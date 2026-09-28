@@ -121,6 +121,13 @@ fn main() {
             commands::timeline::update_clip,
             commands::timeline::add_track,
             commands::timeline::set_track_flags,
+            commands::overlays::overlay_catalog,
+            commands::overlays::add_text_clip,
+            commands::overlays::add_shape_clip,
+            commands::overlays::move_overlay_clip,
+            commands::overlays::trim_overlay_clip,
+            commands::overlays::update_text_clip,
+            commands::overlays::update_shape_clip,
         ])
         .run(tauri::generate_context!())
         .expect("error while running the oca desktop shell");

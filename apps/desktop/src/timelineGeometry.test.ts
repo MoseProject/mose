@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   RULER_HEIGHT,
   TRACK_HEIGHT,
+  findSpan,
   hitTest,
   markerAtX,
   rulerTicks,
@@ -12,7 +13,7 @@ import {
   xToTime,
   zoomAround,
 } from "./timelineGeometry";
-import type { ClipInstance, Marker, Track } from "./types";
+import type { ClipInstance, Marker, ShapeClip, TextClip, Track } from "./types";
 
 function clip(id: number, start: number, duration: number, speed = 1): ClipInstance {
   return {
@@ -50,6 +51,14 @@ function track(id: number, clips: ClipInstance[]): Track {
   };
 }
 
+function textClip(id: number, start: number, duration: number): TextClip {
+  return { id, start_secs: start, duration_secs: duration, text: "Text", font_size: 48, font_family: "lato", font_style: "Regular", color_rgba: [255, 255, 255, 255], pos_x: 0.1, pos_y: 0.85, words: [], highlight_enabled: false, highlight_color_rgba: [255, 220, 0, 255], text_align: "Auto" };
+}
+
+function shapeClip(id: number, start: number, duration: number): ShapeClip {
+  return { id, start_secs: start, duration_secs: duration, shape_kind: "Ellipse", center_x: 0.5, center_y: 0.5, width: 0.3, height: 0.3, color_rgba: [255, 255, 255, 255] };
+}
+
 const rowY = (index: number) => RULER_HEIGHT + index * TRACK_HEIGHT + TRACK_HEIGHT / 2;
 
 describe("coordinate mapping", () => {
@@ -85,6 +94,31 @@ describe("hitTest", () => {
     const narrow = [track(1, [clip(1, 0, 0.3)])];
     expect(hitTest(narrow, 6, rowY(0), 40, 0)?.part).toBe("body");
   });
+
+  it("finds text and shape clip handles using their overlay duration", () => {
+    const textTrack = track(1, []);
+    textTrack.kind = "Text";
+    textTrack.text_clips = [textClip(31, 1, 2)];
+    const shapeTrack = track(2, []);
+    shapeTrack.kind = "Shape";
+    shapeTrack.shape_clips = [shapeClip(32, 2, 1)];
+    expect(hitTest([textTrack, shapeTrack], 41, rowY(0), 40, 0)).toEqual({ part: "start", clipId: 31, trackIndex: 0 });
+    expect(hitTest([textTrack, shapeTrack], 119, rowY(0), 40, 0)?.part).toBe("end");
+    expect(hitTest([textTrack, shapeTrack], 100, rowY(1), 40, 0)?.clipId).toBe(32);
+  });
+});
+
+describe("clip spans", () => {
+  it("flags text and shape clips as overlays and finds them across tracks", () => {
+    const media = track(1, [clip(1, 0, 2, 2)]);
+    const textTrack = track(2, []);
+    textTrack.kind = "Text";
+    textTrack.text_clips = [textClip(5, 3, 1.5)];
+    const found = findSpan([media, textTrack], 5);
+    expect(found).toEqual({ span: { id: 5, start_secs: 3, duration_secs: 1.5, overlay: true }, trackIndex: 1 });
+    expect(findSpan([media, textTrack], 1)?.span).toEqual({ id: 1, start_secs: 0, duration_secs: 2, overlay: false });
+    expect(findSpan([media, textTrack], 99)).toBeNull();
+  });
 });
 
 describe("marker hit testing", () => {
@@ -107,6 +141,16 @@ describe("snapping", () => {
   it("excludes the dragged clip's own edges", () => {
     const tracks = [track(1, [clip(1, 0, 2), clip(2, 5, 1)])];
     expect(snapCandidates(tracks, 2, [3.3])).toEqual([0, 3.3, 0, 2]);
+  });
+
+  it("includes text and shape edges as snap targets", () => {
+    const textTrack = track(1, []);
+    textTrack.kind = "Text";
+    textTrack.text_clips = [textClip(3, 4, 2)];
+    const shapeTrack = track(2, []);
+    shapeTrack.kind = "Shape";
+    shapeTrack.shape_clips = [shapeClip(4, 8, 1)];
+    expect(snapCandidates([textTrack, shapeTrack], 99, [])).toEqual([0, 4, 6, 8, 9]);
   });
 });
 

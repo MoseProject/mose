@@ -13,6 +13,7 @@
 pub mod export;
 pub mod markers;
 pub mod media;
+pub mod overlays;
 pub mod prefs;
 pub mod sequences;
 pub mod timeline;

@@ -89,19 +89,15 @@ pub(super) fn text_clip_properties(
         .show_ui(ui, |ui| {
             font_family_picker_body(ui, &mut tc.font_family, tc_id, locale);
         });
-    let is_variable_family = avcore::font_catalog::find_family(tc.font_family.family_id())
-        .is_some_and(|entry| entry.source_kind == avcore::font_catalog::FontSourceKind::Variable);
     if tc.font_family != previous_family {
-        if !tc.font_family.supports_bold() {
-            tc.font_style = avcore::TextFontStyle::Regular;
-        }
-        if !is_variable_family {
-            // A static family has no `wght` axis for this to drive — dropped rather than left
-            // to silently do nothing on the newly selected family.
-            tc.font_weight = None;
-        }
+        // The picker wrote the new family in place; re-apply it through core so Bold/`wght`
+        // settings the new family can't honor are dropped the same way in every shell.
+        let family = std::mem::replace(&mut tc.font_family, previous_family);
+        tc.set_font_family(family);
         changed = true;
     }
+    let is_variable_family = avcore::font_catalog::find_family(tc.font_family.family_id())
+        .is_some_and(|entry| entry.source_kind == avcore::font_catalog::FontSourceKind::Variable);
 
     components::property_row(ui, Text::PropTextFontStyle.tr(locale));
     let previous_style = tc.font_style;

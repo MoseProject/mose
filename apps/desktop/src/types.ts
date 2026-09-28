@@ -56,12 +56,68 @@ export interface TextClip {
   start_secs: number;
   duration_secs: number;
   text: string;
+  font_size: number;
+  font_family: string;
+  font_style: TextFontStyle;
+  color_rgba: Rgba;
+  pos_x: number;
+  pos_y: number;
+  /** Per-word timing from transcription; word highlight only applies when non-empty. */
+  words: unknown[];
+  highlight_enabled: boolean;
+  highlight_color_rgba: Rgba;
+  text_align: TextAlign;
 }
 
 export interface ShapeClip {
   id: number;
   start_secs: number;
   duration_secs: number;
+  shape_kind: ShapeKind;
+  center_x: number;
+  center_y: number;
+  width: number;
+  height: number;
+  color_rgba: Rgba;
+}
+
+/** `avcore::timeline::ShapeKind` as serde_json emits it. */
+export type ShapeKind = "Ellipse" | { Polygon: [number, number][] };
+
+export type Rgba = [number, number, number, number];
+export type TextFontStyle = "Regular" | "Bold";
+export type TextAlign = "Auto" | "Left" | "Center" | "Right" | "Start" | "End";
+export type ShapePreset = "Ellipse" | "Rectangle" | "Triangle" | "Trapezoid" | "Arrow" | "Custom";
+
+export interface TextClipPatch {
+  text?: string;
+  fontFamily?: string;
+  fontStyle?: TextFontStyle;
+  fontSize?: number;
+  colorRgba?: Rgba;
+  textAlign?: TextAlign;
+  posX?: number;
+  posY?: number;
+  highlightEnabled?: boolean;
+  highlightColorRgba?: Rgba;
+}
+
+export interface ShapeClipPatch {
+  shapeKind?: ShapePreset;
+  colorRgb?: [number, number, number];
+  opacity?: number;
+  centerX?: number;
+  centerY?: number;
+  width?: number;
+  height?: number;
+}
+
+export type FontCategory = "Sans" | "Display" | "Serif" | "Handwritten" | "Monospace" | "International";
+
+/** `commands::overlays::OverlayCatalog`: static font/shape data owned by `core`. */
+export interface OverlayCatalog {
+  fonts: { id: string; displayName: string; category: FontCategory; supportsBold: boolean }[];
+  shapePresets: { preset: ShapePreset; kind: ShapeKind }[];
 }
 
 export interface Track {

@@ -37,6 +37,39 @@ export type ClipHit = {
   trackIndex: number;
 };
 
+/** Timeline geometry of any clip kind: media clips, text overlays and shape overlays. */
+export interface TimelineSpan {
+  id: number;
+  start_secs: number;
+  duration_secs: number;
+  /** Text/shape clips move and trim through the overlay commands, media clips through the
+   *  clip commands. */
+  overlay: boolean;
+}
+
+/** Every clip on `track` as a span. A track only ever holds one kind, so order is stable. */
+export function trackSpans(track: Track): TimelineSpan[] {
+  const spans: TimelineSpan[] = track.clips.map((clip) => ({
+    id: clip.id,
+    start_secs: clip.start_secs,
+    duration_secs: clipDuration(clip),
+    overlay: false,
+  }));
+  for (const clip of [...track.text_clips, ...track.shape_clips]) {
+    spans.push({ id: clip.id, start_secs: clip.start_secs, duration_secs: clip.duration_secs, overlay: true });
+  }
+  return spans;
+}
+
+/** The span with `clipId` and the index of its track, across every track. */
+export function findSpan(tracks: Track[], clipId: number): { span: TimelineSpan; trackIndex: number } | null {
+  for (let trackIndex = 0; trackIndex < tracks.length; trackIndex += 1) {
+    const span = trackSpans(tracks[trackIndex]).find((s) => s.id === clipId);
+    if (span) return { span, trackIndex };
+  }
+  return null;
+}
+
 /** Which clip part sits under (x, y) in lane coordinates (x = 0 at the lane's left edge). */
 export function hitTest(
   tracks: Track[],
@@ -47,9 +80,9 @@ export function hitTest(
 ): ClipHit | null {
   const trackIndex = trackIndexAtY(y, tracks.length);
   if (trackIndex < 0) return null;
-  for (const clip of tracks[trackIndex].clips) {
+  for (const clip of trackSpans(tracks[trackIndex])) {
     const left = timeToX(clip.start_secs, pxPerSec, scrollSecs);
-    const right = timeToX(clip.start_secs + clipDuration(clip), pxPerSec, scrollSecs);
+    const right = timeToX(clip.start_secs + clip.duration_secs, pxPerSec, scrollSecs);
     if (x < left || x > right) continue;
     // Narrow clips keep a body zone: handles never cover more than a third each.
     const grab = Math.min(EDGE_GRAB_PX, (right - left) / 3);
@@ -63,9 +96,9 @@ export function hitTest(
 export function snapCandidates(tracks: Track[], excludeClipId: number, extra: number[]): number[] {
   const points = [0, ...extra];
   for (const track of tracks) {
-    for (const clip of track.clips) {
+    for (const clip of trackSpans(track)) {
       if (clip.id === excludeClipId) continue;
-      points.push(clip.start_secs, clip.start_secs + clipDuration(clip));
+      points.push(clip.start_secs, clip.start_secs + clip.duration_secs);
     }
   }
   return points;

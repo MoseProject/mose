@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { t } from "../i18n";
 import { api } from "../ipc";
 import { run, uiStore, useStore } from "../store";
+import { ShapeInspector } from "./ShapeInspector";
+import { TextInspector } from "./TextInspector";
 import {
   activeTimeline,
   type ClipInstance,
@@ -17,6 +19,12 @@ export function Inspector({ session }: { session: SessionView }) {
       ? timeline.tracks.flatMap((track) => track.clips).find((c) => c.id === selectedClipIds[0])
       : undefined;
   const asset = clip && session.project.media_library.find((a) => a.id === clip.asset_id);
+  const textClip = selectedClipIds.length === 1
+    ? timeline.tracks.flatMap((track) => track.text_clips).find((item) => item.id === selectedClipIds[0])
+    : undefined;
+  const shapeClip = selectedClipIds.length === 1
+    ? timeline.tracks.flatMap((track) => track.shape_clips).find((item) => item.id === selectedClipIds[0])
+    : undefined;
 
   return (
     <section className="panel inspector">
@@ -29,6 +37,10 @@ export function Inspector({ session }: { session: SessionView }) {
             </div>
             <ClipControls key={clip.id} clip={clip} />
           </>
+        ) : textClip ? (
+          <TextInspector key={textClip.id} clip={textClip} />
+        ) : shapeClip ? (
+          <ShapeInspector key={shapeClip.id} clip={shapeClip} />
         ) : (
           <div className="empty-state">{t("noClipSelected")}</div>
         )}
@@ -114,7 +126,7 @@ function ClipControls({ clip }: { clip: ClipInstance }) {
 }
 
 /** A range input that previews locally while dragging and commits once on release. */
-function Slider(props: {
+export function Slider(props: {
   label: string;
   value: number;
   min: number;

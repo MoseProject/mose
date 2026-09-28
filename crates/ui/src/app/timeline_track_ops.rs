@@ -221,33 +221,11 @@ impl App {
         let timeline = self.active_project_mut().timeline_mut();
         let track_index = resolve_or_create_track(timeline, TrackKind::Text, None);
         let clip_id = next_clip_id(timeline);
-        timeline.tracks[track_index].text_clips.push(TextClip {
-            id: clip_id,
-            start_secs: playhead_secs,
-            duration_secs: 3.0,
-            text: default_text,
-            font_size: 48.0,
-            font_family: Default::default(),
-            font_style: Default::default(),
-            font_weight: None,
-            color_rgba: [255, 255, 255, 255],
-            background_rgba: [0, 0, 0, 0],
-            background_padding: 8.0,
-            background_corner_radius: 8.0,
-            pos_x: 0.1,
-            pos_y: 0.85,
-            words: Vec::new(),
-            highlight_enabled: false,
-            highlight_color_rgba: [255, 220, 0, 255],
-            opacity_keyframes: vec![],
-            pos_x_keyframes: vec![],
-            pos_y_keyframes: vec![],
-            scale_keyframes: vec![],
-            rotation_keyframes: vec![],
-            direction: Default::default(),
-            language: None,
-            text_align: Default::default(),
-        });
+        timeline.tracks[track_index].text_clips.push(TextClip::new(
+            clip_id,
+            playhead_secs,
+            default_text,
+        ));
         self.selected_clip_id = None;
         self.selected_shape_clip_id = None;
         self.selected_text_clip_id = Some(clip_id);
@@ -268,33 +246,10 @@ impl App {
         let timeline = self.active_project_mut().timeline_mut();
         let track_index = resolve_or_create_track(timeline, TrackKind::Text, None);
         let clip_id = next_clip_id(timeline);
-        timeline.tracks[track_index].text_clips.push(TextClip {
-            id: clip_id,
-            start_secs: playhead_secs,
-            duration_secs: 3.0,
-            text: String::new(),
-            font_size: 48.0,
-            font_family: Default::default(),
-            font_style: Default::default(),
-            font_weight: None,
-            color_rgba: [255, 255, 255, 255],
-            background_rgba: [0, 0, 0, 0],
-            background_padding: 8.0,
-            background_corner_radius: 8.0,
-            pos_x,
-            pos_y,
-            words: Vec::new(),
-            highlight_enabled: false,
-            highlight_color_rgba: [255, 220, 0, 255],
-            opacity_keyframes: vec![],
-            pos_x_keyframes: vec![],
-            pos_y_keyframes: vec![],
-            scale_keyframes: vec![],
-            rotation_keyframes: vec![],
-            direction: Default::default(),
-            language: None,
-            text_align: Default::default(),
-        });
+        let mut clip = TextClip::new(clip_id, playhead_secs, String::new());
+        clip.pos_x = pos_x;
+        clip.pos_y = pos_y;
+        timeline.tracks[track_index].text_clips.push(clip);
         self.selected_clip_id = None;
         self.selected_shape_clip_id = None;
         self.selected_text_clip_id = Some(clip_id);
@@ -341,24 +296,9 @@ impl App {
         let timeline = self.active_project_mut().timeline_mut();
         let track_index = resolve_or_create_track(timeline, TrackKind::Shape, None);
         let clip_id = next_clip_id(timeline);
-        timeline.tracks[track_index].shape_clips.push(ShapeClip {
-            id: clip_id,
-            start_secs: playhead_secs,
-            duration_secs: 3.0,
-            shape_kind: ShapeKind::rectangle(),
-            center_x: 0.5,
-            center_y: 0.5,
-            center_x_keyframes: vec![],
-            center_y_keyframes: vec![],
-            width_keyframes: vec![],
-            height_keyframes: vec![],
-            rotation_keyframes: vec![],
-            width: 0.3,
-            height: 0.3,
-            rotation_deg: 0.0,
-            color_rgba: [255, 255, 255, 255],
-            stroke_thickness_px: 0.0,
-        });
+        timeline.tracks[track_index]
+            .shape_clips
+            .push(ShapeClip::new(clip_id, playhead_secs));
         self.selected_clip_id = None;
         self.selected_text_clip_id = None;
         self.selected_shape_clip_id = Some(clip_id);
