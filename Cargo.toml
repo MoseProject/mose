@@ -5,6 +5,7 @@ members = [
     "crates/ui",
     "crates/avbridge",
     "crates/ytbridge",
+    "apps/desktop/src-tauri",
 ]
 
 [workspace.package]

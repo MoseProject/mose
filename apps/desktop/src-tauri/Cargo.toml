@@ -1,0 +1,27 @@
+[package]
+name = "desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Tauri shell for oca: a React/TypeScript webview frontend over the avcore engine."
+
+[[bin]]
+name = "oca-desktop"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+# Package name is `core`; Rust code imports it as `avcore` (see crates/core/Cargo.toml).
+core = { path = "../../../crates/core" }
+tauri = { version = "2.12", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1.0"
+# Native open/save dialogs, same crate and major version the egui shell already uses.
+rfd = "0.17.2"
+# Preview frames and media thumbnails cross the IPC boundary as JPEG: a 1080p RGBA frame is
+# ~8 MB raw, which the webview cannot ingest at playback rate over a custom protocol.
+image = { version = "0.25.10", default-features = false, features = ["jpeg"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
