@@ -90,7 +90,18 @@ Known gaps versus the egui shell, in migration order:
    the egui shell. Multi-select itself (Ctrl+click) predates this slice. Still missing: on-canvas
    ghost rendering for roll/slip/slide drags (commands only fire on release, no live preview of
    the pending edit), a visible "has clipboard" indicator on the paste/apply buttons.
-3. Keyframes, masks, transitions, crop. **Text and shape clips (first part) done:** toolbar
+3. **Keyframes, masks, transitions, crop done** (property-panel controls, matching egui's own
+   `DragValue`/`Slider`-driven approach for these -- no on-canvas crop handles or mask preview
+   overlay in either shell): the inspector gets crop x/y/w/h with a reset button, mask shape
+   (None/Circle/RoundedRect) with corner radius, transition type/duration, blend mode (English
+   names, untranslated, same as egui), and per-property keyframe list editors (position/scale/
+   rotation/opacity/gain/brightness/contrast/saturation/crop_x/y/w/h) via `update_clip`'s
+   extended `ClipPatch` -- one whole-list `Vec<Keyframe<T>>` write-back per add/remove/edit,
+   mirroring egui's `f32_keyframe_editor`/`position_keyframe_editor` shape. Value ranges/clamps
+   mirror `crates/ui/src/app/mod.rs`'s constants exactly (`CROP_MIN_SIZE`, `MASK_CORNER_RADIUS_
+   RANGE`, `TRANSITION_DURATION_RANGE`, etc). Still missing: timeline keyframe markers, on-canvas
+   crop/mask handles, per-effect enable indicators the properties panel's collapsible sections
+   give egui. **Text and shape clips (first part) done:** toolbar
    "Add text"/"Add shape" create a clip at the playhead on an auto-created Text/Shape track via
    `core`'s `TextClip::new`/`ShapeClip::new` and select it; overlays draw on the timeline canvas
    and move/trim/snap/delete through the same drag paths as media clips; the inspector edits
