@@ -4,6 +4,7 @@
 //! first primitive models the scheduling contract shared by every interactive engine command:
 //! pending work is replaceable, and the worker receives only the latest editor intent.
 
+mod audio_block;
 mod byte_cache;
 mod latest_intent;
 mod scene;
@@ -12,6 +13,7 @@ mod scene_versions;
 mod transport;
 mod video_frame;
 
+pub use audio_block::{AudioBlock, AudioBlockError};
 pub use byte_cache::{ByteCache, CacheError, CacheInsert};
 pub use latest_intent::{Generation, LatestIntent, PendingIntent};
 pub use scene::{
