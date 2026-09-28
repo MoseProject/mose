@@ -5,8 +5,8 @@
 // re-render the components that read them.
 
 import { useSyncExternalStore } from "react";
-import { api, onExports, onPreview, onSession } from "./ipc";
-import { localeFromPrefs, setLocale } from "./i18n";
+import { api, onExports, onPreview, onSession, onTranscribe } from "./ipc";
+import { localeFromPrefs, setLocale, t } from "./i18n";
 import type { ExportJobView, LayerTemplate, PreviewTick, SessionView } from "./types";
 
 export interface Store<T> {
@@ -65,6 +65,7 @@ export const previewStore = createStore<PreviewTick>({
 });
 export const exportsStore = createStore<ExportJobView[]>([]);
 export const layerTemplatesStore = createStore<LayerTemplate[]>([]);
+export const transcribingAssetIdStore = createStore<number | null>(null);
 export const uiStore = createStore<UiState>({
   screen: "home",
   selectedClipIds: [],
@@ -124,6 +125,18 @@ export async function connect() {
   });
   await onPreview((tick) => previewStore.set(tick));
   await onExports((jobs) => exportsStore.set(jobs));
+  await onTranscribe((event) => {
+    if (event.type === "started") {
+      transcribingAssetIdStore.set(event.assetId);
+      return;
+    }
+    transcribingAssetIdStore.set(null);
+    if (event.type === "failed") {
+      patchUi({ error: event.message });
+    } else if (event.type === "noSpeech") {
+      patchUi({ error: t("transcribeNoSpeechFound") });
+    }
+  });
   sessionStore.set(await api.getSession());
   const prefs = await api.getPrefs();
   setLocale(localeFromPrefs(prefs.locale));

@@ -27,5 +27,6 @@ export function Prefs() {
     <label><input type="checkbox" checked={prefs.previewHardwareDecode} onChange={(e) => update({ previewHardwareDecode: e.target.checked })} /> {t("hardwareDecode")}</label>
     <label>{t("outputFolder")}<input value={prefs.outputFolder} onChange={(e) => update({ outputFolder: e.target.value })} /></label>
     <label>{t("autosaveInterval")}<input type="number" min={1} max={60} value={prefs.autosaveMinutes} onChange={(e) => update({ autosaveMinutes: Number(e.target.value) || 1 })} /> {t("minutes")}</label>
+    <label>{t("whisperModelPath")}<input value={prefs.whisperModelPath} onChange={(e) => update({ whisperModelPath: e.target.value })} /></label>
   </main>;
 }

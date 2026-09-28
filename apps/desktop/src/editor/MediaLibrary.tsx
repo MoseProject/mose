@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { formatTime, t } from "../i18n";
 import { api, thumbnailUrl } from "../ipc";
-import { assetDragStore, run } from "../store";
+import { assetDragStore, run, transcribingAssetIdStore, useStore } from "../store";
 import type { MediaAsset, SessionView } from "../types";
 
 /** Pixels the pointer must travel before a press on an asset becomes a drag. */
@@ -31,6 +31,8 @@ export function MediaLibrary({ session }: { session: SessionView }) {
 
 function AssetRow({ asset }: { asset: MediaAsset }) {
   const [thumbFailed, setThumbFailed] = useState(false);
+  const transcribingAssetId = useStore(transcribingAssetIdStore);
+  const transcribing = transcribingAssetId === asset.id;
 
   // Internal drag onto the timeline uses pointer events: with Tauri's OS file drop enabled,
   // WebView2 does not deliver HTML5 drag-and-drop between elements.
@@ -88,6 +90,17 @@ function AssetRow({ asset }: { asset: MediaAsset }) {
         <div className="name">{asset.file_name}</div>
         <div className="meta">{meta}</div>
       </div>
+      {asset.has_audio && (
+        <button
+          className="icon"
+          title={transcribing ? t("transcribing") : t("transcribe")}
+          disabled={transcribingAssetId !== null}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => run(api.transcribeAsset(asset.id))}
+        >
+          {transcribing ? "…" : "📝"}
+        </button>
+      )}
       <button
         className={`icon ${asset.favorited ? "active" : ""}`}
         title={t("favorite")}

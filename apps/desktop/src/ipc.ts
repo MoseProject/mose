@@ -18,12 +18,16 @@ import type {
   ShapeClipPatch,
   TextClipPatch,
   TrackKind,
+  TranscribeEvent,
+  TranscriptDocument,
+  TranscriptHit,
 } from "./types";
 
 export const events = {
   session: "session-changed",
   preview: "preview-tick",
   exports: "export-jobs",
+  transcribe: "transcribe-event",
 } as const;
 
 export function onSession(handler: (view: SessionView) => void): Promise<UnlistenFn> {
@@ -36,6 +40,10 @@ export function onPreview(handler: (tick: PreviewTick) => void): Promise<Unliste
 
 export function onExports(handler: (jobs: ExportJobView[]) => void): Promise<UnlistenFn> {
   return listen<ExportJobView[]>(events.exports, (e) => handler(e.payload));
+}
+
+export function onTranscribe(handler: (event: TranscribeEvent) => void): Promise<UnlistenFn> {
+  return listen<TranscribeEvent>(events.transcribe, (e) => handler(e.payload));
 }
 
 // Custom URI schemes are served from http://<scheme>.localhost on Windows (WebView2) and
@@ -127,6 +135,14 @@ export const api = {
   renameSequence: (sequenceId: number, name: string) => invoke<void>("rename_sequence", { sequenceId, name }),
   removeSequence: (sequenceId: number) => invoke<void>("remove_sequence", { sequenceId }),
   moveSequence: (fromIndex: number, targetIndex: number) => invoke<void>("move_sequence", { fromIndex, targetIndex }),
+  transcribeAsset: (assetId: number) => invoke<void>("transcribe_asset", { assetId }),
+  getTranscript: (assetId: number) =>
+    invoke<TranscriptDocument | null>("get_transcript", { assetId }),
+  searchTranscripts: (query: string) =>
+    invoke<TranscriptHit[]>("search_transcripts", { query }),
+  seekToTranscriptWord: (assetId: number, sourceSecs: number) =>
+    invoke<boolean>("seek_to_transcript_word", { assetId, sourceSecs }),
+
   addMarker: (kind: MarkerKind = "Standard") => invoke<void>("add_marker", { kind }),
   removeMarker: (markerId: number) => invoke<void>("remove_marker", { markerId }),
   updateMarker: (markerId: number, patch: { label?: string; kind?: MarkerKind; completed?: boolean }) => invoke<void>("update_marker", {

@@ -226,7 +226,36 @@ export interface PrefsView {
   previewHardwareDecode: boolean;
   recentProjectPaths: string[];
   savedLayerTemplates: LayerTemplate[];
+  whisperModelPath: string;
 }
+
+export interface TranscriptWord {
+  id: number;
+  text: string;
+  start_secs: number;
+  end_secs: number;
+  confidence: number;
+  speaker: string | null;
+}
+
+export interface TranscriptDocument {
+  schema_version: number;
+  asset_id: number;
+  language: string | null;
+  words: TranscriptWord[];
+}
+
+export interface TranscriptHit {
+  assetId: number;
+  assetName: string;
+  word: TranscriptWord;
+}
+
+export type TranscribeEvent =
+  | { type: "started"; assetId: number }
+  | { type: "done"; assetId: number }
+  | { type: "noSpeech"; assetId: number }
+  | { type: "failed"; assetId: number; message: string };
 
 /** A saved layer-group template -- `layers` is opaque `ClipFormatting` per layer (position/
  *  scale/crop/effects), never edited field-by-field in the webview, only captured and reapplied
