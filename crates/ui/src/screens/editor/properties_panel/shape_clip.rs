@@ -13,45 +13,13 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+use avcore::timeline::ShapePreset;
 use eframe::egui::{self, RichText};
 
 use crate::app::App;
 use crate::components;
 use crate::i18n::Text;
 use crate::theme;
-
-/// A `Copy`-friendly stand-in for [`avcore::timeline::ShapeKind`] for use with
-/// [`components::enum_combo`] (whose `T: Copy` bound `ShapeKind` itself can't satisfy — its
-/// `Polygon` variant holds a `Vec`). Maps to/from the fixed presets via `ShapeKind::rectangle()`
-/// etc. `Custom` stands for a `Polygon` that doesn't match any preset's exact vertex list; there
-/// being no vertex-editing UI yet (see `ShapeKind::Polygon`'s doc comment), it's only ever shown
-/// as the current value, never offered as something to pick.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ShapePreset {
-    Ellipse,
-    Rectangle,
-    Triangle,
-    Trapezoid,
-    Arrow,
-    Custom,
-}
-
-fn shape_kind_to_preset(kind: &avcore::timeline::ShapeKind) -> ShapePreset {
-    use avcore::timeline::ShapeKind;
-    if *kind == ShapeKind::Ellipse {
-        ShapePreset::Ellipse
-    } else if *kind == ShapeKind::rectangle() {
-        ShapePreset::Rectangle
-    } else if *kind == ShapeKind::triangle() {
-        ShapePreset::Triangle
-    } else if *kind == ShapeKind::trapezoid() {
-        ShapePreset::Trapezoid
-    } else if *kind == ShapeKind::arrow() {
-        ShapePreset::Arrow
-    } else {
-        ShapePreset::Custom
-    }
-}
 
 fn shape_preset_label(preset: ShapePreset, locale: crate::i18n::Locale) -> String {
     match preset {
@@ -100,30 +68,19 @@ pub(super) fn shape_clip_properties(
 
     // Shape preset
     components::property_row(ui, Text::PropShapeKind.tr(locale));
-    let mut preset = shape_kind_to_preset(&sc.shape_kind);
-    let mut preset_options = vec![
-        ShapePreset::Ellipse,
-        ShapePreset::Rectangle,
-        ShapePreset::Triangle,
-        ShapePreset::Trapezoid,
-        ShapePreset::Arrow,
-    ];
+    let mut preset = ShapePreset::from_kind(&sc.shape_kind);
+    let mut preset_options = ShapePreset::PICKABLE.to_vec();
     if preset == ShapePreset::Custom {
         preset_options.push(ShapePreset::Custom);
     }
     if components::enum_combo(ui, "shape_kind", &preset_options, &mut preset, |p| {
         shape_preset_label(p, locale)
     }) {
-        sc.shape_kind = match preset {
-            ShapePreset::Ellipse => avcore::timeline::ShapeKind::Ellipse,
-            ShapePreset::Rectangle => avcore::timeline::ShapeKind::rectangle(),
-            ShapePreset::Triangle => avcore::timeline::ShapeKind::triangle(),
-            ShapePreset::Trapezoid => avcore::timeline::ShapeKind::trapezoid(),
-            ShapePreset::Arrow => avcore::timeline::ShapeKind::arrow(),
-            // Not reachable — Custom is only ever in `preset_options` when it was already the
-            // current value, so selecting it again isn't a change `enum_combo` reports.
-            ShapePreset::Custom => sc.shape_kind.clone(),
-        };
+        // `Custom` has no fixed geometry (and is only listed when already current, so picking
+        // it again isn't a change `enum_combo` reports) -- keep the existing polygon.
+        if let Some(kind) = preset.to_kind() {
+            sc.shape_kind = kind;
+        }
         changed = true;
     }
     ui.add_space(4.0);
