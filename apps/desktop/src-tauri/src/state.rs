@@ -116,6 +116,14 @@ pub struct AppState {
     /// The asset a background transcription is currently running for, if any -- only one at a
     /// time, mirrors `ui::App::transcribe_state.transcribing_asset_id`.
     pub transcribing_asset_id: Mutex<Option<u64>>,
+    /// Single-flight guards for the remaining background AI features, each mirroring the
+    /// matching `ui::App::*_state` field of the same name.
+    pub scene_cut_detection_clip_id: Mutex<Option<u64>>,
+    pub motion_tracking_clip_id: Mutex<Option<u64>>,
+    pub auto_reframing_clip_id: Mutex<Option<u64>>,
+    pub matte_generating_clip_id: Mutex<Option<u64>>,
+    pub privacy_blur_generating_clip_id: Mutex<Option<u64>>,
+    pub tts_generating: Mutex<bool>,
 }
 
 impl AppState {

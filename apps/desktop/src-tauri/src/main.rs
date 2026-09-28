@@ -69,6 +69,12 @@ fn main() {
                 clip_clipboard: Mutex::new(None),
                 formatting_clipboard: Mutex::new(None),
                 transcribing_asset_id: Mutex::new(None),
+                scene_cut_detection_clip_id: Mutex::new(None),
+                motion_tracking_clip_id: Mutex::new(None),
+                auto_reframing_clip_id: Mutex::new(None),
+                matte_generating_clip_id: Mutex::new(None),
+                privacy_blur_generating_clip_id: Mutex::new(None),
+                tts_generating: Mutex::new(false),
             });
             autosave::spawn(handle);
             Ok(())
@@ -151,6 +157,13 @@ fn main() {
             commands::transcribe::seek_to_transcript_word,
             commands::silence::detect_silence_gaps_for_clip,
             commands::silence::apply_silence_gaps,
+            commands::scene_detection::detect_scene_cuts_for_clip,
+            commands::highlight_detection::detect_highlights,
+            commands::motion_tracking::motion_track_clip,
+            commands::auto_reframe::auto_reframe_clip,
+            commands::background_removal::generate_matte_for_clip,
+            commands::privacy_blur::apply_privacy_blur_to_clip,
+            commands::tts::generate_tts,
         ])
         .run(tauri::generate_context!())
         .expect("error while running the oca desktop shell");

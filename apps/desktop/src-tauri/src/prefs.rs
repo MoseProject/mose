@@ -24,6 +24,19 @@ pub struct PrefsView {
     /// -- shared with the egui shell's `PrefsState.whisper_model_path` under the same key.
     #[serde(default)]
     pub whisper_model_path: String,
+    /// Path to a local UltraFace ONNX model file for auto-reframe, or empty to use the bundled
+    /// model -- shared with the egui shell's `PrefsState.reframe_model_path` key.
+    #[serde(default)]
+    pub reframe_model_path: String,
+    /// Path to a local MODNet ONNX model file for AI background removal, or empty to use the
+    /// bundled model -- shared with the egui shell's `PrefsState.background_removal_model_path`
+    /// key.
+    #[serde(default)]
+    pub background_removal_model_path: String,
+    /// Path to a local Piper voice `.onnx` model file for text-to-speech, or empty to use the
+    /// bundled pt-BR voice -- shared with the egui shell's `PrefsState.tts_model_path` key.
+    #[serde(default)]
+    pub tts_model_path: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
@@ -45,6 +58,12 @@ struct DiskPrefs {
     saved_layer_templates: Vec<LayerTemplate>,
     #[serde(default)]
     whisper_model_path: String,
+    #[serde(default)]
+    reframe_model_path: String,
+    #[serde(default)]
+    background_removal_model_path: String,
+    #[serde(default)]
+    tts_model_path: String,
 }
 
 fn default_hardware_decode() -> bool {
@@ -71,6 +90,9 @@ impl From<DiskPrefs> for PrefsView {
             recent_project_paths: value.recent_project_paths,
             saved_layer_templates: value.saved_layer_templates,
             whisper_model_path: value.whisper_model_path,
+            reframe_model_path: value.reframe_model_path,
+            background_removal_model_path: value.background_removal_model_path,
+            tts_model_path: value.tts_model_path,
         }
     }
 }
@@ -86,6 +108,9 @@ impl From<&PrefsView> for DiskPrefs {
             recent_project_paths: value.recent_project_paths.clone(),
             saved_layer_templates: value.saved_layer_templates.clone(),
             whisper_model_path: value.whisper_model_path.clone(),
+            reframe_model_path: value.reframe_model_path.clone(),
+            background_removal_model_path: value.background_removal_model_path.clone(),
+            tts_model_path: value.tts_model_path.clone(),
         }
     }
 }
@@ -101,6 +126,9 @@ impl Default for PrefsView {
             recent_project_paths: Vec::new(),
             saved_layer_templates: Vec::new(),
             whisper_model_path: String::new(),
+            reframe_model_path: String::new(),
+            background_removal_model_path: String::new(),
+            tts_model_path: String::new(),
         }
     }
 }

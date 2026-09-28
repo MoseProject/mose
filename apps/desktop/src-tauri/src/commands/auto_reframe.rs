@@ -1,0 +1,180 @@
+//! CF-04 static auto-reframe -- background-thread face detection + crop computation for the
+//! selected clip, mirroring `ui::App::spawn_auto_reframe_selected_clip` exactly (same bundled/
+//! configured UltraFace ONNX model, same seed-point bypass), no core changes needed. Dynamic
+//! (per-frame animated) auto-reframe is not yet ported -- see `dynamic_reframe.rs` in the egui
+//! shell for that variant.
+
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+use tauri::{AppHandle, Emitter, Manager};
+
+use super::with_session;
+use crate::state::AppState;
+
+pub const AUTO_REFRAME_EVENT: &str = "auto-reframe-event";
+/// Face detection resizes to its own fixed input regardless, so this only needs to be large
+/// enough that a small/distant face survives that resize as more than a couple of pixels.
+const REFRAME_FRAME_MAX_DIM: u32 = 960;
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutoReframeResult {
+    pub clip_id: u64,
+    pub subject_found: bool,
+}
+
+/// Runs auto-reframe against `clip_id` on a background thread -- what the properties panel's
+/// "Reenquadramento automático" button does. Targets the active sequence's export aspect ratio
+/// (source resolution for `Original`). A model must be configured *unless* the clip already
+/// carries `reframe_seed_point` (a manually pinned anchor skips face detection entirely).
+/// Errors (already running, clip/asset not found, no model and no seed) surface synchronously;
+/// the crop is applied automatically and [`AUTO_REFRAME_EVENT`] reports whether a subject was
+/// actually found.
+#[tauri::command]
+pub fn auto_reframe_clip(app: AppHandle, clip_id: u64) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    {
+        let mut running = state
+            .auto_reframing_clip_id
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        if running.is_some() {
+            return Err("an auto-reframe is already running".to_string());
+        }
+        *running = Some(clip_id);
+    }
+    let clear_running = |state: &AppState| {
+        *state
+            .auto_reframing_clip_id
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = None;
+    };
+
+    let clip = {
+        let session = state.session();
+        session
+            .project
+            .timeline()
+            .tracks
+            .iter()
+            .flat_map(|t| &t.clips)
+            .find(|c| c.id == clip_id)
+            .cloned()
+    };
+    let Some(clip) = clip else {
+        clear_running(&state);
+        return Err("clip not found".to_string());
+    };
+    let seed_point = clip.reframe_seed_point;
+    let configured_model_path = state.prefs().view.reframe_model_path.clone();
+    if seed_point.is_none() && configured_model_path.trim().is_empty() {
+        clear_running(&state);
+        return Err("no auto-reframe model configured".to_string());
+    }
+    let (asset_resolution, source_path) = {
+        let session = state.session();
+        let asset = session
+            .project
+            .media_library
+            .iter()
+            .find(|a| a.id == clip.asset_id)
+            .cloned();
+        (
+            asset.as_ref().and_then(|a| a.resolution),
+            asset.map(|a| a.source_path),
+        )
+    };
+    let (Some((source_w, source_h)), Some(source_path)) = (asset_resolution, source_path) else {
+        clear_running(&state);
+        return Err("asset resolution unknown".to_string());
+    };
+    let (target_w, target_h) = {
+        let session = state.session();
+        session
+            .project
+            .active_sequence()
+            .export_settings
+            .aspect_ratio
+            .dims_or((source_w, source_h))
+    };
+    let midpoint_secs = (clip.source_in_secs + clip.source_out_secs) / 2.0;
+    let model_path = PathBuf::from(configured_model_path);
+
+    let worker_app = app.clone();
+    std::thread::spawn(move || {
+        let subject_center = match seed_point {
+            Some(seed) => Some(seed),
+            None => extract_frame(&source_path, midpoint_secs).and_then(|(w, h, rgba)| {
+                match avcore::detect_faces(&model_path, &rgba, w, h) {
+                    Ok(faces) => avcore::main_subject_center(&faces),
+                    Err(error) => {
+                        tracing::warn!(%error, "auto-reframe face detection failed");
+                        None
+                    }
+                }
+            }),
+        };
+        let subject_found = subject_center.is_some();
+        let crop =
+            avcore::compute_reframe_crop(source_w, source_h, target_w, target_h, subject_center);
+        {
+            let state = worker_app.state::<AppState>();
+            clear_running(&state);
+        }
+        let _ = with_session(&worker_app, |session| {
+            if let Some(clip) = session.project.timeline_mut().clip_mut(clip_id) {
+                clip.crop_x = crop.x;
+                clip.crop_y = crop.y;
+                clip.crop_w = crop.w;
+                clip.crop_h = crop.h;
+            }
+            session.dirty = true;
+            Ok(())
+        });
+        let _ = worker_app.emit(
+            AUTO_REFRAME_EVENT,
+            AutoReframeResult {
+                clip_id,
+                subject_found,
+            },
+        );
+    });
+    Ok(())
+}
+
+fn extract_frame(path: &Path, at_secs: f64) -> Option<(u32, u32, Vec<u8>)> {
+    let sampler = avcore::FrameSampler::open(path, Duration::from_millis(20)).ok()?;
+    let frame = sampler.sample(at_secs, Duration::from_millis(1500))?;
+    Some(downscale_frame_rgba(
+        frame.width,
+        frame.height,
+        frame.rgba,
+        REFRAME_FRAME_MAX_DIM,
+    ))
+}
+
+fn downscale_frame_rgba(
+    width: u32,
+    height: u32,
+    rgba: Vec<u8>,
+    max_dim: u32,
+) -> (u32, u32, Vec<u8>) {
+    let scale = (max_dim as f32 / width.max(height) as f32).min(1.0);
+    if scale >= 1.0 {
+        return (width, height, rgba);
+    }
+    let new_width = ((width as f32 * scale) as u32).max(1);
+    let new_height = ((height as f32 * scale) as u32).max(1);
+    let mut out = vec![0u8; (new_width * new_height * 4) as usize];
+    for y in 0..new_height {
+        let src_y = (y * height / new_height).min(height - 1);
+        for x in 0..new_width {
+            let src_x = (x * width / new_width).min(width - 1);
+            let src = ((src_y * width + src_x) * 4) as usize;
+            let dst = ((y * new_width + x) * 4) as usize;
+            out[dst..dst + 4].copy_from_slice(&rgba[src..src + 4]);
+        }
+    }
+    (new_width, new_height, out)
+}

@@ -10,15 +10,22 @@
 //! successful mutations publish the new session through [`crate::state::publish`] rather than
 //! returning it, so every listener (not just the caller) sees the same state.
 
+pub mod auto_reframe;
+pub mod background_removal;
 pub mod export;
+pub mod highlight_detection;
 pub mod markers;
 pub mod media;
+pub mod motion_tracking;
 pub mod overlays;
 pub mod prefs;
+pub mod privacy_blur;
+pub mod scene_detection;
 pub mod sequences;
 pub mod silence;
 pub mod timeline;
 pub mod transcribe;
+pub mod tts;
 
 use std::path::PathBuf;
 
