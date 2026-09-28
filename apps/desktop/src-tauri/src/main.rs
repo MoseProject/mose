@@ -20,9 +20,11 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod autosave;
 mod commands;
 mod export;
 mod frames;
+mod prefs;
 mod preview_engine;
 mod protocol;
 mod state;
@@ -58,9 +60,11 @@ fn main() {
                     "Untitled".to_string(),
                     "Sequence 1".to_string(),
                 ))),
+                prefs: Mutex::new(prefs::PrefsDocument::load()),
                 preview: PreviewEngine::spawn(handle),
                 exports: Arc::new(ExportQueue::default()),
             });
+            autosave::spawn(handle);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -78,6 +82,12 @@ fn main() {
             commands::export_active_sequence,
             commands::cancel_export,
             commands::list_exports,
+            commands::prefs::get_prefs,
+            commands::prefs::set_prefs,
+            commands::prefs::get_recent_projects,
+            commands::prefs::remove_recent_project,
+            commands::prefs::restore_autosave,
+            commands::prefs::discard_autosave,
             commands::media::import_media_dialog,
             commands::media::import_media,
             commands::media::toggle_favorite,

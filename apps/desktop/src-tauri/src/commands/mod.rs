@@ -11,6 +11,7 @@
 //! returning it, so every listener (not just the caller) sees the same state.
 
 pub mod media;
+pub mod prefs;
 pub mod timeline;
 
 use std::path::PathBuf;
@@ -61,8 +62,14 @@ pub fn get_session(state: State<'_, AppState>) -> Result<serde_json::Value, Stri
 
 #[tauri::command]
 pub fn new_project(app: AppHandle, name: String, sequence_name: String) -> Result<(), String> {
+    let target_lufs = {
+        let profile = app.state::<AppState>().prefs().view.lufs_profile;
+        [-14.0, -16.0, -23.0].get(profile).copied().unwrap_or(-14.0)
+    };
     with_session(&app, |session| {
-        session.replace_project(blank_project(name, sequence_name));
+        let mut project = blank_project(name, sequence_name);
+        project.active_sequence_mut().export_settings.target_lufs = target_lufs;
+        session.replace_project(project);
         Ok(())
     })
 }
@@ -89,6 +96,7 @@ pub async fn open_project_path(app: AppHandle, path: String) -> Result<(), Strin
         session.replace_project(project);
         Ok(session.project_epoch)
     })?;
+    prefs::record_recent_project(&app, &path)?;
     // Proxies are a regenerable cache, never serialized: re-attach (or rebuild) them so
     // preview decodes the light file again after a reopen.
     media::rehydrate_proxies(&app, epoch);
@@ -125,7 +133,9 @@ pub async fn save_project(app: AppHandle, save_as: bool) -> Result<bool, String>
         session.project.file_path = Some(path);
         session.dirty = false;
         Ok(true)
-    })
+    })?;
+    prefs::record_recent_project(&app, &path)?;
+    Ok(true)
 }
 
 #[tauri::command]

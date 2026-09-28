@@ -1617,6 +1617,8 @@ dependencies = [
  "core",
  "image",
  "rfd",
+ "rmp-serde",
+ "rmpv",
  "serde",
  "serde_json",
  "tauri",
