@@ -5,6 +5,7 @@
 //! pending work is replaceable, and the worker receives only the latest editor intent.
 
 mod audio_block;
+mod audio_mixer;
 mod byte_cache;
 mod cpu_renderer;
 mod decode_source;
@@ -17,6 +18,7 @@ mod transport;
 mod video_frame;
 
 pub use audio_block::{AudioBlock, AudioBlockError};
+pub use audio_mixer::{AudioMixer, MixError, MixInput};
 pub use byte_cache::{ByteCache, CacheError, CacheInsert};
 pub use cpu_renderer::{CpuRenderer, LayerFrame, RenderError};
 pub use decode_source::{DecodeSource, DecodeSourceError, SourceInfo};
