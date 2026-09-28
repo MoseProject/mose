@@ -5,8 +5,10 @@
 //! interactive preview command adds before platform-specific media work starts.
 
 use std::hint::black_box;
+use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 
-use bush::{ByteCache, Generation, LatestIntent};
+use bush::{ByteCache, DecodeSource, Generation, LatestIntent};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
 fn bench_latest_intent_replacement(c: &mut Criterion) {
@@ -53,5 +55,31 @@ fn bench_cache_access(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_latest_intent_replacement, bench_cache_access);
+fn bench_fixture_decode(c: &mut Criterion) {
+    let fixture =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../avbridge/tests/fixtures/video.mp4");
+    let cancel = AtomicBool::new(false);
+    let mut group = c.benchmark_group("fixture_decode");
+    group.bench_function("open_to_first_rgba", |b| {
+        b.iter(|| {
+            let mut source = DecodeSource::open(black_box(&fixture)).unwrap();
+            black_box(source.next_frame(&cancel).unwrap())
+        });
+    });
+    group.bench_function("seek_to_first_rgba", |b| {
+        b.iter(|| {
+            let mut source = DecodeSource::open(black_box(&fixture)).unwrap();
+            source.seek(black_box(0.5)).unwrap();
+            black_box(source.next_frame(&cancel).unwrap())
+        });
+    });
+    group.finish();
+}
+
+criterion_group!(
+    benches,
+    bench_latest_intent_replacement,
+    bench_cache_access,
+    bench_fixture_decode
+);
 criterion_main!(benches);
