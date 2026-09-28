@@ -56,7 +56,7 @@ impl App {
             Ok(b) => b,
             Err(_) => return,
         };
-        let autosave_path = file_path.with_extension("autosave.ocproj");
+        let autosave_path = avcore::app_paths::autosave_path(&file_path);
         debug!(path = %autosave_path.display(), "writing autosave");
         self.project_dirty = false;
         self.last_autosave_instant = Some(now);
@@ -109,7 +109,7 @@ impl App {
     /// Flags that a project with `file_path` should offer autosave restoration on open, if
     /// `<file_path>.autosave.ocproj` exists and is newer than the project file itself.
     pub fn check_autosave_on_open(&mut self, file_path: &Path) {
-        let autosave_path = file_path.with_extension("autosave.ocproj");
+        let autosave_path = avcore::app_paths::autosave_path(&file_path);
         if autosave_is_newer(&autosave_path, file_path) {
             self.autosave_restore_pending = Some(autosave_path);
         }

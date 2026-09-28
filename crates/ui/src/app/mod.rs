@@ -817,25 +817,7 @@ pub fn load_prefs() -> PrefsState {
 /// - Windows: `%APPDATA%\oca\prefs.oc`
 /// - Linux:   `~/.config/oca/prefs.oc`
 pub(crate) fn prefs_path() -> PathBuf {
-    #[cfg(target_os = "macos")]
-    {
-        if let Ok(home) = std::env::var("HOME") {
-            return PathBuf::from(home).join("Library/Application Support/oca/prefs.oc");
-        }
-    }
-    #[cfg(target_os = "windows")]
-    {
-        if let Ok(appdata) = std::env::var("APPDATA") {
-            return PathBuf::from(appdata).join("oca\\prefs.oc");
-        }
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    {
-        if let Ok(home) = std::env::var("HOME") {
-            return PathBuf::from(home).join(".config/oca/prefs.oc");
-        }
-    }
-    PathBuf::from("prefs.oc")
+    avcore::app_paths::prefs_path()
 }
 
 /// Upper bounds for filmstrip resources. At [`THUMBNAIL_MAX_DIM`] a worst-case square RGBA
