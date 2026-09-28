@@ -80,7 +80,18 @@ Known gaps versus the egui shell, in migration order:
    playback and seeks. Hardware decode defaults on and can be changed through the preview command.
    Compound clips are still skipped in preview.
 2. Multi-select drag, composite blocks, roll/slide/slip edits, copy/paste, layer templates.
-3. Text and shape clips (creation and editing), keyframes, masks, transitions, crop.
+3. Keyframes, masks, transitions, crop. **Text and shape clips (first part) done:** toolbar
+   "Add text"/"Add shape" create a clip at the playhead on an auto-created Text/Shape track via
+   `core`'s `TextClip::new`/`ShapeClip::new` and select it; overlays draw on the timeline canvas
+   and move/trim/snap/delete through the same drag paths as media clips; the inspector edits
+   text (content, bundled-catalog font grouped by category, Bold only where the family ships
+   one, size, color, alignment, position, word highlight when the clip has word timing) and
+   shapes (preset via `core`'s `ShapePreset`, color, opacity, position, size), one undo step per
+   commit, with the preview reopening on the changed layer. Still missing from egui: Text tool
+   (T) click-to-create on the preview, direct on-canvas drag/resize, custom shape drawing and
+   vertex editing, font weight (variable fonts), text direction, background box, rotation,
+   stroke thickness, start/duration fields, per-property keyframes, split of overlay clips,
+   add-empty-Text/Shape-track buttons.
 4. Export queue parity: persistent `.ocqueue` snapshots, bounded worker pool, pause/resume/cancel/remove, loudness matching, GPU encoder preference, output conflict choices, and SRT export are implemented. The dedicated export panel still needs visual/e2e coverage.
 5. AI features: transcription/transcript panel, silence review, scene detection, highlight
    detection, auto-reframe, background removal, motion tracking, privacy blur, TTS.
