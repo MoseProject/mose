@@ -129,8 +129,17 @@ Known gaps versus the egui shell, in migration order:
    click-to-seek on the timecode, and ripple-deletes whatever's still checked on Apply (one undo
    step for the batch) -- mirrors `ui::App`'s `silence_review.rs` modal, review state staying
    client-side between `detect_silence_gaps_for_clip` and `apply_silence_gaps` rather than
-   server-staged. Still missing: scene detection, highlight detection, auto-reframe, background
-   removal, motion tracking, privacy blur, TTS.
+   server-staged. **Scene/highlight detection, motion tracking, auto-reframe (static), background
+   removal, privacy blur and TTS done:** each ports its `ui::App` background-thread counterpart
+   command-for-command (same sampling rates/caps, same `avcore` pipelines -- scene cuts and
+   highlights land as `Chapter`/`Highlight` markers, motion tracking writes `position_keyframes`,
+   auto-reframe writes `crop_x/y/w/h`, background removal/privacy blur write a cached matte
+   `.mp4` path + enable flag, TTS imports the synthesized WAV like any dropped file); each has a
+   single-flight `AppState` guard and its own Tauri event for the async result. Region params
+   (motion-track/privacy-blur center+size) are plain number inputs on the inspector rather than
+   on-canvas pickers. Still missing: **dynamic (per-frame animated) auto-reframe** -- only the
+   static one-crop-per-clip variant is ported; `ui::App`'s `dynamic_reframe.rs` produces sparse
+   crop keyframes instead and hasn't been.
 6. Preferences (locale switch, layout, hardware decode), autosave + crash recovery, error
    reporting consent, update check, telemetry, recent projects on Home, watch folder, YouTube
    download, sound library. **In progress:** desktop now shares `prefs.oc` with egui for locale,
