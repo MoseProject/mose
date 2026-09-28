@@ -18,6 +18,8 @@ import type {
   ShapeClipPatch,
   TextClipPatch,
   TrackKind,
+  SilenceGap,
+  SilenceReview,
   TranscribeEvent,
   TranscriptDocument,
   TranscriptHit,
@@ -142,6 +144,11 @@ export const api = {
     invoke<TranscriptHit[]>("search_transcripts", { query }),
   seekToTranscriptWord: (assetId: number, sourceSecs: number) =>
     invoke<boolean>("seek_to_transcript_word", { assetId, sourceSecs }),
+
+  detectSilenceGapsForClip: (clipId: number) =>
+    invoke<SilenceReview | null>("detect_silence_gaps_for_clip", { clipId }),
+  applySilenceGaps: (trackId: number, gaps: SilenceGap[]) =>
+    invoke<void>("apply_silence_gaps", { trackId, gaps }),
 
   addMarker: (kind: MarkerKind = "Standard") => invoke<void>("add_marker", { kind }),
   removeMarker: (markerId: number) => invoke<void>("remove_marker", { markerId }),

@@ -125,6 +125,15 @@ const strings = {
   },
   transcriptPanelNoClip: { "pt-BR": "Selecione um clipe de vídeo ou áudio.", en: "Select a video or audio clip." },
   whisperModelPath: { "pt-BR": "Modelo Whisper (.bin)", en: "Whisper model (.bin)" },
+
+  silenceReview: { "pt-BR": "Revisar silêncio", en: "Review silence" },
+  silenceReviewTitle: { "pt-BR": "Revisar silêncio", en: "Review silence" },
+  silenceReviewEmpty: { "pt-BR": "Nenhum silêncio encontrado.", en: "No silence found." },
+  silenceReviewApply: { "pt-BR": "Aplicar", en: "Apply" },
+  silenceReviewSelectClipFirst: {
+    "pt-BR": "Selecione um clipe primeiro.",
+    en: "Select a clip first.",
+  },
   sequences: { "pt-BR": "Sequências", en: "Sequences" },
   sequence: { "pt-BR": "Sequência", en: "Sequence" },
   copy: { "pt-BR": "cópia", en: "copy" },

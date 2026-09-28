@@ -251,6 +251,16 @@ export interface TranscriptHit {
   word: TranscriptWord;
 }
 
+export interface SilenceGap {
+  startSecs: number;
+  endSecs: number;
+}
+
+export interface SilenceReview {
+  trackId: number;
+  gaps: SilenceGap[];
+}
+
 export type TranscribeEvent =
   | { type: "started"; assetId: number }
   | { type: "done"; assetId: number }

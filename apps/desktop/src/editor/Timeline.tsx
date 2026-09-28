@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { formatTime, t } from "../i18n";
 import { api } from "../ipc";
 import { LayerTemplates } from "./LayerTemplates";
+import { SilenceReviewPanel } from "./SilenceReviewPanel";
 import { TranscriptPanel } from "./TranscriptPanel";
 import {
   assetDragStore,
@@ -559,6 +560,7 @@ export function Timeline({ session }: { session: SessionView }) {
         </button>
         <LayerTemplates session={session} />
         <TranscriptPanel session={session} />
+        <SilenceReviewPanel />
         <button className="icon" onClick={() => run(api.addTrack("Video"))}>
           {t("addVideoTrack")}
         </button>
