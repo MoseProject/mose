@@ -670,4 +670,53 @@ PcmStatus avbridge_extract_pcm_16k_mono(const char *in_path, float **out_samples
    Safe to call with `samples == NULL` (no-op). */
 void avbridge_free_pcm_buffer(float *samples);
 
+/* Opaque one-video-stream demux/decode session used by Bush preview. */
+typedef struct AvbridgeDecodeSession AvbridgeDecodeSession;
+
+typedef enum {
+    DECODE_OK = 0,
+    DECODE_EOF = 1,
+    DECODE_CANCELLED = 2,
+    DECODE_ERR_OPEN_INPUT = 3,
+    DECODE_ERR_STREAM_INFO = 4,
+    DECODE_ERR_NO_VIDEO_STREAM = 5,
+    DECODE_ERR_DECODER = 6,
+    DECODE_ERR_SEEK = 7,
+    DECODE_ERR_PIPELINE = 8,
+    /* Dimensions or a packed RGBA frame exceed Bush's native allocation limit. */
+    DECODE_ERR_FRAME_SIZE = 9,
+} DecodeStatus;
+
+typedef struct {
+    int width;
+    int height;
+    int fps_num;
+    int fps_den;
+    double duration_secs;
+} DecodeInfo;
+
+typedef struct {
+    uint8_t *pixels;
+    size_t pixel_len;
+    int width;
+    int height;
+    int stride_bytes;
+    double timestamp_secs;
+} DecodedRgbaFrame;
+
+/* Opens the first video stream. `out_session` is set only on DECODE_OK and must be released by
+   avbridge_decode_close. `out_info` is initialized only on DECODE_OK. */
+DecodeStatus avbridge_decode_open(const char *path, AvbridgeDecodeSession **out_session,
+                                  DecodeInfo *out_info);
+
+/* Flushes decoder state and seeks to the nearest preceding keyframe at timestamp_secs. */
+DecodeStatus avbridge_decode_seek(AvbridgeDecodeSession *session, double timestamp_secs);
+
+/* Decodes one packed RGBA frame. On DECODE_OK the caller owns out_frame->pixels and releases it
+   with avbridge_decode_free_frame. Every loop checks cancel when it is non-NULL. */
+DecodeStatus avbridge_decode_next_rgba(AvbridgeDecodeSession *session, const uint8_t *cancel,
+                                       DecodedRgbaFrame *out_frame);
+void avbridge_decode_free_frame(DecodedRgbaFrame *frame);
+void avbridge_decode_close(AvbridgeDecodeSession *session);
+
 #endif

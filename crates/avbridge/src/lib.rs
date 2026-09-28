@@ -119,6 +119,30 @@ struct RawProbeInfo {
     sample_rate_hz: c_int,
 }
 
+#[repr(C)]
+struct RawDecodeInfo {
+    width: c_int,
+    height: c_int,
+    fps_num: c_int,
+    fps_den: c_int,
+    duration_secs: f64,
+}
+
+#[repr(C)]
+struct RawDecodedRgbaFrame {
+    pixels: *mut u8,
+    pixel_len: usize,
+    width: c_int,
+    height: c_int,
+    stride_bytes: c_int,
+    timestamp_secs: f64,
+}
+
+#[repr(C)]
+struct RawDecodeSession {
+    _private: [u8; 0],
+}
+
 unsafe extern "C" {
     fn avbridge_version() -> u32;
     fn avbridge_probe(path: *const c_char, out: *mut RawProbeInfo) -> c_int;
@@ -236,6 +260,19 @@ unsafe extern "C" {
         canvas_fps_num: c_int,
         canvas_fps_den: c_int,
     ) -> c_int;
+    fn avbridge_decode_open(
+        path: *const c_char,
+        out_session: *mut *mut RawDecodeSession,
+        out_info: *mut RawDecodeInfo,
+    ) -> c_int;
+    fn avbridge_decode_seek(session: *mut RawDecodeSession, timestamp_secs: f64) -> c_int;
+    fn avbridge_decode_next_rgba(
+        session: *mut RawDecodeSession,
+        cancel: *const u8,
+        out_frame: *mut RawDecodedRgbaFrame,
+    ) -> c_int;
+    fn avbridge_decode_free_frame(frame: *mut RawDecodedRgbaFrame);
+    fn avbridge_decode_close(session: *mut RawDecodeSession);
 }
 
 /// Trampoline handed to the C side as `progress_cb`; `user_data` is a `*mut F` for whatever
@@ -362,6 +399,189 @@ pub fn probe(path: &Path) -> Result<ProbeInfo, ProbeError> {
         sample_rate_hz: (kind == StreamKind::Audio && raw.sample_rate_hz > 0)
             .then_some(raw.sample_rate_hz as u32),
     })
+}
+
+/// Stream metadata for one opened video decode session.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DecodeInfo {
+    pub width: u32,
+    pub height: u32,
+    pub fps: Option<f64>,
+    pub duration_secs: Option<f64>,
+}
+
+/// One packed RGBA frame copied out of the native decode session.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DecodedRgbaFrame {
+    pub width: u32,
+    pub height: u32,
+    pub stride_bytes: usize,
+    pub timestamp_secs: f64,
+    pub pixels: Vec<u8>,
+}
+
+/// A worker-owned FFmpeg video decode session.
+///
+/// This type deliberately has no `Sync` implementation. Open, seek, decode, and teardown must
+/// stay on one Bush worker thread; cancellation may be signalled from another thread through the
+/// supplied [`AtomicBool`].
+#[derive(Debug)]
+pub struct DecodeSession {
+    raw: *mut RawDecodeSession,
+}
+
+/// Failure reported by the narrow decode-session C surface.
+#[derive(Debug, thiserror::Error)]
+pub enum DecodeError {
+    #[error("path is not a valid C string: {0}")]
+    InvalidPath(NulError),
+    #[error("failed to open input")]
+    OpenInput,
+    #[error("failed to read stream info")]
+    StreamInfo,
+    #[error("input has no video stream")]
+    NoVideoStream,
+    #[error("failed to initialize video decoder")]
+    Decoder,
+    #[error("seek timestamp must be finite and non-negative")]
+    InvalidSeekTimestamp,
+    #[error("failed to seek video stream")]
+    Seek,
+    #[error("decoded frame dimensions exceed the native RGBA allocation limit")]
+    FrameSize,
+    #[error("decode pipeline failed")]
+    Pipeline,
+    #[error("unknown decode status code: {0}")]
+    Unknown(c_int),
+}
+
+impl DecodeSession {
+    /// Opens the first video stream at `path`.
+    pub fn open(path: &Path) -> Result<(Self, DecodeInfo), DecodeError> {
+        let c_path =
+            CString::new(path.to_string_lossy().as_bytes()).map_err(DecodeError::InvalidPath)?;
+        let mut raw = std::ptr::null_mut();
+        let mut info = RawDecodeInfo {
+            width: 0,
+            height: 0,
+            fps_num: 0,
+            fps_den: 0,
+            duration_secs: 0.0,
+        };
+        // SAFETY: c_path is NUL-terminated for this call; raw/info point to writable storage.
+        let status = unsafe { avbridge_decode_open(c_path.as_ptr(), &mut raw, &mut info) };
+        decode_open_status(status)?;
+        debug_assert!(!raw.is_null());
+        let width = u32::try_from(info.width).map_err(|_| DecodeError::FrameSize)?;
+        let height = u32::try_from(info.height).map_err(|_| DecodeError::FrameSize)?;
+        if width == 0 || height == 0 {
+            // SAFETY: successful open transfers ownership of raw to this call; release it before
+            // rejecting an invalid native metadata result.
+            unsafe { avbridge_decode_close(raw) };
+            return Err(DecodeError::FrameSize);
+        }
+        Ok((
+            Self { raw },
+            DecodeInfo {
+                width,
+                height,
+                fps: (info.fps_num > 0 && info.fps_den > 0)
+                    .then_some(info.fps_num as f64 / info.fps_den as f64),
+                duration_secs: (info.duration_secs.is_finite() && info.duration_secs >= 0.0)
+                    .then_some(info.duration_secs),
+            },
+        ))
+    }
+
+    /// Flushes decoder state and seeks to the nearest preceding keyframe.
+    pub fn seek(&mut self, timestamp_secs: f64) -> Result<(), DecodeError> {
+        if !timestamp_secs.is_finite() || timestamp_secs < 0.0 {
+            return Err(DecodeError::InvalidSeekTimestamp);
+        }
+        // SAFETY: self.raw is owned by this live session and C does not retain the call inputs.
+        match unsafe { avbridge_decode_seek(self.raw, timestamp_secs) } {
+            0 => Ok(()),
+            7 => Err(DecodeError::Seek),
+            other => Err(DecodeError::Unknown(other)),
+        }
+    }
+
+    /// Decodes the next packed RGBA frame, or `None` at end of stream.
+    pub fn next_rgba(
+        &mut self,
+        cancel: &AtomicBool,
+    ) -> Result<Option<DecodedRgbaFrame>, DecodeError> {
+        let mut raw_frame = RawDecodedRgbaFrame {
+            pixels: std::ptr::null_mut(),
+            pixel_len: 0,
+            width: 0,
+            height: 0,
+            stride_bytes: 0,
+            timestamp_secs: 0.0,
+        };
+        // SAFETY: self.raw is live, `cancel.as_ptr()` is documented to have bool-compatible
+        // size/alignment/bit validity, and raw_frame is writable for this call. Successful
+        // frames are copied and released with the paired C allocator below.
+        let status = unsafe {
+            avbridge_decode_next_rgba(self.raw, cancel.as_ptr() as *const u8, &mut raw_frame)
+        };
+        match status {
+            0 => {
+                let width = u32::try_from(raw_frame.width).map_err(|_| DecodeError::FrameSize)?;
+                let height = u32::try_from(raw_frame.height).map_err(|_| DecodeError::FrameSize)?;
+                let stride_bytes =
+                    usize::try_from(raw_frame.stride_bytes).map_err(|_| DecodeError::FrameSize)?;
+                if raw_frame.pixels.is_null()
+                    || width == 0
+                    || height == 0
+                    || stride_bytes == 0
+                    || !raw_frame.timestamp_secs.is_finite()
+                {
+                    // SAFETY: safe with null or a successful C allocation; clears raw_frame.
+                    unsafe { avbridge_decode_free_frame(&mut raw_frame) };
+                    return Err(DecodeError::FrameSize);
+                }
+                // SAFETY: DECODE_OK guarantees `pixel_len` initialized bytes at `pixels`.
+                let pixels = unsafe {
+                    std::slice::from_raw_parts(raw_frame.pixels, raw_frame.pixel_len).to_vec()
+                };
+                let timestamp_secs = raw_frame.timestamp_secs;
+                // SAFETY: releases only the C allocation copied above.
+                unsafe { avbridge_decode_free_frame(&mut raw_frame) };
+                Ok(Some(DecodedRgbaFrame {
+                    width,
+                    height,
+                    stride_bytes,
+                    timestamp_secs,
+                    pixels,
+                }))
+            }
+            1 => Ok(None),
+            2 => Ok(None),
+            8 => Err(DecodeError::Pipeline),
+            9 => Err(DecodeError::FrameSize),
+            other => Err(DecodeError::Unknown(other)),
+        }
+    }
+}
+
+impl Drop for DecodeSession {
+    fn drop(&mut self) {
+        // SAFETY: self uniquely owns the non-null raw session returned by avbridge_decode_open.
+        unsafe { avbridge_decode_close(self.raw) };
+    }
+}
+
+fn decode_open_status(status: c_int) -> Result<(), DecodeError> {
+    match status {
+        0 => Ok(()),
+        3 => Err(DecodeError::OpenInput),
+        4 => Err(DecodeError::StreamInfo),
+        5 => Err(DecodeError::NoVideoStream),
+        6 => Err(DecodeError::Decoder),
+        9 => Err(DecodeError::FrameSize),
+        other => Err(DecodeError::Unknown(other)),
+    }
 }
 
 /// What [`remux_copy`] failed on.
