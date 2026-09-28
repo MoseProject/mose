@@ -23,9 +23,15 @@ pub struct PendingIntent<T> {
 ///
 /// This is the core backpressure rule for Bush preview scheduling. It stays bounded at one item:
 /// stale scrubs or live edits are returned to the caller on replacement instead of accumulating.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct LatestIntent<T> {
     pending: Option<PendingIntent<T>>,
+}
+
+impl<T> Default for LatestIntent<T> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<T> LatestIntent<T> {

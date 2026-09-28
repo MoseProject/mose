@@ -6,6 +6,7 @@
 
 mod latest_intent;
 mod scene;
+mod scene_scheduler;
 mod scene_versions;
 
 pub use latest_intent::{Generation, LatestIntent, PendingIntent};
@@ -13,4 +14,5 @@ pub use scene::{
     Contributor, ContributorContent, ContributorId, MediaSource, RasterOverlay, SceneError,
     SceneSnapshot, SourceRange,
 };
+pub use scene_scheduler::{SceneScheduler, ScheduleError, ScheduledScene, Submission};
 pub use scene_versions::{invalidation_scope, InvalidationScope, SceneVersions, Version};
