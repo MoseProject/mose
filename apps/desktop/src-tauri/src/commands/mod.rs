@@ -10,6 +10,7 @@
 //! successful mutations publish the new session through [`crate::state::publish`] rather than
 //! returning it, so every listener (not just the caller) sees the same state.
 
+pub mod export;
 pub mod media;
 pub mod timeline;
 
@@ -18,7 +19,6 @@ use std::path::PathBuf;
 use avcore::{ExportAspectRatio, Project};
 use tauri::{AppHandle, Manager, State};
 
-use crate::export::{prepare_export, ExportJobView};
 use crate::state::{blank_project, publish, AppState, Session};
 
 /// Runs a non-undoable mutation (navigation, persistence metadata) and publishes the result.
@@ -172,37 +172,4 @@ pub fn set_export_settings(
         session.dirty = true;
         Ok(())
     })
-}
-
-/// Resolves the active sequence, asks where to write it, and starts rendering. `Ok(None)` when
-/// the user cancels the dialog.
-#[tauri::command]
-pub async fn export_active_sequence(app: AppHandle) -> Result<Option<u64>, String> {
-    let (prepared, title) = {
-        let state = app.state::<AppState>();
-        let session = state.session();
-        (
-            prepare_export(&session.project)?,
-            session.project.active_sequence().name.clone(),
-        )
-    };
-    let Some(output) = rfd::FileDialog::new()
-        .add_filter("MP4", &["mp4"])
-        .set_file_name(format!("{title}_export.mp4"))
-        .save_file()
-    else {
-        return Ok(None);
-    };
-    let exports = app.state::<AppState>().exports.clone();
-    Ok(Some(exports.start(app.clone(), title, output, prepared)))
-}
-
-#[tauri::command]
-pub fn cancel_export(state: State<'_, AppState>, job_id: u64) {
-    state.exports.cancel(job_id);
-}
-
-#[tauri::command]
-pub fn list_exports(state: State<'_, AppState>) -> Vec<ExportJobView> {
-    state.exports.snapshot()
 }
