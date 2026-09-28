@@ -79,7 +79,17 @@ Known gaps versus the egui shell, in migration order:
    reopening; decoder-shape changes still reopen. Word-highlight text overlays now advance during
    playback and seeks. Hardware decode defaults on and can be changed through the preview command.
    Compound clips are still skipped in preview.
-2. Multi-select drag, composite blocks, roll/slide/slip edits, copy/paste, layer templates.
+2. **Done:** roll/slip/slide tools (timeline toolbar tool switcher, repurposing edge/body drags
+   into `avcore::Timeline`'s `Track::roll_edit`/`ClipInstance::slip`/`Track::slide_clip`);
+   composite-block body drag (`Timeline::move_clip_with_group`) and "Mesclar em bloco composto";
+   `Ctrl+C`/`X`/`V` and `Ctrl+Shift+C`/`V` clip/formatting clipboard
+   (`Timeline::copy_clip_group`/`paste_clip_group`, `ClipInstance::formatting`/
+   `apply_formatting`), transient per-session (not per-project) same as egui's
+   `App::clipboard_clip`; layer templates (Templates popup: apply/delete saved templates, Save
+   as template for >=2 selected clips), sharing `prefs.oc`'s `saved_layer_templates` key with
+   the egui shell. Multi-select itself (Ctrl+click) predates this slice. Still missing: on-canvas
+   ghost rendering for roll/slip/slide drags (commands only fire on release, no live preview of
+   the pending edit), a visible "has clipboard" indicator on the paste/apply buttons.
 3. Keyframes, masks, transitions, crop. **Text and shape clips (first part) done:** toolbar
    "Add text"/"Add shape" create a clip at the playhead on an auto-created Text/Shape track via
    `core`'s `TextClip::new`/`ShapeClip::new` and select it; overlays draw on the timeline canvas
