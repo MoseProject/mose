@@ -28,5 +28,8 @@ export function Prefs() {
     <label>{t("outputFolder")}<input value={prefs.outputFolder} onChange={(e) => update({ outputFolder: e.target.value })} /></label>
     <label>{t("autosaveInterval")}<input type="number" min={1} max={60} value={prefs.autosaveMinutes} onChange={(e) => update({ autosaveMinutes: Number(e.target.value) || 1 })} /> {t("minutes")}</label>
     <label>{t("whisperModelPath")}<input value={prefs.whisperModelPath} onChange={(e) => update({ whisperModelPath: e.target.value })} /></label>
+    <label>{t("reframeModelPath")}<input value={prefs.reframeModelPath} onChange={(e) => update({ reframeModelPath: e.target.value })} /></label>
+    <label>{t("backgroundRemovalModelPath")}<input value={prefs.backgroundRemovalModelPath} onChange={(e) => update({ backgroundRemovalModelPath: e.target.value })} /></label>
+    <label>{t("ttsModelPath")}<input value={prefs.ttsModelPath} onChange={(e) => update({ ttsModelPath: e.target.value })} /></label>
   </main>;
 }

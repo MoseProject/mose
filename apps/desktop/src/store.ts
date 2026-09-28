@@ -5,7 +5,19 @@
 // re-render the components that read them.
 
 import { useSyncExternalStore } from "react";
-import { api, onExports, onPreview, onSession, onTranscribe } from "./ipc";
+import {
+  api,
+  onAutoReframe,
+  onExports,
+  onMatteGeneration,
+  onMotionTrack,
+  onPreview,
+  onPrivacyBlur,
+  onSceneCut,
+  onSession,
+  onTranscribe,
+  onTts,
+} from "./ipc";
 import { localeFromPrefs, setLocale, t } from "./i18n";
 import type { ExportJobView, LayerTemplate, PreviewTick, SessionView } from "./types";
 
@@ -125,6 +137,24 @@ export async function connect() {
   });
   await onPreview((tick) => previewStore.set(tick));
   await onExports((jobs) => exportsStore.set(jobs));
+  await onSceneCut((count) => {
+    if (count === 0) patchUi({ error: t("sceneCutDetectionNone") });
+  });
+  await onMotionTrack((count) => {
+    if (count === 0) patchUi({ error: t("motionTrackNoFramesDecoded") });
+  });
+  await onAutoReframe((event) => {
+    if (!event.subjectFound) patchUi({ error: t("autoReframeNoSubjectFound") });
+  });
+  await onMatteGeneration((event) => {
+    if (event.type === "failed") patchUi({ error: event.message });
+  });
+  await onPrivacyBlur((event) => {
+    if (event.type === "failed") patchUi({ error: event.message });
+  });
+  await onTts((event) => {
+    if (event.type === "failed") patchUi({ error: event.message });
+  });
   await onTranscribe((event) => {
     if (event.type === "started") {
       transcribingAssetIdStore.set(event.assetId);

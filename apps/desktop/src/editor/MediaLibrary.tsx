@@ -4,6 +4,47 @@ import { api, thumbnailUrl } from "../ipc";
 import { assetDragStore, run, transcribingAssetIdStore, useStore } from "../store";
 import type { MediaAsset, SessionView } from "../types";
 
+function TtsButton() {
+  const [text, setText] = useState<string | null>(null);
+  if (text === null) {
+    return (
+      <button className="icon" onClick={() => setText("")}>
+        {t("ttsButton")}
+      </button>
+    );
+  }
+  return (
+    <div className="modal-overlay" onClick={() => setText(null)}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h3>{t("ttsModalTitle")}</h3>
+        <textarea
+          autoFocus
+          rows={4}
+          style={{ width: "100%" }}
+          placeholder={t("ttsPlaceholder")}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+        <div className="modal-actions">
+          <button className="icon" onClick={() => setText(null)}>
+            {t("cancel")}
+          </button>
+          <button
+            className="icon primary"
+            disabled={text.trim().length === 0}
+            onClick={() => {
+              void run(api.generateTts(text));
+              setText(null);
+            }}
+          >
+            {t("ttsGenerate")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Pixels the pointer must travel before a press on an asset becomes a drag. */
 const DRAG_THRESHOLD_PX = 4;
 
@@ -17,6 +58,7 @@ export function MediaLibrary({ session }: { session: SessionView }) {
         <button className="icon" onClick={() => run(api.importMediaDialog())}>
           {t("importFiles")}
         </button>
+        <TtsButton />
       </div>
       <div className="asset-list">
         {assets.length === 0 ? (

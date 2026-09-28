@@ -5,14 +5,17 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
+  AutoReframeEvent,
   ClipPatch,
   ExportAspectRatio,
   ExportJobView,
   LayerTemplate,
   MarkerKind,
+  MatteGenerationEvent,
   OverlayCatalog,
   PreviewTick,
   PrefsView,
+  PrivacyBlurEvent,
   RecentProject,
   SessionView,
   ShapeClipPatch,
@@ -23,6 +26,7 @@ import type {
   TranscribeEvent,
   TranscriptDocument,
   TranscriptHit,
+  TtsEvent,
 } from "./types";
 
 export const events = {
@@ -30,6 +34,12 @@ export const events = {
   preview: "preview-tick",
   exports: "export-jobs",
   transcribe: "transcribe-event",
+  sceneCut: "scene-cut-event",
+  motionTrack: "motion-track-event",
+  autoReframe: "auto-reframe-event",
+  matteGeneration: "matte-generation-event",
+  privacyBlur: "privacy-blur-event",
+  tts: "tts-event",
 } as const;
 
 export function onSession(handler: (view: SessionView) => void): Promise<UnlistenFn> {
@@ -46,6 +56,32 @@ export function onExports(handler: (jobs: ExportJobView[]) => void): Promise<Unl
 
 export function onTranscribe(handler: (event: TranscribeEvent) => void): Promise<UnlistenFn> {
   return listen<TranscribeEvent>(events.transcribe, (e) => handler(e.payload));
+}
+
+export function onSceneCut(handler: (cutCount: number) => void): Promise<UnlistenFn> {
+  return listen<number>(events.sceneCut, (e) => handler(e.payload));
+}
+
+export function onMotionTrack(handler: (keyframeCount: number) => void): Promise<UnlistenFn> {
+  return listen<number>(events.motionTrack, (e) => handler(e.payload));
+}
+
+export function onAutoReframe(handler: (event: AutoReframeEvent) => void): Promise<UnlistenFn> {
+  return listen<AutoReframeEvent>(events.autoReframe, (e) => handler(e.payload));
+}
+
+export function onMatteGeneration(
+  handler: (event: MatteGenerationEvent) => void,
+): Promise<UnlistenFn> {
+  return listen<MatteGenerationEvent>(events.matteGeneration, (e) => handler(e.payload));
+}
+
+export function onPrivacyBlur(handler: (event: PrivacyBlurEvent) => void): Promise<UnlistenFn> {
+  return listen<PrivacyBlurEvent>(events.privacyBlur, (e) => handler(e.payload));
+}
+
+export function onTts(handler: (event: TtsEvent) => void): Promise<UnlistenFn> {
+  return listen<TtsEvent>(events.tts, (e) => handler(e.payload));
 }
 
 // Custom URI schemes are served from http://<scheme>.localhost on Windows (WebView2) and
@@ -149,6 +185,43 @@ export const api = {
     invoke<SilenceReview | null>("detect_silence_gaps_for_clip", { clipId }),
   applySilenceGaps: (trackId: number, gaps: SilenceGap[]) =>
     invoke<void>("apply_silence_gaps", { trackId, gaps }),
+
+  detectSceneCutsForClip: (clipId: number) =>
+    invoke<void>("detect_scene_cuts_for_clip", { clipId }),
+  detectHighlights: () => invoke<void>("detect_highlights"),
+  motionTrackClip: (
+    clipId: number,
+    centerX: number,
+    centerY: number,
+    templateWidth: number,
+    templateHeight: number,
+    searchRadius: number,
+  ) =>
+    invoke<void>("motion_track_clip", {
+      clipId,
+      centerX,
+      centerY,
+      templateWidth,
+      templateHeight,
+      searchRadius,
+    }),
+  autoReframeClip: (clipId: number) => invoke<void>("auto_reframe_clip", { clipId }),
+  generateMatteForClip: (clipId: number) => invoke<void>("generate_matte_for_clip", { clipId }),
+  applyPrivacyBlurToClip: (
+    clipId: number,
+    centerX: number,
+    centerY: number,
+    widthFrac: number,
+    heightFrac: number,
+  ) =>
+    invoke<void>("apply_privacy_blur_to_clip", {
+      clipId,
+      centerX,
+      centerY,
+      widthFrac,
+      heightFrac,
+    }),
+  generateTts: (text: string) => invoke<void>("generate_tts", { text }),
 
   addMarker: (kind: MarkerKind = "Standard") => invoke<void>("add_marker", { kind }),
   removeMarker: (markerId: number) => invoke<void>("remove_marker", { markerId }),

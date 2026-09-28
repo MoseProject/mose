@@ -558,6 +558,16 @@ export function Timeline({ session }: { session: SessionView }) {
         >
           {t("mergeComposite")}
         </button>
+        <button
+          className="icon"
+          disabled={selected.length !== 1}
+          onClick={() => selected[0] !== undefined && run(api.detectSceneCutsForClip(selected[0]))}
+        >
+          {t("detectChapters")}
+        </button>
+        <button className="icon" onClick={() => run(api.detectHighlights())}>
+          {t("detectHighlightsAction")}
+        </button>
         <LayerTemplates session={session} />
         <TranscriptPanel session={session} />
         <SilenceReviewPanel />

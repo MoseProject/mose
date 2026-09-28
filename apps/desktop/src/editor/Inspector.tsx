@@ -69,6 +69,7 @@ export function Inspector({ session }: { session: SessionView }) {
 }
 function ClipControls({ clip }: { clip: ClipInstance }) {
   const commit = (patch: ClipPatch) => run(api.updateClip(clip.id, patch));
+  const [region, setRegion] = useState({ centerX: 0.5, centerY: 0.5, width: 0.3, height: 0.3 });
   return (
     <>
       <Slider
@@ -352,6 +353,87 @@ function ClipControls({ clip }: { clip: ClipInstance }) {
         defaultValue={1}
         onCommit={(next) => commit({ cropHKeyframes: next })}
       />
+
+      <div className="field">
+        <label>{t("aiActions")}</label>
+      </div>
+      <div className="modal-row">
+        <input
+          type="number"
+          step={0.05}
+          min={0}
+          max={1}
+          value={region.centerX}
+          title={t("centerX")}
+          onChange={(e) => setRegion({ ...region, centerX: Number(e.target.value) })}
+        />
+        <input
+          type="number"
+          step={0.05}
+          min={0}
+          max={1}
+          value={region.centerY}
+          title={t("centerY")}
+          onChange={(e) => setRegion({ ...region, centerY: Number(e.target.value) })}
+        />
+        <input
+          type="number"
+          step={0.05}
+          min={0.05}
+          max={0.6}
+          value={region.width}
+          title={t("regionWidth")}
+          onChange={(e) => setRegion({ ...region, width: Number(e.target.value) })}
+        />
+        <input
+          type="number"
+          step={0.05}
+          min={0.05}
+          max={0.6}
+          value={region.height}
+          title={t("regionHeight")}
+          onChange={(e) => setRegion({ ...region, height: Number(e.target.value) })}
+        />
+      </div>
+      <button
+        className="icon"
+        onClick={() =>
+          run(
+            api.motionTrackClip(
+              clip.id,
+              region.centerX,
+              region.centerY,
+              region.width,
+              region.height,
+              0.08,
+            ),
+          )
+        }
+      >
+        {t("trackMotion")}
+      </button>
+      <button className="icon" onClick={() => run(api.autoReframeClip(clip.id))}>
+        {t("autoReframe")}
+      </button>
+      <button className="icon" onClick={() => run(api.generateMatteForClip(clip.id))}>
+        {t("generateMatte")}
+      </button>
+      <button
+        className="icon"
+        onClick={() =>
+          run(
+            api.applyPrivacyBlurToClip(
+              clip.id,
+              region.centerX,
+              region.centerY,
+              region.width,
+              region.height,
+            ),
+          )
+        }
+      >
+        {t("applyPrivacyBlur")}
+      </button>
     </>
   );
 }

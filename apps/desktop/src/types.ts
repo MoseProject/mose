@@ -227,6 +227,9 @@ export interface PrefsView {
   recentProjectPaths: string[];
   savedLayerTemplates: LayerTemplate[];
   whisperModelPath: string;
+  reframeModelPath: string;
+  backgroundRemovalModelPath: string;
+  ttsModelPath: string;
 }
 
 export interface TranscriptWord {
@@ -260,6 +263,21 @@ export interface SilenceReview {
   trackId: number;
   gaps: SilenceGap[];
 }
+
+export interface AutoReframeEvent {
+  clipId: number;
+  subjectFound: boolean;
+}
+
+export type MatteGenerationEvent =
+  | { type: "done"; clipId: number }
+  | { type: "failed"; clipId: number; message: string };
+
+export type PrivacyBlurEvent =
+  | { type: "done"; clipId: number }
+  | { type: "failed"; clipId: number; message: string };
+
+export type TtsEvent = { type: "done" } | { type: "failed"; message: string };
 
 export type TranscribeEvent =
   | { type: "started"; assetId: number }
