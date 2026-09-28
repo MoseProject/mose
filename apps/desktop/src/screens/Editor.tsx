@@ -1,6 +1,7 @@
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useEffect, useRef, useState } from "react";
 import { Inspector } from "../editor/Inspector";
+import { ExportPanel } from "../editor/ExportPanel";
 import { MediaLibrary } from "../editor/MediaLibrary";
 import { PreviewPanel } from "../editor/PreviewPanel";
 import { Timeline } from "../editor/Timeline";
@@ -96,6 +97,7 @@ export function Editor({ session }: { session: SessionView }) {
       <MediaLibrary session={session} />
       <PreviewPanel />
       <Inspector session={session} />
+      <ExportPanel />
       <div className="splitter" onPointerDown={startResize} />
       <Timeline session={session} />
       {dropping && <div className="drop-overlay">{t("dropToImport")}</div>}

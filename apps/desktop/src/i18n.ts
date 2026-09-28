@@ -88,6 +88,13 @@ const strings = {
   cancel: { "pt-BR": "Cancelar", en: "Cancel" },
   noExports: { "pt-BR": "Nenhuma exportação nesta sessão.", en: "No exports this session." },
   errorPrefix: { "pt-BR": "Erro", en: "Error" },
+  exportSrt: { "pt-BR": "Exportar SRT", en: "Export SRT" },
+  gpuEncoder: { "pt-BR": "Codificador GPU", en: "GPU encoder" },
+  matchLoudness: { "pt-BR": "Igualar loudness", en: "Match loudness" },
+  pauseExport: { "pt-BR": "Pausar", en: "Pause" },
+  resumeExport: { "pt-BR": "Retomar", en: "Resume" },
+  removeExport: { "pt-BR": "Remover", en: "Remove" },
+  elapsed: { "pt-BR": "decorrido", en: "elapsed" },
 } as const;
 
 export type TextKey = keyof typeof strings;

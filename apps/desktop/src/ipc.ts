@@ -82,6 +82,13 @@ export const api = {
   setExportSettings: (targetLufs: number, aspectRatio: ExportAspectRatio) =>
     invoke<void>("set_export_settings", { targetLufs, aspectRatio }),
   exportActiveSequence: () => invoke<number | null>("export_active_sequence"),
+  exportActiveSequenceSrt: () => invoke<boolean>("export_active_sequence_srt"),
   cancelExport: (jobId: number) => invoke<void>("cancel_export", { jobId }),
+  pauseExport: (jobId: number) => invoke<void>("pause_export", { jobId }),
+  resumeExport: (jobId: number) => invoke<void>("resume_export", { jobId }),
+  removeExport: (jobId: number) => invoke<void>("remove_export", { jobId }),
+  matchExportLoudness: (targetLufs: number) => invoke<void>("match_export_loudness", { targetLufs }),
+  setGpuEncoderPreference: (preference: string) => invoke<void>("set_gpu_encoder_preference", { preference }),
+  getGpuEncoderPreference: () => invoke<string>("get_gpu_encoder_preference"),
   listExports: () => invoke<ExportJobView[]>("list_exports"),
 };
