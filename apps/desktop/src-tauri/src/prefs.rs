@@ -2,7 +2,6 @@
 //! but retains unknown MessagePack map entries written by the egui shell.
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
 
 use rmpv::Value;
 use serde::{Deserialize, Serialize};
@@ -125,8 +124,10 @@ impl PrefsDocument {
     }
 
     pub fn save(&mut self) -> Result<(), String> {
-        let patch =
-            rmp_serde::to_vec(&DiskPrefs::from(&self.view)).map_err(|error| error.to_string())?;
+        // Struct-map (named) encoding: plain `to_vec` writes structs as arrays, which neither
+        // this merge nor the egui shell's `PrefsState` can read back.
+        let patch = rmp_serde::to_vec_named(&DiskPrefs::from(&self.view))
+            .map_err(|error| error.to_string())?;
         let Value::Map(entries) =
             rmp_serde::from_slice::<Value>(&patch).map_err(|error| error.to_string())?
         else {
@@ -161,26 +162,7 @@ impl Default for PrefsDocument {
     }
 }
 
-/// Uses the exact path used by the egui shell.
-pub fn prefs_path() -> PathBuf {
-    #[cfg(target_os = "macos")]
-    if let Ok(home) = std::env::var("HOME") {
-        return PathBuf::from(home).join("Library/Application Support/oca/prefs.oc");
-    }
-    #[cfg(target_os = "windows")]
-    if let Ok(appdata) = std::env::var("APPDATA") {
-        return PathBuf::from(appdata).join("oca\\prefs.oc");
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    if let Ok(home) = std::env::var("HOME") {
-        return PathBuf::from(home).join(".config/oca/prefs.oc");
-    }
-    PathBuf::from("prefs.oc")
-}
-
-pub fn autosave_path(project_path: &Path) -> PathBuf {
-    project_path.with_extension("autosave.ocproj")
-}
+pub use avcore::app_paths::{autosave_path, prefs_path};
 
 #[cfg(test)]
 mod tests {
@@ -197,7 +179,7 @@ mod tests {
                 ..PrefsView::default()
             },
         };
-        let patch = rmp_serde::to_vec(&document.view).unwrap();
+        let patch = rmp_serde::to_vec_named(&DiskPrefs::from(&document.view)).unwrap();
         let Value::Map(entries) = rmp_serde::from_slice::<Value>(&patch).unwrap() else {
             panic!("serialized preferences must be a map");
         };
@@ -208,13 +190,5 @@ mod tests {
         }
         assert_eq!(document.raw["telemetry_enabled"], Value::Boolean(true));
         assert_eq!(document.raw["locale"], Value::from("en"));
-    }
-
-    #[test]
-    fn autosave_path_matches_egui_naming() {
-        assert_eq!(
-            autosave_path(Path::new("C:/projects/demo.ocproj")),
-            PathBuf::from("C:/projects/demo.autosave.ocproj")
-        );
     }
 }
