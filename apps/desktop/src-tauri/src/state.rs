@@ -124,6 +124,9 @@ pub struct AppState {
     pub matte_generating_clip_id: Mutex<Option<u64>>,
     pub privacy_blur_generating_clip_id: Mutex<Option<u64>>,
     pub tts_generating: Mutex<bool>,
+    /// The running watch-folder loop's stop flag, if any -- `Some` while a watch is active.
+    /// Mirrors `ui::App::watch_folder_state.stop`.
+    pub watch_folder_stop: Mutex<Option<Arc<std::sync::atomic::AtomicBool>>>,
 }
 
 impl AppState {

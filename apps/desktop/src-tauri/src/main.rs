@@ -75,6 +75,7 @@ fn main() {
                 matte_generating_clip_id: Mutex::new(None),
                 privacy_blur_generating_clip_id: Mutex::new(None),
                 tts_generating: Mutex::new(false),
+                watch_folder_stop: Mutex::new(None),
             });
             autosave::spawn(handle);
             Ok(())
@@ -165,6 +166,10 @@ fn main() {
             commands::privacy_blur::apply_privacy_blur_to_clip,
             commands::tts::generate_tts,
             commands::sound_library::list_sound_library,
+            commands::watch_folder::pick_watch_folder,
+            commands::watch_folder::start_watching_folder,
+            commands::watch_folder::stop_watching_folder,
+            commands::watch_folder::add_watched_file_to_project,
         ])
         .run(tauri::generate_context!())
         .expect("error while running the oca desktop shell");

@@ -27,6 +27,7 @@ pub mod sound_library;
 pub mod timeline;
 pub mod transcribe;
 pub mod tts;
+pub mod watch_folder;
 
 use std::path::PathBuf;
 
