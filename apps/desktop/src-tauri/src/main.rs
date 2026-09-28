@@ -61,7 +61,7 @@ fn main() {
                     "Sequence 1".to_string(),
                 ))),
                 prefs: Mutex::new(prefs::PrefsDocument::load()),
-                preview: PreviewEngine::spawn(handle),
+                preview: PreviewEngine::spawn(handle.clone()),
                 exports: Arc::new(ExportQueue::default()),
             });
             autosave::spawn(handle);

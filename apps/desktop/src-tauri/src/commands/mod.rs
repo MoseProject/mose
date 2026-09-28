@@ -91,7 +91,7 @@ pub async fn open_project(app: AppHandle) -> Result<bool, String> {
 pub async fn open_project_path(app: AppHandle, path: String) -> Result<(), String> {
     let path = PathBuf::from(path);
     let mut project = avcore::load_project_from_file(&path).map_err(|e| e.to_string())?;
-    project.file_path = Some(path);
+    project.file_path = Some(path.clone());
     let epoch = with_session(&app, |session| {
         session.replace_project(project);
         Ok(session.project_epoch)
@@ -130,7 +130,7 @@ pub async fn save_project(app: AppHandle, save_as: bool) -> Result<bool, String>
     with_session(&app, |session| {
         session.project.timeline_mut().playhead_secs = playhead;
         avcore::save_project_to_file(&session.project, &path).map_err(|e| e.to_string())?;
-        session.project.file_path = Some(path);
+        session.project.file_path = Some(path.clone());
         session.dirty = false;
         Ok(true)
     })?;

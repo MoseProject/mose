@@ -22,7 +22,7 @@ pub fn spawn(app: tauri::AppHandle) {
         std::thread::sleep(std::time::Duration::from_secs(1));
         let state = app.state::<AppState>();
         let minutes = state.prefs().view.autosave_minutes.max(1);
-        let mut session = state.session();
+        let session = state.session();
         if !session.dirty {
             continue;
         }
@@ -43,7 +43,10 @@ pub fn spawn(app: tauri::AppHandle) {
         if !due {
             continue;
         }
-        let Ok(bytes) = avcore::to_ocproj_bytes(&session.project) else {
+        // Serialize and write outside the session lock so editing commands never wait on disk.
+        let project = session.project.clone();
+        drop(session);
+        let Ok(bytes) = avcore::to_ocproj_bytes(&project) else {
             continue;
         };
         if let Err(error) = std::fs::write(&recovery, bytes) {
