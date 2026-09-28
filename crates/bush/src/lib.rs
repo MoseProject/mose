@@ -11,6 +11,7 @@ mod cpu_renderer;
 mod decode_source;
 mod frame_mailbox;
 mod latest_intent;
+mod preview_worker;
 mod scene;
 mod scene_scheduler;
 mod scene_versions;
@@ -24,6 +25,9 @@ pub use cpu_renderer::{CpuRenderer, LayerFrame, RenderError};
 pub use decode_source::{DecodeSource, DecodeSourceError, SourceInfo};
 pub use frame_mailbox::{FrameMailbox, PublishedFrame};
 pub use latest_intent::{Generation, LatestIntent, PendingIntent};
+pub use preview_worker::{
+    PreviewCommand, PreviewWorker, WorkerFailure, WorkerOperation, WorkerSubmitError,
+};
 pub use scene::{
     Contributor, ContributorContent, ContributorId, MediaSource, RasterOverlay, SceneError,
     SceneSnapshot, SourceRange,
