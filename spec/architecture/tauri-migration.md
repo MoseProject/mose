@@ -122,9 +122,15 @@ Known gaps versus the egui shell, in migration order:
    selected clip's own transcript by default, or searches every asset with a saved transcript
    project-wide when toggled on, highlighting the word under the playhead and seeking through
    `seek_to_transcript_word` (maps a word's media-relative time back onto the first timeline clip
-   using that asset, same as `ui::App::map_asset_source_to_timeline`) on click. Still missing:
-   silence review, scene detection, highlight detection, auto-reframe, background removal, motion
-   tracking, privacy blur, TTS.
+   using that asset, same as `ui::App::map_asset_source_to_timeline`) on click. **Silence review
+   done:** the timeline toolbar's "Revisar silêncio" button scans the selected clip's track for
+   waveform-derived silence gaps (`avcore::clip_silence_gaps`, cached `MediaAsset::waveform_
+   peaks`, no core changes needed), lists them with a checkbox defaulting to accepted and
+   click-to-seek on the timecode, and ripple-deletes whatever's still checked on Apply (one undo
+   step for the batch) -- mirrors `ui::App`'s `silence_review.rs` modal, review state staying
+   client-side between `detect_silence_gaps_for_clip` and `apply_silence_gaps` rather than
+   server-staged. Still missing: scene detection, highlight detection, auto-reframe, background
+   removal, motion tracking, privacy blur, TTS.
 6. Preferences (locale switch, layout, hardware decode), autosave + crash recovery, error
    reporting consent, update check, telemetry, recent projects on Home, watch folder, YouTube
    download, sound library. **In progress:** desktop now shares `prefs.oc` with egui for locale,
