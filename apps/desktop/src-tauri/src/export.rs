@@ -348,7 +348,7 @@ impl ExportQueue {
                             last = percent;
                             queue.progress(&worker_app, job.id, percent)
                         }
-                        control.wait_if_paused()
+                        control.wait_if_paused();
                     },
                 );
                 queue.finish(worker_app, job.id, result)
