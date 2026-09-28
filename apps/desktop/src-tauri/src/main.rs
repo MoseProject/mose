@@ -55,13 +55,16 @@ fn main() {
         .setup(|app| {
             let handle = app.handle().clone();
             app.manage(ThumbnailCache::default());
+            let prefs = prefs::PrefsDocument::load();
+            let preview = PreviewEngine::spawn(handle.clone());
+            preview.set_hardware_decode(prefs.view.preview_hardware_decode);
             app.manage(AppState {
                 session: Mutex::new(Session::new(blank_project(
                     "Untitled".to_string(),
                     "Sequence 1".to_string(),
                 ))),
-                prefs: Mutex::new(prefs::PrefsDocument::load()),
-                preview: PreviewEngine::spawn(handle.clone()),
+                prefs: Mutex::new(prefs),
+                preview,
                 exports: Arc::new(ExportQueue::load(app.path().app_config_dir()?)),
             });
             autosave::spawn(handle);
