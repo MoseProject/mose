@@ -11,8 +11,10 @@
 
 use std::collections::HashSet;
 
-use avcore::timeline::{AudioRole, ClipInstance, Timeline, TrackKind};
-use avcore::{MediaKind, Project};
+use avcore::timeline::{
+    AudioRole, BlendMode, ClipInstance, MaskShape, Timeline, TrackKind, TransitionType,
+};
+use avcore::{Keyframe, MediaKind, Position, Project};
 use serde::Deserialize;
 use tauri::{AppHandle, Manager};
 
@@ -42,7 +44,36 @@ pub struct ClipPatch {
     pub frozen: Option<bool>,
     pub flipped_h: Option<bool>,
     pub voice_cleanup_enabled: Option<bool>,
+    pub crop_x: Option<f32>,
+    pub crop_y: Option<f32>,
+    pub crop_w: Option<f32>,
+    pub crop_h: Option<f32>,
+    pub mask_shape: Option<MaskShape>,
+    pub mask_corner_radius: Option<f32>,
+    pub transition_in: Option<TransitionType>,
+    pub transition_duration_secs: Option<f32>,
+    pub blend_mode: Option<BlendMode>,
+    pub position_keyframes: Option<Vec<Keyframe<Position>>>,
+    pub scale_keyframes: Option<Vec<Keyframe<f32>>>,
+    pub rotation_keyframes: Option<Vec<Keyframe<f32>>>,
+    pub opacity_keyframes: Option<Vec<Keyframe<f32>>>,
+    pub gain_keyframes: Option<Vec<Keyframe<f32>>>,
+    pub brightness_keyframes: Option<Vec<Keyframe<f32>>>,
+    pub contrast_keyframes: Option<Vec<Keyframe<f32>>>,
+    pub saturation_keyframes: Option<Vec<Keyframe<f32>>>,
+    pub crop_x_keyframes: Option<Vec<Keyframe<f32>>>,
+    pub crop_y_keyframes: Option<Vec<Keyframe<f32>>>,
+    pub crop_w_keyframes: Option<Vec<Keyframe<f32>>>,
+    pub crop_h_keyframes: Option<Vec<Keyframe<f32>>>,
 }
+
+/// Shortest crop rectangle side a crop edit may shrink to -- mirrors
+/// `crates/ui/src/app/mod.rs`'s `CROP_MIN_SIZE`.
+const CROP_MIN_SIZE: f32 = 0.05;
+/// Mirrors `crates/ui/src/app/mod.rs`'s `MASK_CORNER_RADIUS_RANGE`.
+const MASK_CORNER_RADIUS_RANGE: std::ops::RangeInclusive<f32> = 0.0..=1.0;
+/// Mirrors `crates/ui/src/app/mod.rs`'s `TRANSITION_DURATION_RANGE`.
+const TRANSITION_DURATION_RANGE: std::ops::RangeInclusive<f32> = 0.1..=3.0;
 
 #[tauri::command]
 pub fn add_asset_to_timeline(
@@ -521,6 +552,75 @@ fn apply_patch(clip: &mut ClipInstance, patch: &ClipPatch) -> bool {
     }
     if let Some(enabled) = patch.voice_cleanup_enabled {
         clip.voice_cleanup_enabled = enabled;
+    }
+    if let Some(crop_x) = patch.crop_x {
+        clip.crop_x = crop_x.clamp(0.0, 1.0);
+    }
+    if let Some(crop_y) = patch.crop_y {
+        clip.crop_y = crop_y.clamp(0.0, 1.0);
+    }
+    if let Some(crop_w) = patch.crop_w {
+        clip.crop_w = crop_w.clamp(CROP_MIN_SIZE, 1.0);
+    }
+    if let Some(crop_h) = patch.crop_h {
+        clip.crop_h = crop_h.clamp(CROP_MIN_SIZE, 1.0);
+    }
+    if let Some(mask_shape) = patch.mask_shape {
+        clip.mask_shape = mask_shape;
+    }
+    if let Some(mask_corner_radius) = patch.mask_corner_radius {
+        clip.mask_corner_radius = mask_corner_radius.clamp(
+            *MASK_CORNER_RADIUS_RANGE.start(),
+            *MASK_CORNER_RADIUS_RANGE.end(),
+        );
+    }
+    if let Some(transition_in) = patch.transition_in {
+        clip.transition_in = transition_in;
+    }
+    if let Some(transition_duration_secs) = patch.transition_duration_secs {
+        clip.transition_duration_secs = transition_duration_secs.clamp(
+            *TRANSITION_DURATION_RANGE.start(),
+            *TRANSITION_DURATION_RANGE.end(),
+        );
+    }
+    if let Some(blend_mode) = patch.blend_mode {
+        clip.blend_mode = blend_mode;
+    }
+    if let Some(keyframes) = patch.position_keyframes.clone() {
+        clip.position_keyframes = keyframes;
+    }
+    if let Some(keyframes) = patch.scale_keyframes.clone() {
+        clip.scale_keyframes = keyframes;
+    }
+    if let Some(keyframes) = patch.rotation_keyframes.clone() {
+        clip.rotation_keyframes = keyframes;
+    }
+    if let Some(keyframes) = patch.opacity_keyframes.clone() {
+        clip.opacity_keyframes = keyframes;
+    }
+    if let Some(keyframes) = patch.gain_keyframes.clone() {
+        clip.gain_keyframes = keyframes;
+    }
+    if let Some(keyframes) = patch.brightness_keyframes.clone() {
+        clip.brightness_keyframes = keyframes;
+    }
+    if let Some(keyframes) = patch.contrast_keyframes.clone() {
+        clip.contrast_keyframes = keyframes;
+    }
+    if let Some(keyframes) = patch.saturation_keyframes.clone() {
+        clip.saturation_keyframes = keyframes;
+    }
+    if let Some(keyframes) = patch.crop_x_keyframes.clone() {
+        clip.crop_x_keyframes = keyframes;
+    }
+    if let Some(keyframes) = patch.crop_y_keyframes.clone() {
+        clip.crop_y_keyframes = keyframes;
+    }
+    if let Some(keyframes) = patch.crop_w_keyframes.clone() {
+        clip.crop_w_keyframes = keyframes;
+    }
+    if let Some(keyframes) = patch.crop_h_keyframes.clone() {
+        clip.crop_h_keyframes = keyframes;
     }
     *clip != before
 }
