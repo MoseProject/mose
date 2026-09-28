@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { localeSnapshot, subscribeLocale, t } from "./i18n";
-import { api } from "./ipc";
+import { api, exportActiveSequence } from "./ipc";
 import { Editor } from "./screens/Editor";
 import { Home } from "./screens/Home";
 import { Prefs } from "./screens/Prefs";
@@ -37,7 +37,7 @@ export function App() {
               {t("redo")}
             </button>
             <button onClick={() => run(api.saveProject(false))}>{t("save")}</button>
-            <button className="primary" onClick={() => run(api.exportActiveSequence())}>
+            <button className="primary" onClick={() => run(exportActiveSequence(() => window.confirm(t("exportOverwriteConfirm"))))}>
               {t("export")}
             </button>
           </>

@@ -29,6 +29,8 @@ serde_json = "1.0.151"
 # added to Project/ClipInstance/etc. after a project was last saved — the same
 # schema-evolution guarantee JSON gave, just binary. gzip-compressed on top for size/speed.
 rmp-serde = "1"
+# Atomic `.ocqueue` writes (`export_queue`) -- same crate and version the egui shell already uses.
+tempfile = "3.27.0"
 flate2 = "1"
 # CPU-only (default features) — no cuda/hipblas/metal/vulkan. Needs LIBCLANG_PATH set at build
 # time (bindgen dependency) and outside a %TEMP%-rooted build dir on Windows (MSVC's FileTracker

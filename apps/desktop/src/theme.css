@@ -428,6 +428,10 @@ input[type="range"] {
   accent-color: var(--accent);
 }
 
+.export-panel { position: fixed; right: 12px; bottom: 12px; width: 360px; max-height: 55vh; overflow: auto; background: var(--surface); border: 1px solid var(--border); z-index: 5; }
+.export-body { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.export-actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+
 /* ---- timeline ---- */
 .timeline-toolbar {
   display: flex;

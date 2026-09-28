@@ -147,7 +147,12 @@ export interface PreviewTick {
   peakR: number;
 }
 
-export type ExportStatus = "rendering" | "done" | "failed" | "cancelled";
+export type ExportStatus =
+  | "Queued"
+  | { Rendering: { percent: number } }
+  | { Paused: { percent: number } }
+  | "Done"
+  | { Failed: { message: string } };
 
 export interface ExportJobView {
   id: number;
@@ -155,7 +160,7 @@ export interface ExportJobView {
   outputPath: string;
   status: ExportStatus;
   percent: number;
-  message: string | null;
+  elapsedSecs: number | null;
 }
 
 export interface ClipPatch {

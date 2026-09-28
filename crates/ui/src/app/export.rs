@@ -13,10 +13,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::Arc;
 use std::time::Instant;
 
 use avcore::{
@@ -32,77 +30,7 @@ use crate::theme;
 
 use super::{App, NestedSequenceEvent, RenderEvent};
 
-/// Cooperative controls shared by the UI and one render worker. The native encoder already
-/// checks `cancel` between packets; pause is implemented at its per-frame progress callback,
-/// where the worker can safely wait without blocking egui's UI thread.
-pub(super) struct RenderControl {
-    cancel: AtomicBool,
-    paused: AtomicBool,
-    wait_lock: Mutex<()>,
-    wake: Condvar,
-}
-
-impl RenderControl {
-    pub(super) fn new() -> Self {
-        Self {
-            cancel: AtomicBool::new(false),
-            paused: AtomicBool::new(false),
-            wait_lock: Mutex::new(()),
-            wake: Condvar::new(),
-        }
-    }
-
-    fn lock_wait_state(&self) -> std::sync::MutexGuard<'_, ()> {
-        self.wait_lock
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-    }
-
-    pub(super) fn pause(&self) {
-        let _guard = self.lock_wait_state();
-        self.paused.store(true, Ordering::Release);
-    }
-
-    pub(super) fn resume(&self) {
-        let _guard = self.lock_wait_state();
-        self.paused.store(false, Ordering::Release);
-        self.wake.notify_all();
-    }
-
-    pub(super) fn cancel(&self) {
-        let _guard = self.lock_wait_state();
-        self.cancel.store(true, Ordering::Release);
-        self.paused.store(false, Ordering::Release);
-        self.wake.notify_all();
-    }
-
-    pub(super) fn cancel_flag(&self) -> &AtomicBool {
-        &self.cancel
-    }
-
-    #[cfg(test)]
-    pub(super) fn is_cancelled(&self) -> bool {
-        self.cancel.load(Ordering::Acquire)
-    }
-
-    #[cfg(test)]
-    pub(super) fn is_paused(&self) -> bool {
-        self.paused.load(Ordering::Acquire)
-    }
-
-    /// Waits until Resume or Cancel when a pause was requested. Returns `false` after
-    /// cancellation so the caller can avoid doing any more callback-side work.
-    pub(super) fn wait_if_paused(&self) -> bool {
-        let mut guard = self.lock_wait_state();
-        while self.paused.load(Ordering::Acquire) && !self.cancel.load(Ordering::Acquire) {
-            guard = self
-                .wake
-                .wait(guard)
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-        }
-        !self.cancel.load(Ordering::Acquire)
-    }
-}
+pub(super) use avcore::RenderControl;
 
 /// A ready-to-queue export whose output path collided with an existing file — held until the
 /// user picks Overwrite, Rename, or Cancel in [`App::show_export_conflict_modal`]. Everything
@@ -698,33 +626,15 @@ impl App {
 
 /// Finds the first `<stem> (2)<ext>`, `<stem> (3)<ext>`, ... sibling of `path` that doesn't
 /// already exist. `path` itself is assumed to exist (that's why the caller is renaming).
-pub(super) fn next_available_path(path: &std::path::Path) -> PathBuf {
-    let parent = path.parent().unwrap_or_else(|| std::path::Path::new(""));
-    let stem = path
-        .file_stem()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let ext = path.extension().map(|e| e.to_string_lossy().into_owned());
-    for n in 2.. {
-        let candidate_name = match &ext {
-            Some(ext) => format!("{stem} ({n}).{ext}"),
-            None => format!("{stem} ({n})"),
-        };
-        let candidate = parent.join(candidate_name);
-        if !candidate.exists() {
-            return candidate;
-        }
-    }
-    unreachable!("infinite range always yields a free name eventually")
-}
+pub(super) use avcore::next_available_path;
 
 /// Returns the platform-appropriate path for the compressed oca export queue, next to
 /// `prefs.oc`.
 fn queue_path() -> std::path::PathBuf {
     super::prefs_path()
         .parent()
-        .map(|d| d.join("queue.ocqueue"))
-        .unwrap_or_else(|| std::path::PathBuf::from("queue.ocqueue"))
+        .map(avcore::export_queue_path)
+        .unwrap_or_else(|| PathBuf::from("queue.ocqueue"))
 }
 
 /// Returns the old JSON queue path used before `.ocqueue`. It is read only when the binary file
@@ -751,36 +661,13 @@ pub(super) fn save_queue_to_path(
     jobs: &[ExportJob],
     path: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let snapshot = persisted_queue_snapshot(jobs);
-    let bytes = avcore::to_ocqueue_bytes(&snapshot)?;
-    atomic_write(path, &bytes)
+    avcore::save_export_queue_to_path(jobs, path)
+        .map_err(|error| error as Box<dyn std::error::Error>)
 }
 
-fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
-    let parent = path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
-    std::fs::create_dir_all(parent)?;
-    let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
-    temporary.write_all(bytes)?;
-    temporary.as_file().sync_all()?;
-    temporary.persist(path)?;
-    Ok(())
-}
-
+#[cfg(test)]
 pub(super) fn persisted_queue_snapshot(jobs: &[ExportJob]) -> Vec<ExportJob> {
-    let mut snapshot = jobs.to_vec();
-    for job in &mut snapshot {
-        match job.status {
-            ExportJobStatus::Rendering { .. } => job.status = ExportJobStatus::Queued,
-            ExportJobStatus::Paused { .. } => {
-                job.status = ExportJobStatus::Paused { percent: 0 };
-            }
-            _ => {}
-        }
-    }
-    snapshot
+    avcore::persisted_export_queue_snapshot(jobs)
 }
 
 /// Loads `queue.ocqueue`, falling back to a one-time migration from the old `queue.json` only
@@ -793,8 +680,8 @@ pub(super) fn load_queue() -> Vec<ExportJob> {
 
 pub(super) fn load_queue_from_paths(path: &Path, legacy_path: &Path) -> Vec<ExportJob> {
     match std::fs::read(path) {
-        Ok(bytes) => match avcore::from_ocqueue_bytes::<Vec<ExportJob>>(&bytes) {
-            Ok(jobs) => normalize_loaded_queue(jobs),
+        Ok(_) => match avcore::load_export_queue_from_path(path) {
+            Ok(jobs) => jobs,
             Err(storage_error) => {
                 error!(path = %path.display(), error = %storage_error, "failed to load export queue");
                 Vec::new()
@@ -833,15 +720,8 @@ fn migrate_legacy_queue(path: &Path, legacy_path: &Path) -> Vec<ExportJob> {
     jobs
 }
 
-pub(super) fn normalize_loaded_queue(mut jobs: Vec<ExportJob>) -> Vec<ExportJob> {
-    for job in &mut jobs {
-        if matches!(job.status, ExportJobStatus::Rendering { .. }) {
-            job.status = ExportJobStatus::Queued;
-        } else if matches!(job.status, ExportJobStatus::Paused { .. }) {
-            job.status = ExportJobStatus::Paused { percent: 0 };
-        }
-    }
-    jobs
+pub(super) fn normalize_loaded_queue(jobs: Vec<ExportJob>) -> Vec<ExportJob> {
+    avcore::normalize_loaded_export_queue(jobs)
 }
 
 #[cfg(test)]

@@ -104,6 +104,10 @@ const strings = {
   statusFailed: { "pt-BR": "Falhou", en: "Failed" },
   statusCancelled: { "pt-BR": "Cancelado", en: "Cancelled" },
   cancel: { "pt-BR": "Cancelar", en: "Cancel" },
+  exportOverwriteConfirm: {
+    "pt-BR": "O arquivo já existe. Substituir? (Cancelar cria uma cópia com novo nome.)",
+    en: "The file already exists. Overwrite it? (Cancel creates a renamed copy.)",
+  },
   noExports: { "pt-BR": "Nenhuma exportação nesta sessão.", en: "No exports this session." },
   errorPrefix: { "pt-BR": "Erro", en: "Error" },
   preferences: { "pt-BR": "Ajustes", en: "Preferences" },
@@ -117,6 +121,13 @@ const strings = {
   recoverAutosave: { "pt-BR": "Recuperar salvamento automático", en: "Recover autosave" },
   discardAutosave: { "pt-BR": "Descartar salvamento automático", en: "Discard autosave" },
   unsavedConfirm: { "pt-BR": "Há alterações não salvas. Deseja continuar?", en: "You have unsaved changes. Continue?" },
+  exportSrt: { "pt-BR": "Exportar SRT", en: "Export SRT" },
+  gpuEncoder: { "pt-BR": "Codificador GPU", en: "GPU encoder" },
+  matchLoudness: { "pt-BR": "Igualar loudness", en: "Match loudness" },
+  pauseExport: { "pt-BR": "Pausar", en: "Pause" },
+  resumeExport: { "pt-BR": "Retomar", en: "Resume" },
+  removeExport: { "pt-BR": "Remover", en: "Remove" },
+  elapsed: { "pt-BR": "decorrido", en: "elapsed" },
 } as const;
 
 export type TextKey = keyof typeof strings;

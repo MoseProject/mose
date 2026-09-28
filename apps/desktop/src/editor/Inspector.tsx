@@ -1,36 +1,13 @@
 import { useEffect, useState } from "react";
-import { t, type TextKey } from "../i18n";
+import { t } from "../i18n";
 import { api } from "../ipc";
-import { exportsStore, run, uiStore, useStore } from "../store";
+import { run, uiStore, useStore } from "../store";
 import {
   activeTimeline,
   type ClipInstance,
   type ClipPatch,
-  type ExportAspectRatio,
-  type ExportStatus,
   type SessionView,
 } from "../types";
-
-/** Same presets as `ui::app::LUFS_PROFILES`. */
-const LUFS_PROFILES: [string, number][] = [
-  ["-14 LUFS | YouTube", -14],
-  ["-16 LUFS | Podcast", -16],
-  ["-23 LUFS | Broadcast", -23],
-];
-
-const ASPECTS: [ExportAspectRatio, TextKey][] = [
-  ["Original", "aspectOriginal"],
-  ["Landscape", "aspectLandscape"],
-  ["Portrait", "aspectPortrait"],
-  ["Square", "aspectSquare"],
-];
-
-const STATUS_TEXT: Record<ExportStatus, TextKey> = {
-  rendering: "statusRendering",
-  done: "statusDone",
-  failed: "statusFailed",
-  cancelled: "statusCancelled",
-};
 
 export function Inspector({ session }: { session: SessionView }) {
   const { selectedClipIds } = useStore(uiStore);
@@ -55,12 +32,10 @@ export function Inspector({ session }: { session: SessionView }) {
         ) : (
           <div className="empty-state">{t("noClipSelected")}</div>
         )}
-        <ExportSection session={session} />
       </div>
     </section>
   );
 }
-
 function ClipControls({ clip }: { clip: ClipInstance }) {
   const commit = (patch: ClipPatch) => run(api.updateClip(clip.id, patch));
   return (
@@ -172,69 +147,3 @@ function Slider(props: {
   );
 }
 
-function ExportSection({ session }: { session: SessionView }) {
-  const jobs = useStore(exportsStore);
-  const sequence = session.project.sequences[session.project.active_sequence];
-  const settings = sequence.export_settings;
-
-  return (
-    <>
-      <div className="panel-title" style={{ padding: "8px 0" }}>
-        {t("export")}
-      </div>
-      <div className="field">
-        <label>{t("exportTarget")}</label>
-        <select
-          value={settings.target_lufs}
-          onChange={(e) =>
-            run(api.setExportSettings(Number(e.target.value), settings.aspect_ratio))
-          }
-        >
-          {LUFS_PROFILES.map(([label, lufs]) => (
-            <option key={lufs} value={lufs}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="field">
-        <label>{t("aspectRatio")}</label>
-        <select
-          value={settings.aspect_ratio}
-          onChange={(e) =>
-            run(
-              api.setExportSettings(settings.target_lufs, e.target.value as ExportAspectRatio),
-            )
-          }
-        >
-          {ASPECTS.map(([value, key]) => (
-            <option key={value} value={value}>
-              {t(key)}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="panel-title" style={{ padding: "8px 0" }}>
-        {t("exportQueue")}
-      </div>
-      <div className="jobs">
-        {jobs.length === 0 && <span className="muted">{t("noExports")}</span>}
-        {jobs.map((job) => (
-          <div className="job" key={job.id} title={job.message ?? job.outputPath}>
-            <span>{job.title}</span>
-            <span className="muted">
-              {t(STATUS_TEXT[job.status])}
-              {job.status === "rendering" && ` ${job.percent}%`}
-              {job.status === "rendering" && (
-                <button className="icon" onClick={() => run(api.cancelExport(job.id))}>
-                  {t("cancel")}
-                </button>
-              )}
-            </span>
-            <progress max={100} value={job.percent} />
-          </div>
-        ))}
-      </div>
-    </>
-  );
-}

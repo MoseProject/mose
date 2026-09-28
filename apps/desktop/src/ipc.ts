@@ -102,7 +102,25 @@ export const api = {
 
   setExportSettings: (targetLufs: number, aspectRatio: ExportAspectRatio) =>
     invoke<void>("set_export_settings", { targetLufs, aspectRatio }),
-  exportActiveSequence: () => invoke<number | null>("export_active_sequence"),
+  pickExportPath: () =>
+    invoke<{ path: string; exists: boolean } | null>("pick_export_path"),
+  startExport: (path: string, rename: boolean) =>
+    invoke<number>("start_export", { path, rename }),
+  exportActiveSequenceSrt: () => invoke<boolean>("export_active_sequence_srt"),
   cancelExport: (jobId: number) => invoke<void>("cancel_export", { jobId }),
+  pauseExport: (jobId: number) => invoke<void>("pause_export", { jobId }),
+  resumeExport: (jobId: number) => invoke<void>("resume_export", { jobId }),
+  removeExport: (jobId: number) => invoke<void>("remove_export", { jobId }),
+  matchExportLoudness: (targetLufs: number) => invoke<void>("match_export_loudness", { targetLufs }),
+  setGpuEncoderPreference: (preference: string) => invoke<void>("set_gpu_encoder_preference", { preference }),
+  getGpuEncoderPreference: () => invoke<string>("get_gpu_encoder_preference"),
   listExports: () => invoke<ExportJobView[]>("list_exports"),
 };
+
+/** Asks for an output file and queues the active sequence. An existing file is overwritten
+ *  only after the user confirms; otherwise the export goes to an auto-renamed sibling. */
+export async function exportActiveSequence(confirmOverwrite: () => boolean): Promise<void> {
+  const target = await api.pickExportPath();
+  if (!target) return;
+  await api.startExport(target.path, target.exists && !confirmOverwrite());
+}
