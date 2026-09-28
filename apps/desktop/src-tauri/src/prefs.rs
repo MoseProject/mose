@@ -20,6 +20,10 @@ pub struct PrefsView {
     /// `PrefsState.saved_layer_templates` under the same `prefs.oc` key.
     #[serde(default)]
     pub saved_layer_templates: Vec<LayerTemplate>,
+    /// Path to a local GGML Whisper model file, or empty to use the bundled Whisper Base model
+    /// -- shared with the egui shell's `PrefsState.whisper_model_path` under the same key.
+    #[serde(default)]
+    pub whisper_model_path: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
@@ -39,6 +43,8 @@ struct DiskPrefs {
     recent_project_paths: Vec<String>,
     #[serde(default)]
     saved_layer_templates: Vec<LayerTemplate>,
+    #[serde(default)]
+    whisper_model_path: String,
 }
 
 fn default_hardware_decode() -> bool {
@@ -64,6 +70,7 @@ impl From<DiskPrefs> for PrefsView {
             preview_hardware_decode: value.preview_hardware_decode,
             recent_project_paths: value.recent_project_paths,
             saved_layer_templates: value.saved_layer_templates,
+            whisper_model_path: value.whisper_model_path,
         }
     }
 }
@@ -78,6 +85,7 @@ impl From<&PrefsView> for DiskPrefs {
             preview_hardware_decode: value.preview_hardware_decode,
             recent_project_paths: value.recent_project_paths.clone(),
             saved_layer_templates: value.saved_layer_templates.clone(),
+            whisper_model_path: value.whisper_model_path.clone(),
         }
     }
 }
@@ -92,6 +100,7 @@ impl Default for PrefsView {
             preview_hardware_decode: true,
             recent_project_paths: Vec::new(),
             saved_layer_templates: Vec::new(),
+            whisper_model_path: String::new(),
         }
     }
 }

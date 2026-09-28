@@ -68,6 +68,7 @@ fn main() {
                 exports: Arc::new(ExportQueue::load(app.path().app_config_dir()?)),
                 clip_clipboard: Mutex::new(None),
                 formatting_clipboard: Mutex::new(None),
+                transcribing_asset_id: Mutex::new(None),
             });
             autosave::spawn(handle);
             Ok(())
@@ -144,6 +145,10 @@ fn main() {
             commands::overlays::trim_overlay_clip,
             commands::overlays::update_text_clip,
             commands::overlays::update_shape_clip,
+            commands::transcribe::transcribe_asset,
+            commands::transcribe::get_transcript,
+            commands::transcribe::search_transcripts,
+            commands::transcribe::seek_to_transcript_word,
         ])
         .run(tauri::generate_context!())
         .expect("error while running the oca desktop shell");

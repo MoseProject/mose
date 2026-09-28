@@ -17,6 +17,7 @@ pub mod overlays;
 pub mod prefs;
 pub mod sequences;
 pub mod timeline;
+pub mod transcribe;
 
 use std::path::PathBuf;
 

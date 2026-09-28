@@ -113,6 +113,9 @@ pub struct AppState {
     /// What `Ctrl+Shift+C` last captured, for `Ctrl+Shift+V` -- same transience as
     /// `clip_clipboard`, mirroring `ui::App::formatting_clipboard`.
     pub formatting_clipboard: Mutex<Option<ClipFormatting>>,
+    /// The asset a background transcription is currently running for, if any -- only one at a
+    /// time, mirrors `ui::App::transcribe_state.transcribing_asset_id`.
+    pub transcribing_asset_id: Mutex<Option<u64>>,
 }
 
 impl AppState {
