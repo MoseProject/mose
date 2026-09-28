@@ -21,32 +21,58 @@
 //! directly with -L/-l; the naming conflict does not arise there.
 
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+fn is_ffmpeg_dev_root(path: &Path) -> bool {
+    let include_dir = path.join("include");
+    let lib_dir = path.join("lib");
+    include_dir.join("libavcodec").join("avcodec.h").is_file()
+        && lib_dir.is_dir()
+        && (lib_dir.join("avcodec.lib").is_file()
+            || lib_dir.join("libavcodec.dll.a").is_file()
+            || lib_dir.join("libavcodec.so").is_file()
+            || lib_dir.join("libavcodec.dylib").is_file())
+}
+
+fn find_ffmpeg_dir() -> PathBuf {
+    if let Some(explicit) = env::var_os("FFMPEG_DIR") {
+        let path = PathBuf::from(explicit);
+        if is_ffmpeg_dev_root(&path) {
+            return path;
+        }
+        panic!(
+            "FFMPEG_DIR={} is not an FFmpeg development root: expected include/ and lib/.",
+            path.display()
+        );
+    }
+
+    // A normal BtbN/shared FFmpeg installation exposes <root>/bin on PATH. Deriving the root
+    // from that entry avoids a user-specific path or a separate environment-variable setup.
+    if let Some(path) = env::var_os("PATH") {
+        for entry in env::split_paths(&path) {
+            let root = entry
+                .parent()
+                .filter(|_| entry.file_name().is_some_and(|name| name == "bin"));
+            if let Some(root) = root.filter(|candidate| is_ffmpeg_dev_root(candidate)) {
+                return root.to_path_buf();
+            }
+        }
+    }
+
+    panic!(
+        "could not locate an FFmpeg development root. Install a shared FFmpeg build with bin/, \
+         include/, and lib/ and put its bin/ directory on PATH, or set FFMPEG_DIR explicitly."
+    );
+}
 
 fn main() {
     println!("cargo:rerun-if-env-changed=FFMPEG_DIR");
     println!("cargo:rerun-if-changed=csrc");
 
-    let ffmpeg_dir = env::var("FFMPEG_DIR").unwrap_or_else(|_| {
-        panic!(
-            "FFMPEG_DIR is not set. Point it at an FFmpeg dev build with `include/` and \
-             `lib/` subdirectories (e.g. a BtbN shared build) — oca-avbridge links against \
-             libavformat/libavcodec/libavutil and can't find their headers/libs without it."
-        )
-    });
-    let ffmpeg_dir = PathBuf::from(ffmpeg_dir);
+    println!("cargo:rerun-if-env-changed=PATH");
+    let ffmpeg_dir = find_ffmpeg_dir();
     let include_dir = ffmpeg_dir.join("include");
     let lib_dir = ffmpeg_dir.join("lib");
-
-    if !include_dir.is_dir() || !lib_dir.is_dir() {
-        panic!(
-            "FFMPEG_DIR={} doesn't look like an FFmpeg dev build: expected {} and {} to both \
-             be directories.",
-            ffmpeg_dir.display(),
-            include_dir.display(),
-            lib_dir.display()
-        );
-    }
 
     let mut build = cc::Build::new();
     build.include(&include_dir);

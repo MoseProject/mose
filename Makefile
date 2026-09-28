@@ -41,18 +41,12 @@ else ifeq ($(_OS),Linux)
     export PYO3_PYTHON
   endif
 else
-  # Windows — set FFMPEG_DIR and PKG_CONFIG_PATH in your environment before
-  # running make, or override them on the command line:
-  #   make build FFMPEG_DIR=C:/path/to/ffmpeg PKG_CONFIG_PATH=C:/path/to/gst/pkgconfig
-  ifndef FFMPEG_DIR
-    $(error FFMPEG_DIR is not set. Point it at an FFmpeg dev build with include/ and lib/ subdirectories.)
-  endif
+  # Windows — avbridge automatically discovers a shared FFmpeg development installation when
+  # its bin/ directory is on PATH. FFMPEG_DIR remains an optional explicit override.
   ifndef PKG_CONFIG_PATH
     $(warning PKG_CONFIG_PATH is not set; GStreamer headers may not be found.)
   endif
-  export FFMPEG_DIR
   export PKG_CONFIG_PATH
-  export PATH := $(FFMPEG_DIR)/bin;$(PATH)
   ifneq ($(wildcard $(CURDIR)/vendor/python-runtime/python.exe),)
     PYO3_PYTHON ?= $(CURDIR)/vendor/python-runtime/python.exe
     export PYO3_PYTHON
