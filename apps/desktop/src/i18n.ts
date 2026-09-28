@@ -152,6 +152,16 @@ const strings = {
   watchFolderDone: { "pt-BR": "Concluído", en: "Done" },
   watchFolderError: { "pt-BR": "Erro", en: "Error" },
 
+  youtubeDownload: { "pt-BR": "Baixar do YouTube", en: "Download from YouTube" },
+  youtubeDownloadUrlHint: { "pt-BR": "Cole o link do vídeo…", en: "Paste the video link…" },
+  youtubeDownloadStart: { "pt-BR": "Baixar", en: "Download" },
+  youtubeDownloadCancel: { "pt-BR": "Cancelar download", en: "Cancel download" },
+  youtubeDownloadInProgress: { "pt-BR": "Baixando…", en: "Downloading…" },
+  youtubeDownloadToolMissing: {
+    "pt-BR": "yt-dlp não está instalado.",
+    en: "yt-dlp is not installed.",
+  },
+
   silenceReview: { "pt-BR": "Revisar silêncio", en: "Review silence" },
   silenceReviewTitle: { "pt-BR": "Revisar silêncio", en: "Review silence" },
   silenceReviewEmpty: { "pt-BR": "Nenhum silêncio encontrado.", en: "No silence found." },

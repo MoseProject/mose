@@ -289,6 +289,11 @@ export type TtsEvent = { type: "done" } | { type: "failed"; message: string };
 
 export type WatchFolderStatus = "stabilizing" | "processing" | "done" | "error";
 
+export type YoutubeDownloadEvent =
+  | { type: "progress"; fraction: number }
+  | { type: "done" }
+  | { type: "failed"; message: string };
+
 export type WatchFolderEvent =
   | { type: "detected"; path: string }
   | { type: "stabilizing"; path: string }

@@ -29,6 +29,7 @@ import type {
   TranscriptHit,
   TtsEvent,
   WatchFolderEvent,
+  YoutubeDownloadEvent,
 } from "./types";
 
 export const events = {
@@ -43,6 +44,7 @@ export const events = {
   privacyBlur: "privacy-blur-event",
   tts: "tts-event",
   watchFolder: "watch-folder-event",
+  youtubeDownload: "youtube-download-event",
 } as const;
 
 export function onSession(handler: (view: SessionView) => void): Promise<UnlistenFn> {
@@ -89,6 +91,12 @@ export function onTts(handler: (event: TtsEvent) => void): Promise<UnlistenFn> {
 
 export function onWatchFolder(handler: (event: WatchFolderEvent) => void): Promise<UnlistenFn> {
   return listen<WatchFolderEvent>(events.watchFolder, (e) => handler(e.payload));
+}
+
+export function onYoutubeDownload(
+  handler: (event: YoutubeDownloadEvent) => void,
+): Promise<UnlistenFn> {
+  return listen<YoutubeDownloadEvent>(events.youtubeDownload, (e) => handler(e.payload));
 }
 
 // Custom URI schemes are served from http://<scheme>.localhost on Windows (WebView2) and
@@ -236,6 +244,11 @@ export const api = {
   stopWatchingFolder: () => invoke<void>("stop_watching_folder"),
   addWatchedFileToProject: (watchPath: string, sourcePath: string) =>
     invoke<void>("add_watched_file_to_project", { watchPath, sourcePath }),
+
+  isYtDlpAvailable: () => invoke<boolean>("is_yt_dlp_available"),
+  downloadYoutube: (url: string, format: "mp4" | "mp3", quality: string) =>
+    invoke<void>("download_youtube", { url, format, quality }),
+  cancelYoutubeDownload: () => invoke<void>("cancel_youtube_download"),
 
   addMarker: (kind: MarkerKind = "Standard") => invoke<void>("add_marker", { kind }),
   removeMarker: (markerId: number) => invoke<void>("remove_marker", { markerId }),
