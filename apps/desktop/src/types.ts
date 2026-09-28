@@ -117,6 +117,22 @@ export interface SessionView {
   dirty: boolean;
 }
 
+export interface PrefsView {
+  locale: string;
+  lufsProfile: number;
+  outputFolder: string;
+  autosaveMinutes: number;
+  previewHardwareDecode: boolean;
+  recentProjectPaths: string[];
+}
+
+export interface RecentProject {
+  path: string;
+  name: string;
+  modifiedUnixSecs: number;
+  autosavePath: string | null;
+}
+
 export interface PreviewTick {
   frameSeq: number;
   playheadSecs: number;

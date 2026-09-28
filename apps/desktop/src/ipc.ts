@@ -9,6 +9,8 @@ import type {
   ExportAspectRatio,
   ExportJobView,
   PreviewTick,
+  PrefsView,
+  RecentProject,
   SessionView,
   TrackKind,
 } from "./types";
@@ -44,7 +46,14 @@ export const api = {
   newProject: (name: string, sequenceName: string) =>
     invoke<void>("new_project", { name, sequenceName }),
   openProject: () => invoke<boolean>("open_project"),
+  openProjectPath: (path: string) => invoke<void>("open_project_path", { path }),
   saveProject: (saveAs: boolean) => invoke<boolean>("save_project", { saveAs }),
+  getPrefs: () => invoke<PrefsView>("get_prefs"),
+  setPrefs: (prefs: PrefsView) => invoke<void>("set_prefs", { prefs }),
+  getRecentProjects: () => invoke<RecentProject[]>("get_recent_projects"),
+  removeRecentProject: (path: string) => invoke<void>("remove_recent_project", { path }),
+  restoreAutosave: (path: string) => invoke<void>("restore_autosave", { path }),
+  discardAutosave: (path: string) => invoke<void>("discard_autosave", { path }),
   undo: () => invoke<void>("undo"),
   redo: () => invoke<void>("redo"),
 

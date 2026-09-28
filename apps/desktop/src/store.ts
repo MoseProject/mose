@@ -6,6 +6,7 @@
 
 import { useSyncExternalStore } from "react";
 import { api, onExports, onPreview, onSession } from "./ipc";
+import { localeFromPrefs, setLocale } from "./i18n";
 import type { ExportJobView, PreviewTick, SessionView } from "./types";
 
 export interface Store<T> {
@@ -36,7 +37,7 @@ export function useStore<T>(store: Store<T>): T {
   return useSyncExternalStore(store.subscribe, store.get);
 }
 
-export type Screen = "home" | "editor";
+export type Screen = "home" | "editor" | "prefs";
 
 export interface UiState {
   screen: Screen;
@@ -113,5 +114,6 @@ export async function connect() {
   await onPreview((tick) => previewStore.set(tick));
   await onExports((jobs) => exportsStore.set(jobs));
   sessionStore.set(await api.getSession());
+  setLocale(localeFromPrefs((await api.getPrefs()).locale));
   exportsStore.set(await api.listExports());
 }
