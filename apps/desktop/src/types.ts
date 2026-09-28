@@ -7,6 +7,7 @@ export type MediaKind = "Video" | "Audio";
 export type TrackKind = "Video" | "Audio" | "Text" | "Shape";
 export type AudioRole = "Unspecified" | "GameAudio" | "Mic" | "Music";
 export type ExportAspectRatio = "Original" | "Landscape" | "Portrait" | "Square";
+export type MarkerKind = "Standard" | "ToDo" | "Chapter" | "Highlight";
 
 export interface LoudnessMetrics {
   integrated_lufs: number;
@@ -80,6 +81,8 @@ export interface Marker {
   id: number;
   position_secs: number;
   label: string;
+  kind: MarkerKind;
+  completed: boolean;
 }
 
 export interface Timeline {

@@ -4,6 +4,7 @@ import { Inspector } from "../editor/Inspector";
 import { MediaLibrary } from "../editor/MediaLibrary";
 import { PreviewPanel } from "../editor/PreviewPanel";
 import { Timeline } from "../editor/Timeline";
+import { SequenceTabs } from "../editor/SequenceTabs";
 import { t } from "../i18n";
 import { api } from "../ipc";
 import { previewStore, run, uiStore } from "../store";
@@ -52,6 +53,8 @@ export function Editor({ session }: { session: SessionView }) {
         void run(api.importMediaDialog());
       } else if (!ctrl && e.key.toLowerCase() === "s") {
         void run(api.splitAtPlayhead(selected));
+      } else if (!ctrl && e.key.toLowerCase() === "m") {
+        void run(api.addMarker());
       } else if (e.key === "Delete" || e.key === "Backspace") {
         if (selected.length > 0) void run(api.deleteClips(selected, e.shiftKey));
       } else if (e.key === "ArrowLeft") {
@@ -97,6 +100,7 @@ export function Editor({ session }: { session: SessionView }) {
       <PreviewPanel />
       <Inspector session={session} />
       <div className="splitter" onPointerDown={startResize} />
+      <SequenceTabs session={session} />
       <Timeline session={session} />
       {dropping && <div className="drop-overlay">{t("dropToImport")}</div>}
     </div>

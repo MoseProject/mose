@@ -2,7 +2,7 @@
 // React and canvas so it is unit-testable, mirroring how the egui timeline keeps its geometry
 // in plain functions (`timeline_panel/draw.rs` takes `(rect, data, px_per_sec)`).
 
-import { clipDuration, type Track } from "./types";
+import { clipDuration, type Marker, type Track } from "./types";
 
 export const RULER_HEIGHT = 24;
 export const TRACK_HEIGHT = 56;
@@ -18,6 +18,11 @@ export function timeToX(secs: number, pxPerSec: number, scrollSecs: number): num
 
 export function xToTime(x: number, pxPerSec: number, scrollSecs: number): number {
   return x / pxPerSec + scrollSecs;
+}
+
+/** Marker nearest a ruler coordinate within its visible tick width. */
+export function markerAtX(markers: Marker[], x: number, pxPerSec: number, scrollSecs: number, radius = 6): Marker | undefined {
+  return markers.find((marker) => Math.abs(timeToX(marker.position_secs, pxPerSec, scrollSecs) - x) <= radius);
 }
 
 /** Track row under a y coordinate in the track area (below the ruler), or -1. */

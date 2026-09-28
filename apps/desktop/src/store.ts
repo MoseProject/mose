@@ -98,7 +98,11 @@ export async function connect() {
   if (connected) return;
   connected = true;
   await onSession((view) => {
+    const previous = sessionStore.get();
     sessionStore.set(view);
+    const previousId = previous?.project.sequences[previous.project.active_sequence]?.id;
+    const activeId = view.project.sequences[view.project.active_sequence]?.id;
+    if (previousId !== undefined && previousId !== activeId) patchUi({ selectedClipIds: [] });
     // Drop selections that no longer exist (undo, delete, project switch).
     const ids = new Set(
       view.project.sequences[view.project.active_sequence].timeline.tracks.flatMap((t) =>

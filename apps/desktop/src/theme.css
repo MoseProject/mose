@@ -251,6 +251,18 @@ input[type="range"] {
   grid-column: 1 / 4;
 }
 
+.editor > .sequence-tabs { grid-row: 3; grid-column: 1 / 4; align-self: start; z-index: 1; display: flex; min-height: 30px; background: var(--surface); border-bottom: 1px solid var(--border-subtle); }
+.sequence-tabs + .timeline { padding-top: 30px; }
+.tab-list, .marker-row { display: flex; align-items: center; gap: 2px; }
+.tab-list { overflow-x: auto; flex: 1; padding: 3px 6px; }
+.sequence-tab { display: flex; align-items: center; border: 1px solid transparent; border-radius: var(--radius); }
+.sequence-tab.active { background: var(--accent-tint); border-color: var(--accent); }
+.sequence-tab button { white-space: nowrap; }
+.sequence-tab input { width: 110px; }
+.marker-list { margin: 4px 8px; position: relative; }
+.marker-list[open] { min-width: 360px; background: var(--bg-elevated); padding: 4px; }
+.marker-row input { width: 100px; }
+
 .drop-overlay {
   position: fixed;
   inset: 0;

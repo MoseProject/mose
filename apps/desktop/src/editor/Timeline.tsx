@@ -17,6 +17,7 @@ import {
   SNAP_PX,
   TRACK_HEIGHT,
   hitTest,
+  markerAtX,
   rulerTicks,
   snap,
   snapCandidates,
@@ -100,6 +101,7 @@ function snapMove(raw: number, duration: number, candidates: number[], threshold
 export function Timeline({ session }: { session: SessionView }) {
   const ui = useStore(uiStore);
   const tracks = activeTimeline(session.project).tracks;
+  const markers = activeTimeline(session.project).markers;
   const media = session.project.media_library;
   const [scrollSecs, setScrollSecs] = useState(0);
   const [scrollY, setScrollY] = useState(0);
@@ -114,8 +116,8 @@ export function Timeline({ session }: { session: SessionView }) {
   const lastScrubSeekRef = useRef(0);
 
   // Everything draw() reads, refreshed every render so the rAF callback never sees stale data.
-  const stateRef = useRef({ tracks, media, ui, scrollSecs, scrollY });
-  stateRef.current = { tracks, media, ui, scrollSecs, scrollY };
+  const stateRef = useRef({ tracks, markers, media, ui, scrollSecs, scrollY });
+  stateRef.current = { tracks, markers, media, ui, scrollSecs, scrollY };
 
   const draw = () => {
     const canvas = canvasRef.current;
@@ -123,7 +125,7 @@ export function Timeline({ session }: { session: SessionView }) {
     if (!canvas || !ctx) return;
     const palette = (paletteRef.current ??= readPalette());
     const { width, height } = sizeRef.current;
-    const { tracks, media, ui, scrollSecs, scrollY } = stateRef.current;
+    const { tracks, markers, media, ui, scrollSecs, scrollY } = stateRef.current;
     const px = ui.pxPerSec;
     const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -202,6 +204,16 @@ export function Timeline({ session }: { session: SessionView }) {
       const x = Math.round(timeToX(tick, px, scrollSecs)) + 0.5;
       ctx.fillRect(x, RULER_HEIGHT - 8, 1, 7);
       ctx.fillText(formatTime(tick).replace(/\.00$/, ""), x + 4, RULER_HEIGHT / 2);
+    }
+    for (const marker of markers) {
+      const x = timeToX(marker.position_secs, px, scrollSecs);
+      if (x < -8 || x > width + 8) continue;
+      ctx.fillStyle = marker.completed ? palette.textMuted : palette.accent;
+      ctx.beginPath();
+      ctx.moveTo(x, 1);
+      ctx.lineTo(x + 6, 1);
+      ctx.lineTo(x, 8);
+      ctx.fill();
     }
 
     // Playhead.
@@ -299,6 +311,11 @@ export function Timeline({ session }: { session: SessionView }) {
     const { x, y } = lanePoint(e);
     e.currentTarget.setPointerCapture(e.pointerId);
     if (y < RULER_HEIGHT) {
+      const marker = markerAtX(markers, x, ui.pxPerSec, scrollSecs);
+      if (marker) {
+        void run(api.seek(marker.position_secs));
+        return;
+      }
       dragRef.current = { mode: "scrub" };
       scrubTo(x, true);
       return;
@@ -445,6 +462,15 @@ export function Timeline({ session }: { session: SessionView }) {
         <button className="icon" onClick={() => run(api.addTrack("Audio"))}>
           {t("addAudioTrack")}
         </button>
+        <button className="icon" title={t("addMarker")} onClick={() => run(api.addMarker())}>M</button>
+        <button className="icon" title={t("previousMarker")} onClick={() => {
+          const previous = markers.filter((m) => m.position_secs < previewStore.get().playheadSecs).sort((a, b) => b.position_secs - a.position_secs)[0];
+          if (previous) void run(api.seek(previous.position_secs));
+        }}>‹M</button>
+        <button className="icon" title={t("nextMarker")} onClick={() => {
+          const next = markers.filter((m) => m.position_secs > previewStore.get().playheadSecs).sort((a, b) => a.position_secs - b.position_secs)[0];
+          if (next) void run(api.seek(next.position_secs));
+        }}>M›</button>
         <span style={{ flex: 1 }} />
         <button className="icon" title={t("zoomOut")} onClick={() => zoomBy(1 / 1.5)}>
           −
