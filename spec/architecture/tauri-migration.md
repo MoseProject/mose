@@ -66,7 +66,9 @@ thumbnails; timeline canvas (ruler, tracks, clips, waveforms, playhead, scrub, m
 tracks, trim, snap to edges/playhead, zoom around pointer, lock/visibility); split, delete,
 ripple delete, add track; undo/redo; composited preview with play/pause/step and audio meter;
 inspector for gain/speed/color balance/freeze/flip/voice cleanup; per-sequence LUFS target and
-aspect ratio; export with progress and cancel; keyboard shortcuts (Space, S, Del, Shift+Del,
+aspect ratio; sequence tabs (switch/add/duplicate/rename/remove/reorder, compound-reference
+delete guard); markers (add at playhead with M, label/kind/completion, ruler draw/click, and
+previous/next navigation); export with progress and cancel; keyboard shortcuts (Space, S, M, Del, Shift+Del,
 arrows, Home, Ctrl+Z/Y/S/Shift+S/I).
 
 Known gaps versus the egui shell, in migration order:
@@ -75,8 +77,7 @@ Known gaps versus the egui shell, in migration order:
    pipeline updates (`set_live_*`) are not applied -- any clip change at the playhead reopens
    the pipeline instead. Word-highlight text overlays do not advance during playback
    (`update_text_overlays`). Compound clips are skipped in preview.
-2. Sequences/tabs, markers, multi-select drag, composite blocks, roll/slide/slip edits,
-   copy/paste, layer templates.
+2. Multi-select drag, composite blocks, roll/slide/slip edits, copy/paste, layer templates.
 3. Text and shape clips (creation and editing), keyframes, masks, transitions, crop.
 4. Export queue persistence (`.ocqueue`), pause/resume, GPU encoder preference, SRT export.
 5. AI features: transcription/transcript panel, silence review, scene detection, highlight
