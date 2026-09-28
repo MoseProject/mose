@@ -83,7 +83,10 @@ Known gaps versus the egui shell, in migration order:
    detection, auto-reframe, background removal, motion tracking, privacy blur, TTS.
 6. Preferences (locale switch, layout, hardware decode), autosave + crash recovery, error
    reporting consent, update check, telemetry, recent projects on Home, watch folder, YouTube
-   download, sound library.
+   download, sound library. **In progress:** desktop now shares `prefs.oc` with egui for locale,
+   LUFS defaults, hardware decode, output folder, autosave interval and recent projects; it also
+   writes/restores the shared `.autosave.ocproj` files. Layout, crash-report review, consent,
+   update, telemetry, watch/download and sound-library controls remain.
 7. Packaging: replace `crates/ui` in the installer and auto-update flow, port `e2e/` from
    pywinauto to WebDriver (`tauri-driver`), then delete `crates/ui`.
 
