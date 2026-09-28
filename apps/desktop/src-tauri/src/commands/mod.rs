@@ -12,6 +12,7 @@
 
 pub mod auto_reframe;
 pub mod background_removal;
+pub mod error_reporting;
 pub mod export;
 pub mod highlight_detection;
 pub mod markers;
@@ -27,6 +28,7 @@ pub mod sound_library;
 pub mod timeline;
 pub mod transcribe;
 pub mod tts;
+pub mod update_check;
 pub mod watch_folder;
 pub mod youtube_download;
 

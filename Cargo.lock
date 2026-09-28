@@ -1624,8 +1624,11 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-build",
+ "tokio",
  "tracing",
+ "tracing-appender",
  "tracing-subscriber",
+ "ureq",
 ]
 
 [[package]]

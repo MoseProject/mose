@@ -22,16 +22,20 @@
 
 mod autosave;
 mod commands;
+mod error_reporting;
 mod export;
 mod frames;
 mod prefs;
 mod preview_engine;
 mod protocol;
 mod state;
+mod telemetry;
 
 use std::sync::{Arc, Mutex};
 
 use tauri::Manager;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 use crate::export::ExportQueue;
 use crate::preview_engine::PreviewEngine;
@@ -41,12 +45,8 @@ use crate::state::{blank_project, AppState, Session};
 fn main() {
     // Must run before GStreamer initializes so packaged runtimes win over system installs.
     avcore::configure_bundled_runtime();
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_env("OCA_LOG")
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
-        .init();
+    init_logging();
+    install_panic_hook();
 
     tauri::Builder::default()
         .register_asynchronous_uri_scheme_protocol(protocol::SCHEME, |ctx, request, responder| {
@@ -58,6 +58,25 @@ fn main() {
             let prefs = prefs::PrefsDocument::load();
             let preview = PreviewEngine::spawn(handle.clone());
             preview.set_hardware_decode(prefs.view.preview_hardware_decode);
+
+            let locale_code = if prefs.view.locale == "en" {
+                "en"
+            } else {
+                "pt-BR"
+            };
+            let error_reporter = error_reporting::seed_error_reporting(
+                locale_code,
+                prefs.view.error_reporting_consent,
+            );
+            let pending_crash_review = error_reporting::find_latest_unreviewed_crash(
+                &platform_log_dir(),
+                prefs.view.last_reviewed_crash_unix,
+            );
+            let telemetry_enabled = Arc::new(std::sync::atomic::AtomicBool::new(
+                prefs.view.telemetry_enabled,
+            ));
+            telemetry::spawn(Arc::clone(&telemetry_enabled));
+
             app.manage(AppState {
                 session: Mutex::new(Session::new(blank_project(
                     "Untitled".to_string(),
@@ -77,6 +96,9 @@ fn main() {
                 tts_generating: Mutex::new(false),
                 watch_folder_stop: Mutex::new(None),
                 youtube_download_cancel: Mutex::new(None),
+                error_reporter: Mutex::new(error_reporter),
+                pending_crash_review: Mutex::new(pending_crash_review),
+                telemetry_enabled,
             });
             autosave::spawn(handle);
             Ok(())
@@ -174,7 +196,117 @@ fn main() {
             commands::youtube_download::is_yt_dlp_available,
             commands::youtube_download::download_youtube,
             commands::youtube_download::cancel_youtube_download,
+            commands::error_reporting::get_pending_crash_review,
+            commands::error_reporting::send_crash_once,
+            commands::error_reporting::always_send_crash,
+            commands::error_reporting::dismiss_crash_review,
+            commands::error_reporting::set_error_reporting_consent,
+            commands::error_reporting::get_queued_report_count,
+            commands::error_reporting::delete_queued_reports,
+            commands::update_check::check_for_update,
+            commands::update_check::install_available_update,
+            commands::update_check::restart_after_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running the oca desktop shell");
+}
+
+/// Initialises the global tracing subscriber: a rolling daily file in the platform log dir
+/// plus, in debug builds, a human-readable layer on stderr. Mirrors `ui::main.rs::init_logging`
+/// exactly -- same log directory convention, same `OCA_LOG` filter override.
+fn init_logging() {
+    let log_dir = platform_log_dir();
+    let _ = std::fs::create_dir_all(&log_dir);
+
+    let file_appender = tracing_appender::rolling::daily(&log_dir, "oca.log");
+    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+    std::mem::forget(guard);
+
+    let filter = tracing_subscriber::EnvFilter::try_from_env("OCA_LOG")
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+    let file_layer = tracing_subscriber::fmt::layer()
+        .with_ansi(false)
+        .with_writer(non_blocking);
+
+    #[cfg(debug_assertions)]
+    {
+        let stderr_layer = tracing_subscriber::fmt::layer()
+            .with_writer(std::io::stderr)
+            .pretty();
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(file_layer)
+            .with(stderr_layer)
+            .init();
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(file_layer)
+            .init();
+    }
+
+    tracing::info!(version = env!("CARGO_PKG_VERSION"), "oca desktop starting");
+}
+
+/// Platform-appropriate log directory -- mirrors `ui::main.rs::platform_log_dir` exactly, same
+/// paths, so both shells' crash files and error-report queues share one directory.
+fn platform_log_dir() -> std::path::PathBuf {
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(home) = std::env::var("HOME") {
+            return std::path::PathBuf::from(home).join("Library/Logs/oca");
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            return std::path::PathBuf::from(appdata).join("oca\\logs");
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        if let Ok(home) = std::env::var("HOME") {
+            return std::path::PathBuf::from(home).join(".local/share/oca/logs");
+        }
+    }
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("logs")))
+        .unwrap_or_else(|| std::path::PathBuf::from("logs"))
+}
+
+/// Installs a panic hook that writes a `crash_<unix_seconds>.txt` file to the log directory
+/// before calling the default hook -- mirrors `ui::main.rs::install_panic_hook` exactly (same
+/// file format `error_reporting::parse_crash_report`/`find_latest_unreviewed_crash` read), so a
+/// crash from either shell surfaces through the same post-crash review.
+fn install_panic_hook() {
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let backtrace = std::backtrace::Backtrace::force_capture();
+        let msg = info
+            .payload()
+            .downcast_ref::<&str>()
+            .copied()
+            .or_else(|| info.payload().downcast_ref::<String>().map(|s| s.as_str()))
+            .unwrap_or("<unknown>");
+        let location = info
+            .location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_else(|| "<unknown>".to_owned());
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let report = format!(
+            "oca v{ver} crash report\ntimestamp (unix): {timestamp}\nlocation: {location}\nmessage: {msg}\n\nbacktrace:\n{backtrace}\n",
+            ver = env!("CARGO_PKG_VERSION"),
+        );
+        let log_dir = platform_log_dir();
+        let _ = std::fs::create_dir_all(&log_dir);
+        let crash_path = log_dir.join(format!("crash_{timestamp}.txt"));
+        let _ = std::fs::write(&crash_path, report.as_bytes());
+        default_hook(info);
+    }));
 }

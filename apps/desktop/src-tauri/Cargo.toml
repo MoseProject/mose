@@ -27,3 +27,9 @@ rfd = "0.17.2"
 image = { version = "0.25.10", default-features = false, features = ["jpeg"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+# ER-01B error-report delivery transport, same crate/major version the egui shell already uses.
+ureq = "3"
+# Channel primitives only (no task runtime) -- same "sync"-only feature set crates/ui pins, per
+# CLAUDE.md's "background work is plain std::thread::spawn, not tokio tasks" convention.
+tokio = { version = "1", features = ["sync"] }

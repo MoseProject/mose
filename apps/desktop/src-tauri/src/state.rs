@@ -130,6 +130,17 @@ pub struct AppState {
     /// The running YouTube download's cancel flag, if any. Mirrors
     /// `ui::App::youtube_download_state.youtube_download_cancel`.
     pub youtube_download_cancel: Mutex<Option<Arc<std::sync::atomic::AtomicBool>>>,
+    /// This launch's error reporter, if ER-01B consent is `AlwaysSend`. `None` is the
+    /// consent-disabled state: no report is ever built, validated, queued, or sent. Mirrors
+    /// `ui::App::error_reporter`.
+    pub error_reporter: Mutex<Option<Arc<dyn avcore::ErrorReporter>>>,
+    /// A previous launch's crash, staged for the post-crash review modal, if `main.rs`'s panic
+    /// hook wrote one newer than `prefs.last_reviewed_crash_unix`. Mirrors
+    /// `ui::App::pending_crash_review`.
+    pub pending_crash_review: Mutex<Option<crate::error_reporting::PendingCrashReview>>,
+    /// Live toggle for `telemetry.rs`'s resource samplers -- checked each sampling tick, kept in
+    /// sync with `prefs.telemetry_enabled` by `commands::prefs::set_prefs`.
+    pub telemetry_enabled: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl AppState {

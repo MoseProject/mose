@@ -7,6 +7,8 @@ use avcore::LayerTemplate;
 use rmpv::Value;
 use serde::{Deserialize, Serialize};
 
+use crate::error_reporting::ErrorReportingConsent;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PrefsView {
@@ -41,6 +43,23 @@ pub struct PrefsView {
     /// shared with the egui shell's `PrefsState.sound_library_path` key.
     #[serde(default)]
     pub sound_library_path: String,
+    /// ER-01B steady-state consent -- shared with the egui shell's
+    /// `PrefsState.error_reporting_consent` key. Defaults to `Disabled`.
+    #[serde(default)]
+    pub error_reporting_consent: ErrorReportingConsent,
+    /// Unix timestamp of the most recent crash file already reviewed -- shared with the egui
+    /// shell's `PrefsState.last_reviewed_crash_unix` key.
+    #[serde(default)]
+    pub last_reviewed_crash_unix: u64,
+    /// Local-only telemetry opt-in (never sent anywhere, separate from
+    /// `error_reporting_consent`) -- shared with the egui shell's `PrefsState.telemetry_enabled`
+    /// key, same default-on (it's local-only, not remote) behavior.
+    #[serde(default = "default_telemetry_enabled")]
+    pub telemetry_enabled: bool,
+}
+
+fn default_telemetry_enabled() -> bool {
+    true
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
@@ -70,6 +89,12 @@ struct DiskPrefs {
     tts_model_path: String,
     #[serde(default)]
     sound_library_path: String,
+    #[serde(default)]
+    error_reporting_consent: ErrorReportingConsent,
+    #[serde(default)]
+    last_reviewed_crash_unix: u64,
+    #[serde(default = "default_telemetry_enabled")]
+    telemetry_enabled: bool,
 }
 
 fn default_hardware_decode() -> bool {
@@ -100,6 +125,9 @@ impl From<DiskPrefs> for PrefsView {
             background_removal_model_path: value.background_removal_model_path,
             tts_model_path: value.tts_model_path,
             sound_library_path: value.sound_library_path,
+            error_reporting_consent: value.error_reporting_consent,
+            last_reviewed_crash_unix: value.last_reviewed_crash_unix,
+            telemetry_enabled: value.telemetry_enabled,
         }
     }
 }
@@ -119,6 +147,9 @@ impl From<&PrefsView> for DiskPrefs {
             background_removal_model_path: value.background_removal_model_path.clone(),
             tts_model_path: value.tts_model_path.clone(),
             sound_library_path: value.sound_library_path.clone(),
+            error_reporting_consent: value.error_reporting_consent,
+            last_reviewed_crash_unix: value.last_reviewed_crash_unix,
+            telemetry_enabled: value.telemetry_enabled,
         }
     }
 }
@@ -138,6 +169,9 @@ impl Default for PrefsView {
             background_removal_model_path: String::new(),
             tts_model_path: String::new(),
             sound_library_path: String::new(),
+            error_reporting_consent: ErrorReportingConsent::default(),
+            last_reviewed_crash_unix: 0,
+            telemetry_enabled: true,
         }
     }
 }
