@@ -114,8 +114,17 @@ Known gaps versus the egui shell, in migration order:
    stroke thickness, start/duration fields, per-property keyframes, split of overlay clips,
    add-empty-Text/Shape-track buttons.
 4. Export queue parity: persistent `.ocqueue` snapshots, bounded worker pool, pause/resume/cancel/remove, loudness matching, GPU encoder preference, output conflict choices, and SRT export are implemented. The dedicated export panel still needs visual/e2e coverage.
-5. AI features: transcription/transcript panel, silence review, scene detection, highlight
-   detection, auto-reframe, background removal, motion tracking, privacy blur, TTS.
+5. AI features. **Transcription/transcript panel done:** the media library's per-asset "📝"
+   button runs Whisper on a background thread (`avcore::transcribe`, bundled Whisper Base model
+   or `prefs.whisper_model_path`, shared with the egui shell), creating word-highlight `TextClip`
+   subtitles on an auto-created Text track and saving a `TranscriptDocument` `.octr` sidecar
+   (`transcribe_asset`/`TRANSCRIBE_EVENT`). The Transcript panel (timeline toolbar) filters the
+   selected clip's own transcript by default, or searches every asset with a saved transcript
+   project-wide when toggled on, highlighting the word under the playhead and seeking through
+   `seek_to_transcript_word` (maps a word's media-relative time back onto the first timeline clip
+   using that asset, same as `ui::App::map_asset_source_to_timeline`) on click. Still missing:
+   silence review, scene detection, highlight detection, auto-reframe, background removal, motion
+   tracking, privacy blur, TTS.
 6. Preferences (locale switch, layout, hardware decode), autosave + crash recovery, error
    reporting consent, update check, telemetry, recent projects on Home, watch folder, YouTube
    download, sound library. **In progress:** desktop now shares `prefs.oc` with egui for locale,
