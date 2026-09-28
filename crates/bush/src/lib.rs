@@ -10,6 +10,7 @@ mod scene;
 mod scene_scheduler;
 mod scene_versions;
 mod transport;
+mod video_frame;
 
 pub use byte_cache::{ByteCache, CacheError, CacheInsert};
 pub use latest_intent::{Generation, LatestIntent, PendingIntent};
@@ -20,3 +21,4 @@ pub use scene::{
 pub use scene_scheduler::{SceneScheduler, ScheduleError, ScheduledScene, Submission};
 pub use scene_versions::{invalidation_scope, InvalidationScope, SceneVersions, Version};
 pub use transport::{PlaybackState, Transport, TransportError};
+pub use video_frame::{PixelFormat, VideoFrame, VideoFrameError};
