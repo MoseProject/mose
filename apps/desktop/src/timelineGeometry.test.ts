@@ -3,6 +3,7 @@ import {
   RULER_HEIGHT,
   TRACK_HEIGHT,
   hitTest,
+  markerAtX,
   rulerTicks,
   snap,
   snapCandidates,
@@ -11,7 +12,7 @@ import {
   xToTime,
   zoomAround,
 } from "./timelineGeometry";
-import type { ClipInstance, Track } from "./types";
+import type { ClipInstance, Marker, Track } from "./types";
 
 function clip(id: number, start: number, duration: number, speed = 1): ClipInstance {
   return {
@@ -83,6 +84,17 @@ describe("hitTest", () => {
   it("keeps a body zone on very narrow clips", () => {
     const narrow = [track(1, [clip(1, 0, 0.3)])];
     expect(hitTest(narrow, 6, rowY(0), 40, 0)?.part).toBe("body");
+  });
+});
+
+describe("marker hit testing", () => {
+  const markers: Marker[] = [
+    { id: 1, position_secs: 2, label: "A", kind: "Standard", completed: false },
+  ];
+
+  it("finds ruler markers within their click target", () => {
+    expect(markerAtX(markers, 83, 40, 0)?.id).toBe(1);
+    expect(markerAtX(markers, 90, 40, 0)).toBeUndefined();
   });
 });
 
