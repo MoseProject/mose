@@ -113,7 +113,7 @@ Known gaps versus the egui shell, in migration order:
    vertex editing, font weight (variable fonts), text direction, background box, rotation,
    stroke thickness, start/duration fields, per-property keyframes, split of overlay clips,
    add-empty-Text/Shape-track buttons.
-4. Export queue parity: persistent `.ocqueue` snapshots, bounded worker pool, pause/resume/cancel/remove, loudness matching, GPU encoder preference, output conflict choices, and SRT export are implemented. The dedicated export panel still needs visual/e2e coverage.
+4. Export queue parity: persistent `.ocqueue` snapshots, bounded worker pool, pause/resume/cancel/remove, loudness matching, GPU encoder preference, output conflict choices, and SRT export are implemented. **Visual coverage done:** `ExportPanel.test.tsx` (jsdom + `@testing-library/react`, `../ipc` mocked) covers empty/queued/rendering/paused render states, the loudness-match shortcuts' >=2-queued-jobs gate, and action-button wiring. True end-to-end coverage still needs the WebDriver harness gap 7 will port from `e2e/`'s current pywinauto suite.
 5. AI features. **Transcription/transcript panel done:** the media library's per-asset "📝"
    button runs Whisper on a background thread (`avcore::transcribe`, bundled Whisper Base model
    or `prefs.whisper_model_path`, shared with the egui shell), creating word-highlight `TextClip`
@@ -145,10 +145,24 @@ Known gaps versus the egui shell, in migration order:
    download, sound library. **In progress:** desktop shares `prefs.oc` with egui for locale, LUFS
    defaults, hardware decode, output folder, autosave interval, recent projects, and every AI
    feature's model path; it also writes/restores the shared `.autosave.ocproj` files. **Sound
-   library done:** `list_sound_library` scans `prefs.sound_library_path`'s `music`/`sfx`
-   subfolders (`avcore::scan_library_dir`) into a popup, importing a track through the existing
-   `import_media` pipeline. Layout, crash-report review, consent, update, telemetry, and watch
-   folder/YouTube download remain.
+   library, watch folder and YouTube download done:** `list_sound_library` scans
+   `prefs.sound_library_path`'s `music`/`sfx` subfolders into a popup; the new "watch" screen
+   drives `avcore::process_watched_file` through a background poll loop
+   (`start_watching_folder`/`stop_watching_folder`, `watch-folder-event`), same
+   `StabilityTracker` cadence as `ui::App::watch_folder.rs`; the media library's YouTube modal
+   downloads via `avcore::download_youtube`/`ytbridge` (`youtube-download-event`) -- all three
+   import through the existing `import_media` pipeline on success.
+
+   **Deliberately not ported this pass: layout persistence, crash-report review, error-reporting
+   consent/telemetry delivery, update check.** These four are one tightly-coupled subsystem in
+   `ui::App` (`error_reporting.rs`'s ~700-line process-wide report builder/bounded on-disk queue/
+   Sentry-envelope delivery worker, `crash_review.rs`'s panic-hook-file review modal, and
+   `update_check.rs`) that isn't `core`-shared logic today -- porting it correctly means either
+   duplicating consent/privacy-sensitive code (real risk of a subtly wrong "opted out means
+   nothing is ever sent" guarantee) or first moving it into `avcore` behind review, not a
+   same-session autonomous port. Layout persistence is lower-stakes but architecturally mismatched
+   (desktop's CSS-grid panels vs. egui's immediate-mode resize) rather than a quick win. Flagging
+   rather than guessing at consent-affecting code.
 7. Packaging: replace `crates/ui` in the installer and auto-update flow, port `e2e/` from
    pywinauto to WebDriver (`tauri-driver`), then delete `crates/ui`.
 
