@@ -418,3 +418,7 @@ pub(crate) fn patch_shape(timeline: &mut Timeline, clip_id: u64, patch: ShapeCli
     }
     *clip != before
 }
+
+#[cfg(test)]
+#[path = "overlays_test.rs"]
+mod tests;
