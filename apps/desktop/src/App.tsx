@@ -1,13 +1,15 @@
-import { useEffect } from "react";
-import { t } from "./i18n";
+import { useEffect, useSyncExternalStore } from "react";
+import { localeSnapshot, subscribeLocale, t } from "./i18n";
 import { api } from "./ipc";
 import { Editor } from "./screens/Editor";
 import { Home } from "./screens/Home";
+import { Prefs } from "./screens/Prefs";
 import { connect, patchUi, run, sessionStore, uiStore, useStore } from "./store";
 
 export function App() {
   const session = useStore(sessionStore);
   const ui = useStore(uiStore);
+  useSyncExternalStore(subscribeLocale, localeSnapshot);
 
   useEffect(() => {
     void run(connect());
@@ -22,6 +24,7 @@ export function App() {
         >
           {t("home")}
         </button>
+        <button className={`icon ${ui.screen === "prefs" ? "active" : ""}`} onClick={() => patchUi({ screen: "prefs" })}>{t("preferences")}</button>
         {session && (
           <>
             <span className="project-name">{session.project.name}</span>
@@ -40,7 +43,7 @@ export function App() {
           </>
         )}
       </header>
-      {ui.screen === "home" || !session ? <Home /> : <Editor session={session} />}
+      {ui.screen === "home" || !session ? <Home /> : ui.screen === "prefs" ? <Prefs /> : <Editor session={session} />}
       {ui.error && (
         <div className="error-banner" role="alert">
           <span>

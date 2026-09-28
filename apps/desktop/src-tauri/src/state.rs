@@ -18,6 +18,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::export::ExportQueue;
+use crate::prefs::PrefsDocument;
 use crate::preview_engine::PreviewEngine;
 
 /// Event carrying a fresh [`SessionView`] after any mutation.
@@ -102,6 +103,7 @@ pub struct SessionView<'a> {
 
 pub struct AppState {
     pub session: Mutex<Session>,
+    pub prefs: Mutex<PrefsDocument>,
     pub preview: PreviewEngine,
     pub exports: Arc<ExportQueue>,
 }
@@ -111,6 +113,12 @@ impl AppState {
         // A poisoned lock means a command panicked mid-edit; the data is still the last
         // consistent snapshot any other command left, so keep serving it.
         self.session
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+    }
+
+    pub fn prefs(&self) -> MutexGuard<'_, PrefsDocument> {
+        self.prefs
             .lock()
             .unwrap_or_else(|poison| poison.into_inner())
     }

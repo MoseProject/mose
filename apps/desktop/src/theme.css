@@ -199,6 +199,14 @@ input[type="range"] {
   gap: 8px;
 }
 
+.recent-projects, .prefs { width: min(720px, 90vw); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+.recent-projects h2, .prefs h1 { margin-top: 0; }
+.recent-project { display: flex; align-items: center; gap: 6px; padding: 6px 0; border-top: 1px solid var(--border-subtle); }
+.recent-open { flex: 1; text-align: left; display: flex; flex-direction: column; }
+.prefs { margin: auto; display: grid; gap: 14px; }
+.prefs label { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.prefs input:not([type="checkbox"]) { min-width: 260px; }
+
 /* ---- editor ---- */
 .editor {
   display: grid;

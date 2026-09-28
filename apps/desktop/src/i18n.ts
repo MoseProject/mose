@@ -106,6 +106,17 @@ const strings = {
   cancel: { "pt-BR": "Cancelar", en: "Cancel" },
   noExports: { "pt-BR": "Nenhuma exportação nesta sessão.", en: "No exports this session." },
   errorPrefix: { "pt-BR": "Erro", en: "Error" },
+  preferences: { "pt-BR": "Ajustes", en: "Preferences" },
+  language: { "pt-BR": "Idioma", en: "Language" },
+  defaultLufs: { "pt-BR": "Perfil LUFS padrão", en: "Default LUFS profile" },
+  hardwareDecode: { "pt-BR": "Decodificação por hardware", en: "Hardware decoding" },
+  outputFolder: { "pt-BR": "Pasta de saída", en: "Output folder" },
+  autosaveInterval: { "pt-BR": "Intervalo de salvamento automático", en: "Autosave interval" },
+  minutes: { "pt-BR": "minutos", en: "minutes" },
+  removeRecent: { "pt-BR": "Remover da lista", en: "Remove from list" },
+  recoverAutosave: { "pt-BR": "Recuperar salvamento automático", en: "Recover autosave" },
+  discardAutosave: { "pt-BR": "Descartar salvamento automático", en: "Discard autosave" },
+  unsavedConfirm: { "pt-BR": "Há alterações não salvas. Deseja continuar?", en: "You have unsaved changes. Continue?" },
 } as const;
 
 export type TextKey = keyof typeof strings;
@@ -115,9 +126,25 @@ export function detectLocale(): Locale {
 }
 
 let current: Locale = typeof navigator === "undefined" ? "en" : detectLocale();
+const localeListeners = new Set<() => void>();
 
 export function setLocale(locale: Locale) {
+  if (current === locale) return;
   current = locale;
+  localeListeners.forEach((listener) => listener());
+}
+
+export function localeFromPrefs(locale: string): Locale {
+  return locale === "en" ? "en" : "pt-BR";
+}
+
+export function subscribeLocale(listener: () => void) {
+  localeListeners.add(listener);
+  return () => localeListeners.delete(listener);
+}
+
+export function localeSnapshot() {
+  return current;
 }
 
 export function t(key: TextKey): string {
