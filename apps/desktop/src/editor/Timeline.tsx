@@ -10,6 +10,7 @@ import {
   run,
   uiStore,
   useStore,
+  type EditorTool,
 } from "../store";
 import {
   HEADER_WIDTH,
@@ -40,6 +41,12 @@ import {
 
 /** Seeks sent while scrubbing the ruler are coalesced to preview cadence (egui: 33 ms). */
 const SCRUB_SEEK_INTERVAL_MS = 33;
+const TOOLS: [EditorTool, "toolSelect" | "toolRoll" | "toolSlip" | "toolSlide"][] = [
+  ["select", "toolSelect"],
+  ["roll", "toolRoll"],
+  ["slip", "toolSlip"],
+  ["slide", "toolSlide"],
+];
 const UI_FONT = "11px 'Segoe UI', system-ui, sans-serif";
 const MONO_FONT = "11px 'Cascadia Mono', Consolas, monospace";
 
@@ -52,11 +59,22 @@ type Drag =
       ghostStart: number;
       ghostTrack: number;
       duration: number;
+      /** "slide" keeps the clip's own range and absorbs the move into its neighbors instead of
+       *  repositioning; the row never changes for it. */
+      editKind: "move" | "slide";
     }
   | {
       mode: "trim-start" | "trim-end";
       clipId: number;
       ghostEdge: number;
+      /** Rolls the shared boundary with the neighbor on that side instead of trimming alone. */
+      roll: boolean;
+    }
+  | {
+      mode: "slip";
+      clipId: number;
+      grabX: number;
+      deltaSecs: number;
     };
 
 interface Palette {
@@ -360,6 +378,20 @@ export function Timeline({ session }: { session: SessionView }) {
     if (track.locked) return;
     const clip = findSpan(tracks, hit.clipId)!.span;
     const end = clip.start_secs + clip.duration_secs;
+    const tool: EditorTool = clip.overlay ? "select" : ui.tool;
+    if (tool === "slip" && hit.part === "body") {
+      dragRef.current = { mode: "slip", clipId: clip.id, grabX: x, deltaSecs: 0 };
+      return;
+    }
+    if (tool === "roll" && hit.part !== "body") {
+      dragRef.current = {
+        mode: hit.part === "start" ? "trim-start" : "trim-end",
+        clipId: clip.id,
+        ghostEdge: hit.part === "start" ? clip.start_secs : end,
+        roll: true,
+      };
+      return;
+    }
     dragRef.current =
       hit.part === "body"
         ? {
@@ -369,10 +401,12 @@ export function Timeline({ session }: { session: SessionView }) {
             ghostStart: clip.start_secs,
             ghostTrack: hit.trackIndex,
             duration: clip.duration_secs,
+            editKind: tool === "slide" ? "slide" : "move",
           }
         : {
             mode: hit.part === "start" ? "trim-start" : "trim-end",
             clipId: clip.id,
+            roll: false,
             ghostEdge: hit.part === "start" ? clip.start_secs : end,
           };
   };
@@ -395,11 +429,15 @@ export function Timeline({ session }: { session: SessionView }) {
     if (drag.mode === "move") {
       const raw = Math.max(0, xToTime(x, px, scrollSecs) - drag.grabOffsetSecs);
       drag.ghostStart = snapMove(raw, drag.duration, candidates, threshold);
-      const row = trackIndexAtY(y + scrollY, tracks.length);
-      const source = tracks[findSpan(tracks, drag.clipId)?.trackIndex ?? -1];
-      if (row >= 0 && source && tracks[row].kind === source.kind && !tracks[row].locked) {
-        drag.ghostTrack = row;
+      if (drag.editKind === "move") {
+        const row = trackIndexAtY(y + scrollY, tracks.length);
+        const source = tracks[findSpan(tracks, drag.clipId)?.trackIndex ?? -1];
+        if (row >= 0 && source && tracks[row].kind === source.kind && !tracks[row].locked) {
+          drag.ghostTrack = row;
+        }
       }
+    } else if (drag.mode === "slip") {
+      drag.deltaSecs = (x - drag.grabX) / px;
     } else {
       drag.ghostEdge = snap(Math.max(0, xToTime(x, px, scrollSecs)), candidates, threshold);
     }
@@ -418,21 +456,33 @@ export function Timeline({ session }: { session: SessionView }) {
       if (found && target) {
         const { span, trackIndex } = found;
         if (span.start_secs !== drag.ghostStart || drag.ghostTrack !== trackIndex) {
-          void run(
-            span.overlay
-              ? api.moveOverlayClip(span.id, target.id, drag.ghostStart)
-              : api.moveClip(span.id, target.id, drag.ghostStart),
-          );
+          if (span.overlay) {
+            void run(api.moveOverlayClip(span.id, target.id, drag.ghostStart));
+          } else if (drag.editKind === "slide") {
+            void run(api.slideClip(span.id, drag.ghostStart));
+          } else if (drag.ghostTrack !== trackIndex) {
+            void run(api.moveClip(span.id, target.id, drag.ghostStart));
+          } else {
+            void run(api.moveClipGroup(span.id, drag.ghostStart));
+          }
         }
       }
+    } else if (drag.mode === "slip") {
+      if (Math.abs(drag.deltaSecs) > 1e-6) void run(api.slipClip(drag.clipId, drag.deltaSecs));
     } else {
       const edge = drag.mode === "trim-start" ? "start" : "end";
       const overlay = findSpan(tracks, drag.clipId)?.span.overlay ?? false;
-      void run(
-        overlay
-          ? api.trimOverlayClip(drag.clipId, edge, drag.ghostEdge)
-          : api.trimClip(drag.clipId, edge, drag.ghostEdge),
-      );
+      if (overlay) {
+        void run(api.trimOverlayClip(drag.clipId, edge, drag.ghostEdge));
+      } else if (drag.roll) {
+        void run(
+          edge === "start"
+            ? api.rollEditFromStartEdge(drag.clipId, drag.ghostEdge)
+            : api.rollEditClip(drag.clipId, drag.ghostEdge),
+        );
+      } else {
+        void run(api.trimClip(drag.clipId, edge, drag.ghostEdge));
+      }
     }
     scheduleDraw();
   };
@@ -471,6 +521,16 @@ export function Timeline({ session }: { session: SessionView }) {
         <span className="panel-title" style={{ border: 0, padding: "0 8px 0 0" }}>
           {t("timeline")}
         </span>
+        {TOOLS.map(([tool, label]) => (
+          <button
+            key={tool}
+            className={`icon ${ui.tool === tool ? "active" : ""}`}
+            title={t(label)}
+            onClick={() => patchUi({ tool })}
+          >
+            {t(label)}
+          </button>
+        ))}
         <button className="icon" onClick={() => run(api.splitAtPlayhead(selected))}>
           {t("split")}
         </button>
@@ -487,6 +547,13 @@ export function Timeline({ session }: { session: SessionView }) {
           onClick={() => run(api.deleteClips(selected, true))}
         >
           {t("rippleDelete")}
+        </button>
+        <button
+          className="icon"
+          disabled={selected.length < 2}
+          onClick={() => run(api.mergeClipsIntoComposite(selected))}
+        >
+          {t("mergeComposite")}
         </button>
         <button className="icon" onClick={() => run(api.addTrack("Video"))}>
           {t("addVideoTrack")}

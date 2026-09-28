@@ -39,9 +39,14 @@ export function useStore<T>(store: Store<T>): T {
 
 export type Screen = "home" | "editor" | "prefs";
 
+/** Timeline edit tool -- egui's `EditorTool`. "select" is the default drag-to-move/trim mode;
+ *  the others repurpose a body/edge drag into the matching Premiere/DaVinci/FCP-style edit. */
+export type EditorTool = "select" | "roll" | "slip" | "slide";
+
 export interface UiState {
   screen: Screen;
   selectedClipIds: number[];
+  tool: EditorTool;
   /** Timeline zoom, in pixels per second. */
   pxPerSec: number;
   error: string | null;
@@ -62,6 +67,7 @@ export const exportsStore = createStore<ExportJobView[]>([]);
 export const uiStore = createStore<UiState>({
   screen: "home",
   selectedClipIds: [],
+  tool: "select",
   pxPerSec: 40,
   error: null,
 });

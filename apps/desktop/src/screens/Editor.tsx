@@ -8,7 +8,7 @@ import { Timeline } from "../editor/Timeline";
 import { SequenceTabs } from "../editor/SequenceTabs";
 import { t } from "../i18n";
 import { api } from "../ipc";
-import { previewStore, run, uiStore } from "../store";
+import { patchUi, previewStore, run, uiStore } from "../store";
 import type { SessionView } from "../types";
 
 const MIN_TIMELINE_HEIGHT = 140;
@@ -52,6 +52,18 @@ export function Editor({ session }: { session: SessionView }) {
         void run(api.saveProject(e.shiftKey));
       } else if (ctrl && e.key.toLowerCase() === "i") {
         void run(api.importMediaDialog());
+      } else if (ctrl && e.shiftKey && e.key.toLowerCase() === "c") {
+        if (selected[0] !== undefined) void run(api.copyClipFormatting(selected[0]));
+      } else if (ctrl && e.shiftKey && e.key.toLowerCase() === "v") {
+        if (selected[0] !== undefined) void run(api.pasteClipFormatting(selected[0]));
+      } else if (ctrl && e.key.toLowerCase() === "c") {
+        if (selected[0] !== undefined) void run(api.copyClip(selected[0]));
+      } else if (ctrl && e.key.toLowerCase() === "x") {
+        if (selected[0] !== undefined) void run(api.cutClip(selected[0]));
+      } else if (ctrl && e.key.toLowerCase() === "v") {
+        void run(api.pasteClip()).then((ids) => {
+          if (ids && ids.length > 0) patchUi({ selectedClipIds: ids });
+        });
       } else if (!ctrl && e.key.toLowerCase() === "s") {
         void run(api.splitAtPlayhead(selected));
       } else if (!ctrl && e.key.toLowerCase() === "m") {

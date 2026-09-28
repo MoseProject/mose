@@ -73,13 +73,28 @@ export const api = {
     }),
   moveClip: (clipId: number, trackId: number, startSecs: number) =>
     invoke<void>("move_clip", { clipId, trackId, startSecs }),
+  moveClipGroup: (clipId: number, startSecs: number) =>
+    invoke<void>("move_clip_group", { clipId, startSecs }),
   trimClip: (clipId: number, edge: "start" | "end", positionSecs: number) =>
     invoke<void>("trim_clip", { clipId, edge, positionSecs }),
+  rollEditClip: (clipId: number, boundarySecs: number) =>
+    invoke<void>("roll_edit_clip", { clipId, boundarySecs }),
+  rollEditFromStartEdge: (editedClipId: number, boundarySecs: number) =>
+    invoke<void>("roll_edit_from_start_edge", { editedClipId, boundarySecs }),
+  slipClip: (clipId: number, deltaSecs: number) => invoke<void>("slip_clip", { clipId, deltaSecs }),
+  slideClip: (clipId: number, startSecs: number) => invoke<void>("slide_clip", { clipId, startSecs }),
   splitAtPlayhead: (clipIds: number[]) => invoke<void>("split_at_playhead", { clipIds }),
   deleteClips: (clipIds: number[], ripple: boolean) =>
     invoke<void>("delete_clips", { clipIds, ripple }),
   updateClip: (clipId: number, patch: ClipPatch) =>
     invoke<void>("update_clip", { clipId, patch }),
+  mergeClipsIntoComposite: (clipIds: number[]) =>
+    invoke<void>("merge_clips_into_composite", { clipIds }),
+  copyClip: (clipId: number) => invoke<void>("copy_clip", { clipId }),
+  cutClip: (clipId: number) => invoke<void>("cut_clip", { clipId }),
+  pasteClip: () => invoke<number[]>("paste_clip"),
+  copyClipFormatting: (clipId: number) => invoke<void>("copy_clip_formatting", { clipId }),
+  pasteClipFormatting: (clipId: number) => invoke<void>("paste_clip_formatting", { clipId }),
   overlayCatalog: () => invoke<OverlayCatalog>("overlay_catalog"),
   /** Resolves to the new clip's id, or null when the target track is locked. */
   addTextClip: (text: string) => invoke<number | null>("add_text_clip", { text }),
