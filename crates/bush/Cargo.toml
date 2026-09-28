@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+avbridge = { path = "../avbridge" }
 
 [dev-dependencies]
 criterion = "0.8.2"

@@ -6,6 +6,7 @@
 
 mod audio_block;
 mod byte_cache;
+mod decode_source;
 mod frame_mailbox;
 mod latest_intent;
 mod scene;
@@ -16,6 +17,7 @@ mod video_frame;
 
 pub use audio_block::{AudioBlock, AudioBlockError};
 pub use byte_cache::{ByteCache, CacheError, CacheInsert};
+pub use decode_source::{DecodeSource, DecodeSourceError, SourceInfo};
 pub use frame_mailbox::{FrameMailbox, PublishedFrame};
 pub use latest_intent::{Generation, LatestIntent, PendingIntent};
 pub use scene::{
