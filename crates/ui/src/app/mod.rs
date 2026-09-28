@@ -62,7 +62,6 @@ mod preview_live_updates;
 mod preview_overlays;
 mod preview_selection;
 mod preview_snapshot;
-mod preview_worker;
 mod privacy_blur;
 mod project_ops;
 mod project_timeline_modals;
@@ -89,6 +88,9 @@ mod watch_folder;
 mod worker_events;
 mod youtube_download;
 
+pub(crate) use avcore::preview_worker::{
+    LiveUpdateKey, PreviewOpenRequest, PreviewSeek, PreviewWorker,
+};
 pub(crate) use color::{format_color_hex, TextColorEdit, TextColorTarget};
 pub(crate) use open_projects::OpenProjects;
 pub(crate) use operation_state::{
@@ -99,7 +101,6 @@ pub(crate) use operation_state::{
     TranscribeState, TranscriptPanelState, TtsState, VoiceCleanupPreviewState, WatchFolderState,
     YoutubeDownloadState,
 };
-pub(crate) use preview_worker::{LiveUpdateKey, PreviewOpenRequest, PreviewSeek, PreviewWorker};
 pub use state::{
     BindableAction, EditorTool, KeyCombo, LayoutScope, MediaLibraryFilter, MediaViewMode,
     PrefsState, PreviewZoom, PropertiesTab, Screen,

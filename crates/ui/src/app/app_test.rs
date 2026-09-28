@@ -45,15 +45,6 @@ mod youtube_download;
 
 use support::*;
 
-pub(super) fn preview_worker_test_clip(
-    id: u64,
-    start_secs: f64,
-    source_in_secs: f64,
-    source_out_secs: f64,
-) -> ClipInstance {
-    support::test_clip(id, start_secs, source_in_secs, source_out_secs)
-}
-
 #[test]
 fn start_watching_folder_is_a_no_op_with_no_path_set() {
     let mut app = test_app(vec![test_project(1, Vec::new())], Vec::new());

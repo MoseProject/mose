@@ -672,27 +672,7 @@ pub(super) fn create_new_track(
     timeline: &mut avcore::timeline::Timeline,
     kind: TrackKind,
 ) -> usize {
-    let count = timeline.tracks.iter().filter(|t| t.kind == kind).count();
-    let track_id = timeline.tracks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
-    let prefix = match kind {
-        TrackKind::Video => "V",
-        TrackKind::Audio => "A",
-        TrackKind::Text => "T",
-        TrackKind::Shape => "S",
-    };
-    timeline.tracks.push(avcore::timeline::Track {
-        id: track_id,
-        name: format!("{prefix}{}", count + 1),
-        kind,
-        clips: Vec::new(),
-        text_clips: Vec::new(),
-        shape_clips: Vec::new(),
-        visible: true,
-        audio_role: AudioRole::Unspecified,
-        locked: false,
-        color_label: None,
-    });
-    timeline.tracks.len() - 1
+    timeline.create_track(kind)
 }
 
 /// Builds a fresh, entirely-default `ClipInstance` at `start_secs`, trimmed to
@@ -713,74 +693,8 @@ fn default_clip_instance(
     voice_cleanup_enabled: bool,
 ) -> ClipInstance {
     ClipInstance {
-        id,
-        asset_id,
-        start_secs,
-        source_in_secs,
-        source_out_secs,
-        composite_id: None,
-        color_label: None,
-        gain_db: 0.0,
-        frozen: false,
-        speed_factor: 1.0,
-        speed_ramp_end_factor: None,
-        nested_sequence_id: None,
-        crop_x: 0.0,
-        crop_y: 0.0,
-        crop_w: 1.0,
-        crop_h: 1.0,
-        mask_shape: avcore::timeline::MaskShape::None,
-        mask_corner_radius: 0.0,
-        flipped_h: false,
-        color_filter: avcore::timeline::ColorFilter::None,
-        vignette_intensity: 0.0,
-        brightness: 0.0,
-        contrast: 1.0,
-        saturation: 1.0,
-        sharpen: 0.0,
-        chroma_key_enabled: false,
-        chroma_key_color: [0, 255, 0],
-        chroma_key_tolerance: 0.4,
-        blur_intensity: 0.0,
-        shake_intensity: 0.0,
-        glitch_intensity: 0.0,
-        pixelize_intensity: 0.0,
-        transition_in: avcore::timeline::TransitionType::None,
-        transition_duration_secs: 0.5,
-        position_keyframes: vec![],
-        scale_keyframes: vec![],
-        rotation_keyframes: vec![],
-        opacity_keyframes: vec![],
-        gain_keyframes: vec![],
         voice_cleanup_enabled,
-        voice_cleanup_noise_floor_db: -30.0,
-        voice_cleanup_compressor_threshold_db: -18.0,
-        voice_cleanup_compressor_ratio: 3.0,
-        voice_cleanup_ceiling_linear: 0.95,
-        brightness_keyframes: vec![],
-        contrast_keyframes: vec![],
-        saturation_keyframes: vec![],
-        crop_x_keyframes: vec![],
-        crop_y_keyframes: vec![],
-        crop_w_keyframes: vec![],
-        crop_h_keyframes: vec![],
-        deflicker_enabled: false,
-        lut_path: String::new(),
-        layer_scale_x: 1.0,
-        layer_scale_y: 1.0,
-        stabilization_intensity: 0.0,
-        background_removal_enabled: false,
-        background_removal_mask_path: String::new(),
-        blend_mode: avcore::timeline::BlendMode::Normal,
-        anchor_x: 0.5,
-        anchor_y: 0.5,
-        reframe_seed_point: None,
-        privacy_blur_enabled: false,
-        privacy_blur_mask_path: String::new(),
-        privacy_blur_sigma: 15.0,
-        privacy_blur_seed_vertices: Vec::new(),
-        privacy_blur_seed_center_x_frac: 0.0,
-        privacy_blur_seed_center_y_frac: 0.0,
+        ..ClipInstance::new(id, asset_id, start_secs, source_in_secs, source_out_secs)
     }
 }
 
@@ -793,66 +707,14 @@ pub(super) fn resolve_or_create_track(
     kind: TrackKind,
     preferred_track_id: Option<u64>,
 ) -> usize {
-    if let Some(id) = preferred_track_id {
-        if let Some(index) = timeline
-            .tracks
-            .iter()
-            .position(|t| t.id == id && t.kind == kind)
-        {
-            return index;
-        }
-    }
-    if let Some(index) = timeline.tracks.iter().position(|t| t.kind == kind) {
-        return index;
-    }
-    let track_id = timeline.tracks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
-    let name = match kind {
-        TrackKind::Video => "V1",
-        TrackKind::Audio => "A1",
-        TrackKind::Text => "T1",
-        TrackKind::Shape => "S1",
-    };
-    timeline.tracks.push(avcore::timeline::Track {
-        id: track_id,
-        name: name.to_string(),
-        kind,
-        clips: Vec::new(),
-        text_clips: Vec::new(),
-        shape_clips: Vec::new(),
-        visible: true,
-        audio_role: AudioRole::Unspecified,
-        locked: false,
-        color_label: None,
-    });
-    timeline.tracks.len() - 1
+    timeline.resolve_or_create_track(kind, preferred_track_id)
 }
 
 /// The next free clip id across every track in `timeline`, including text and shape clips — one
 /// past the current max, `1` if the timeline has no clips yet. Covers [`ClipInstance`]s,
 /// [`TextClip`]s, and [`ShapeClip`]s so their ids are globally unique within a timeline.
 pub(super) fn next_clip_id(timeline: &avcore::timeline::Timeline) -> u64 {
-    let video_audio_max = timeline
-        .tracks
-        .iter()
-        .flat_map(|t| &t.clips)
-        .map(|c| c.id)
-        .max()
-        .unwrap_or(0);
-    let text_max = timeline
-        .tracks
-        .iter()
-        .flat_map(|t| &t.text_clips)
-        .map(|c| c.id)
-        .max()
-        .unwrap_or(0);
-    let shape_max = timeline
-        .tracks
-        .iter()
-        .flat_map(|t| &t.shape_clips)
-        .map(|c| c.id)
-        .max()
-        .unwrap_or(0);
-    video_audio_max.max(text_max).max(shape_max) + 1
+    timeline.next_clip_id()
 }
 
 #[cfg(test)]

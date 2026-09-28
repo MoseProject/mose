@@ -500,12 +500,12 @@ impl App {
         };
         while let Some(status) = worker.take_status() {
             match status {
-                crate::app::preview_worker::PreviewStatus::Ready { generation }
+                avcore::preview_worker::PreviewStatus::Ready { generation }
                     if generation == self.preview_state.worker_generation =>
                 {
                     self.preview_state.worker_ready_generation = Some(generation);
                 }
-                crate::app::preview_worker::PreviewStatus::Failed {
+                avcore::preview_worker::PreviewStatus::Failed {
                     generation,
                     message,
                 } if generation == self.preview_state.worker_generation => {
@@ -518,7 +518,7 @@ impl App {
         let Some(ready) = worker.take_frame() else {
             return;
         };
-        if !crate::app::preview_worker::generation_is_current(
+        if !avcore::preview_worker::generation_is_current(
             self.preview_state.worker_generation,
             ready.generation,
         ) {
