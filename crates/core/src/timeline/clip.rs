@@ -891,6 +891,91 @@ fn default_voice_cleanup_ceiling_linear() -> f32 {
 }
 
 impl ClipInstance {
+    /// A fresh, entirely-default clip at `start_secs`, trimmed to
+    /// `source_in_secs..source_out_secs` of `asset_id` -- every effect neutral, unity gain and
+    /// speed, no keyframes, voice cleanup off. Shared by every frontend that places a new asset
+    /// on the timeline, so the ~70-field neutral literal lives in exactly one place; callers
+    /// override individual fields with struct-update syntax (e.g. `voice_cleanup_enabled` for a
+    /// clip landing on a `Mic` track).
+    pub fn new(
+        id: u64,
+        asset_id: u64,
+        start_secs: f64,
+        source_in_secs: f64,
+        source_out_secs: f64,
+    ) -> Self {
+        Self {
+            id,
+            asset_id,
+            start_secs,
+            source_in_secs,
+            source_out_secs,
+            composite_id: None,
+            color_label: None,
+            gain_db: 0.0,
+            frozen: false,
+            speed_factor: 1.0,
+            speed_ramp_end_factor: None,
+            nested_sequence_id: None,
+            crop_x: 0.0,
+            crop_y: 0.0,
+            crop_w: 1.0,
+            crop_h: 1.0,
+            mask_shape: MaskShape::None,
+            mask_corner_radius: 0.0,
+            flipped_h: false,
+            color_filter: ColorFilter::None,
+            vignette_intensity: 0.0,
+            brightness: 0.0,
+            contrast: 1.0,
+            saturation: 1.0,
+            sharpen: 0.0,
+            chroma_key_enabled: false,
+            chroma_key_color: [0, 255, 0],
+            chroma_key_tolerance: 0.4,
+            blur_intensity: 0.0,
+            shake_intensity: 0.0,
+            glitch_intensity: 0.0,
+            pixelize_intensity: 0.0,
+            transition_in: TransitionType::None,
+            transition_duration_secs: 0.5,
+            position_keyframes: vec![],
+            scale_keyframes: vec![],
+            rotation_keyframes: vec![],
+            opacity_keyframes: vec![],
+            gain_keyframes: vec![],
+            voice_cleanup_enabled: false,
+            voice_cleanup_noise_floor_db: -30.0,
+            voice_cleanup_compressor_threshold_db: -18.0,
+            voice_cleanup_compressor_ratio: 3.0,
+            voice_cleanup_ceiling_linear: 0.95,
+            brightness_keyframes: vec![],
+            contrast_keyframes: vec![],
+            saturation_keyframes: vec![],
+            crop_x_keyframes: vec![],
+            crop_y_keyframes: vec![],
+            crop_w_keyframes: vec![],
+            crop_h_keyframes: vec![],
+            deflicker_enabled: false,
+            lut_path: String::new(),
+            layer_scale_x: 1.0,
+            layer_scale_y: 1.0,
+            stabilization_intensity: 0.0,
+            background_removal_enabled: false,
+            background_removal_mask_path: String::new(),
+            blend_mode: BlendMode::Normal,
+            anchor_x: 0.5,
+            anchor_y: 0.5,
+            reframe_seed_point: None,
+            privacy_blur_enabled: false,
+            privacy_blur_mask_path: String::new(),
+            privacy_blur_sigma: 15.0,
+            privacy_blur_seed_vertices: Vec::new(),
+            privacy_blur_seed_center_x_frac: 0.0,
+            privacy_blur_seed_center_y_frac: 0.0,
+        }
+    }
+
     /// How long this instance plays for, i.e. its trimmed length — not the source asset's
     /// full duration. Uses [`keyframe::smooth_speed_ramp_duration_secs`]'s log-based integral
     /// when [`ClipInstance::speed_ramp_end_factor`] is `Some` (a smooth ramp doesn't compress

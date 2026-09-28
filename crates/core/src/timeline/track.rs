@@ -35,6 +35,18 @@ pub enum TrackKind {
     Shape,
 }
 
+impl TrackKind {
+    /// One-letter prefix for auto-generated track names (`V1`, `A2`, ...).
+    pub fn name_prefix(self) -> &'static str {
+        match self {
+            TrackKind::Video => "V",
+            TrackKind::Audio => "A",
+            TrackKind::Text => "T",
+            TrackKind::Shape => "S",
+        }
+    }
+}
+
 /// What kind of audio source a [`Track`] carries — user-set metadata (a track header picker),
 /// not inferred. `Video`/`Audio` tracks both carry real audio (a video capture's own embedded
 /// game audio counts) and both can be tagged; `Text`/`Shape` tracks stay `Unspecified` since

@@ -91,6 +91,73 @@ impl MulticamGroup {
 }
 
 impl Timeline {
+    /// The next free clip id across every track, including text and shape clips -- one past
+    /// the highest id in use, `1` for an empty timeline. Clip ids are unique across all three
+    /// clip kinds, so every frontend that inserts a clip must allocate through this.
+    pub fn next_clip_id(&self) -> u64 {
+        self.tracks
+            .iter()
+            .flat_map(|track| {
+                track
+                    .clips
+                    .iter()
+                    .map(|clip| clip.id)
+                    .chain(track.text_clips.iter().map(|clip| clip.id))
+                    .chain(track.shape_clips.iter().map(|clip| clip.id))
+            })
+            .max()
+            .unwrap_or(0)
+            + 1
+    }
+
+    /// Appends a brand-new, empty track of `kind` -- never reuses an existing one. Named
+    /// `V<n>`/`A<n>`/`T<n>`/`S<n>`, `n` one past the count of existing tracks of that kind.
+    /// Returns the new track's index.
+    pub fn create_track(&mut self, kind: TrackKind) -> usize {
+        let count = self.tracks.iter().filter(|t| t.kind == kind).count();
+        self.push_empty_track(kind, format!("{}{}", kind.name_prefix(), count + 1))
+    }
+
+    /// The track a new clip of `kind` should land on: `preferred_track_id` if it exists and
+    /// matches `kind`, else the first existing track of that kind, else a newly appended
+    /// `V1`/`A1`/`T1`/`S1` track. Returns the resolved track's index.
+    pub fn resolve_or_create_track(
+        &mut self,
+        kind: TrackKind,
+        preferred_track_id: Option<u64>,
+    ) -> usize {
+        if let Some(id) = preferred_track_id {
+            if let Some(index) = self
+                .tracks
+                .iter()
+                .position(|t| t.id == id && t.kind == kind)
+            {
+                return index;
+            }
+        }
+        if let Some(index) = self.tracks.iter().position(|t| t.kind == kind) {
+            return index;
+        }
+        self.push_empty_track(kind, format!("{}1", kind.name_prefix()))
+    }
+
+    fn push_empty_track(&mut self, kind: TrackKind, name: String) -> usize {
+        let track_id = self.tracks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
+        self.tracks.push(Track {
+            id: track_id,
+            name,
+            kind,
+            clips: Vec::new(),
+            text_clips: Vec::new(),
+            shape_clips: Vec::new(),
+            visible: true,
+            audio_role: AudioRole::Unspecified,
+            locked: false,
+            color_label: None,
+        });
+        self.tracks.len() - 1
+    }
+
     /// Mutable access to the clip with `clip_id` across all tracks, if it exists. Searches
     /// tracks in order and returns the first match — clip ids are unique within a timeline.
     pub fn clip_mut(&mut self, clip_id: u64) -> Option<&mut ClipInstance> {
