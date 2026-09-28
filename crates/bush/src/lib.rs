@@ -15,6 +15,7 @@ mod preview_worker;
 mod scene;
 mod scene_scheduler;
 mod scene_versions;
+mod source_variants;
 mod transport;
 mod video_frame;
 
@@ -34,5 +35,8 @@ pub use scene::{
 };
 pub use scene_scheduler::{SceneScheduler, ScheduleError, ScheduledScene, Submission};
 pub use scene_versions::{invalidation_scope, InvalidationScope, SceneVersions, Version};
+pub use source_variants::{
+    PreviewQuality, SourceVariant, SourceVariantError, SourceVariantKind, SourceVariants,
+};
 pub use transport::{PlaybackState, Transport, TransportError};
 pub use video_frame::{PixelFormat, VideoFrame, VideoFrameError};
