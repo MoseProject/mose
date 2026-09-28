@@ -51,6 +51,7 @@ pub mod overlay_render;
 pub mod persistence;
 pub mod preview;
 pub mod preview_effects;
+pub mod preview_worker;
 pub mod privacy_blur;
 pub mod probe;
 pub mod project;
