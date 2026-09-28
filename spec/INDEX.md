@@ -32,6 +32,10 @@ Read **[architecture/complex-text-shaping.md](architecture/complex-text-shaping.
 working on bidi, ligatures, Unicode line breaking, timed highlight clusters, or international
 fallback.
 
+For the standalone replacement of GStreamer preview playback, read
+**[architecture/preview-engine-replacement.md](architecture/preview-engine-replacement.md)**.
+It intentionally stops before any `core` or UI integration.
+
 Do not read every file here for one task. Read `matrix/changelog.md` only when you need the
 historical "why was it built this way" detail (verification caveats, real bugs found, empirical
 discoveries) — it's a narrative log of already-completed work, not a task list.
