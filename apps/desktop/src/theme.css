@@ -416,6 +416,32 @@ input[type="range"] {
   color: var(--text-secondary);
 }
 
+.field select {
+  grid-column: 1 / 3;
+  width: 100%;
+}
+
+.keyframe-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.keyframe-list > label {
+  color: var(--text-secondary);
+}
+
+.keyframe-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.keyframe-row:has(input ~ input ~ input) {
+  grid-template-columns: 1fr 1fr 1fr auto;
+}
+
 .jobs {
   display: flex;
   flex-direction: column;

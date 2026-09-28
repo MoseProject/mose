@@ -2,14 +2,33 @@ import { useEffect, useState } from "react";
 import { t } from "../i18n";
 import { api } from "../ipc";
 import { run, uiStore, useStore } from "../store";
+import { F32KeyframeList, PositionKeyframeList } from "./KeyframeEditor";
 import { ShapeInspector } from "./ShapeInspector";
 import { TextInspector } from "./TextInspector";
 import {
   activeTimeline,
+  BLEND_MODES,
+  type BlendMode,
   type ClipInstance,
   type ClipPatch,
+  type MaskShape,
   type SessionView,
+  type TransitionType,
 } from "../types";
+
+const MASK_SHAPES: { value: MaskShape; label: () => string }[] = [
+  { value: "None", label: () => t("maskNone") },
+  { value: "Circle", label: () => t("maskCircle") },
+  { value: "RoundedRect", label: () => t("maskRoundedRect") },
+];
+
+const TRANSITION_TYPES: { value: TransitionType; label: () => string }[] = [
+  { value: "None", label: () => t("transitionNone") },
+  { value: "Fade", label: () => t("transitionFade") },
+  { value: "HardCut", label: () => t("transitionHardCut") },
+  { value: "Slide", label: () => t("transitionSlide") },
+  { value: "Zoom", label: () => t("transitionZoom") },
+];
 
 export function Inspector({ session }: { session: SessionView }) {
   const { selectedClipIds } = useStore(uiStore);
@@ -121,6 +140,218 @@ function ClipControls({ clip }: { clip: ClipInstance }) {
         />
         {t("voiceCleanup")}
       </label>
+
+      <div className="field">
+        <label>{t("crop")}</label>
+      </div>
+      <Slider
+        label="x"
+        value={clip.crop_x}
+        min={0}
+        max={1}
+        step={0.01}
+        format={(v) => v.toFixed(2)}
+        onCommit={(v) => commit({ cropX: v })}
+      />
+      <Slider
+        label="y"
+        value={clip.crop_y}
+        min={0}
+        max={1}
+        step={0.01}
+        format={(v) => v.toFixed(2)}
+        onCommit={(v) => commit({ cropY: v })}
+      />
+      <Slider
+        label="w"
+        value={clip.crop_w}
+        min={0.05}
+        max={1}
+        step={0.01}
+        format={(v) => v.toFixed(2)}
+        onCommit={(v) => commit({ cropW: v })}
+      />
+      <Slider
+        label="h"
+        value={clip.crop_h}
+        min={0.05}
+        max={1}
+        step={0.01}
+        format={(v) => v.toFixed(2)}
+        onCommit={(v) => commit({ cropH: v })}
+      />
+      <button className="icon" onClick={() => commit({ cropX: 0, cropY: 0, cropW: 1, cropH: 1 })}>
+        {t("cropReset")}
+      </button>
+
+      <div className="field">
+        <label>{t("mask")}</label>
+        <select
+          value={clip.mask_shape}
+          onChange={(e) => commit({ maskShape: e.target.value as MaskShape })}
+        >
+          {MASK_SHAPES.map(({ value, label }) => (
+            <option key={value} value={value}>
+              {label()}
+            </option>
+          ))}
+        </select>
+      </div>
+      {clip.mask_shape === "RoundedRect" && (
+        <Slider
+          label={t("maskCornerRadius")}
+          value={clip.mask_corner_radius}
+          min={0}
+          max={1}
+          step={0.01}
+          format={(v) => v.toFixed(2)}
+          onCommit={(v) => commit({ maskCornerRadius: v })}
+        />
+      )}
+
+      <div className="field">
+        <label>{t("transition")}</label>
+        <select
+          value={clip.transition_in}
+          onChange={(e) => commit({ transitionIn: e.target.value as TransitionType })}
+        >
+          {TRANSITION_TYPES.map(({ value, label }) => (
+            <option key={value} value={value}>
+              {label()}
+            </option>
+          ))}
+        </select>
+      </div>
+      {clip.transition_in !== "None" && (
+        <Slider
+          label={t("transitionDuration")}
+          value={clip.transition_duration_secs}
+          min={0.1}
+          max={3}
+          step={0.1}
+          format={(v) => `${v.toFixed(1)}s`}
+          onCommit={(v) => commit({ transitionDurationSecs: v })}
+        />
+      )}
+
+      <div className="field">
+        <label>{t("blendMode")}</label>
+        <select
+          value={clip.blend_mode}
+          onChange={(e) => commit({ blendMode: e.target.value as BlendMode })}
+        >
+          {BLEND_MODES.map((mode) => (
+            <option key={mode} value={mode}>
+              {mode}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <PositionKeyframeList
+        label={t("positionKeyframes")}
+        keyframes={clip.position_keyframes}
+        onCommit={(next) => commit({ positionKeyframes: next })}
+      />
+      <F32KeyframeList
+        label={t("scaleKeyframes")}
+        keyframes={clip.scale_keyframes}
+        min={1}
+        max={3}
+        step={0.01}
+        defaultValue={1}
+        onCommit={(next) => commit({ scaleKeyframes: next })}
+      />
+      <F32KeyframeList
+        label={t("rotationKeyframes")}
+        keyframes={clip.rotation_keyframes}
+        min={-180}
+        max={180}
+        step={1}
+        defaultValue={0}
+        onCommit={(next) => commit({ rotationKeyframes: next })}
+      />
+      <F32KeyframeList
+        label={t("opacityKeyframes")}
+        keyframes={clip.opacity_keyframes}
+        min={0}
+        max={1}
+        step={0.01}
+        defaultValue={1}
+        onCommit={(next) => commit({ opacityKeyframes: next })}
+      />
+      <F32KeyframeList
+        label={t("gainKeyframes")}
+        keyframes={clip.gain_keyframes}
+        min={-24}
+        max={24}
+        step={0.5}
+        defaultValue={0}
+        onCommit={(next) => commit({ gainKeyframes: next })}
+      />
+      <F32KeyframeList
+        label={t("brightnessKeyframes")}
+        keyframes={clip.brightness_keyframes}
+        min={-1}
+        max={1}
+        step={0.01}
+        defaultValue={0}
+        onCommit={(next) => commit({ brightnessKeyframes: next })}
+      />
+      <F32KeyframeList
+        label={t("contrastKeyframes")}
+        keyframes={clip.contrast_keyframes}
+        min={0}
+        max={2}
+        step={0.01}
+        defaultValue={1}
+        onCommit={(next) => commit({ contrastKeyframes: next })}
+      />
+      <F32KeyframeList
+        label={t("saturationKeyframes")}
+        keyframes={clip.saturation_keyframes}
+        min={0}
+        max={2}
+        step={0.01}
+        defaultValue={1}
+        onCommit={(next) => commit({ saturationKeyframes: next })}
+      />
+      <F32KeyframeList
+        label={t("cropXKeyframes")}
+        keyframes={clip.crop_x_keyframes}
+        min={0}
+        max={1}
+        step={0.01}
+        defaultValue={0}
+        onCommit={(next) => commit({ cropXKeyframes: next })}
+      />
+      <F32KeyframeList
+        label={t("cropYKeyframes")}
+        keyframes={clip.crop_y_keyframes}
+        min={0}
+        max={1}
+        step={0.01}
+        defaultValue={0}
+        onCommit={(next) => commit({ cropYKeyframes: next })}
+      />
+      <F32KeyframeList
+        label={t("cropWKeyframes")}
+        keyframes={clip.crop_w_keyframes}
+        min={0.05}
+        max={1}
+        step={0.01}
+        defaultValue={1}
+        onCommit={(next) => commit({ cropWKeyframes: next })}
+      />
+      <F32KeyframeList
+        label={t("cropHKeyframes")}
+        keyframes={clip.crop_h_keyframes}
+        min={0.05}
+        max={1}
+        step={0.01}
+        defaultValue={1}
+        onCommit={(next) => commit({ cropHKeyframes: next })}
+      />
     </>
   );
 }

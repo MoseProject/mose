@@ -5,6 +5,27 @@
 
 export type MediaKind = "Video" | "Audio";
 export type TrackKind = "Video" | "Audio" | "Text" | "Shape";
+export interface Keyframe<T> {
+  time_fraction: number;
+  value: T;
+}
+export interface Position {
+  x: number;
+  y: number;
+}
+export type MaskShape = "None" | "Circle" | "RoundedRect";
+export type TransitionType = "None" | "Fade" | "HardCut" | "Slide" | "Zoom";
+/** Industry-standard compositing-mode names, shown untranslated regardless of locale -- mirrors
+ *  `crates/ui/src/screens/editor/properties_panel/keyframe_editors.rs`'s `blend_mode_label`. */
+export const BLEND_MODES = [
+  "Normal", "Addition", "And", "Average", "Burn", "Darken", "Difference", "GrainExtract",
+  "Divide", "Dodge", "Exclusion", "HardLight", "Lighten", "Multiply", "Negation", "Or",
+  "Overlay", "Phoenix", "PinLight", "Reflect", "Screen", "SoftLight", "Subtract", "VividLight",
+  "Xor", "HardMix", "LinearLight", "Glow", "GrainMerge", "Multiply128", "Heat", "Freeze",
+  "Extremity", "SoftDifference", "Geometric", "Harmonic", "Bleach", "Stain", "Interpolate",
+  "HardOverlay",
+] as const;
+export type BlendMode = (typeof BLEND_MODES)[number];
 export type AudioRole = "Unspecified" | "GameAudio" | "Mic" | "Music";
 export type ExportAspectRatio = "Original" | "Landscape" | "Portrait" | "Square";
 export type MarkerKind = "Standard" | "ToDo" | "Chapter" | "Highlight";
@@ -49,6 +70,27 @@ export interface ClipInstance {
   contrast: number;
   saturation: number;
   voice_cleanup_enabled: boolean;
+  crop_x: number;
+  crop_y: number;
+  crop_w: number;
+  crop_h: number;
+  mask_shape: MaskShape;
+  mask_corner_radius: number;
+  transition_in: TransitionType;
+  transition_duration_secs: number;
+  blend_mode: BlendMode;
+  position_keyframes: Keyframe<Position>[];
+  scale_keyframes: Keyframe<number>[];
+  rotation_keyframes: Keyframe<number>[];
+  opacity_keyframes: Keyframe<number>[];
+  gain_keyframes: Keyframe<number>[];
+  brightness_keyframes: Keyframe<number>[];
+  contrast_keyframes: Keyframe<number>[];
+  saturation_keyframes: Keyframe<number>[];
+  crop_x_keyframes: Keyframe<number>[];
+  crop_y_keyframes: Keyframe<number>[];
+  crop_w_keyframes: Keyframe<number>[];
+  crop_h_keyframes: Keyframe<number>[];
 }
 
 export interface TextClip {
@@ -237,6 +279,27 @@ export interface ClipPatch {
   frozen?: boolean;
   flippedH?: boolean;
   voiceCleanupEnabled?: boolean;
+  cropX?: number;
+  cropY?: number;
+  cropW?: number;
+  cropH?: number;
+  maskShape?: MaskShape;
+  maskCornerRadius?: number;
+  transitionIn?: TransitionType;
+  transitionDurationSecs?: number;
+  blendMode?: BlendMode;
+  positionKeyframes?: Keyframe<Position>[];
+  scaleKeyframes?: Keyframe<number>[];
+  rotationKeyframes?: Keyframe<number>[];
+  opacityKeyframes?: Keyframe<number>[];
+  gainKeyframes?: Keyframe<number>[];
+  brightnessKeyframes?: Keyframe<number>[];
+  contrastKeyframes?: Keyframe<number>[];
+  saturationKeyframes?: Keyframe<number>[];
+  cropXKeyframes?: Keyframe<number>[];
+  cropYKeyframes?: Keyframe<number>[];
+  cropWKeyframes?: Keyframe<number>[];
+  cropHKeyframes?: Keyframe<number>[];
 }
 
 /** Timeline length of a clip, matching `ClipInstance::duration_secs` for constant speed. */
