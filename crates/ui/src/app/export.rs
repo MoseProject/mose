@@ -661,9 +661,11 @@ pub(super) fn save_queue_to_path(
     jobs: &[ExportJob],
     path: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    avcore::save_export_queue_to_path(jobs, path).map_err(|error| error.into())
+    avcore::save_export_queue_to_path(jobs, path)
+        .map_err(|error| error as Box<dyn std::error::Error>)
 }
 
+#[cfg(test)]
 pub(super) fn persisted_queue_snapshot(jobs: &[ExportJob]) -> Vec<ExportJob> {
     avcore::persisted_export_queue_snapshot(jobs)
 }
@@ -718,7 +720,7 @@ fn migrate_legacy_queue(path: &Path, legacy_path: &Path) -> Vec<ExportJob> {
     jobs
 }
 
-pub(super) fn normalize_loaded_queue(mut jobs: Vec<ExportJob>) -> Vec<ExportJob> {
+pub(super) fn normalize_loaded_queue(jobs: Vec<ExportJob>) -> Vec<ExportJob> {
     avcore::normalize_loaded_export_queue(jobs)
 }
 
