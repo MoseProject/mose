@@ -59,7 +59,7 @@ else
   endif
 endif
 
-.PHONY: build release run debug test test-core test-app test-xtask test-e2e bench fmt fmt-check lint graph docs check clean icon-font
+.PHONY: build release run debug test test-core test-app test-xtask test-e2e bench fmt fmt-check lint graph docs check clean icon-font desktop-install desktop-dev desktop-build test-desktop
 
 # Debug build of the whole workspace (core, ui, xtask).
 build:
@@ -93,6 +93,24 @@ test-app:
 
 test-xtask:
 	cargo test -p xtask
+
+# Tauri shell (apps/desktop): React/TypeScript webview over the same avcore engine, migrating
+# the egui screens one by one -- see spec/architecture/tauri-migration.md. Node/npm required.
+desktop-install:
+	cd apps/desktop && npm install
+
+# Runs Vite's dev server and the Tauri app with hot reload.
+desktop-dev:
+	cd apps/desktop && npm run tauri dev
+
+# Release bundle (installer under target/release/bundle/).
+desktop-build:
+	cd apps/desktop && npm run tauri build
+
+# Frontend typecheck + unit tests, then the Rust shell's own tests.
+test-desktop:
+	cd apps/desktop && npm run typecheck && npm test
+	cargo test -p desktop
 
 # End-to-end tests (e2e/, pytest + pywinauto) driving the real built ui.exe through Windows
 # UI Automation. Needs a debug build first (this target doesn't build one for you, since e2e
