@@ -9,10 +9,14 @@
 //! previews drags and slider moves locally and only calls in on release, the same
 //! one-snapshot-per-gesture rule `ui::App::push_undo_snapshot_for_drag` enforces.
 
+use std::collections::HashSet;
+
 use avcore::timeline::{AudioRole, ClipInstance, Timeline, TrackKind};
 use avcore::{MediaKind, Project};
 use serde::Deserialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
+
+use crate::state::AppState;
 
 use super::undoable;
 
@@ -72,6 +76,197 @@ pub fn trim_clip(
     position_secs: f64,
 ) -> Result<(), String> {
     undoable(&app, |project| trim(project, clip_id, edge, position_secs))
+}
+
+/// Rolls the shared boundary between `clip_id` (must be the *earlier* clip of the pair) and its
+/// next neighbor to `boundary_secs` -- the "Roll" tool.
+#[tauri::command]
+pub fn roll_edit_clip(app: AppHandle, clip_id: u64, boundary_secs: f64) -> Result<(), String> {
+    undoable(&app, |project| roll_edit(project, clip_id, boundary_secs))
+}
+
+/// [`roll_edit_clip`], but for a drag that grabbed `edited_clip_id`'s *start* edge instead of
+/// its end -- resolves the earlier clip in the pair (`edited_clip_id`'s previous neighbor) and
+/// delegates. A no-op if `edited_clip_id` has no previous neighbor.
+#[tauri::command]
+pub fn roll_edit_from_start_edge(
+    app: AppHandle,
+    edited_clip_id: u64,
+    boundary_secs: f64,
+) -> Result<(), String> {
+    undoable(&app, |project| {
+        let Some(index) = track_of(project.timeline(), edited_clip_id) else {
+            return false;
+        };
+        let Some(previous_id) = project.timeline().tracks[index].previous_clip_id(edited_clip_id)
+        else {
+            return false;
+        };
+        roll_edit(project, previous_id, boundary_secs)
+    })
+}
+
+/// Slips `clip_id`'s source in/out points by `delta_secs` without moving it on the timeline or
+/// changing its duration -- the "Slip" tool.
+#[tauri::command]
+pub fn slip_clip(app: AppHandle, clip_id: u64, delta_secs: f64) -> Result<(), String> {
+    undoable(&app, |project| {
+        let max_source_out_secs = clip_asset_max_source_out_secs(project, clip_id);
+        let Some(index) = track_of(project.timeline(), clip_id) else {
+            return false;
+        };
+        let Some(clip) = project.timeline_mut().tracks[index].clip_mut(clip_id) else {
+            return false;
+        };
+        clip.slip(delta_secs, max_source_out_secs)
+    })
+}
+
+/// Slides `clip_id` to `start_secs`, keeping its own duration/source range unchanged -- its
+/// immediate neighbors' in/out points adjust to absorb the move. The "Slide" tool.
+#[tauri::command]
+pub fn slide_clip(app: AppHandle, clip_id: u64, start_secs: f64) -> Result<(), String> {
+    undoable(&app, |project| {
+        let Some(index) = track_of(project.timeline(), clip_id) else {
+            return false;
+        };
+        let previous_id = project.timeline().tracks[index].previous_clip_id(clip_id);
+        let prev_max_source_out_secs =
+            previous_id.and_then(|id| clip_asset_max_source_out_secs(project, id));
+        project.timeline_mut().tracks[index].slide_clip(
+            clip_id,
+            start_secs.max(0.0),
+            MIN_CLIP_SECS,
+            prev_max_source_out_secs,
+        )
+    })
+}
+
+/// Repositions `clip_id` on its own track, dragging every other clip sharing its
+/// `composite_id` along with it -- what dragging a composite block's body does. Falls back to a
+/// plain same-track move if `clip_id` isn't a composite member.
+#[tauri::command]
+pub fn move_clip_group(app: AppHandle, clip_id: u64, start_secs: f64) -> Result<(), String> {
+    undoable(&app, |project| {
+        project
+            .timeline_mut()
+            .move_clip_with_group(clip_id, start_secs.max(0.0))
+    })
+}
+
+/// Merges every clip in `clip_ids` into one composite block. A no-op unless there are at least
+/// two and they're all on the same track.
+#[tauri::command]
+pub fn merge_clips_into_composite(app: AppHandle, clip_ids: Vec<u64>) -> Result<(), String> {
+    undoable(&app, |project| {
+        project
+            .timeline_mut()
+            .merge_into_composite(&clip_ids.into_iter().collect::<HashSet<u64>>())
+    })
+}
+
+/// Captures `clip_id` (and its composite group, if any) into the clip clipboard -- `Ctrl+C`.
+/// Not undoable: it doesn't touch the project.
+#[tauri::command]
+pub fn copy_clip(app: AppHandle, clip_id: u64) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let copied = state.session().project.timeline().copy_clip_group(clip_id);
+    if copied.is_some() {
+        *state
+            .clip_clipboard
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = copied;
+    }
+    Ok(())
+}
+
+/// [`copy_clip`] followed by deleting every clip it captured -- `Ctrl+X`.
+#[tauri::command]
+pub fn cut_clip(app: AppHandle, clip_id: u64) -> Result<(), String> {
+    copy_clip(app.clone(), clip_id)?;
+    let state = app.state::<AppState>();
+    let ids: Vec<u64> = state
+        .clip_clipboard
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .as_ref()
+        .map(|(clips, _)| clips.iter().map(|c| c.id).collect())
+        .unwrap_or_default();
+    undoable(&app, |project| delete(project.timeline_mut(), &ids, false))
+}
+
+/// Pastes the clip clipboard as fresh clip(s) at the playhead -- `Ctrl+V`. A no-op if the
+/// clipboard is empty.
+#[tauri::command]
+pub fn paste_clip(app: AppHandle) -> Result<Vec<u64>, String> {
+    let state = app.state::<AppState>();
+    let Some((copied, kind)) = state
+        .clip_clipboard
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .clone()
+    else {
+        return Ok(Vec::new());
+    };
+    drop(state);
+    let playhead = app.state::<AppState>().preview.playhead();
+    let mut new_ids = Vec::new();
+    undoable(&app, |project| {
+        project.timeline_mut().playhead_secs = playhead;
+        new_ids = project
+            .timeline_mut()
+            .paste_clip_group(copied, kind, playhead);
+        !new_ids.is_empty()
+    })?;
+    Ok(new_ids)
+}
+
+/// Captures `clip_id`'s gain/freeze/speed/crop/mask/flip/color-adjustment settings into the
+/// formatting clipboard -- `Ctrl+Shift+C`.
+#[tauri::command]
+pub fn copy_clip_formatting(app: AppHandle, clip_id: u64) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let formatting = state
+        .session()
+        .project
+        .timeline()
+        .tracks
+        .iter()
+        .flat_map(|t| &t.clips)
+        .find(|c| c.id == clip_id)
+        .map(|c| c.formatting());
+    if formatting.is_some() {
+        *state
+            .formatting_clipboard
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = formatting;
+    }
+    Ok(())
+}
+
+/// Applies the formatting clipboard onto `clip_id`, without touching its position/trim/
+/// composite membership -- `Ctrl+Shift+V`.
+#[tauri::command]
+pub fn paste_clip_formatting(app: AppHandle, clip_id: u64) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let formatting = state
+        .formatting_clipboard
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .clone();
+    drop(state);
+    let Some(formatting) = formatting else {
+        return Ok(());
+    };
+    undoable(&app, |project| {
+        project
+            .timeline_mut()
+            .clip_mut(clip_id)
+            .is_some_and(|clip| {
+                clip.apply_formatting(&formatting);
+                true
+            })
+    })
 }
 
 /// Splits `clip_ids` at the playhead, or every unlocked track's clip under the playhead when
@@ -191,6 +386,37 @@ pub(crate) fn move_clip_in(
     } else {
         timeline.move_clip_to_track(clip_id, track_id, start_secs)
     }
+}
+
+/// The source asset's own full duration for `clip_id`'s footage, if both the clip and its asset
+/// can be found -- the upper bound roll/slip/slide edits pass so they can't ask for footage past
+/// the actual source media's end. Mirrors `trim`'s own inline lookup below.
+fn clip_asset_max_source_out_secs(project: &Project, clip_id: u64) -> Option<f64> {
+    let asset_id = project
+        .timeline()
+        .tracks
+        .iter()
+        .flat_map(|t| &t.clips)
+        .find(|c| c.id == clip_id)
+        .map(|c| c.asset_id)?;
+    project
+        .media_library
+        .iter()
+        .find(|a| a.id == asset_id)
+        .map(|a| a.duration_secs)
+}
+
+fn roll_edit(project: &mut Project, clip_id: u64, boundary_secs: f64) -> bool {
+    let max_source_out_secs = clip_asset_max_source_out_secs(project, clip_id);
+    let Some(index) = track_of(project.timeline(), clip_id) else {
+        return false;
+    };
+    project.timeline_mut().tracks[index].roll_edit(
+        clip_id,
+        boundary_secs,
+        MIN_CLIP_SECS,
+        max_source_out_secs,
+    )
 }
 
 fn trim(project: &mut Project, clip_id: u64, edge: TrimEdge, position_secs: f64) -> bool {

@@ -12,6 +12,7 @@
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
+use avcore::timeline::{ClipFormatting, ClipInstance, TrackKind};
 use avcore::undo::UndoStack;
 use avcore::{Project, Sequence, SequenceExportSettings, Timeline};
 use serde::Serialize;
@@ -106,6 +107,12 @@ pub struct AppState {
     pub prefs: Mutex<PrefsDocument>,
     pub preview: PreviewEngine,
     pub exports: Arc<ExportQueue>,
+    /// What `Ctrl+C`/`Ctrl+X` last captured, for `Ctrl+V` -- transient, never serialized, and
+    /// not scoped to a project or sequence, same as `ui::App::clipboard_clip`.
+    pub clip_clipboard: Mutex<Option<(Vec<ClipInstance>, TrackKind)>>,
+    /// What `Ctrl+Shift+C` last captured, for `Ctrl+Shift+V` -- same transience as
+    /// `clip_clipboard`, mirroring `ui::App::formatting_clipboard`.
+    pub formatting_clipboard: Mutex<Option<ClipFormatting>>,
 }
 
 impl AppState {
