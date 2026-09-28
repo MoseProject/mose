@@ -149,6 +149,8 @@ fn main() {
             commands::transcribe::get_transcript,
             commands::transcribe::search_transcripts,
             commands::transcribe::seek_to_transcript_word,
+            commands::silence::detect_silence_gaps_for_clip,
+            commands::silence::apply_silence_gaps,
         ])
         .run(tauri::generate_context!())
         .expect("error while running the oca desktop shell");

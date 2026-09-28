@@ -16,6 +16,7 @@ pub mod media;
 pub mod overlays;
 pub mod prefs;
 pub mod sequences;
+pub mod silence;
 pub mod timeline;
 pub mod transcribe;
 
