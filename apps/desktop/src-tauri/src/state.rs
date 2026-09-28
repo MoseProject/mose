@@ -127,6 +127,9 @@ pub struct AppState {
     /// The running watch-folder loop's stop flag, if any -- `Some` while a watch is active.
     /// Mirrors `ui::App::watch_folder_state.stop`.
     pub watch_folder_stop: Mutex<Option<Arc<std::sync::atomic::AtomicBool>>>,
+    /// The running YouTube download's cancel flag, if any. Mirrors
+    /// `ui::App::youtube_download_state.youtube_download_cancel`.
+    pub youtube_download_cancel: Mutex<Option<Arc<std::sync::atomic::AtomicBool>>>,
 }
 
 impl AppState {

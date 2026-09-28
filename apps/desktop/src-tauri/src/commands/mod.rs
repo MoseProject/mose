@@ -28,6 +28,7 @@ pub mod timeline;
 pub mod transcribe;
 pub mod tts;
 pub mod watch_folder;
+pub mod youtube_download;
 
 use std::path::PathBuf;
 

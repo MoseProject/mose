@@ -76,6 +76,7 @@ fn main() {
                 privacy_blur_generating_clip_id: Mutex::new(None),
                 tts_generating: Mutex::new(false),
                 watch_folder_stop: Mutex::new(None),
+                youtube_download_cancel: Mutex::new(None),
             });
             autosave::spawn(handle);
             Ok(())
@@ -170,6 +171,9 @@ fn main() {
             commands::watch_folder::start_watching_folder,
             commands::watch_folder::stop_watching_folder,
             commands::watch_folder::add_watched_file_to_project,
+            commands::youtube_download::is_yt_dlp_available,
+            commands::youtube_download::download_youtube,
+            commands::youtube_download::cancel_youtube_download,
         ])
         .run(tauri::generate_context!())
         .expect("error while running the oca desktop shell");
