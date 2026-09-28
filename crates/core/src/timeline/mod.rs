@@ -19,7 +19,7 @@ mod shape_clip;
 mod text_clip;
 mod track;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -247,6 +247,131 @@ impl Timeline {
         let mut clip = self.tracks[source_index].clips.remove(clip_index);
         clip.start_secs = new_start_secs;
         self.tracks[target_index].clips.push(clip);
+        true
+    }
+
+    /// [`Track::move_clip`], but if `clip_id` is a composite block member every other clip
+    /// sharing its `composite_id` moves by the same delta, on the same track — what dragging a
+    /// composite block's body does, so the whole block reads as one clip per `request.md`'s
+    /// Fase 3 "blocos compostos" spec. Falls back to a plain [`Track::move_clip`] if `clip_id`
+    /// isn't a composite member. No-op (`false`) if the clip isn't found.
+    pub fn move_clip_with_group(&mut self, clip_id: u64, new_start_secs: f64) -> bool {
+        let Some((old_start_secs, composite_id, track_index)) =
+            self.tracks.iter().enumerate().find_map(|(index, t)| {
+                let dragged = t.clips.iter().find(|c| c.id == clip_id)?;
+                Some((dragged.start_secs, dragged.composite_id, index))
+            })
+        else {
+            return false;
+        };
+        let Some(group) = composite_id else {
+            return self.tracks[track_index].move_clip(clip_id, new_start_secs);
+        };
+        let delta = new_start_secs - old_start_secs;
+        let updates: Vec<(u64, f64)> = self.tracks[track_index]
+            .clips
+            .iter()
+            .filter(|c| c.composite_id == Some(group))
+            .map(|c| (c.id, c.start_secs + delta))
+            .collect();
+        let mut changed = false;
+        for (id, start_secs) in updates {
+            changed |= self.tracks[track_index].move_clip(id, start_secs);
+        }
+        changed
+    }
+
+    /// Captures `clip_id`'s clip data for [`Timeline::paste_clip_group`], along with the track
+    /// kind it lives on. If `clip_id` is a composite block member, every clip sharing its
+    /// `composite_id` is captured too (not just the one asked for), so a copy/cut round-trips
+    /// the whole block as one unit through [`Timeline::paste_clip_group`]. `None` if `clip_id`
+    /// isn't found.
+    pub fn copy_clip_group(&self, clip_id: u64) -> Option<(Vec<ClipInstance>, TrackKind)> {
+        self.tracks.iter().find_map(|t| {
+            let selected = t.clips.iter().find(|c| c.id == clip_id)?;
+            let group: Vec<ClipInstance> = match selected.composite_id {
+                Some(composite_id) => t
+                    .clips
+                    .iter()
+                    .filter(|c| c.composite_id == Some(composite_id))
+                    .cloned()
+                    .collect(),
+                None => vec![selected.clone()],
+            };
+            Some((group, t.kind))
+        })
+    }
+
+    /// Pastes `copied` (from [`Timeline::copy_clip_group`]) as fresh, newly-id'd clips at
+    /// `playhead_secs`, on a matching-`kind` track ([`Timeline::resolve_or_create_track`]). The
+    /// earliest copied clip lands exactly on the playhead; every other copied clip keeps its
+    /// original offset relative to it, and its `color_label` is dropped. More than one copied
+    /// clip is assigned one fresh shared `composite_id` so the block pastes back as one unit; a
+    /// single copied clip pastes standalone. Returns the pasted clips' fresh ids (empty if
+    /// `copied` is empty).
+    pub fn paste_clip_group(
+        &mut self,
+        copied: Vec<ClipInstance>,
+        kind: TrackKind,
+        playhead_secs: f64,
+    ) -> Vec<u64> {
+        if copied.is_empty() {
+            return Vec::new();
+        }
+        let track_index = self.resolve_or_create_track(kind, None);
+        let group_min_start = copied
+            .iter()
+            .map(|c| c.start_secs)
+            .fold(f64::INFINITY, f64::min);
+        let new_composite_id = (copied.len() > 1).then(|| {
+            self.tracks[track_index]
+                .clips
+                .iter()
+                .filter_map(|c| c.composite_id)
+                .max()
+                .unwrap_or(0)
+                + 1
+        });
+        let mut new_ids = Vec::with_capacity(copied.len());
+        for mut clip in copied {
+            let clip_id = self.next_clip_id();
+            clip.id = clip_id;
+            clip.start_secs = playhead_secs + (clip.start_secs - group_min_start);
+            clip.composite_id = new_composite_id;
+            clip.color_label = None;
+            self.tracks[track_index].clips.push(clip);
+            new_ids.push(clip_id);
+        }
+        new_ids
+    }
+
+    /// Merges every clip in `ids` into one composite block, assigning them all a fresh
+    /// `composite_id` — what "Mesclar em bloco composto" does. No-op (`false`), leaving every
+    /// clip's `composite_id` untouched, unless `ids` has at least two entries and they're all
+    /// on the same track — composite blocks don't span tracks yet.
+    pub fn merge_into_composite(&mut self, ids: &HashSet<u64>) -> bool {
+        if ids.len() < 2 {
+            return false;
+        }
+        let Some(index) = self
+            .tracks
+            .iter()
+            .position(|t| ids.iter().all(|id| t.clips.iter().any(|c| c.id == *id)))
+        else {
+            return false;
+        };
+        let group_id = self.tracks[index]
+            .clips
+            .iter()
+            .filter_map(|c| c.composite_id)
+            .max()
+            .unwrap_or(0)
+            + 1;
+        for clip in &mut self.tracks[index].clips {
+            if ids.contains(&clip.id) {
+                clip.composite_id = Some(group_id);
+            }
+        }
         true
     }
 }
