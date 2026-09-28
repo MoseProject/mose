@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { formatTime, t } from "../i18n";
-import { api } from "../ipc";
+import { api, exportActiveSequence } from "../ipc";
 import { exportsStore, run, useStore } from "../store";
 import type { ExportJobView } from "../types";
 
@@ -14,7 +14,7 @@ export function ExportPanel() {
   return <section className="export-panel">
     <div className="panel-title">{t("exportQueue")}</div>
     <div className="export-body">
-      <div className="export-actions"><button className="primary" onClick={() => run(api.exportActiveSequence())}>{t("export")}</button><button onClick={() => run(api.exportActiveSequenceSrt())}>{t("exportSrt")}</button></div>
+      <div className="export-actions"><button className="primary" onClick={() => run(exportActiveSequence(() => window.confirm(t("exportOverwriteConfirm"))))}>{t("export")}</button><button onClick={() => run(api.exportActiveSequenceSrt())}>{t("exportSrt")}</button></div>
       <label className="field"><span>{t("gpuEncoder")}</span><select value={gpu} onChange={(e) => { setGpu(e.target.value); void run(api.setGpuEncoderPreference(e.target.value)); }}><option value="auto">Auto</option><option value="cpu">CPU</option><option value="nvenc">NVENC</option><option value="quick_sync">Quick Sync</option><option value="amf">AMF</option><option value="vaapi">VAAPI</option><option value="video_toolbox">VideoToolbox</option></select></label>
       {jobs.filter((job) => label(job) === "Queued").length >= 2 && <div className="export-actions">{LOUDNESS.map((target) => <button key={target} onClick={() => run(api.matchExportLoudness(target))}>{target} LUFS</button>)}</div>}
       {jobs.length === 0 ? <div className="empty-state">{t("noExports")}</div> : jobs.map((job) => <Job key={job.id} job={job} />)}

@@ -86,6 +86,10 @@ const strings = {
   statusFailed: { "pt-BR": "Falhou", en: "Failed" },
   statusCancelled: { "pt-BR": "Cancelado", en: "Cancelled" },
   cancel: { "pt-BR": "Cancelar", en: "Cancel" },
+  exportOverwriteConfirm: {
+    "pt-BR": "O arquivo já existe. Substituir? (Cancelar cria uma cópia com novo nome.)",
+    en: "The file already exists. Overwrite it? (Cancel creates a renamed copy.)",
+  },
   noExports: { "pt-BR": "Nenhuma exportação nesta sessão.", en: "No exports this session." },
   errorPrefix: { "pt-BR": "Erro", en: "Error" },
   exportSrt: { "pt-BR": "Exportar SRT", en: "Export SRT" },
