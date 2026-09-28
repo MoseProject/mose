@@ -28,6 +28,7 @@ import type {
   TranscriptDocument,
   TranscriptHit,
   TtsEvent,
+  WatchFolderEvent,
 } from "./types";
 
 export const events = {
@@ -41,6 +42,7 @@ export const events = {
   matteGeneration: "matte-generation-event",
   privacyBlur: "privacy-blur-event",
   tts: "tts-event",
+  watchFolder: "watch-folder-event",
 } as const;
 
 export function onSession(handler: (view: SessionView) => void): Promise<UnlistenFn> {
@@ -83,6 +85,10 @@ export function onPrivacyBlur(handler: (event: PrivacyBlurEvent) => void): Promi
 
 export function onTts(handler: (event: TtsEvent) => void): Promise<UnlistenFn> {
   return listen<TtsEvent>(events.tts, (e) => handler(e.payload));
+}
+
+export function onWatchFolder(handler: (event: WatchFolderEvent) => void): Promise<UnlistenFn> {
+  return listen<WatchFolderEvent>(events.watchFolder, (e) => handler(e.payload));
 }
 
 // Custom URI schemes are served from http://<scheme>.localhost on Windows (WebView2) and
@@ -224,6 +230,12 @@ export const api = {
     }),
   generateTts: (text: string) => invoke<void>("generate_tts", { text }),
   listSoundLibrary: () => invoke<LibraryTrack[]>("list_sound_library"),
+
+  pickWatchFolder: () => invoke<string | null>("pick_watch_folder"),
+  startWatchingFolder: (path: string) => invoke<void>("start_watching_folder", { path }),
+  stopWatchingFolder: () => invoke<void>("stop_watching_folder"),
+  addWatchedFileToProject: (watchPath: string, sourcePath: string) =>
+    invoke<void>("add_watched_file_to_project", { watchPath, sourcePath }),
 
   addMarker: (kind: MarkerKind = "Standard") => invoke<void>("add_marker", { kind }),
   removeMarker: (markerId: number) => invoke<void>("remove_marker", { markerId }),

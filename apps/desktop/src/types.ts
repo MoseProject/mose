@@ -287,6 +287,16 @@ export type PrivacyBlurEvent =
 
 export type TtsEvent = { type: "done" } | { type: "failed"; message: string };
 
+export type WatchFolderStatus = "stabilizing" | "processing" | "done" | "error";
+
+export type WatchFolderEvent =
+  | { type: "detected"; path: string }
+  | { type: "stabilizing"; path: string }
+  | { type: "processing"; path: string }
+  | { type: "progress"; path: string; percent: number }
+  | { type: "done"; path: string; before: LoudnessMetrics; after: LoudnessMetrics }
+  | { type: "failed"; path: string; message: string };
+
 export type TranscribeEvent =
   | { type: "started"; assetId: number }
   | { type: "done"; assetId: number }

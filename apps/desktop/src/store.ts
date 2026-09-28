@@ -49,7 +49,7 @@ export function useStore<T>(store: Store<T>): T {
   return useSyncExternalStore(store.subscribe, store.get);
 }
 
-export type Screen = "home" | "editor" | "prefs";
+export type Screen = "home" | "editor" | "prefs" | "watch";
 
 /** Timeline edit tool -- egui's `EditorTool`. "select" is the default drag-to-move/trim mode;
  *  the others repurpose a body/edge drag into the matching Premiere/DaVinci/FCP-style edit. */

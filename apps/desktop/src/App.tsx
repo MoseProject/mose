@@ -4,6 +4,7 @@ import { api, exportActiveSequence } from "./ipc";
 import { Editor } from "./screens/Editor";
 import { Home } from "./screens/Home";
 import { Prefs } from "./screens/Prefs";
+import { WatchFolder } from "./screens/WatchFolder";
 import { connect, patchUi, run, sessionStore, uiStore, useStore } from "./store";
 
 export function App() {
@@ -25,6 +26,7 @@ export function App() {
           {t("home")}
         </button>
         <button className={`icon ${ui.screen === "prefs" ? "active" : ""}`} onClick={() => patchUi({ screen: "prefs" })}>{t("preferences")}</button>
+        <button className={`icon ${ui.screen === "watch" ? "active" : ""}`} onClick={() => patchUi({ screen: "watch" })}>{t("watchFolder")}</button>
         {session && (
           <>
             <span className="project-name">{session.project.name}</span>
@@ -43,7 +45,15 @@ export function App() {
           </>
         )}
       </header>
-      {ui.screen === "home" || !session ? <Home /> : ui.screen === "prefs" ? <Prefs /> : <Editor session={session} />}
+      {ui.screen === "watch" ? (
+        <WatchFolder />
+      ) : ui.screen === "home" || !session ? (
+        <Home />
+      ) : ui.screen === "prefs" ? (
+        <Prefs />
+      ) : (
+        <Editor session={session} />
+      )}
       {ui.error && (
         <div className="error-banner" role="alert">
           <span>

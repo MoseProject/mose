@@ -138,6 +138,20 @@ const strings = {
     en: "Configure the sound library folder in preferences.",
   },
 
+  watchFolder: { "pt-BR": "Monitorar pasta", en: "Watch folder" },
+  watchFolderChoose: { "pt-BR": "Escolher pasta…", en: "Choose folder…" },
+  watchFolderStart: { "pt-BR": "Iniciar monitoramento", en: "Start watching" },
+  watchFolderStop: { "pt-BR": "Parar monitoramento", en: "Stop watching" },
+  watchFolderEmpty: {
+    "pt-BR": "Nenhum arquivo detectado ainda.",
+    en: "No files detected yet.",
+  },
+  watchFolderAddToProject: { "pt-BR": "Adicionar ao projeto", en: "Add to project" },
+  watchFolderStabilizing: { "pt-BR": "Aguardando gravação terminar…", en: "Waiting for recording to finish…" },
+  watchFolderProcessing: { "pt-BR": "Processando…", en: "Processing…" },
+  watchFolderDone: { "pt-BR": "Concluído", en: "Done" },
+  watchFolderError: { "pt-BR": "Erro", en: "Error" },
+
   silenceReview: { "pt-BR": "Revisar silêncio", en: "Review silence" },
   silenceReviewTitle: { "pt-BR": "Revisar silêncio", en: "Review silence" },
   silenceReviewEmpty: { "pt-BR": "Nenhum silêncio encontrado.", en: "No silence found." },
