@@ -22,10 +22,10 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use avcore::preview_worker::{
-    clip_seek_offset, PreviewOpenRequest, PreviewSeek, PreviewStatus, PreviewWorker,
+    clip_seek_offset, LiveUpdateKey, PreviewOpenRequest, PreviewSeek, PreviewStatus, PreviewWorker,
 };
 use avcore::timeline::{ClipInstance, ShapeClip, TextClip, Timeline, TrackKind};
-use avcore::MediaAsset;
+use avcore::{live_preview_updates, DeflickerHistory, Lut3D, MediaAsset, PreviewCpuEffects};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
@@ -54,6 +54,7 @@ enum Command {
     Seek(f64),
     Step(i64),
     Playing(bool),
+    HardwareDecode(bool),
 }
 
 /// Snapshot of transport state for the webview.
@@ -116,6 +117,11 @@ impl PreviewEngine {
         let _ = self.tx.send(Command::Playing(playing));
     }
 
+    /// Changes the decoder policy for subsequent opens. The current pipeline is reopened.
+    pub fn set_hardware_decode(&self, enabled: bool) {
+        let _ = self.tx.send(Command::HardwareDecode(enabled));
+    }
+
     /// The live playhead. Authoritative over `Timeline::playhead_secs` in the session, which
     /// only catches up when an edit or save needs it.
     pub fn playhead(&self) -> f64 {
@@ -148,6 +154,39 @@ impl Layers {
             && self.text.is_empty()
             && self.shapes.is_empty())
     }
+}
+
+/// Returns all live updates when layer identity and every pipeline-shaping field are unchanged.
+/// Text, shapes, audio, paths, and missing layers still require a reopen.
+fn live_updates_between(
+    previous: &Layers,
+    next: &Layers,
+) -> Option<Vec<avcore::LivePreviewUpdate>> {
+    let mut updates = Vec::new();
+    let mut compare_video = |before: &(PathBuf, ClipInstance), after: &(PathBuf, ClipInstance)| {
+        if before.0 != after.0 {
+            return None;
+        }
+        let next_updates = live_preview_updates(&before.1, &after.1)?;
+        updates.extend(next_updates);
+        Some(())
+    };
+    match (&previous.background, &next.background) {
+        (Some(before), Some(after)) => compare_video(before, after)?,
+        (None, None) => {}
+        _ => return None,
+    }
+    if previous.overlays.len() != next.overlays.len()
+        || previous.audio != next.audio
+        || previous.text != next.text
+        || previous.shapes != next.shapes
+    {
+        return None;
+    }
+    for (before, after) in previous.overlays.iter().zip(&next.overlays) {
+        compare_video(before, after)?;
+    }
+    Some(updates)
 }
 
 /// The source a preview pipeline should decode for `asset`: its editing proxy when one
@@ -214,7 +253,11 @@ pub(crate) fn resolve_layers(timeline: &Timeline, media: &[MediaAsset], at_secs:
     layers
 }
 
-fn open_request(layers: &Layers, playhead_secs: f64) -> Option<PreviewOpenRequest> {
+fn open_request(
+    layers: &Layers,
+    playhead_secs: f64,
+    hardware_decode: bool,
+) -> Option<PreviewOpenRequest> {
     let (path, clip) = layers.background.clone()?;
     Some(if layers.is_composited() {
         PreviewOpenRequest::Composited {
@@ -225,16 +268,40 @@ fn open_request(layers: &Layers, playhead_secs: f64) -> Option<PreviewOpenReques
             text: layers.text.clone(),
             shapes: layers.shapes.clone(),
             playhead_secs,
-            hardware_decode: true,
+            hardware_decode,
         }
     } else {
         PreviewOpenRequest::Single {
             path,
             clip,
             playhead_secs,
-            hardware_decode: true,
+            hardware_decode,
         }
     })
+}
+
+fn refresh_text_highlights(worker: &PreviewWorker, layers: &Layers, playhead_secs: f64) {
+    if layers.text.is_empty() {
+        return;
+    }
+    let timed_clips: Vec<_> = layers
+        .text
+        .iter()
+        .cloned()
+        .map(|clip| {
+            let local_time = playhead_secs - clip.start_secs;
+            (clip, local_time)
+        })
+        .collect();
+    worker.live(LiveUpdateKey::global("text"), move |preview| {
+        let refs: Vec<_> = timed_clips
+            .iter()
+            .map(|(clip, time)| (clip, *time))
+            .collect();
+        if let Err(error) = preview.update_text_overlays(&refs) {
+            tracing::warn!(%error, "failed to refresh preview text overlays");
+        }
+    });
 }
 
 /// Seek parameters in the branch order [`open_request`] built the pipeline with.
@@ -284,6 +351,7 @@ fn run(
     let mut media: Vec<MediaAsset> = Vec::new();
     let mut playhead = 0.0f64;
     let mut playing = false;
+    let mut hardware_decode = true;
     // `None` until the first resolve, so an empty timeline still emits one initial tick.
     let mut loaded: Option<Layers> = None;
     let mut generation = 0u64;
@@ -298,6 +366,9 @@ fn run(
     let mut audio = avcore::AudioLevel::default();
     let mut dirty = true;
     let mut last_tick = Instant::now();
+    let mut lut_cache: Option<(String, Option<Lut3D>)> = None;
+    let mut deflicker_history: (Option<u64>, DeflickerHistory) = (None, DeflickerHistory::new());
+    let mut effect_seed = 0u64;
 
     loop {
         let mut commands = Vec::new();
@@ -354,12 +425,27 @@ fn run(
                     worker.set_playing(playing && pipeline_clock);
                     dirty = true;
                 }
+                Command::HardwareDecode(enabled) => {
+                    if hardware_decode != enabled {
+                        hardware_decode = enabled;
+                        loaded = None;
+                        dirty = true;
+                    }
+                }
             }
         }
 
         let layers = resolve_layers(&timeline, &media, playhead);
-        if loaded.as_ref() != Some(&layers) {
-            match open_request(&layers, playhead) {
+        let live_updates = loaded
+            .as_ref()
+            .and_then(|previous| live_updates_between(previous, &layers));
+        if !seek_pending && loaded.as_ref().is_some() && live_updates.is_some() {
+            for update in live_updates.unwrap_or_default() {
+                worker.live_update(update);
+            }
+            loaded = Some(layers.clone());
+        } else if loaded.as_ref() != Some(&layers) {
+            match open_request(&layers, playhead, hardware_decode) {
                 Some(request) => {
                     generation = generation.wrapping_add(1);
                     open_generation = generation;
@@ -426,7 +512,45 @@ fn run(
                 let key = (ready.generation, ready.position_secs.map(f64::to_bits));
                 if last_frame_key != Some(key) {
                     last_frame_key = Some(key);
-                    if let Some(jpeg) = encode_jpeg(&ready.frame, PREVIEW_MAX_DIM) {
+                    let mut frame = ready.frame;
+                    let effects = PreviewCpuEffects::for_clip(Some(clip));
+                    if deflicker_history.0 != effects.clip_id {
+                        deflicker_history = (effects.clip_id, DeflickerHistory::new());
+                    }
+                    if !effects.lut_path.is_empty() {
+                        let reparse = lut_cache
+                            .as_ref()
+                            .is_none_or(|(path, _)| path != &effects.lut_path);
+                        if reparse {
+                            lut_cache = Some((
+                                effects.lut_path.clone(),
+                                Lut3D::load(std::path::Path::new(&effects.lut_path)).ok(),
+                            ));
+                        }
+                        if let Some((_, Some(lut))) = &lut_cache {
+                            avcore::apply_lut_to_rgba(&mut frame.rgba, lut);
+                        }
+                    }
+                    if effects.vignette_intensity > 0.0 {
+                        avcore::apply_vignette_to_rgba(
+                            &mut frame.rgba,
+                            frame.width,
+                            frame.height,
+                            effects.vignette_intensity,
+                        );
+                    }
+                    if effects.glitch_intensity > 0.0 {
+                        effect_seed = effect_seed.wrapping_add(1);
+                        avcore::apply_glitch_to_rgba(
+                            &mut frame.rgba,
+                            effects.glitch_intensity,
+                            effect_seed,
+                        );
+                    }
+                    if effects.deflicker_enabled {
+                        avcore::apply_deflicker_to_rgba(&mut frame.rgba, &mut deflicker_history.1);
+                    }
+                    if let Some(jpeg) = encode_jpeg(&frame, PREVIEW_MAX_DIM) {
                         if let Ok(mut frame) = latest.lock() {
                             *frame = Some(Arc::new(jpeg));
                         }
@@ -441,6 +565,10 @@ fn run(
             let (started, from) = *wall_clock.get_or_insert((Instant::now(), playhead));
             playhead = from + started.elapsed().as_secs_f64();
             dirty = true;
+        }
+
+        if let Some(layers) = &loaded {
+            refresh_text_highlights(&worker, layers, playhead);
         }
         let end = timeline.duration_secs();
         if playing && playhead >= end {
