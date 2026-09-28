@@ -5,7 +5,12 @@
 //! pending work is replaceable, and the worker receives only the latest editor intent.
 
 mod latest_intent;
+mod scene;
 mod scene_versions;
 
 pub use latest_intent::{Generation, LatestIntent, PendingIntent};
+pub use scene::{
+    Contributor, ContributorContent, ContributorId, MediaSource, RasterOverlay, SceneError,
+    SceneSnapshot, SourceRange,
+};
 pub use scene_versions::{invalidation_scope, InvalidationScope, SceneVersions, Version};
