@@ -34,6 +34,7 @@ pub mod dynamic_reframe;
 pub mod entitlement;
 pub mod error_reporting;
 pub mod export;
+pub mod export_queue;
 pub mod font_catalog;
 pub mod frame_sampler;
 pub mod gameplay_events;
@@ -110,6 +111,11 @@ pub use error_reporting::{
     STATE_TRANSITIONS,
 };
 pub use export::{ExportAspectRatio, ExportJob, ExportJobStatus, PlatformExportPreset};
+pub use export_queue::{
+    export_queue_path, load_export_queue_from_path, next_available_path,
+    normalize_loaded_export_queue, persisted_export_queue_snapshot, save_export_queue_to_path,
+    RenderControl,
+};
 pub use frame_sampler::FrameSampler;
 pub use highlight_detection::{
     clip_amplitude_samples, detect_highlight_candidates, HighlightCandidate,
