@@ -73,10 +73,12 @@ arrows, Home, Ctrl+Z/Y/S/Shift+S/I).
 
 Known gaps versus the egui shell, in migration order:
 
-1. **Preview fidelity**: post-decode CPU effects (LUT, vignette, glitch, deflicker) and live
-   pipeline updates (`set_live_*`) are not applied -- any clip change at the playhead reopens
-   the pipeline instead. Word-highlight text overlays do not advance during playback
-   (`update_text_overlays`). Compound clips are skipped in preview.
+1. **Preview fidelity**: LUT, vignette, glitch, and per-clip deflicker now run after decode
+   before JPEG encoding. The existing live pipeline properties (color balance, blur/sharpen,
+   chroma key parameters, crop, pixelize, shake, and an already-instantiated mask) update without
+   reopening; decoder-shape changes still reopen. Word-highlight text overlays now advance during
+   playback and seeks. Hardware decode defaults on and can be changed through the preview command.
+   Compound clips are still skipped in preview.
 2. Multi-select drag, composite blocks, roll/slide/slip edits, copy/paste, layer templates.
 3. Text and shape clips (creation and editing), keyframes, masks, transitions, crop.
 4. Export queue parity: persistent `.ocqueue` snapshots, bounded worker pool, pause/resume/cancel/remove, loudness matching, GPU encoder preference, output conflict choices, and SRT export are implemented. The dedicated export panel still needs visual/e2e coverage.

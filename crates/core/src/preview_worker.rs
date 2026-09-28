@@ -19,6 +19,7 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 
 use crate::preview::{Preview, VideoFrame};
+use crate::preview_live_updates::LivePreviewUpdate;
 use crate::timeline::{ClipInstance, ShapeClip, TextClip};
 use tracing::warn;
 
@@ -369,6 +370,26 @@ impl PreviewWorker {
         self.live_updates
             .replace(Box::new(ClosurePreviewCommand { key, apply }));
         self.wake();
+    }
+
+    /// Applies a shared, coalesced live property update without rebuilding the pipeline.
+    pub fn live_update(&self, update: LivePreviewUpdate) {
+        let key = match &update {
+            LivePreviewUpdate::Balance { clip_id, .. } => {
+                LiveUpdateKey::for_clip("balance", *clip_id)
+            }
+            LivePreviewUpdate::Blur { clip_id, .. } => LiveUpdateKey::for_clip("blur", *clip_id),
+            LivePreviewUpdate::ChromaKey { clip_id, .. } => {
+                LiveUpdateKey::for_clip("chroma-key", *clip_id)
+            }
+            LivePreviewUpdate::Crop { clip_id, .. } => LiveUpdateKey::for_clip("crop", *clip_id),
+            LivePreviewUpdate::Pixelize { clip_id, .. } => {
+                LiveUpdateKey::for_clip("pixelize", *clip_id)
+            }
+            LivePreviewUpdate::Shake { clip_id, .. } => LiveUpdateKey::for_clip("shake", *clip_id),
+            LivePreviewUpdate::Mask { clip_id, .. } => LiveUpdateKey::for_clip("mask", *clip_id),
+        };
+        self.live(key, move |preview| update.apply(preview));
     }
 
     pub fn take_frame(&self) -> Option<PreviewFrameReady> {

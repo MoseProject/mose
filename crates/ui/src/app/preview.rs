@@ -488,11 +488,10 @@ impl App {
         }
         // Resolve all model-owned effect settings before taking a frame from the worker so the
         // decoded image can be processed and uploaded without a second project lookup.
-        let (lut_path, vignette_intensity, glitch_intensity, deflicker_enabled, clip_id) =
-            self.current_preview_clip_lut_and_vignette();
-        if self.preview_state.preview_deflicker_history.0 != clip_id {
+        let cpu_effects = self.current_preview_cpu_effects();
+        if self.preview_state.preview_deflicker_history.0 != cpu_effects.clip_id {
             self.preview_state.preview_deflicker_history =
-                (clip_id, avcore::DeflickerHistory::new());
+                (cpu_effects.clip_id, avcore::DeflickerHistory::new());
         }
 
         let Some(worker) = &self.preview_state.worker else {
@@ -535,37 +534,39 @@ impl App {
             // `avcore::preview_effects`'s own doc comment for why only these two, and why this
             // is an approximation, not bit-exact to the real `lut3d`/`vignette` avfilters export
             // uses). Applied in place, before upload, so it costs nothing when neither is set.
-            if !lut_path.is_empty() {
+            if !cpu_effects.lut_path.is_empty() {
                 let needs_reparse = self
                     .preview_state
                     .preview_lut_cache
                     .as_ref()
-                    .is_none_or(|(cached_path, _)| cached_path != &lut_path);
+                    .is_none_or(|(cached_path, _)| cached_path != &cpu_effects.lut_path);
                 if needs_reparse {
-                    let parsed = avcore::Lut3D::load(std::path::Path::new(&lut_path)).ok();
-                    self.preview_state.preview_lut_cache = Some((lut_path.clone(), parsed));
+                    let parsed =
+                        avcore::Lut3D::load(std::path::Path::new(&cpu_effects.lut_path)).ok();
+                    self.preview_state.preview_lut_cache =
+                        Some((cpu_effects.lut_path.clone(), parsed));
                 }
                 if let Some((_, Some(lut))) = &self.preview_state.preview_lut_cache {
                     avcore::apply_lut_to_rgba(&mut frame.rgba, lut);
                 }
             }
-            if vignette_intensity > 0.0 {
+            if cpu_effects.vignette_intensity > 0.0 {
                 avcore::apply_vignette_to_rgba(
                     &mut frame.rgba,
                     frame.width,
                     frame.height,
-                    vignette_intensity,
+                    cpu_effects.vignette_intensity,
                 );
             }
-            if glitch_intensity > 0.0 {
+            if cpu_effects.glitch_intensity > 0.0 {
                 // Elapsed wall-clock time bit-cast to a seed -- differs every frame (unlike a
                 // frame counter, doesn't need a new PreviewState field), giving the temporal
                 // "digital corruption" look apply_glitch_to_rgba's own doc comment describes
                 // rather than a static grain texture.
                 let seed = ctx.input(|i| i.time).to_bits();
-                avcore::apply_glitch_to_rgba(&mut frame.rgba, glitch_intensity, seed);
+                avcore::apply_glitch_to_rgba(&mut frame.rgba, cpu_effects.glitch_intensity, seed);
             }
-            if deflicker_enabled {
+            if cpu_effects.deflicker_enabled {
                 avcore::apply_deflicker_to_rgba(
                     &mut frame.rgba,
                     &mut self.preview_state.preview_deflicker_history.1,

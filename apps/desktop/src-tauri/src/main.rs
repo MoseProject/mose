@@ -78,6 +78,7 @@ fn main() {
             commands::preview_seek,
             commands::preview_step,
             commands::preview_set_playing,
+            commands::preview_set_hardware_decode,
             commands::set_export_settings,
             commands::export::pick_export_path,
             commands::export::start_export,

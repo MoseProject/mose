@@ -4,7 +4,7 @@ use avcore::preview_worker::PreviewSeek;
 use avcore::timeline::{AudioRole, ClipInstance, Timeline, Track, TrackKind};
 use avcore::{MediaAsset, MediaKind};
 
-use super::{resolve_layers, seek_for, timeline_position};
+use super::{live_updates_between, resolve_layers, seek_for, timeline_position};
 
 fn fixture() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../crates/core/tests/fixtures/video.mp4")
@@ -172,4 +172,34 @@ fn source_position_maps_back_to_timeline_and_clamps_at_the_out_point() {
 
     assert_eq!(timeline_position(&clip, 6.0), 11.0);
     assert_eq!(timeline_position(&clip, 9.0), 12.0);
+}
+
+#[test]
+fn live_video_property_changes_keep_the_loaded_layers() {
+    let media = vec![asset(1, fixture())];
+    let before = timeline(vec![track(
+        1,
+        TrackKind::Video,
+        vec![ClipInstance::new(10, 1, 0.0, 0.0, 3.0)],
+    )]);
+    let mut after = before.clone();
+    after.tracks[0].clips[0].brightness = 0.25;
+    let before = resolve_layers(&before, &media, 1.0);
+    let after = resolve_layers(&after, &media, 1.0);
+    assert!(live_updates_between(&before, &after).is_some());
+}
+
+#[test]
+fn trim_changes_reopen_the_loaded_layers() {
+    let media = vec![asset(1, fixture())];
+    let before = timeline(vec![track(
+        1,
+        TrackKind::Video,
+        vec![ClipInstance::new(10, 1, 0.0, 0.0, 3.0)],
+    )]);
+    let mut after = before.clone();
+    after.tracks[0].clips[0].source_out_secs = 2.0;
+    let before = resolve_layers(&before, &media, 1.0);
+    let after = resolve_layers(&after, &media, 1.0);
+    assert!(live_updates_between(&before, &after).is_none());
 }

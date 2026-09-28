@@ -180,27 +180,19 @@ impl App {
     /// these three scalar fields, so paying for the rest was pure waste on the hottest UI-thread
     /// path in the app. Defaults (`String::new()`, `0.0`, `0.0`) when nothing covers the
     /// playhead, same as the `unwrap_or_default()` the caller used to apply to the full clone.
-    pub(super) fn current_preview_clip_lut_and_vignette(
-        &self,
-    ) -> (String, f32, f32, bool, Option<u64>) {
+    pub(super) fn current_preview_cpu_effects(&self) -> avcore::PreviewCpuEffects {
         let timeline = self.active_project().timeline();
         let Some(track) = timeline
             .tracks
             .iter()
             .find(|t| t.kind == TrackKind::Video && t.visible)
         else {
-            return (String::new(), 0.0, 0.0, false, None);
+            return avcore::PreviewCpuEffects::default();
         };
         let Some(clip) = track.clip_at(timeline.playhead_secs) else {
-            return (String::new(), 0.0, 0.0, false, None);
+            return avcore::PreviewCpuEffects::default();
         };
-        (
-            clip.lut_path.clone(),
-            clip.vignette_intensity,
-            clip.glitch_intensity,
-            clip.deflicker_enabled,
-            Some(clip.id),
-        )
+        avcore::PreviewCpuEffects::for_clip(Some(clip))
     }
 
     /// Every overlay-track (video track index 1+, in track order — matches
