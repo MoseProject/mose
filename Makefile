@@ -59,7 +59,7 @@ else
   endif
 endif
 
-.PHONY: build release run debug test test-core test-app test-xtask test-e2e bench fmt fmt-check lint graph docs check clean icon-font
+.PHONY: build release run debug test test-core test-app test-xtask test-e2e bench bench-bush fmt fmt-check lint graph docs check clean icon-font
 
 # Debug build of the whole workspace (core, ui, xtask).
 build:
@@ -106,6 +106,11 @@ test-e2e:
 # Compare successive runs to catch performance regressions as the engine grows.
 bench:
 	cargo bench -p core
+
+# Runs Bush's dependency-free editor workload benchmarks. These cover the engine's scheduling and
+# bounded-cache primitives without requiring FFmpeg or GStreamer development environments.
+bench-bush:
+	cargo bench -p bush
 
 # Regenerates crates/ui/assets/fonts/lucide-oca.{ttf,json} from spec/architecture/assets/
 # icons/*.svg — run after adding/removing a vendored icon SVG (see
