@@ -27,7 +27,7 @@ pub use clip::{
     BlendMode, ClipFormatting, ClipInstance, ColorFilter, LayerTemplate, MaskShape, TransitionType,
 };
 pub use marker::{Marker, MarkerKind};
-pub use shape_clip::{ShapeClip, ShapeKind};
+pub use shape_clip::{ShapeClip, ShapeKind, ShapePreset};
 pub use text_clip::{
     TextAlign, TextClip, TextDirection, TextFontFamily, TextFontStyle, WordTiming,
 };
