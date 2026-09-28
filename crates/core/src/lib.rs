@@ -25,6 +25,7 @@
 //! Nothing in this crate depends on `egui` or any GUI toolkit — `ui` is the only
 //! consumer, and it owns all presentation/formatting concerns (see its `i18n` module).
 
+pub mod app_paths;
 pub mod auto_reframe;
 pub mod background_removal;
 pub mod blend_mode;
