@@ -21,6 +21,7 @@ import {
   rulerTicks,
   snap,
   snapCandidates,
+  findSpan,
   timeToX,
   trackIndexAtY,
   xToTime,
@@ -32,6 +33,8 @@ import {
   type ClipInstance,
   type MediaAsset,
   type SessionView,
+  type ShapeClip,
+  type TextClip,
   type Track,
 } from "../types";
 
@@ -160,20 +163,38 @@ export function Timeline({ session }: { session: SessionView }) {
         const asset = media.find((a) => a.id === clip.asset_id);
         drawClip(ctx, palette, track, clip, asset, left, right, y, width, ui.selectedClipIds, 1);
       }
+      for (const clip of [...track.text_clips, ...track.shape_clips]) {
+        let start = clip.start_secs;
+        let end = start + clip.duration_secs;
+        if (drag && drag.mode !== "scrub" && drag.clipId === clip.id) {
+          if (drag.mode === "move") continue; // drawn as a ghost below
+          if (drag.mode === "trim-start") start = Math.min(drag.ghostEdge, end - 0.1);
+          if (drag.mode === "trim-end") end = Math.max(drag.ghostEdge, start + 0.1);
+        }
+        const left = timeToX(start, px, scrollSecs);
+        const right = timeToX(end, px, scrollSecs);
+        if (right < 0 || left > width) continue;
+        drawOverlayClip(ctx, palette, clip, left, right, y, ui.selectedClipIds, 1);
+      }
       if (!track.visible) {
         ctx.fillStyle = "rgba(0,0,0,0.45)";
         ctx.fillRect(0, y, width, TRACK_HEIGHT - 1);
       }
     });
     if (drag?.mode === "move") {
-      const clip = tracks.flatMap((t) => t.clips).find((c) => c.id === drag.clipId);
       const track = tracks[drag.ghostTrack];
+      const y = RULER_HEIGHT + drag.ghostTrack * TRACK_HEIGHT;
+      const left = timeToX(drag.ghostStart, px, scrollSecs);
+      const right = timeToX(drag.ghostStart + drag.duration, px, scrollSecs);
+      const clip = tracks.flatMap((t) => t.clips).find((c) => c.id === drag.clipId);
+      const overlay = clip
+        ? undefined
+        : tracks.flatMap((t) => [...t.text_clips, ...t.shape_clips]).find((c) => c.id === drag.clipId);
       if (clip && track) {
-        const y = RULER_HEIGHT + drag.ghostTrack * TRACK_HEIGHT;
-        const left = timeToX(drag.ghostStart, px, scrollSecs);
-        const right = timeToX(drag.ghostStart + drag.duration, px, scrollSecs);
         const asset = media.find((a) => a.id === clip.asset_id);
         drawClip(ctx, palette, track, clip, asset, left, right, y, width, [clip.id], 0.75);
+      } else if (overlay && track) {
+        drawOverlayClip(ctx, palette, overlay, left, right, y, [overlay.id], 0.75);
       }
     }
     const assetDrag = assetDragStore.get();
@@ -337,8 +358,8 @@ export function Timeline({ session }: { session: SessionView }) {
     if (!selected.includes(hit.clipId)) patchUi({ selectedClipIds: [hit.clipId] });
     const track = tracks[hit.trackIndex];
     if (track.locked) return;
-    const clip = track.clips.find((c) => c.id === hit.clipId)!;
-    const end = clip.start_secs + clipDuration(clip);
+    const clip = findSpan(tracks, hit.clipId)!.span;
+    const end = clip.start_secs + clip.duration_secs;
     dragRef.current =
       hit.part === "body"
         ? {
@@ -347,7 +368,7 @@ export function Timeline({ session }: { session: SessionView }) {
             grabOffsetSecs: xToTime(x, ui.pxPerSec, scrollSecs) - clip.start_secs,
             ghostStart: clip.start_secs,
             ghostTrack: hit.trackIndex,
-            duration: clipDuration(clip),
+            duration: clip.duration_secs,
           }
         : {
             mode: hit.part === "start" ? "trim-start" : "trim-end",
@@ -375,7 +396,7 @@ export function Timeline({ session }: { session: SessionView }) {
       const raw = Math.max(0, xToTime(x, px, scrollSecs) - drag.grabOffsetSecs);
       drag.ghostStart = snapMove(raw, drag.duration, candidates, threshold);
       const row = trackIndexAtY(y + scrollY, tracks.length);
-      const source = tracks.find((t) => t.clips.some((c) => c.id === drag.clipId));
+      const source = tracks[findSpan(tracks, drag.clipId)?.trackIndex ?? -1];
       if (row >= 0 && source && tracks[row].kind === source.kind && !tracks[row].locked) {
         drag.ghostTrack = row;
       }
@@ -392,15 +413,26 @@ export function Timeline({ session }: { session: SessionView }) {
     if (drag.mode === "scrub") {
       scrubTo(lanePoint(e).x, true);
     } else if (drag.mode === "move") {
-      const source = tracks.find((t) => t.clips.some((c) => c.id === drag.clipId));
-      const clip = source?.clips.find((c) => c.id === drag.clipId);
+      const found = findSpan(tracks, drag.clipId);
       const target = tracks[drag.ghostTrack];
-      if (clip && target && (clip.start_secs !== drag.ghostStart || target !== source)) {
-        void run(api.moveClip(clip.id, target.id, drag.ghostStart));
+      if (found && target) {
+        const { span, trackIndex } = found;
+        if (span.start_secs !== drag.ghostStart || drag.ghostTrack !== trackIndex) {
+          void run(
+            span.overlay
+              ? api.moveOverlayClip(span.id, target.id, drag.ghostStart)
+              : api.moveClip(span.id, target.id, drag.ghostStart),
+          );
+        }
       }
     } else {
       const edge = drag.mode === "trim-start" ? "start" : "end";
-      void run(api.trimClip(drag.clipId, edge, drag.ghostEdge));
+      const overlay = findSpan(tracks, drag.clipId)?.span.overlay ?? false;
+      void run(
+        overlay
+          ? api.trimOverlayClip(drag.clipId, edge, drag.ghostEdge)
+          : api.trimClip(drag.clipId, edge, drag.ghostEdge),
+      );
     }
     scheduleDraw();
   };
@@ -462,6 +494,12 @@ export function Timeline({ session }: { session: SessionView }) {
         <button className="icon" onClick={() => run(api.addTrack("Audio"))}>
           {t("addAudioTrack")}
         </button>
+        <button className="icon" onClick={() => void addOverlay(api.addTextClip(t("defaultTextContent")))}>
+          {t("addTextClip")}
+        </button>
+        <button className="icon" onClick={() => void addOverlay(api.addShapeClip())}>
+          {t("addShapeClip")}
+        </button>
         <button className="icon" title={t("addMarker")} onClick={() => run(api.addMarker())}>M</button>
         <button className="icon" title={t("previousMarker")} onClick={() => {
           const previous = markers.filter((m) => m.position_secs < previewStore.get().playheadSecs).sort((a, b) => b.position_secs - a.position_secs)[0];
@@ -509,6 +547,12 @@ export function Timeline({ session }: { session: SessionView }) {
       </div>
     </section>
   );
+}
+
+/** Creates a text/shape clip at the playhead and selects it, as egui's "+ Add" buttons do. */
+async function addOverlay(call: Promise<number | null>) {
+  const id = await run(call);
+  if (id != null) patchUi({ selectedClipIds: [id] });
 }
 
 function TrackHeader({ track }: { track: Track }) {
@@ -577,6 +621,46 @@ function drawClip(
     ctx.restore();
   }
 
+  if (selectedIds.includes(clip.id)) {
+    ctx.strokeStyle = palette.accent;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(left + 1, top + 1, width - 2, height - 2);
+  }
+  ctx.globalAlpha = 1;
+}
+
+/** Text/shape overlay block, tinted with the overlay's own color like egui's timeline. */
+function drawOverlayClip(
+  ctx: CanvasRenderingContext2D,
+  palette: Palette,
+  clip: TextClip | ShapeClip,
+  left: number,
+  right: number,
+  rowY: number,
+  selectedIds: number[],
+  alpha: number,
+) {
+  const top = rowY + 4;
+  const height = TRACK_HEIGHT - 9;
+  const width = Math.max(1, right - left);
+  const [r, g, b] = clip.color_rgba;
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = palette.surface2;
+  ctx.fillRect(left, top, width, height);
+  ctx.fillStyle = `rgba(${r},${g},${b},${120 / 255})`;
+  ctx.fillRect(left, top, width, height);
+  if (width > 24) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(left + 4, top, width - 8, height);
+    ctx.clip();
+    ctx.fillStyle = palette.text;
+    ctx.font = UI_FONT;
+    ctx.textBaseline = "top";
+    const label = "text" in clip ? clip.text || t("text") : t("shape");
+    ctx.fillText(label, Math.max(left, 0) + 5, top + 4);
+    ctx.restore();
+  }
   if (selectedIds.includes(clip.id)) {
     ctx.strokeStyle = palette.accent;
     ctx.lineWidth = 2;

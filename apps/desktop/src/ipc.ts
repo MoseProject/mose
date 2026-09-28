@@ -9,10 +9,13 @@ import type {
   ExportAspectRatio,
   ExportJobView,
   MarkerKind,
+  OverlayCatalog,
   PreviewTick,
   PrefsView,
   RecentProject,
   SessionView,
+  ShapeClipPatch,
+  TextClipPatch,
   TrackKind,
 } from "./types";
 
@@ -77,6 +80,18 @@ export const api = {
     invoke<void>("delete_clips", { clipIds, ripple }),
   updateClip: (clipId: number, patch: ClipPatch) =>
     invoke<void>("update_clip", { clipId, patch }),
+  overlayCatalog: () => invoke<OverlayCatalog>("overlay_catalog"),
+  /** Resolves to the new clip's id, or null when the target track is locked. */
+  addTextClip: (text: string) => invoke<number | null>("add_text_clip", { text }),
+  addShapeClip: () => invoke<number | null>("add_shape_clip"),
+  moveOverlayClip: (clipId: number, trackId: number, startSecs: number) =>
+    invoke<void>("move_overlay_clip", { clipId, trackId, startSecs }),
+  trimOverlayClip: (clipId: number, edge: "start" | "end", positionSecs: number) =>
+    invoke<void>("trim_overlay_clip", { clipId, edge, positionSecs }),
+  updateTextClip: (clipId: number, patch: TextClipPatch) =>
+    invoke<void>("update_text_clip", { clipId, patch }),
+  updateShapeClip: (clipId: number, patch: ShapeClipPatch) =>
+    invoke<void>("update_shape_clip", { clipId, patch }),
   addTrack: (kind: TrackKind) => invoke<void>("add_track", { kind }),
   setTrackFlags: (trackId: number, flags: { visible?: boolean; locked?: boolean }) =>
     invoke<void>("set_track_flags", {
