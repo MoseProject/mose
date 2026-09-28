@@ -78,7 +78,7 @@ Known gaps versus the egui shell, in migration order:
 2. Sequences/tabs, markers, multi-select drag, composite blocks, roll/slide/slip edits,
    copy/paste, layer templates.
 3. Text and shape clips (creation and editing), keyframes, masks, transitions, crop.
-4. Export queue persistence (`.ocqueue`), pause/resume, GPU encoder preference, SRT export.
+4. Export queue parity: persistent `.ocqueue` snapshots, bounded worker pool, pause/resume/cancel/remove, loudness matching, GPU encoder preference, output conflict choices, and SRT export are implemented. The dedicated export panel still needs visual/e2e coverage.
 5. AI features: transcription/transcript panel, silence review, scene detection, highlight
    detection, auto-reframe, background removal, motion tracking, privacy blur, TTS.
 6. Preferences (locale switch, layout, hardware decode), autosave + crash recovery, error
