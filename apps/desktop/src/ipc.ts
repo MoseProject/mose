@@ -8,6 +8,7 @@ import type {
   ClipPatch,
   ExportAspectRatio,
   ExportJobView,
+  LayerTemplate,
   MarkerKind,
   OverlayCatalog,
   PreviewTick,
@@ -58,6 +59,12 @@ export const api = {
   removeRecentProject: (path: string) => invoke<void>("remove_recent_project", { path }),
   restoreAutosave: (path: string) => invoke<void>("restore_autosave", { path }),
   discardAutosave: (path: string) => invoke<void>("discard_autosave", { path }),
+  saveLayerTemplate: (name: string, clipIds: number[]) =>
+    invoke<LayerTemplate[]>("save_layer_template", { name, clipIds }),
+  deleteLayerTemplate: (index: number) =>
+    invoke<LayerTemplate[]>("delete_layer_template", { index }),
+  applyLayerTemplate: (templateIndex: number, assetIds: (number | null)[]) =>
+    invoke<void>("apply_layer_template", { templateIndex, assetIds }),
   undo: () => invoke<void>("undo"),
   redo: () => invoke<void>("redo"),
 

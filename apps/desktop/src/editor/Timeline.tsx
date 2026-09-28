@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { formatTime, t } from "../i18n";
 import { api } from "../ipc";
+import { LayerTemplates } from "./LayerTemplates";
 import {
   assetDragStore,
   MAX_PX_PER_SEC,
@@ -555,6 +556,7 @@ export function Timeline({ session }: { session: SessionView }) {
         >
           {t("mergeComposite")}
         </button>
+        <LayerTemplates session={session} />
         <button className="icon" onClick={() => run(api.addTrack("Video"))}>
           {t("addVideoTrack")}
         </button>

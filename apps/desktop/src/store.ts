@@ -7,7 +7,7 @@
 import { useSyncExternalStore } from "react";
 import { api, onExports, onPreview, onSession } from "./ipc";
 import { localeFromPrefs, setLocale } from "./i18n";
-import type { ExportJobView, PreviewTick, SessionView } from "./types";
+import type { ExportJobView, LayerTemplate, PreviewTick, SessionView } from "./types";
 
 export interface Store<T> {
   get: () => T;
@@ -64,6 +64,7 @@ export const previewStore = createStore<PreviewTick>({
   peakR: 0,
 });
 export const exportsStore = createStore<ExportJobView[]>([]);
+export const layerTemplatesStore = createStore<LayerTemplate[]>([]);
 export const uiStore = createStore<UiState>({
   screen: "home",
   selectedClipIds: [],
@@ -124,6 +125,8 @@ export async function connect() {
   await onPreview((tick) => previewStore.set(tick));
   await onExports((jobs) => exportsStore.set(jobs));
   sessionStore.set(await api.getSession());
-  setLocale(localeFromPrefs((await api.getPrefs()).locale));
+  const prefs = await api.getPrefs();
+  setLocale(localeFromPrefs(prefs.locale));
+  layerTemplatesStore.set(prefs.savedLayerTemplates);
   exportsStore.set(await api.listExports());
 }

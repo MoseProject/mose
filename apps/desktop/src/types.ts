@@ -183,6 +183,15 @@ export interface PrefsView {
   autosaveMinutes: number;
   previewHardwareDecode: boolean;
   recentProjectPaths: string[];
+  savedLayerTemplates: LayerTemplate[];
+}
+
+/** A saved layer-group template -- `layers` is opaque `ClipFormatting` per layer (position/
+ *  scale/crop/effects), never edited field-by-field in the webview, only captured and reapplied
+ *  as a whole through the backend commands. */
+export interface LayerTemplate {
+  name: string;
+  layers: [TrackKind, Record<string, unknown>][];
 }
 
 export interface RecentProject {

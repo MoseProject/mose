@@ -199,6 +199,14 @@ input[type="range"] {
   gap: 8px;
 }
 
+.modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 10; }
+.modal { width: min(420px, 90vw); max-height: 80vh; overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+.modal h3 { margin-top: 0; }
+.modal input, .modal select { width: 100%; box-sizing: border-box; }
+.modal-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border-subtle); }
+.modal-row:first-of-type { border-top: none; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+
 .recent-projects, .prefs { width: min(720px, 90vw); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
 .recent-projects h2, .prefs h1 { margin-top: 0; }
 .recent-project { display: flex; align-items: center; gap: 6px; padding: 6px 0; border-top: 1px solid var(--border-subtle); }
