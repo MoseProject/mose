@@ -55,6 +55,14 @@ impl RenderControl {
         self.wake.notify_all();
     }
 
+    pub fn is_cancelled(&self) -> bool {
+        self.cancel.load(Ordering::Acquire)
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.paused.load(Ordering::Acquire)
+    }
+
     pub fn cancel_flag(&self) -> &AtomicBool {
         &self.cancel
     }
