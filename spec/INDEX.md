@@ -16,6 +16,10 @@ For the post-P4 product-growth queue, read
 ROADMAP and RULES. It contains the current competitor evidence, ordered implementation slices,
 acceptance criteria, security constraints, and deliberate non-goals.
 
+For anything touching the new Tauri shell (`apps/desktop`) or moving a screen off egui, read
+**[architecture/tauri-migration.md](architecture/tauri-migration.md)** first: decisions, data
+flow, what already has parity and the ordered list of remaining gaps.
+
 Before broad beta distribution, read
 **[architecture/client-error-reporting.md](architecture/client-error-reporting.md)** for ER-01's
 consent, sanitization, offline delivery, symbolication, and native-crash rollout requirements.
@@ -55,6 +59,7 @@ spec/
 │   ├── competitor-parity.md          (real feature research: CapCut/DaVinci/Premiere/FCP gaps)
 │   └── changelog.md                  (large historical log — read only for "why", not "what's next")
 └── architecture/                     ← HOW to build it (principles, not per-feature status)
+    ├── tauri-migration.md            (egui -> Tauri + React: decisions, parity, remaining gaps)
     ├── differentiators.md            (D1-D7: the proposed differentiator feature specs)
     ├── competitive-feature-plan.md   (CF-01-CF-10: next competitive implementation plan)
     ├── monetization-and-licensing.md (MON-01: Free/Pro subscription and GPL model)

@@ -124,6 +124,13 @@ Three-crate split, enforced by dependency direction: `avbridge` → `core` → `
   `screens/` has one module per screen; `theme.rs` is the dark/teal palette; **all UI
   strings live in `i18n.rs`** (pt-BR and English) — never hardcode display text.
 
+- **`apps/desktop`** — Tauri 2 shell replacing `ui` screen by screen: React/TypeScript webview
+  (`src/`, Vite) over a Rust crate `desktop` (`src-tauri/`, bin `oca-desktop`) that owns the
+  session, preview engine, import and export via `core`. Webview talks to Rust only through
+  `src/ipc.ts`. Status, decisions and remaining gaps:
+  [`spec/architecture/tauri-migration.md`](spec/architecture/tauri-migration.md). Logic both
+  shells need moves into `core`, never duplicated. `make desktop-dev` / `make test-desktop`.
+
 Test placement: `core` and `avbridge` have `[lib]` targets → integration tests in
 `crates/<crate>/tests/`. `ui` is bin-only → unit tests in `src/<module>/<module>_test.rs`.
 
