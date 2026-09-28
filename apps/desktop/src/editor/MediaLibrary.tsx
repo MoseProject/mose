@@ -2,7 +2,54 @@ import { useState } from "react";
 import { formatTime, t } from "../i18n";
 import { api, thumbnailUrl } from "../ipc";
 import { assetDragStore, run, transcribingAssetIdStore, useStore } from "../store";
-import type { MediaAsset, SessionView } from "../types";
+import type { LibraryTrack, MediaAsset, SessionView } from "../types";
+
+function SoundLibraryButton() {
+  const [open, setOpen] = useState(false);
+  const [tracks, setTracks] = useState<LibraryTrack[] | null>(null);
+
+  const toggle = () => {
+    if (!open) void run(api.listSoundLibrary()).then((result) => setTracks(result ?? []));
+    setOpen(!open);
+  };
+
+  return (
+    <>
+      <button className="icon" onClick={toggle}>
+        {t("soundLibrary")}
+      </button>
+      {open && (
+        <div className="modal-overlay" onClick={() => setOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>{t("soundLibrary")}</h3>
+            {!tracks || tracks.length === 0 ? (
+              <p className="muted">{t("soundLibraryEmpty")}</p>
+            ) : (
+              <div style={{ maxHeight: 320, overflowY: "auto" }}>
+                {tracks.map((track) => (
+                  <div className="modal-row" key={track.path}>
+                    <span>
+                      {track.category === "music" ? "🎵" : "🔊"} {track.name} ({formatTime(track.durationSecs)})
+                    </span>
+                    <button
+                      className="icon"
+                      onClick={() => {
+                        void run(api.importMedia([track.path]));
+                        setOpen(false);
+                      }}
+                    >
+                      {t("importFiles")}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
 function TtsButton() {
   const [text, setText] = useState<string | null>(null);
@@ -59,6 +106,7 @@ export function MediaLibrary({ session }: { session: SessionView }) {
           {t("importFiles")}
         </button>
         <TtsButton />
+        <SoundLibraryButton />
       </div>
       <div className="asset-list">
         {assets.length === 0 ? (

@@ -10,6 +10,7 @@ import type {
   ExportAspectRatio,
   ExportJobView,
   LayerTemplate,
+  LibraryTrack,
   MarkerKind,
   MatteGenerationEvent,
   OverlayCatalog,
@@ -222,6 +223,7 @@ export const api = {
       heightFrac,
     }),
   generateTts: (text: string) => invoke<void>("generate_tts", { text }),
+  listSoundLibrary: () => invoke<LibraryTrack[]>("list_sound_library"),
 
   addMarker: (kind: MarkerKind = "Standard") => invoke<void>("add_marker", { kind }),
   removeMarker: (markerId: number) => invoke<void>("remove_marker", { markerId }),

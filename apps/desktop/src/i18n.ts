@@ -131,6 +131,12 @@ const strings = {
     en: "Background removal model (.onnx)",
   },
   ttsModelPath: { "pt-BR": "Modelo de voz (.onnx)", en: "Voice model (.onnx)" },
+  soundLibraryPath: { "pt-BR": "Pasta da biblioteca de som", en: "Sound library folder" },
+  soundLibrary: { "pt-BR": "Biblioteca de som", en: "Sound library" },
+  soundLibraryEmpty: {
+    "pt-BR": "Configure a pasta da biblioteca de som nas preferências.",
+    en: "Configure the sound library folder in preferences.",
+  },
 
   silenceReview: { "pt-BR": "Revisar silêncio", en: "Review silence" },
   silenceReviewTitle: { "pt-BR": "Revisar silêncio", en: "Review silence" },

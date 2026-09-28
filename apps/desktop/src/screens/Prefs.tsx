@@ -31,5 +31,6 @@ export function Prefs() {
     <label>{t("reframeModelPath")}<input value={prefs.reframeModelPath} onChange={(e) => update({ reframeModelPath: e.target.value })} /></label>
     <label>{t("backgroundRemovalModelPath")}<input value={prefs.backgroundRemovalModelPath} onChange={(e) => update({ backgroundRemovalModelPath: e.target.value })} /></label>
     <label>{t("ttsModelPath")}<input value={prefs.ttsModelPath} onChange={(e) => update({ ttsModelPath: e.target.value })} /></label>
+    <label>{t("soundLibraryPath")}<input value={prefs.soundLibraryPath} onChange={(e) => update({ soundLibraryPath: e.target.value })} /></label>
   </main>;
 }

@@ -230,6 +230,14 @@ export interface PrefsView {
   reframeModelPath: string;
   backgroundRemovalModelPath: string;
   ttsModelPath: string;
+  soundLibraryPath: string;
+}
+
+export interface LibraryTrack {
+  name: string;
+  path: string;
+  durationSecs: number;
+  category: "music" | "sfx";
 }
 
 export interface TranscriptWord {
