@@ -243,6 +243,8 @@ pub(crate) fn delete(timeline: &mut Timeline, clip_ids: &[u64], ripple: bool) ->
     let mut changed = false;
     for &clip_id in clip_ids {
         let Some(index) = track_of(timeline, clip_id) else {
+            // Text/shape overlays: removed without ripple (they don't carry the edit).
+            changed |= super::overlays::remove_overlay(timeline, clip_id);
             continue;
         };
         let track = &mut timeline.tracks[index];
