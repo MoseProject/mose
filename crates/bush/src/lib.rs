@@ -4,11 +4,13 @@
 //! first primitive models the scheduling contract shared by every interactive engine command:
 //! pending work is replaceable, and the worker receives only the latest editor intent.
 
+mod byte_cache;
 mod latest_intent;
 mod scene;
 mod scene_scheduler;
 mod scene_versions;
 
+pub use byte_cache::{ByteCache, CacheError, CacheInsert};
 pub use latest_intent::{Generation, LatestIntent, PendingIntent};
 pub use scene::{
     Contributor, ContributorContent, ContributorId, MediaSource, RasterOverlay, SceneError,
