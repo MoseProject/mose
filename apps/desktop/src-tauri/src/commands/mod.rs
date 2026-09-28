@@ -23,6 +23,7 @@ pub mod privacy_blur;
 pub mod scene_detection;
 pub mod sequences;
 pub mod silence;
+pub mod sound_library;
 pub mod timeline;
 pub mod transcribe;
 pub mod tts;

@@ -37,6 +37,10 @@ pub struct PrefsView {
     /// bundled pt-BR voice -- shared with the egui shell's `PrefsState.tts_model_path` key.
     #[serde(default)]
     pub tts_model_path: String,
+    /// Root folder holding `music`/`sfx` subfolders scanned for the sound library panel --
+    /// shared with the egui shell's `PrefsState.sound_library_path` key.
+    #[serde(default)]
+    pub sound_library_path: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
@@ -64,6 +68,8 @@ struct DiskPrefs {
     background_removal_model_path: String,
     #[serde(default)]
     tts_model_path: String,
+    #[serde(default)]
+    sound_library_path: String,
 }
 
 fn default_hardware_decode() -> bool {
@@ -93,6 +99,7 @@ impl From<DiskPrefs> for PrefsView {
             reframe_model_path: value.reframe_model_path,
             background_removal_model_path: value.background_removal_model_path,
             tts_model_path: value.tts_model_path,
+            sound_library_path: value.sound_library_path,
         }
     }
 }
@@ -111,6 +118,7 @@ impl From<&PrefsView> for DiskPrefs {
             reframe_model_path: value.reframe_model_path.clone(),
             background_removal_model_path: value.background_removal_model_path.clone(),
             tts_model_path: value.tts_model_path.clone(),
+            sound_library_path: value.sound_library_path.clone(),
         }
     }
 }
@@ -129,6 +137,7 @@ impl Default for PrefsView {
             reframe_model_path: String::new(),
             background_removal_model_path: String::new(),
             tts_model_path: String::new(),
+            sound_library_path: String::new(),
         }
     }
 }

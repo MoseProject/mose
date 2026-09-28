@@ -164,6 +164,7 @@ fn main() {
             commands::background_removal::generate_matte_for_clip,
             commands::privacy_blur::apply_privacy_blur_to_clip,
             commands::tts::generate_tts,
+            commands::sound_library::list_sound_library,
         ])
         .run(tauri::generate_context!())
         .expect("error while running the oca desktop shell");
