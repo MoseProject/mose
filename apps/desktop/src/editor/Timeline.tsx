@@ -577,6 +577,12 @@ export function Timeline({ session }: { session: SessionView }) {
         <button className="icon" onClick={() => run(api.addTrack("Audio"))}>
           {t("addAudioTrack")}
         </button>
+        <button className="icon" onClick={() => run(api.addTrack("Text"))}>
+          {t("addTextTrack")}
+        </button>
+        <button className="icon" onClick={() => run(api.addTrack("Shape"))}>
+          {t("addShapeTrack")}
+        </button>
         <button className="icon" onClick={() => void addOverlay(api.addTextClip(t("defaultTextContent")))}>
           {t("addTextClip")}
         </button>
