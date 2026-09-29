@@ -1519,15 +1519,7 @@ pub fn render_export_job_multi_with_audio(
 fn timeline_duration(track_segments: &[Vec<avbridge::ClipSegment>]) -> f64 {
     track_segments
         .first()
-        .map(|track| {
-            track
-                .iter()
-                .map(|segment| {
-                    (segment.source_out_secs - segment.source_in_secs)
-                        / (segment.speed_factor as f64).max(0.0001)
-                })
-                .sum()
-        })
+        .map(|track| track.iter().map(clip_segment_duration_secs).sum())
         .unwrap_or(0.0)
 }
 

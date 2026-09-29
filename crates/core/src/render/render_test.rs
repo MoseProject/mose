@@ -159,6 +159,21 @@ fn render_validation_rejects_invalid_audio_mix_segments() {
 }
 
 #[test]
+fn audio_mix_timeline_duration_respects_smooth_speed_ramps() {
+    let mut ramp = segment();
+    ramp.source_out_secs = 4.0;
+    ramp.speed_factor = 1.0;
+    ramp.smooth_speed_ramp_end_factor = 2.0;
+
+    let duration = timeline_duration(&[vec![ramp.clone()]]);
+    assert!((duration - clip_segment_duration_secs(&ramp)).abs() < 1e-9);
+    assert!(
+        duration < 4.0,
+        "a ramp from 1x to 2x must shorten the timeline"
+    );
+}
+
+#[test]
 fn render_job_rejects_invalid_segments_before_entering_the_native_encoder() {
     let mut invalid = segment();
     invalid.speed_factor = 0.0;
