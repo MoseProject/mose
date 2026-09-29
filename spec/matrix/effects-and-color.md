@@ -58,8 +58,8 @@ for exact export-vs-preview wiring per effect).
       `../architecture/built-in-font-catalog.md`.
 - [~] Complex shaping/bidi — `avcore::text_layout` now uses bundled-only `cosmic-text` for
       OpenType shaping, mixed-direction paragraphs, ligatures, Indic conjuncts, deterministic
-      international fallback, cache bounds, and validated caption resource limits. Remaining:
-      cluster-overlap timed highlights and off-thread shaping; see
+      international fallback, cache bounds, validated caption resource limits, and timed
+      highlights expanded to whole overlapping clusters. Remaining: off-thread shaping; see
       `../architecture/complex-text-shaping.md`.
 - [x] Geometric shapes: presets (rectangle/ellipse/triangle/trapezoid/arrow) + hand-drawn
       custom polygon (click-to-place on preview).

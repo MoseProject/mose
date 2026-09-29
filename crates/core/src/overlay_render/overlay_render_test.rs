@@ -14,6 +14,15 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use super::*;
+
+#[test]
+fn timed_highlight_selects_every_overlapping_shaped_cluster() {
+    let ligature = 2..4;
+    assert!(!glyph_excluded(&ligature, Some([3, 4])));
+    assert!(!glyph_excluded(&ligature, Some([1, 3])));
+    assert!(glyph_excluded(&ligature, Some([4, 5])));
+    assert!(glyph_excluded(&ligature, Some([0, 2])));
+}
 use crate::timeline::{MaskShape, ShapeClip, ShapeKind, TextClip, TextDirection, WordTiming};
 
 fn sample_shape(kind: ShapeKind) -> ShapeClip {

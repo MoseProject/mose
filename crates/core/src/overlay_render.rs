@@ -78,14 +78,14 @@ fn blend_pixel(buf: &mut [u8], width: u32, height: u32, x: i64, y: i64, rgba: [u
     buf[idx + 3] = (out_a * 255.0).round().clamp(0.0, 255.0) as u8;
 }
 
-/// `glyph_byte_range` filters by each glyph's *cluster start* — matching the previous `fontdue`
-/// renderer's own `glyph.byte_offset` semantics exactly, so a highlight range that lands mid-
-/// cluster still includes the whole cluster rather than splitting it (cluster-safe splitting
-/// itself, TEXT-01B, is a separate, later concern).
+/// `glyph_byte_range` selects every glyph cluster that overlaps the logical timed-word range.
+/// This expands a highlight to complete ligatures, combining marks, and conjuncts rather than
+/// splitting a shaped cluster at a UTF-8 byte boundary.
 fn glyph_excluded(cluster: &Range<usize>, glyph_byte_range: Option<[u32; 2]>) -> bool {
     glyph_byte_range.is_some_and(|[start, end]| {
-        let offset = cluster.start as u64;
-        offset < start as u64 || offset >= end as u64
+        let start = start as usize;
+        let end = end as usize;
+        cluster.end <= start || cluster.start >= end
     })
 }
 
