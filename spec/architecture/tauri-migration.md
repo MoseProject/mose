@@ -262,7 +262,7 @@ Known gaps versus the egui shell, in migration order:
    existing (already-correct) invocation -- this was a real ship-blocking regression this gap's
    own packaging slice introduced, not present in `crates/ui`'s build.
 
-   **e2e harness ported and proven working end-to-end -- 17/18 real passing tests, 1 skipped, 2
+   **e2e harness ported and proven working end-to-end -- 21/22 real passing tests, 1 skipped, 2
    left quarantined as egui-implementation-detail tests with no CSS/React equivalent (not
    feature gaps).** `e2e/conftest.py` drives
    `oca-desktop.exe` through `tauri-driver`/Selenium instead of pywinauto, invoking Tauri
@@ -272,7 +272,11 @@ Known gaps versus the egui shell, in migration order:
    topbar/screen model, which never had egui's five-destination nav rail), `test_import.py`,
    `test_undo_redo.py`, `test_export.py` (a real FFmpeg render), `test_silence_review.py` (real
    waveform detection + ripple-delete), `test_clip_selection.py` (new -- the one thing that
-   still needs a real canvas click, since the timeline has no per-clip DOM element).
+   still needs a real canvas click, since the timeline has no per-clip DOM element), plus every
+   later gap-1/gap-3 feature test added since (`test_layer_transform.py`, `test_speed_ramp.py`,
+   `test_properties_panel_disclosure.py`, `test_custom_shape.py`, `test_text_tool.py`,
+   `test_overlay_properties.py`, `test_compound_clip.py`,
+   `test_insert_sequence_as_compound_clip.py`, `test_open_nested_sequence.py`).
    `test_auto_reframe.py` ports the same way but is skipped here (no bundled ONNX model in this
    tree, same condition the retired version used). `data-testid` selectors added to `App.tsx`/
    `Home.tsx`/`Editor.tsx`/`Prefs.tsx`/`WatchFolder.tsx`/`Timeline.tsx`/`Inspector.tsx`.
