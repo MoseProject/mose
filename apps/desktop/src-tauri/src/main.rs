@@ -173,6 +173,7 @@ fn main() {
             commands::overlays::overlay_catalog,
             commands::overlays::add_text_clip,
             commands::overlays::add_shape_clip,
+            commands::overlays::add_custom_shape_clip,
             commands::overlays::move_overlay_clip,
             commands::overlays::trim_overlay_clip,
             commands::overlays::update_text_clip,

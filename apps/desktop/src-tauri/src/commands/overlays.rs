@@ -112,6 +112,27 @@ pub fn add_shape_clip(app: AppHandle) -> Result<Option<u64>, String> {
     Ok(created)
 }
 
+/// Finishes a click-to-place-vertex custom shape drawing (the frontend's own `uiStore.
+/// drawingShapePoints`, canvas-fraction coordinates) into a `ShapeKind::Polygon` -- what
+/// pressing Enter with at least 3 points placed does in `ui::App::finish_drawing_custom_shape`,
+/// ported verbatim. `points` are absolute canvas-fraction coordinates; `ShapeKind::Polygon`
+/// stores vertices relative to the shape's own local unit square instead, so this derives a
+/// bounding box across all clicked points, centers/sizes the new `ShapeClip` on it, and
+/// re-expresses each point as an offset from that box's center divided by its width/height.
+/// `None` if fewer than 3 points were placed or the target track is locked.
+#[tauri::command]
+pub fn add_custom_shape_clip(
+    app: AppHandle,
+    points: Vec<(f32, f32)>,
+) -> Result<Option<u64>, String> {
+    let mut created = None;
+    undoable(&app, |project| {
+        created = insert_custom_shape(project.timeline_mut(), &points);
+        created.is_some()
+    })?;
+    Ok(created)
+}
+
 #[tauri::command]
 pub fn move_overlay_clip(
     app: AppHandle,
@@ -215,6 +236,43 @@ pub(crate) fn insert_shape(timeline: &mut Timeline) -> Option<u64> {
     timeline.tracks[index]
         .shape_clips
         .push(ShapeClip::new(id, start));
+    Some(id)
+}
+
+pub(crate) fn insert_custom_shape(timeline: &mut Timeline, points: &[(f32, f32)]) -> Option<u64> {
+    if points.len() < 3 {
+        return None;
+    }
+    let index = timeline.resolve_or_create_track(TrackKind::Shape, None);
+    if timeline.tracks[index].locked {
+        return None;
+    }
+
+    let min_x = points.iter().map(|p| p.0).fold(f32::INFINITY, f32::min);
+    let max_x = points.iter().map(|p| p.0).fold(f32::NEG_INFINITY, f32::max);
+    let min_y = points.iter().map(|p| p.1).fold(f32::INFINITY, f32::min);
+    let max_y = points.iter().map(|p| p.1).fold(f32::NEG_INFINITY, f32::max);
+    let center_x = (min_x + max_x) / 2.0;
+    let center_y = (min_y + max_y) / 2.0;
+    // Floors the bounding box away from zero so near-collinear clicks (e.g. three points almost
+    // in a vertical line) can't produce a divide-by-zero below.
+    let width = (max_x - min_x).max(0.02);
+    let height = (max_y - min_y).max(0.02);
+    let local_vertices: Vec<(f32, f32)> = points
+        .iter()
+        .map(|&(x, y)| ((x - center_x) / width, (y - center_y) / height))
+        .collect();
+
+    let id = timeline.next_clip_id();
+    let start = timeline.playhead_secs;
+    timeline.tracks[index].shape_clips.push(ShapeClip {
+        shape_kind: ShapeKind::Polygon(local_vertices),
+        center_x,
+        center_y,
+        width,
+        height,
+        ..ShapeClip::new(id, start)
+    });
     Some(id)
 }
 
