@@ -200,7 +200,8 @@ impl VideoFrame {
 /// narrower (no vignette — no matching element in this GStreamer install; no chroma key — only
 /// meaningful once layering exists; gain is handled by the separate audio pipeline; no
 /// glitch/transitions — animated per-frame in export via avfilter's `n` frame-count expressions
-/// with no static element equivalent GStreamer-side; position keyframes aren't wired to preview
+/// with no static element equivalent GStreamer-side; position keyframes are applied by the
+/// composited-overlay branch's compositor-pad probe
 /// — they need a compositing (`overlay`) stage, which this single-clip pipeline doesn't have,
 /// the same reason position has no visible effect on a single/background track in export either
 /// — see `keyframe` module docs; scale/rotation/opacity each get a pad probe re-evaluating
@@ -223,10 +224,8 @@ impl VideoFrame {
 // split moves — see each block below for specifics. HardCut and None both still render nothing
 // here, same as export.
 //
-// TODO: position keyframes aren't wired to preview (see crate::keyframe module docs) — unlike
-// rotation/opacity below, position needs a compositing (`overlay`) stage that this single-clip
-// pipeline doesn't have at all; adding it would mean building out multi-track preview
-// compositing first, not just picking a GStreamer element.
+// Position keyframes require compositing, so the single-clip path has no placement work to do;
+// composited overlay branches update their compositor pad's `xpos` and `ypos` per buffer below.
 /// `include_opacity` is `false` for an ordinary overlay branch in
 /// [`Preview::open_composited`]'s pipeline — there, opacity keyframes drive `compositor`'s own
 /// per-pad `alpha` property instead (real alpha blending against whatever's under it), so baking
