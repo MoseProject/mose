@@ -79,7 +79,23 @@ Known gaps versus the egui shell, in migration order:
    chroma key parameters, crop, pixelize, shake, and an already-instantiated mask) update without
    reopening; decoder-shape changes still reopen. Word-highlight text overlays now advance during
    playback and seeks. Hardware decode defaults on and can be changed through the preview command.
-   Compound clips are still skipped in preview.
+   **Compound clips done, in both preview and export.** Investigating this gap surfaced a real,
+   previously-unnoticed bug shared by every render/preview resolve function in both shells: a
+   compound clip's `asset_id` field is left at 0 when the clip is wrapped (only
+   `nested_sequence_id` is set), so a plain `asset_id` lookup could never find the synthetic
+   `MediaAsset` `materialize_nested_sequences` produces -- `RenderError::MissingAsset` (or, in
+   preview, "no source" silently) every time, regardless of shell. Fixed at the source:
+   `avcore::nested_sequence::synthetic_asset_id` plus a new `ClipInstance::resolved_asset_id()`
+   (used by every `render.rs` resolve function now, `core` fix, covered by a real
+   `resolve_timeline_segments_multi` regression test). `PreviewEngine` materializes nested
+   sequences on every `Command::Content` (cached by `Timeline` equality on its own dedicated
+   thread, so this never blocks the UI thread or a session-mutating command, matching `ui::App`'s
+   own "known cost, deliberately not hidden" tradeoff for a real FFmpeg re-encode);
+   `start_export` does the same synchronously with its own `AppState`-held cache. Verified against
+   the real release binary via the existing e2e suite (no regressions) plus new unit coverage in
+   both crates -- no dedicated e2e test yet, since desktop has no UI path to *create* a compound
+   clip (the "wrap selection as compound clip" command itself is a separate, not-yet-ported
+   feature, gap 3 material, not this gap).
 2. **Done:** roll/slip/slide tools (timeline toolbar tool switcher, repurposing edge/body drags
    into `avcore::Timeline`'s `Track::roll_edit`/`ClipInstance::slip`/`Track::slide_clip`);
    composite-block body drag (`Timeline::move_clip_with_group`) and "Mesclar em bloco composto";
@@ -275,15 +291,20 @@ Known gaps versus the egui shell, in migration order:
    launches cleanly elsewhere.
 
    **`crates/ui` is not yet deleted.** The packaging bug is fixed, the launch crash is diagnosed
-   and non-blocking, the WebDriver harness is proven working, and gap 3's previously-missing
-   features (on-canvas layer transform, speed-ramp preset, collapsible property sections, Text
-   tool, custom shape drawing and vertex editing, and the full text/shape property field set) are
-   now all shipped. The remaining blocker per the migration's own top-level strategy ("New crate
-   in parallel, egui untouched until parity") is gap 1: compound clips are still skipped in the
-   desktop preview pipeline, a real, confirmed-missing feature (not an e2e-porting gap). Deleting
-   the egui shell before that is built would be a genuine feature regression for real users using
-   compound clips, independent of how much of gap 7 itself is done. That feature work is its own
-   slice, not part of "port e2e" or "replace the installer."
+   and non-blocking, the WebDriver harness is proven working, gap 3's previously-missing features
+   (on-canvas layer transform, speed-ramp preset, collapsible property sections, Text tool,
+   custom shape drawing and vertex editing, and the full text/shape property field set) are all
+   shipped, and gap 1's compound-clip preview/export gap is closed too (along with a real shared
+   `resolved_asset_id` bug this fix surfaced, see gap 1's own entry). The remaining blocker per
+   the migration's own top-level strategy ("New crate in parallel, egui untouched until parity")
+   is narrower now: desktop has no UI path to actually *create* a compound clip -- egui's
+   "wrap selection as compound clip" / "insert existing sequence as compound clip" commands
+   (`ui::App::create_compound_clip_from_selected_clip`/`insert_sequence_as_compound_clip`) were
+   never ported, only the resolve-side rendering. A project that already has a compound clip
+   (from egui, or from a hand-authored `.ocproj`) now previews and exports correctly in desktop,
+   but a desktop-only user has no way to make one. Deleting the egui shell before that command is
+   built would be a genuine feature regression, independent of how much of gap 7 itself is done.
+   That's its own gap-3 slice, not part of "port e2e" or "replace the installer."
 
 Each gap migrates as its own slice: move any egui-free logic from `crates/ui/src/app/` into
 `core` first (commit), then add the command(s) (commit), then the React UI (commit), then tests.
