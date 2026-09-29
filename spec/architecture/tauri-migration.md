@@ -1,7 +1,8 @@
 # Tauri migration (egui -> Tauri + React)
 
-Status: **phase 1 landed** (2026-09-27). The egui shell (`crates/ui`) is still the shipping app;
-the Tauri shell (`apps/desktop`) runs beside it and takes over screen by screen.
+Status: **feature parity is substantially complete** (2026-09-28). The egui shell (`crates/ui`)
+still ships beside the Tauri shell (`apps/desktop`) until the WebDriver migration and release
+bundle validation allow its retirement.
 
 ## Decisions
 
@@ -129,17 +130,16 @@ Known gaps versus the egui shell, in migration order:
    click-to-seek on the timecode, and ripple-deletes whatever's still checked on Apply (one undo
    step for the batch) -- mirrors `ui::App`'s `silence_review.rs` modal, review state staying
    client-side between `detect_silence_gaps_for_clip` and `apply_silence_gaps` rather than
-   server-staged. **Scene/highlight detection, motion tracking, auto-reframe (static), background
+   server-staged. **Scene/highlight detection, motion tracking, static and dynamic auto-reframe, background
    removal, privacy blur and TTS done:** each ports its `ui::App` background-thread counterpart
    command-for-command (same sampling rates/caps, same `avcore` pipelines -- scene cuts and
    highlights land as `Chapter`/`Highlight` markers, motion tracking writes `position_keyframes`,
-   auto-reframe writes `crop_x/y/w/h`, background removal/privacy blur write a cached matte
+   static auto-reframe writes `crop_x/y/w/h`, while dynamic auto-reframe samples at 2 Hz with
+   subject continuity and writes sparse crop keyframes; background removal/privacy blur write a cached matte
    `.mp4` path + enable flag, TTS imports the synthesized WAV like any dropped file); each has a
    single-flight `AppState` guard and its own Tauri event for the async result. Region params
    (motion-track/privacy-blur center+size) are plain number inputs on the inspector rather than
-   on-canvas pickers. Still missing: **dynamic (per-frame animated) auto-reframe** -- only the
-   static one-crop-per-clip variant is ported; `ui::App`'s `dynamic_reframe.rs` produces sparse
-   crop keyframes instead and hasn't been.
+   on-canvas pickers.
 6. Preferences (locale switch, layout, hardware decode), autosave + crash recovery, error
    reporting consent, update check, telemetry, recent projects on Home, watch folder, YouTube
    download, sound library. **In progress:** desktop shares `prefs.oc` with egui for locale, LUFS
@@ -167,11 +167,13 @@ Known gaps versus the egui shell, in migration order:
    `Disabled`): with no reporter held, nothing is built, validated, queued, or sent. Shared
    `prefs.oc` keys: `error_reporting_consent`, `last_reviewed_crash_unix`, `telemetry_enabled`.
    Not ported: per-call-site `report_error` instrumentation (ER-01A's fine-grained wiring across
-   every command's error path -- a much larger, separate refactor than this pass's scope) and
-   layout persistence (architecturally mismatched: desktop's CSS-grid panels vs. egui's
-   immediate-mode resize, not a quick win).
-7. Packaging: replace `crates/ui` in the installer and auto-update flow, port `e2e/` from
-   pywinauto to WebDriver (`tauri-driver`), then delete `crates/ui`.
+   every command error path -- a much larger, separate refactor than this pass's scope). Editor
+   layout persistence is done per project: the resizable library, inspector, and timeline
+   dimensions write `Project::panel_layout` and restore when that project is opened.
+7. Packaging: Windows/Linux/macOS assembly scripts now package the Tauri `oca-desktop` binary,
+   retaining the established resource layout and installer contract. Remaining release work is
+   to port `e2e/` from pywinauto to WebDriver (`tauri-driver`) and retire `crates/ui` only after
+   the Tauri release bundles are validated on every target platform.
 
 Each gap migrates as its own slice: move any egui-free logic from `crates/ui/src/app/` into
 `core` first (commit), then add the command(s) (commit), then the React UI (commit), then tests.
