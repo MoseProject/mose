@@ -1547,7 +1547,7 @@ fn apply_audio_mix_pass(
 /// than a true lowest-terms rational (e.g. NTSC's canonical `30000/1001`), which is precise
 /// enough for a canvas frame rate and doesn't need a full rational-approximation algorithm.
 fn fps_to_rational(fps: f32) -> (u32, u32) {
-    if fps <= 0.0 {
+    if !fps.is_finite() || fps <= 0.0 {
         return (30, 1);
     }
     let rounded = fps.round();

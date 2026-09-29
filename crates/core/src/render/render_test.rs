@@ -141,7 +141,7 @@ fn fps_to_rational_falls_back_to_30_1_for_zero_or_negative_fps() {
 }
 
 #[test]
-fn fps_to_rational_never_panics_on_extreme_input() {
-    let _ = fps_to_rational(f32::INFINITY);
-    let _ = fps_to_rational(f32::NAN);
+fn fps_to_rational_falls_back_to_30_1_for_nonfinite_fps() {
+    assert_eq!(fps_to_rational(f32::INFINITY), (30, 1));
+    assert_eq!(fps_to_rational(f32::NAN), (30, 1));
 }
