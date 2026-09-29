@@ -229,6 +229,7 @@ export const api = {
       searchRadius,
     }),
   autoReframeClip: (clipId: number) => invoke<void>("auto_reframe_clip", { clipId }),
+  dynamicAutoReframeClip: (clipId: number) => invoke<void>("dynamic_auto_reframe_clip", { clipId }),
   generateMatteForClip: (clipId: number) => invoke<void>("generate_matte_for_clip", { clipId }),
   applyPrivacyBlurToClip: (
     clipId: number,

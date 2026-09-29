@@ -415,6 +415,9 @@ function ClipControls({ clip }: { clip: ClipInstance }) {
       <button className="icon" onClick={() => run(api.autoReframeClip(clip.id))}>
         {t("autoReframe")}
       </button>
+      <button className="icon" onClick={() => run(api.dynamicAutoReframeClip(clip.id))}>
+        {t("dynamicAutoReframe")}
+      </button>
       <button className="icon" onClick={() => run(api.generateMatteForClip(clip.id))}>
         {t("generateMatte")}
       </button>

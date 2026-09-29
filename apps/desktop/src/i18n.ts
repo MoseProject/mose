@@ -210,6 +210,7 @@ const strings = {
   },
   trackMotion: { "pt-BR": "Rastrear movimento", en: "Track motion" },
   autoReframe: { "pt-BR": "Reenquadramento automático", en: "Auto reframe" },
+  dynamicAutoReframe: { "pt-BR": "Reenquadramento dinâmico", en: "Dynamic auto reframe" },
   autoReframeNoSubjectFound: {
     "pt-BR": "Nenhum sujeito encontrado; usando corte centralizado.",
     en: "No subject found; using a centered crop.",

@@ -185,6 +185,7 @@ fn main() {
             commands::highlight_detection::detect_highlights,
             commands::motion_tracking::motion_track_clip,
             commands::auto_reframe::auto_reframe_clip,
+            commands::auto_reframe::dynamic_auto_reframe_clip,
             commands::background_removal::generate_matte_for_clip,
             commands::privacy_blur::apply_privacy_blur_to_clip,
             commands::tts::generate_tts,
