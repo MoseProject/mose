@@ -212,6 +212,9 @@ impl Lut3D {
 /// untouched) — what [`crate::timeline::ClipInstance::lut_path`] means for a live preview frame,
 /// via [`Lut3D::sample`]. No-op if `rgba`'s length isn't a multiple of 4.
 pub fn apply_lut_to_rgba(rgba: &mut [u8], lut: &Lut3D) {
+    if !rgba.len().is_multiple_of(4) {
+        return;
+    }
     for pixel in rgba.as_chunks_mut::<4>().0 {
         let [r, g, b] = lut.sample(
             pixel[0] as f32 / 255.0,
@@ -269,10 +272,10 @@ pub fn apply_vignette_to_rgba(rgba: &mut [u8], width: u32, height: u32, intensit
 /// output for the same input, which is what this function's own unit tests rely on. Uses a
 /// simple xorshift64* PRNG, seeded per pixel from `seed` — fast, deterministic, no external
 /// dependency, and no cryptographic-quality requirement (this is a visual effect, not security-
-/// sensitive). No-op if `rgba` is empty.
+/// sensitive). No-op if `rgba` is empty or not a complete packed RGBA8 buffer.
 pub fn apply_glitch_to_rgba(rgba: &mut [u8], intensity: f32, seed: u64) {
     let intensity = intensity.clamp(0.0, 1.0);
-    if intensity <= 0.0 || rgba.is_empty() {
+    if intensity <= 0.0 || rgba.is_empty() || !rgba.len().is_multiple_of(4) {
         return;
     }
     let strength = (intensity * 40.0).round() as i64;
@@ -484,6 +487,20 @@ mod tests {
             "blue preserved via identity"
         );
         assert_eq!(rgba[3], 200, "alpha untouched");
+    }
+
+    #[test]
+    fn lut_and_glitch_leave_incomplete_rgba_buffers_unchanged() {
+        let lut = Lut3D::parse(&identity_cube(2)).unwrap();
+        let mut lut_buffer = vec![100, 110, 120, 130, 140];
+        let lut_before = lut_buffer.clone();
+        apply_lut_to_rgba(&mut lut_buffer, &lut);
+        assert_eq!(lut_buffer, lut_before);
+
+        let mut glitch_buffer = vec![100, 110, 120, 130, 140];
+        let glitch_before = glitch_buffer.clone();
+        apply_glitch_to_rgba(&mut glitch_buffer, 1.0, 42);
+        assert_eq!(glitch_buffer, glitch_before);
     }
 
     #[test]
