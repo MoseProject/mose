@@ -111,7 +111,12 @@ Known gaps versus the egui shell, in migration order:
    floats `position: fixed` over the whole viewport at `z-index: 5` and can overlap the
    preview's bottom-right corner, making a clip positioned there ungrabbable -- fixed by giving
    `.preview-layer` `z-index: 6`. Still missing: timeline keyframe markers, on-canvas crop/mask
-   handles, per-effect enable indicators the properties panel's collapsible sections give egui. **Text and shape clips (first part) done:** toolbar
+   handles, per-effect enable indicators the properties panel's collapsible sections give egui.
+   **Speed ramp done:** the inspector's two preset buttons (Slow -> Fast, Fast -> Slow) call
+   `apply_speed_ramp_to_clip`, a direct port of `ui::App::apply_speed_ramp_to_selected_clip`
+   (same split-then-reflow algorithm and `SPEED_FACTOR_RANGE` clamp) -- no Clip menu exists in
+   desktop, so this lives as inspector buttons instead of a menu item, same relocation pattern
+   every other egui-menu-only action already got. **Text and shape clips (first part) done:** toolbar
    "Add text"/"Add shape" create a clip at the playhead on an auto-created Text/Shape track via
    `core`'s `TextClip::new`/`ShapeClip::new` and select it; overlays draw on the timeline canvas
    and move/trim/snap/delete through the same drag paths as media clips; the inspector edits
