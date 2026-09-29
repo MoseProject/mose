@@ -54,6 +54,8 @@ pub struct ClipPatch {
     pub transition_duration_secs: Option<f32>,
     pub blend_mode: Option<BlendMode>,
     pub position_keyframes: Option<Vec<Keyframe<Position>>>,
+    pub layer_scale_x: Option<f32>,
+    pub layer_scale_y: Option<f32>,
     pub scale_keyframes: Option<Vec<Keyframe<f32>>>,
     pub rotation_keyframes: Option<Vec<Keyframe<f32>>>,
     pub opacity_keyframes: Option<Vec<Keyframe<f32>>>,
@@ -588,6 +590,12 @@ fn apply_patch(clip: &mut ClipInstance, patch: &ClipPatch) -> bool {
     }
     if let Some(keyframes) = patch.position_keyframes.clone() {
         clip.position_keyframes = keyframes;
+    }
+    if let Some(scale_x) = patch.layer_scale_x {
+        clip.layer_scale_x = scale_x.clamp(CROP_MIN_SIZE, 8.0);
+    }
+    if let Some(scale_y) = patch.layer_scale_y {
+        clip.layer_scale_y = scale_y.clamp(CROP_MIN_SIZE, 8.0);
     }
     if let Some(keyframes) = patch.scale_keyframes.clone() {
         clip.scale_keyframes = keyframes;
