@@ -30,6 +30,7 @@ from selenium import webdriver
 REPO_ROOT = Path(__file__).resolve().parents[1]
 APP_EXE = REPO_ROOT / "target" / "debug" / "oca-desktop.exe"
 DRIVER_PORT = int(os.environ.get("TAURI_DRIVER_PORT", "4444"))
+NATIVE_DRIVER = os.environ.get("TAURI_NATIVE_DRIVER")
 LAUNCH_TIMEOUT_SECS = 20
 
 
@@ -52,16 +53,20 @@ def poll_until(predicate, timeout_secs=5.0, interval_secs=0.1):
 def tauri_driver_process():
     """Starts one tauri-driver for the whole test session; each test gets its own app process
     via the `oca_driver` fixture below, but they all speak WebDriver through this single port."""
+    command = ["tauri-driver", "--port", str(DRIVER_PORT)]
+    if NATIVE_DRIVER:
+        command.extend(["--native-driver", NATIVE_DRIVER])
     process = subprocess.Popen(
-        ["tauri-driver", "--port", str(DRIVER_PORT)],
+        command,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
     time.sleep(2.0)  # tauri-driver has no ready signal; give msedgedriver time to bind.
     if process.poll() is not None:
+        output = process.stdout.read().decode(errors="replace") if process.stdout else ""
         pytest.fail(
-            "tauri-driver exited immediately -- is it installed (`cargo install tauri-driver`) "
-            "and is Microsoft Edge WebView2 present?"
+            "tauri-driver exited immediately. Install a matching msedgedriver.exe or set "
+            f"TAURI_NATIVE_DRIVER. Driver output: {output.strip()}"
         )
     yield process
     process.terminate()
