@@ -98,13 +98,19 @@ Known gaps versus the egui shell, in migration order:
    unambiguous multi-select-compounding case) backs a new `create_compound_clip` command and a
    timeline toolbar button, verified end to end against the real binary
    (`e2e/test_compound_clip.py`) -- wrapping a clip now actually renders correctly in both
-   preview and export, closing the loop this gap's own resolve-side fix opened. `ui::App::
-   insert_sequence_as_compound_clip` ("insert an existing sequence as a compound clip" — a
-   different, less-used entry point than wrapping a selection) and `open_nested_sequence`
-   (double-click to jump into a compound clip's tab, trivially portable via the already-existing
-   `select_sequence` command once the frontend resolves nested_sequence_id -> tab index) remain
-   unported; neither blocks `crates/ui` deletion on its own merit, but are worth picking up if a
-   real workflow needs them.
+   preview and export, closing the loop this gap's own resolve-side fix opened.
+   **`insert_sequence_as_compound_clip` done too:** `avcore::Project::insert_sequence_as_compound_clip`
+   (ported from `ui::App::insert_sequence_as_compound_clip` -- "insert an existing sequence as a
+   compound clip", a secondary entry point distinct from wrapping a selection) backs a new
+   command and a per-tab "insert as compound clip" button in `SequenceTabs.tsx` (disabled for the
+   active tab itself), verified end to end
+   (`e2e/test_insert_sequence_as_compound_clip.py`). Only `open_nested_sequence` (double-click a
+   compound clip on the timeline canvas to jump into its tab) remains unported -- deliberately
+   skipped this pass: it needs new hit-testing/double-click plumbing on the canvas-based timeline
+   (`Timeline.tsx`'s `onPointerDown`, which has no double-click handling at all yet), a higher-risk
+   change for a rarely-used affordance, and is trivially portable later via the already-existing
+   `select_sequence` command once the frontend resolves `nested_sequence_id` -> tab index. Doesn't
+   block `crates/ui` deletion on its own merit.
 2. **Done:** roll/slip/slide tools (timeline toolbar tool switcher, repurposing edge/body drags
    into `avcore::Timeline`'s `Track::roll_edit`/`ClipInstance::slip`/`Track::slide_clip`);
    composite-block body drag (`Timeline::move_clip_with_group`) and "Mesclar em bloco composto";
@@ -303,17 +309,17 @@ Known gaps versus the egui shell, in migration order:
    packaging bug is fixed, the launch crash is diagnosed and non-blocking, the WebDriver harness
    is proven working, gap 3's previously-missing features (on-canvas layer transform, speed-ramp
    preset, collapsible property sections, Text tool, custom shape drawing and vertex editing, the
-   full text/shape property field set, and now compound-clip *creation*) are all shipped, and
-   gap 1's compound-clip preview/export gap is closed too (along with a real shared
-   `resolved_asset_id` bug this fix surfaced, see gap 1's own entry). What's left is narrower and
-   lower-stakes than any prior blocker: `ui::App::insert_sequence_as_compound_clip` ("insert an
-   existing sequence as a compound clip", a secondary entry point distinct from "wrap the current
-   selection" which is now ported) and `open_nested_sequence` (double-click a compound clip to
-   jump into its tab -- trivially portable onto the already-existing `select_sequence` command)
-   remain unported. Neither is load-bearing for a typical editing session the way on-canvas
-   layer transform or the Text tool were. The migration's own top-level strategy ("New crate in
-   parallel, egui untouched until parity") no longer has a concrete, named counter-example
-   blocking it; whether that's "close enough" to delete `crates/ui` is a product call for the
+   full text/shape property field set, compound-clip *creation*, and now "insert an existing
+   sequence as a compound clip" too) are all shipped, and gap 1's compound-clip preview/export
+   gap is closed too (along with a real shared `resolved_asset_id` bug this fix surfaced, see
+   gap 1's own entry). What's left is narrower and lower-stakes than any prior blocker:
+   `open_nested_sequence` (double-click a compound clip on the timeline to jump into its tab --
+   trivially portable onto the already-existing `select_sequence` command once the canvas gets
+   double-click hit-testing) remains unported. Not load-bearing for a typical editing session the
+   way on-canvas layer transform or the Text tool were. The migration's own top-level strategy
+   ("New crate in parallel, egui untouched until parity") no longer has a concrete, named
+   counter-example blocking it; whether that's "close enough" to delete `crates/ui` is a product
+   call for the
    project owner to make, not something this doc should decide unilaterally.
 
 Each gap migrates as its own slice: move any egui-free logic from `crates/ui/src/app/` into
