@@ -67,6 +67,10 @@ pub const DEFAULT_HIGHLIGHT_GRID_SECS: f64 = 0.5;
 /// Default minimum candidate duration — shorter simultaneous spikes are more likely coincidental
 /// overlap than a genuine reaction moment.
 pub const DEFAULT_HIGHLIGHT_MIN_DURATION_SECS: f64 = 1.0;
+/// Hard upper bound for one correlation pass. At the default 0.5s resolution this still covers
+/// nearly six days of continuous timeline, while preventing a corrupt timestamp from requesting
+/// an unbounded allocation.
+pub const MAX_HIGHLIGHT_GRID_WINDOWS: usize = 1_000_000;
 
 /// [`TimelineAmplitudeSample`]s for every waveform bucket of `asset_peaks`/`asset_duration_secs`
 /// that falls within `clip`'s visible `source_in_secs..source_out_secs` range, mapped into
@@ -78,7 +82,16 @@ pub fn clip_amplitude_samples(
     asset_duration_secs: f64,
     clip: &ClipInstance,
 ) -> Vec<TimelineAmplitudeSample> {
-    if clip.speed_factor <= 0.0 || asset_peaks.is_empty() || asset_duration_secs <= 0.0 {
+    if !clip.speed_factor.is_finite()
+        || clip.speed_factor <= 0.0
+        || asset_peaks.is_empty()
+        || !asset_duration_secs.is_finite()
+        || asset_duration_secs <= 0.0
+        || !clip.start_secs.is_finite()
+        || !clip.source_in_secs.is_finite()
+        || !clip.source_out_secs.is_finite()
+        || clip.source_out_secs <= clip.source_in_secs
+    {
         return Vec::new();
     }
 
@@ -91,6 +104,9 @@ pub fn clip_amplitude_samples(
         .iter()
         .enumerate()
         .filter_map(|(i, &(min, max))| {
+            if !min.is_finite() || !max.is_finite() {
+                return None;
+            }
             let bucket_start = i as f64 * bucket_secs;
             let bucket_end = bucket_start + bucket_secs;
             if bucket_end <= clip.source_in_secs || bucket_start >= clip.source_out_secs {
@@ -119,23 +135,50 @@ pub fn detect_highlight_candidates(
     grid_secs: f64,
     min_duration_secs: f64,
 ) -> Vec<HighlightCandidate> {
-    if game_audio_samples.is_empty() || mic_samples.is_empty() || grid_secs <= 0.0 {
+    if game_audio_samples.is_empty()
+        || mic_samples.is_empty()
+        || !grid_secs.is_finite()
+        || grid_secs <= 0.0
+        || !threshold_linear.is_finite()
+        || !min_duration_secs.is_finite()
+    {
         return Vec::new();
     }
 
-    let max_at_secs = |samples: &[TimelineAmplitudeSample]| {
-        samples.iter().map(|s| s.at_secs).fold(f64::MIN, f64::max)
+    let valid_samples = game_audio_samples
+        .iter()
+        .chain(mic_samples)
+        .filter(|sample| {
+            sample.at_secs.is_finite() && sample.at_secs >= 0.0 && sample.amplitude.is_finite()
+        })
+        .collect::<Vec<_>>();
+    let Some(min_at_secs) = valid_samples
+        .iter()
+        .map(|sample| sample.at_secs)
+        .min_by(|a, b| a.total_cmp(b))
+    else {
+        return Vec::new();
     };
-    let timeline_end_secs = max_at_secs(game_audio_samples).max(max_at_secs(mic_samples));
-    let grid_len = ((timeline_end_secs / grid_secs).floor() as usize) + 1;
+    let max_at_secs = valid_samples
+        .iter()
+        .map(|sample| sample.at_secs)
+        .max_by(|a, b| a.total_cmp(b))
+        .expect("valid samples are non-empty");
+    let grid_start_secs = (min_at_secs / grid_secs).floor() * grid_secs;
+    let grid_len = ((max_at_secs - grid_start_secs) / grid_secs).floor() + 1.0;
+    if !grid_len.is_finite() || grid_len > MAX_HIGHLIGHT_GRID_WINDOWS as f64 {
+        return Vec::new();
+    }
+    let grid_len = grid_len as usize;
 
     let grid_max = |samples: &[TimelineAmplitudeSample]| -> Vec<f32> {
         let mut grid = vec![0.0f32; grid_len];
         for sample in samples {
-            if sample.at_secs < 0.0 {
+            if !sample.at_secs.is_finite() || sample.at_secs < 0.0 || !sample.amplitude.is_finite()
+            {
                 continue;
             }
-            let index = (sample.at_secs / grid_secs) as usize;
+            let index = ((sample.at_secs - grid_start_secs) / grid_secs).floor() as usize;
             if let Some(slot) = grid.get_mut(index) {
                 *slot = slot.max(sample.amplitude);
             }
@@ -151,8 +194,8 @@ pub fn detect_highlight_candidates(
     let flush =
         |run: &mut Option<(usize, f32)>, end_index: usize, out: &mut Vec<HighlightCandidate>| {
             if let Some((start_index, score)) = run.take() {
-                let start_secs = start_index as f64 * grid_secs;
-                let end_secs = end_index as f64 * grid_secs;
+                let start_secs = grid_start_secs + start_index as f64 * grid_secs;
+                let end_secs = grid_start_secs + end_index as f64 * grid_secs;
                 if end_secs - start_secs >= min_duration_secs {
                     out.push(HighlightCandidate {
                         start_secs,
@@ -474,6 +517,42 @@ mod tests {
         let mic = vec![sample(1.0, 0.9)];
         assert!(detect_highlight_candidates(&[], &mic, 0.5, 1.0, 1.0).is_empty());
         assert!(detect_highlight_candidates(&mic, &[], 0.5, 1.0, 1.0).is_empty());
+    }
+
+    #[test]
+    fn ignores_non_finite_samples_and_refuses_an_unbounded_time_grid() {
+        let valid_game = vec![sample(10.1, 0.9)];
+        let valid_mic = vec![sample(10.2, 0.9)];
+        assert_eq!(
+            detect_highlight_candidates(
+                &[sample(f64::NAN, 1.0)],
+                &valid_mic,
+                DEFAULT_HIGHLIGHT_THRESHOLD_LINEAR,
+                1.0,
+                1.0,
+            ),
+            Vec::new()
+        );
+        assert_eq!(
+            detect_highlight_candidates(
+                &valid_game,
+                &[sample(1.0e12, 0.9)],
+                DEFAULT_HIGHLIGHT_THRESHOLD_LINEAR,
+                0.5,
+                1.0,
+            ),
+            Vec::new()
+        );
+    }
+
+    #[test]
+    fn correlation_grid_is_anchored_near_the_samples_not_timeline_zero() {
+        let game = vec![sample(10_000.1, 0.9), sample(10_001.1, 0.9)];
+        let mic = vec![sample(10_000.2, 0.9), sample(10_001.2, 0.9)];
+        let candidates = detect_highlight_candidates(&game, &mic, 0.5, 1.0, 1.0);
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].start_secs, 10_000.0);
+        assert_eq!(candidates[0].end_secs, 10_002.0);
     }
 
     fn test_event(source_secs: f64, confidence: f32) -> crate::gameplay_events::GameplayEvent {
