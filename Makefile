@@ -59,37 +59,24 @@ else
   endif
 endif
 
-.PHONY: build release run debug test test-core test-app test-xtask test-e2e bench fmt fmt-check lint graph docs check clean icon-font desktop-install desktop-dev desktop-build test-desktop
+.PHONY: build release test test-core test-xtask test-e2e bench fmt fmt-check lint graph docs check clean desktop-install desktop-dev desktop-build test-desktop
 
-# Debug build of the whole workspace (core, ui, xtask).
+# Debug build of the whole workspace (core, avbridge, ytbridge, desktop, xtask).
 build:
 	cargo build --workspace
 
-# Optimized build. Binary ends up at target/release/ui(.exe).
+# Optimized build. Binary ends up at target/release/oca-desktop(.exe) -- but see
+# `desktop-build` for the one that actually embeds the built frontend (never a bare
+# `cargo build --release`, see apps/desktop/CLAUDE.md).
 release:
 	cargo build --workspace --release
 
-# Run the GUI app (debug build).
-run:
-	cargo run -p ui
-
-# Run the GUI app with a backtrace on panic — use this over `run` when chasing a crash.
-# (Set as a target-specific variable, not `VAR=val cargo run`, so it doesn't depend on make
-# invoking a POSIX shell — this works the same under sh.exe and cmd.exe on Windows.)
-debug: export RUST_BACKTRACE = 1
-debug:
-	cargo run -p ui
-
-# Run every crate's test suite (core's ffprobe/loudness parsers, ui's i18n
-# catalog, xtask's codegraph scanner).
+# Run every crate's test suite (core's ffprobe/loudness parsers, xtask's codegraph scanner).
 test:
 	cargo test --workspace
 
 test-core:
 	cargo test -p core
-
-test-app:
-	cargo test -p ui
 
 test-xtask:
 	cargo test -p xtask
@@ -126,13 +113,6 @@ test-e2e:
 # Compare successive runs to catch performance regressions as the engine grows.
 bench:
 	cargo bench -p core
-
-# Regenerates crates/ui/assets/fonts/lucide-oca.{ttf,json} from spec/architecture/assets/
-# icons/*.svg — run after adding/removing a vendored icon SVG (see
-# spec/architecture/editor-ui-visual-redesign.md's "Icon set" section). Node/npm only, not
-# part of the Cargo build; output is committed like any other generated asset.
-icon-font:
-	cd tools/icon-font && npm install && npm run build
 
 fmt:
 	cargo fmt --all
