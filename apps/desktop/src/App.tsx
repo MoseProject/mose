@@ -21,26 +21,27 @@ export function App() {
     <div className="app">
       <header className="topbar">
         <button
+          data-testid="nav-home"
           className={`icon ${ui.screen === "home" ? "active" : ""}`}
           onClick={() => patchUi({ screen: "home" })}
         >
           {t("home")}
         </button>
-        <button className={`icon ${ui.screen === "prefs" ? "active" : ""}`} onClick={() => patchUi({ screen: "prefs" })}>{t("preferences")}</button>
-        <button className={`icon ${ui.screen === "watch" ? "active" : ""}`} onClick={() => patchUi({ screen: "watch" })}>{t("watchFolder")}</button>
+        <button data-testid="nav-prefs" className={`icon ${ui.screen === "prefs" ? "active" : ""}`} onClick={() => patchUi({ screen: "prefs" })}>{t("preferences")}</button>
+        <button data-testid="nav-watch" className={`icon ${ui.screen === "watch" ? "active" : ""}`} onClick={() => patchUi({ screen: "watch" })}>{t("watchFolder")}</button>
         {session && (
           <>
             <span className="project-name">{session.project.name}</span>
             {session.dirty && <span className="muted">• {t("unsaved")}</span>}
             <span className="spacer" />
-            <button className="icon" disabled={!session.canUndo} onClick={() => run(api.undo())}>
+            <button data-testid="undo" className="icon" disabled={!session.canUndo} onClick={() => run(api.undo())}>
               {t("undo")}
             </button>
-            <button className="icon" disabled={!session.canRedo} onClick={() => run(api.redo())}>
+            <button data-testid="redo" className="icon" disabled={!session.canRedo} onClick={() => run(api.redo())}>
               {t("redo")}
             </button>
-            <button onClick={() => run(api.saveProject(false))}>{t("save")}</button>
-            <button className="primary" onClick={() => run(exportActiveSequence(() => window.confirm(t("exportOverwriteConfirm"))))}>
+            <button data-testid="save-project" onClick={() => run(api.saveProject(false))}>{t("save")}</button>
+            <button data-testid="export" className="primary" onClick={() => run(exportActiveSequence(() => window.confirm(t("exportOverwriteConfirm"))))}>
               {t("export")}
             </button>
           </>

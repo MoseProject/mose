@@ -80,7 +80,7 @@ export function WatchFolder() {
   };
 
   return (
-    <main className="prefs">
+    <main className="prefs" data-testid="screen-watch">
       <h1>{t("watchFolder")}</h1>
       <label>
         {watchPath ?? t("watchFolderChoose")}

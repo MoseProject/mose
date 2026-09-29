@@ -33,7 +33,7 @@ export function Prefs() {
   };
 
   if (!prefs) return null;
-  return <main className="prefs">
+  return <main className="prefs" data-testid="screen-prefs">
     <h1>{t("preferences")}</h1>
     <label>{t("language")}<select value={prefs.locale} onChange={(e) => update({ locale: e.target.value })}><option value="pt_br">Português</option><option value="en">English</option></select></label>
     <label>{t("defaultLufs")}<select value={prefs.lufsProfile} onChange={(e) => update({ lufsProfile: Number(e.target.value) })}><option value={0}>-14 LUFS | YouTube</option><option value={1}>-16 LUFS | Podcast</option><option value={2}>-23 LUFS | Broadcast</option></select></label>

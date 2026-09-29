@@ -148,6 +148,7 @@ export function Editor({ session }: { session: SessionView }) {
     <div
       ref={editorRef}
       className="editor"
+      data-testid="screen-editor"
       style={{
         "--library-width": `${layout.libraryWidth}px`,
         "--inspector-width": `${layout.inspectorWidth}px`,

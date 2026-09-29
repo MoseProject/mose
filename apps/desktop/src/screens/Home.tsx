@@ -31,11 +31,11 @@ export function Home() {
   };
 
   return (
-    <main className="home">
+    <main className="home" data-testid="screen-home">
       <h1>oca</h1>
       <p className="muted">{t("homeSubtitle")}</p>
       <div className="actions">
-        <button className="primary" onClick={createProject}>
+        <button data-testid="new-project" className="primary" onClick={createProject}>
           {t("newProject")}
         </button>
         <button onClick={openProject}>{t("openProject")}</button>
