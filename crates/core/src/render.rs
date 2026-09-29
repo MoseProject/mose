@@ -156,6 +156,8 @@ pub enum RenderError {
     InvalidTimelineSegment,
     /// Loudness targets must be finite before crossing the native encoder boundary.
     InvalidTargetLufs,
+    /// A text overlay cannot be shaped within the engine's bounded resource contract.
+    InvalidTextLayout,
     /// The native multi-track audio mixing pass failed after the video render completed.
     AudioMix(String),
     /// Stream-copying the rendered video together with the mixed audio failed.
@@ -205,6 +207,7 @@ impl std::fmt::Display for RenderError {
                 write!(f, "timeline contains an invalid render segment")
             }
             RenderError::InvalidTargetLufs => write!(f, "loudness target must be finite"),
+            RenderError::InvalidTextLayout => write!(f, "text overlay has invalid layout input"),
             RenderError::AudioMix(message) => write!(f, "audio mix failed: {message}"),
             RenderError::MediaMux(message) => write!(f, "audio mux failed: {message}"),
             RenderError::ReplaceOutput(error) => write!(f, "failed to replace export: {error}"),
@@ -353,6 +356,16 @@ fn validate_timeline_segments(
         validate_segment_list(track, canvas, target_lufs)?;
     }
     Ok(())
+}
+
+fn validate_text_segments(
+    text_segments: &[TextSegment],
+    canvas: Canvas,
+) -> Result<(), RenderError> {
+    text_segments.iter().try_for_each(|segment| {
+        crate::overlay_render::validate_text_segment(segment, canvas.width, canvas.height)
+            .map_err(|_| RenderError::InvalidTextLayout)
+    })
 }
 
 /// Resolves `sequence`'s first non-empty video track into export segments (in `start_secs`
@@ -538,6 +551,7 @@ pub fn render_export_job(
     mut on_progress: impl FnMut(u8),
 ) -> Result<RenderOutcome, RenderError> {
     validate_segment_list(segments, canvas, target_lufs)?;
+    validate_text_segments(text_segments, canvas)?;
     let total_duration_secs: f64 = segments.iter().map(clip_segment_duration_secs).sum();
 
     let outcome = avbridge::encode_timeline_export(
@@ -1395,6 +1409,7 @@ pub fn render_export_job_multi_with_audio(
     mut on_progress: impl FnMut(u8),
 ) -> Result<RenderOutcome, RenderError> {
     validate_timeline_segments(track_segments, canvas, target_lufs)?;
+    validate_text_segments(text_segments, canvas)?;
     if track_segments.len() == 1 {
         let outcome = render_export_job(
             &track_segments[0],

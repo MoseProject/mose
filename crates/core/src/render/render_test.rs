@@ -32,6 +32,34 @@ fn segment() -> avbridge::ClipSegment {
     }
 }
 
+fn text_segment() -> TextSegment {
+    TextSegment {
+        start_secs: 0.0,
+        duration_secs: 2.0,
+        text: "caption".to_string(),
+        font_size: 32.0,
+        font_family: TextFontFamily::Lato,
+        font_style: TextFontStyle::Regular,
+        font_weight: None,
+        color_rgba: [255, 255, 255, 255],
+        background_rgba: [0, 0, 0, 0],
+        background_padding: 0.0,
+        background_corner_radius: 0.0,
+        glyph_byte_range: None,
+        pos_x: 0.0,
+        pos_y: 0.0,
+        opacity_keyframe_expr: String::new(),
+        position_keyframe_expr_x: String::new(),
+        position_keyframe_expr_y: String::new(),
+        scale_keyframe_expr_x: String::new(),
+        scale_keyframe_expr_y: String::new(),
+        rotation_keyframe_expr_x: String::new(),
+        rotation_keyframe_expr_y: String::new(),
+        direction: crate::timeline::TextDirection::Auto,
+        text_align: crate::timeline::TextAlign::Auto,
+    }
+}
+
 #[test]
 fn render_validation_accepts_a_complete_segment() {
     assert!(validate_segment_list(&[segment()], canvas(), -16.0).is_ok());
@@ -89,6 +117,16 @@ fn render_validation_rejects_invalid_canvas_and_loudness_target() {
     assert!(matches!(
         validate_segment_list(&[segment()], canvas(), f32::INFINITY),
         Err(RenderError::InvalidTargetLufs)
+    ));
+}
+
+#[test]
+fn render_validation_rejects_text_that_cannot_be_shaped() {
+    let mut invalid = text_segment();
+    invalid.text = "a".repeat(crate::text_layout::MAX_TEXT_LAYOUT_BYTES + 1);
+    assert!(matches!(
+        validate_text_segments(&[invalid], canvas()),
+        Err(RenderError::InvalidTextLayout)
     ));
 }
 

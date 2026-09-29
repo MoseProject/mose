@@ -42,7 +42,7 @@ use std::ops::Range;
 
 use crate::render::TextSegment;
 use crate::shape_render::point_in_polygon;
-use crate::text_layout::{self, ShapedText};
+use crate::text_layout::{self, ShapedText, TextLayoutEngine, TextLayoutError};
 use crate::timeline::{MaskShape, ShapeClip, ShapeKind, TextClip};
 
 /// Writes `[r, g, b, a]` at `(x, y)` into a `width`×`height` RGBA buffer, `a` already the final
@@ -257,30 +257,49 @@ fn text_horizontal_box(
     }
 }
 
+fn shape_text_segment(
+    engine: &mut TextLayoutEngine,
+    segment: &TextSegment,
+    canvas_width: u32,
+    canvas_height: u32,
+) -> Result<ShapedText, TextLayoutError> {
+    let anchor_x = segment.pos_x * canvas_width as f32;
+    let y = segment.pos_y * canvas_height as f32;
+    let resolved_align =
+        text_layout::resolve_text_align(&segment.text, segment.direction, segment.text_align);
+    let (x, max_width) = text_horizontal_box(resolved_align, anchor_x, canvas_width as f32);
+    engine.try_shape(
+        &segment.text,
+        segment.font_family.clone(),
+        segment.font_style,
+        segment.font_weight,
+        segment.font_size,
+        Some(max_width),
+        (x, y),
+        segment.direction,
+        resolved_align,
+    )
+}
+
+/// Validates a text segment with the exact shaping configuration used for preview and export.
+pub fn validate_text_segment(
+    segment: &TextSegment,
+    canvas_width: u32,
+    canvas_height: u32,
+) -> Result<(), TextLayoutError> {
+    text_layout::with_shared_engine(|engine, _| {
+        shape_text_segment(engine, segment, canvas_width, canvas_height).map(|_| ())
+    })
+}
+
 fn draw_text_segment_onto(
     buf: &mut [u8],
     segment: &TextSegment,
     canvas_width: u32,
     canvas_height: u32,
 ) {
-    let anchor_x = segment.pos_x * canvas_width as f32;
-    let y = segment.pos_y * canvas_height as f32;
-    let resolved_align =
-        text_layout::resolve_text_align(&segment.text, segment.direction, segment.text_align);
-    let (x, max_width) = text_horizontal_box(resolved_align, anchor_x, canvas_width as f32);
-
     text_layout::with_shared_engine(|engine, swash_cache| {
-        let Ok(shaped) = engine.try_shape(
-            &segment.text,
-            segment.font_family.clone(),
-            segment.font_style,
-            segment.font_weight,
-            segment.font_size,
-            Some(max_width),
-            (x, y),
-            segment.direction,
-            resolved_align,
-        ) else {
+        let Ok(shaped) = shape_text_segment(engine, segment, canvas_width, canvas_height) else {
             return;
         };
         if let Some(ink_bbox) =
