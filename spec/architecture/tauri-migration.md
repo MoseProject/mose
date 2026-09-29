@@ -111,8 +111,12 @@ Known gaps versus the egui shell, in migration order:
    floats `position: fixed` over the whole viewport at `z-index: 5` and can overlap the
    preview's bottom-right corner, making a clip positioned there ungrabbable -- fixed by giving
    `.preview-layer` `z-index: 6`. Still missing: timeline keyframe markers, on-canvas crop/mask
-   handles, per-effect enable indicators the properties panel's collapsible sections give egui.
-   **Speed ramp done:** the inspector's two preset buttons (Slow -> Fast, Fast -> Slow) call
+   handles. **Collapsible property sections done:** `Inspector.tsx`'s new `Section` component
+   ports `property.rs`'s `property_section` (a plain `<details>`/`<summary>`, closed by default
+   unless the clip's own values differ from default -- Gain/Speed/Color Adjust/Crop/Mask/
+   Transition/Keyframes each get one). Verified live (`e2e/test_properties_panel_disclosure.py`):
+   a fresh clip's Gain section starts collapsed, expands on click, collapses again on a second
+   click. **Speed ramp done:** the inspector's two preset buttons (Slow -> Fast, Fast -> Slow) call
    `apply_speed_ramp_to_clip`, a direct port of `ui::App::apply_speed_ramp_to_selected_clip`
    (same split-then-reflow algorithm and `SPEED_FACTOR_RANGE` clamp) -- no Clip menu exists in
    desktop, so this lives as inspector buttons instead of a menu item, same relocation pattern
