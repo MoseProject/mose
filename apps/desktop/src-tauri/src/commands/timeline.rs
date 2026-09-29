@@ -198,6 +198,25 @@ pub fn merge_clips_into_composite(app: AppHandle, clip_ids: Vec<u64>) -> Result<
     })
 }
 
+/// Wraps `clip_id` in a new nested sequence ("compound clip") -- see
+/// `avcore::Project::create_compound_clip`'s own doc comment for the full single-clip and
+/// multi-select-compounding rules. `selected_clip_ids` is the webview's current multi-selection
+/// (`uiStore.selectedClipIds`), passed through since the backend has no selection state of its
+/// own. Returns the new nested `Sequence`'s id, or `None` if `clip_id` isn't on a `Video` track.
+#[tauri::command]
+pub fn create_compound_clip(
+    app: AppHandle,
+    clip_id: u64,
+    selected_clip_ids: Vec<u64>,
+) -> Result<Option<u64>, String> {
+    let mut created = None;
+    undoable(&app, |project| {
+        created = project.create_compound_clip(clip_id, &selected_clip_ids);
+        created.is_some()
+    })?;
+    Ok(created)
+}
+
 /// Captures `clip_id` (and its composite group, if any) into the clip clipboard -- `Ctrl+C`.
 /// Not undoable: it doesn't touch the project.
 #[tauri::command]

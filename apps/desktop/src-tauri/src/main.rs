@@ -165,6 +165,7 @@ fn main() {
             commands::timeline::add_track,
             commands::timeline::set_track_flags,
             commands::timeline::merge_clips_into_composite,
+            commands::timeline::create_compound_clip,
             commands::timeline::copy_clip,
             commands::timeline::cut_clip,
             commands::timeline::paste_clip,
