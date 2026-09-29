@@ -1,86 +1,96 @@
-# pytest + pywinauto end-to-end harness for the oca desktop app.
+# pytest + Selenium/WebDriver end-to-end harness for the oca desktop app (Tauri + WebView2).
 #
-# Drives the real target/debug/ui.exe through Windows UI Automation (pywinauto's "uia"
-# backend), which works here because `ui/Cargo.toml` builds eframe with the `accesskit`
-# feature — egui's own widgets (ui.button/ui.label/...) publish an accessible name/role for
-# free. Hand-painted controls that skip egui's widget API don't get this automatically; see
-# the comment on nav_rail.rs's `rail_button` for the one place that was fixed to add it. Any
-# other custom-painted control (media library items, timeline clips) still isn't reachable by
-# name yet — coordinate-based pywinauto calls are the fallback there until they get the same
-# treatment.
+# Drives the real target/debug/oca-desktop.exe through tauri-driver, which wraps Microsoft's
+# msedgedriver and speaks the standard WebDriver protocol against the app's WebView2 window --
+# unlike the retired pywinauto/UI Automation harness (egui had no DOM), interactions here are
+# plain CSS selectors against the real React tree, the same one a browser devtools inspector
+# would show. Prefer `[data-testid=...]` selectors over text content, since display strings are
+# locale-dependent (see apps/desktop/src/i18n.ts).
 #
-# Requires the app to already be built (`cargo build -p ui` / `make build`) and the FFmpeg/
-# GStreamer runtime DLL directories on PATH for the *launched process* — same requirement as
-# running target/debug/ui.exe by hand (see CLAUDE.md's Commands section). `make test-e2e`
-# exports both before invoking pytest; running `pytest` directly needs them exported first.
+# One-time setup:
+#   cargo install tauri-driver
+#   python -m pip install -r e2e/requirements.txt
+# Needs a debug build first (`cargo build -p desktop` / `make desktop-build` debug variant) and
+# the FFmpeg/GStreamer runtime DLL directories on PATH for the *launched process* -- same
+# requirement as running target/debug/oca-desktop.exe by hand (see CLAUDE.md's Commands
+# section). `make test-e2e` exports both before invoking pytest.
+#
+# tauri-driver listens on TAURI_DRIVER_PORT (default 4444) and spawns msedgedriver itself; only
+# one instance may own that port at a time, so it's started once per test session, not per test.
 from __future__ import annotations
 
+import os
 import subprocess
 import time
 from pathlib import Path
 
 import pytest
-from pywinauto import Desktop
+from selenium import webdriver
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-APP_EXE = REPO_ROOT / "target" / "debug" / "ui.exe"
-WINDOW_TITLE = "oca"
+APP_EXE = REPO_ROOT / "target" / "debug" / "oca-desktop.exe"
+DRIVER_PORT = int(os.environ.get("TAURI_DRIVER_PORT", "4444"))
 LAUNCH_TIMEOUT_SECS = 20
 
 
-def poll_for_descendants(window, title, control_type="Text", timeout_secs=5.0, interval_secs=0.1):
-    """Repeatedly re-queries `window`'s accessibility tree for a descendant control matching
-    `title`/`control_type` until one shows up or `timeout_secs` elapses.
+def poll_until(predicate, timeout_secs=5.0, interval_secs=0.1):
+    """Retries `predicate()` until it returns a truthy value or `timeout_secs` elapses.
 
-    A single snapshot isn't enough: the app only repaints every 200ms while idle
-    (OcaApp::ui's request_repaint_after), so a UI change (navigation, a background import
-    landing) isn't necessarily visible to UI Automation the instant the triggering action
-    (click_input, etc.) returns.
+    A single snapshot isn't enough: `preview-tick`/`session-changed` events land asynchronously,
+    so a UI change (navigation, a background import landing) isn't necessarily reflected in the
+    DOM the instant the triggering action (click(), etc.) returns.
     """
     deadline = time.monotonic() + timeout_secs
-    while time.monotonic() < deadline:
-        matches = window.descendants(title=title, control_type=control_type)
-        if matches:
-            return matches
+    result = predicate()
+    while not result and time.monotonic() < deadline:
         time.sleep(interval_secs)
-    return []
+        result = predicate()
+    return result
+
+
+@pytest.fixture(scope="session")
+def tauri_driver_process():
+    """Starts one tauri-driver for the whole test session; each test gets its own app process
+    via the `oca_driver` fixture below, but they all speak WebDriver through this single port."""
+    process = subprocess.Popen(
+        ["tauri-driver", "--port", str(DRIVER_PORT)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    time.sleep(2.0)  # tauri-driver has no ready signal; give msedgedriver time to bind.
+    if process.poll() is not None:
+        pytest.fail(
+            "tauri-driver exited immediately -- is it installed (`cargo install tauri-driver`) "
+            "and is Microsoft Edge WebView2 present?"
+        )
+    yield process
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
 
 
 @pytest.fixture
-def oca_window():
-    """Launches a fresh ui.exe, waits for its main window, yields it, then tears it down."""
+def oca_driver(tauri_driver_process):
+    """Launches a fresh oca-desktop.exe under tauri-driver, yields a Selenium WebDriver bound to
+    its WebView2 window, then tears both down."""
     if not APP_EXE.exists():
-        pytest.fail(f"{APP_EXE} not found — build it first: cargo build -p ui")
+        pytest.fail(f"{APP_EXE} not found -- build it first: cargo build -p desktop")
 
-    process = subprocess.Popen([str(APP_EXE)], cwd=REPO_ROOT)
+    capabilities = {
+        "tauri:options": {"application": str(APP_EXE)},
+        "browserName": "wry",
+    }
+    driver = webdriver.Remote(
+        command_executor=f"http://127.0.0.1:{DRIVER_PORT}",
+        desired_capabilities=capabilities,
+    )
     try:
-        window = _wait_for_window(process)
-        window.wait("visible", timeout=LAUNCH_TIMEOUT_SECS)
-        # Without this, click_input() sends real OS-level mouse events at the right
-        # coordinates but they land on whatever window is actually foreground (often the
-        # terminal that launched pytest) — the click never reaches oca at all, no exception,
-        # it just silently does nothing.
-        window.set_focus()
-        yield window
+        poll_until(
+            lambda: driver.execute_script("return document.readyState") == "complete",
+            timeout_secs=LAUNCH_TIMEOUT_SECS,
+        )
+        yield driver
     finally:
-        if process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-
-
-def _wait_for_window(process: subprocess.Popen):
-    deadline = time.monotonic() + LAUNCH_TIMEOUT_SECS
-    while time.monotonic() < deadline:
-        if process.poll() is not None:
-            pytest.fail(
-                f"ui.exe exited early with code {process.returncode} — check PATH has the "
-                "FFmpeg/GStreamer runtime DLL dirs (CLAUDE.md's Commands section)"
-            )
-        window = Desktop(backend="uia").window(title=WINDOW_TITLE)
-        if window.exists():
-            return window
-        time.sleep(0.25)
-    pytest.fail(f"{WINDOW_TITLE!r} window did not appear within {LAUNCH_TIMEOUT_SECS}s")
+        driver.quit()
