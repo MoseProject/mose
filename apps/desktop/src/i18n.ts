@@ -101,6 +101,7 @@ const strings = {
     en: "Click the preview to create a text graphic at that position.",
   },
   mergeComposite: { "pt-BR": "Mesclar em bloco composto", en: "Merge into composite block" },
+  compoundClip: { "pt-BR": "Criar clipe composto", en: "Create compound clip" },
   templates: { "pt-BR": "📋 Templates", en: "📋 Templates" },
   saveTemplateTitle: { "pt-BR": "Salvar template", en: "Save template" },
   saveTemplateConfirm: { "pt-BR": "Salvar", en: "Save" },

@@ -168,6 +168,9 @@ export const api = {
     invoke<void>("update_clip", { clipId, patch }),
   mergeClipsIntoComposite: (clipIds: number[]) =>
     invoke<void>("merge_clips_into_composite", { clipIds }),
+  /** Resolves to the new nested sequence's id, or null if clipId isn't on a Video track. */
+  createCompoundClip: (clipId: number, selectedClipIds: number[]) =>
+    invoke<number | null>("create_compound_clip", { clipId, selectedClipIds }),
   copyClip: (clipId: number) => invoke<void>("copy_clip", { clipId }),
   cutClip: (clipId: number) => invoke<void>("cut_clip", { clipId }),
   pasteClip: () => invoke<number[]>("paste_clip"),

@@ -560,6 +560,14 @@ export function Timeline({ session }: { session: SessionView }) {
           {t("mergeComposite")}
         </button>
         <button
+          data-testid="create-compound-clip"
+          className="icon"
+          disabled={selected.length === 0}
+          onClick={() => selected[0] !== undefined && run(api.createCompoundClip(selected[0], selected))}
+        >
+          {t("compoundClip")}
+        </button>
+        <button
           className="icon"
           disabled={selected.length !== 1}
           onClick={() => selected[0] !== undefined && run(api.detectSceneCutsForClip(selected[0]))}
