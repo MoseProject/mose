@@ -54,6 +54,22 @@ export function Editor({ session }: { session: SessionView }) {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
       const ctrl = e.ctrlKey || e.metaKey;
+      const drawingPoints = uiStore.get().drawingShapePoints;
+      if (drawingPoints !== null) {
+        // Swallows every key while drawing a custom shape -- only Enter (finish, >=3 points,
+        // ui::App::finish_drawing_custom_shape's own floor) and Escape (cancel) apply, matching
+        // egui's own drawing-mode key handling.
+        if (e.key === "Enter" && drawingPoints.length >= 3) {
+          void run(api.addCustomShapeClip(drawingPoints)).then((id) => {
+            patchUi({ drawingShapePoints: null });
+            if (id != null) patchUi({ selectedClipIds: [id] });
+          });
+        } else if (e.key === "Escape") {
+          patchUi({ drawingShapePoints: null });
+        }
+        e.preventDefault();
+        return;
+      }
       const selected = uiStore.get().selectedClipIds;
       let handled = true;
       if (e.code === "Space") {

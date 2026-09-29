@@ -62,6 +62,11 @@ export interface UiState {
   /** Timeline zoom, in pixels per second. */
   pxPerSec: number;
   error: string | null;
+  /** Click-to-place-vertex custom shape drawing (canvas-fraction coordinates, same space
+   *  ShapeClip::center_x/_y use) -- `null` when not drawing. Mirrors `ui::App::drawing_shape_
+   *  points`; kept here rather than as backend state since nothing is committed until the
+   *  drawing finishes (Enter, >=3 points) or is cancelled (Escape). */
+  drawingShapePoints: [number, number][] | null;
 }
 
 export const sessionStore = createStore<SessionView | null>(null);
@@ -84,6 +89,7 @@ export const uiStore = createStore<UiState>({
   tool: "select",
   pxPerSec: 40,
   error: null,
+  drawingShapePoints: null,
 });
 
 /** An asset being dragged from the media library toward the timeline. */

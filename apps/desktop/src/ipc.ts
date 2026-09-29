@@ -179,6 +179,8 @@ export const api = {
   /** Resolves to the new clip's id, or null when the target track is locked. */
   addTextClip: (text: string) => invoke<number | null>("add_text_clip", { text }),
   addShapeClip: () => invoke<number | null>("add_shape_clip"),
+  addCustomShapeClip: (points: [number, number][]) =>
+    invoke<number | null>("add_custom_shape_clip", { points }),
   moveOverlayClip: (clipId: number, trackId: number, startSecs: number) =>
     invoke<void>("move_overlay_clip", { clipId, trackId, startSecs }),
   trimOverlayClip: (clipId: number, edge: "start" | "end", positionSecs: number) =>

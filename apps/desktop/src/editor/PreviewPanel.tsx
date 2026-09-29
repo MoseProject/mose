@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { formatTime, t } from "../i18n";
 import { api, frameUrl } from "../ipc";
-import { previewStore, run, sessionStore, uiStore, useStore } from "../store";
+import { patchUi, previewStore, run, sessionStore, uiStore, useStore } from "../store";
 import {
   activeTimeline,
   aspectRatioDims,
@@ -71,6 +71,19 @@ export function PreviewPanel() {
     asset = clip && session.project.media_library.find((a) => a.id === clip!.asset_id);
   }
 
+  // Canvas rect (letterboxed to the export aspect ratio within the monitor) and the video's own
+  // fit-preserving-aspect rect inside it -- shared by the layer-transform overlay, its drag
+  // math, and the custom-shape drawing surface below, all of which need the same canvas-fraction
+  // <-> pixel mapping.
+  const texAspect = asset?.resolution ? asset.resolution[0] / asset.resolution[1] : 16 / 9;
+  const aspectRatio = session
+    ? session.project.sequences[session.project.active_sequence].export_settings.aspect_ratio
+    : "Original";
+  const [canvasW, canvasH] = aspectRatioDims(aspectRatio, asset?.resolution ?? [1920, 1080]);
+  const canvasRect = fitRect(monitorSize, canvasW / canvasH);
+  const base = fitRect({ width: canvasRect.width, height: canvasRect.height }, texAspect);
+  const hasCanvas = monitorSize.width > 0 && monitorSize.height > 0;
+
   // Square-root the linear peak so quiet speech still visibly moves the bar.
   const meterWidth = (peak: number) => `${Math.min(1, Math.sqrt(Math.max(0, peak))) * 100}%`;
 
@@ -93,6 +106,19 @@ export function PreviewPanel() {
     setDrag({ mode: "resize", startClientX: e.clientX, startClientY: e.clientY, startScaleX: scaleX, startScaleY: scaleY });
   };
 
+  const onCanvasClick = (e: ReactPointerEvent) => {
+    if (ui.drawingShapePoints === null || !hasCanvas) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const fracX = (e.clientX - rect.left - canvasRect.left) / Math.max(1, canvasRect.width);
+    const fracY = (e.clientY - rect.top - canvasRect.top) / Math.max(1, canvasRect.height);
+    patchUi({
+      drawingShapePoints: [
+        ...ui.drawingShapePoints,
+        [Math.min(1, Math.max(0, fracX)), Math.min(1, Math.max(0, fracY))],
+      ],
+    });
+  };
+
   let body: ReactNode = null;
   if (tick.hasClip && tick.error) {
     body = (
@@ -105,17 +131,7 @@ export function PreviewPanel() {
   }
 
   let overlay: ReactNode = null;
-  if (tick.hasClip && tick.frameSeq > 0 && clip && monitorSize.width > 0 && monitorSize.height > 0) {
-    const texAspect = asset?.resolution ? asset.resolution[0] / asset.resolution[1] : 16 / 9;
-    const aspectRatio = session
-      ? session.project.sequences[session.project.active_sequence].export_settings.aspect_ratio
-      : "Original";
-    const [canvasW, canvasH] = aspectRatioDims(aspectRatio, asset?.resolution ?? [1920, 1080]);
-    const canvasAspect = canvasW / canvasH;
-
-    const canvasRect = fitRect(monitorSize, canvasAspect);
-    const base = fitRect({ width: canvasRect.width, height: canvasRect.height }, texAspect);
-
+  if (tick.hasClip && tick.frameSeq > 0 && clip && hasCanvas && ui.drawingShapePoints === null) {
     const position = ghostPos ?? clip.position_keyframes[0]?.value ?? { x: 0, y: 0 };
     const scaleX = ghostScale?.x ?? clip.layer_scale_x;
     const scaleY = ghostScale?.y ?? clip.layer_scale_y;
@@ -151,16 +167,35 @@ export function PreviewPanel() {
     );
   }
 
+  let drawingOverlay: ReactNode = null;
+  if (ui.drawingShapePoints !== null && hasCanvas) {
+    const points = ui.drawingShapePoints;
+    const toPx = ([x, y]: [number, number]) => [
+      canvasRect.left + x * canvasRect.width,
+      canvasRect.top + y * canvasRect.height,
+    ];
+    const pixelPoints = points.map(toPx);
+    const pathD =
+      pixelPoints.length > 0
+        ? `M ${pixelPoints.map(([x, y]) => `${x} ${y}`).join(" L ")}${points.length >= 3 ? " Z" : ""}`
+        : "";
+    drawingOverlay = (
+      <div className="preview-canvas" data-testid="shape-drawing-surface" style={{ left: 0, top: 0, width: monitorSize.width, height: monitorSize.height, pointerEvents: "none" }}>
+        <svg width={monitorSize.width} height={monitorSize.height} style={{ position: "absolute", left: 0, top: 0 }}>
+          {pathD && <path d={pathD} fill="none" stroke="var(--accent)" strokeWidth={1.5} strokeDasharray={points.length < 3 ? undefined : "4 3"} />}
+          {pixelPoints.map(([x, y], i) => (
+            <circle key={i} cx={x} cy={y} r={4} fill="var(--accent)" />
+          ))}
+        </svg>
+        <div className="drawing-shape-hint">
+          {t("drawCustomShapeHint")} ({points.length} {points.length === 1 ? "pt" : "pts"})
+        </div>
+      </div>
+    );
+  }
+
   const onOverlayPointerMove = (e: ReactPointerEvent) => {
     if (!drag || !clip) return;
-    const texAspect = asset?.resolution ? asset.resolution[0] / asset.resolution[1] : 16 / 9;
-    const aspectRatio = session
-      ? session.project.sequences[session.project.active_sequence].export_settings.aspect_ratio
-      : "Original";
-    const [canvasW, canvasH] = aspectRatioDims(aspectRatio, asset?.resolution ?? [1920, 1080]);
-    const canvasRect = fitRect(monitorSize, canvasW / canvasH);
-    const base = fitRect({ width: canvasRect.width, height: canvasRect.height }, texAspect);
-
     if (drag.mode === "move") {
       const dx = (e.clientX - drag.startClientX) / Math.max(1, canvasRect.width);
       const dy = (e.clientY - drag.startClientY) / Math.max(1, canvasRect.height);
@@ -183,13 +218,16 @@ export function PreviewPanel() {
       });
     }
   };
-  const onOverlayPointerUp = () => {
-    if (!drag) return;
-    if (drag.mode === "move" && ghostPos) commitMove(ghostPos);
-    if (drag.mode === "resize" && ghostScale) commitResize(ghostScale.x, ghostScale.y);
-    setDrag(null);
-    setGhostPos(null);
-    setGhostScale(null);
+  const onOverlayPointerUp = (e: ReactPointerEvent) => {
+    if (drag) {
+      if (drag.mode === "move" && ghostPos) commitMove(ghostPos);
+      if (drag.mode === "resize" && ghostScale) commitResize(ghostScale.x, ghostScale.y);
+      setDrag(null);
+      setGhostPos(null);
+      setGhostScale(null);
+      return;
+    }
+    onCanvasClick(e);
   };
 
   return (
@@ -197,6 +235,7 @@ export function PreviewPanel() {
       <div
         ref={monitorRef}
         className="monitor"
+        data-testid="preview-monitor"
         onPointerMove={onOverlayPointerMove}
         onPointerUp={onOverlayPointerUp}
       >
@@ -205,6 +244,7 @@ export function PreviewPanel() {
         )}
         {body}
         {overlay}
+        {drawingOverlay}
       </div>
       <div className="transport">
         <button className="icon" title={t("stepBack")} onClick={() => run(api.step(-1))}>

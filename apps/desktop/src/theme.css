@@ -399,6 +399,18 @@ input[type="range"] {
   cursor: default;
 }
 
+.drawing-shape-hint {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--surface);
+  padding: 3px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--border-subtle);
+}
+
 .preview-layer-handle {
   position: absolute;
   right: -8px;
@@ -558,6 +570,7 @@ input[type="range"] {
 /* ---- timeline ---- */
 .timeline-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
   padding: 4px 8px;

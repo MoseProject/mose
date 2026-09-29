@@ -589,6 +589,13 @@ export function Timeline({ session }: { session: SessionView }) {
         <button className="icon" onClick={() => void addOverlay(api.addShapeClip())}>
           {t("addShapeClip")}
         </button>
+        <button
+          data-testid="draw-custom-shape"
+          className="icon"
+          onClick={() => patchUi({ drawingShapePoints: [] })}
+        >
+          {t("drawCustomShape")}
+        </button>
         <button className="icon" title={t("addMarker")} onClick={() => run(api.addMarker())}>M</button>
         <button className="icon" title={t("previousMarker")} onClick={() => {
           const previous = markers.filter((m) => m.position_secs < previewStore.get().playheadSecs).sort((a, b) => b.position_secs - a.position_secs)[0];

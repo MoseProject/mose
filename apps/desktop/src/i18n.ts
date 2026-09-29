@@ -78,6 +78,11 @@ const strings = {
   addTextClip: { "pt-BR": "Adicionar texto", en: "Add text" },
   addShapeClip: { "pt-BR": "Adicionar forma", en: "Add shape" },
   addAudioTrack: { "pt-BR": "Adicionar faixa de áudio", en: "Add audio track" },
+  drawCustomShape: { "pt-BR": "Desenhar forma", en: "Draw shape" },
+  drawCustomShapeHint: {
+    "pt-BR": "Clique para adicionar vértices, Enter para finalizar (mín. 3), Esc para cancelar.",
+    en: "Click to add vertices, Enter to finish (3+ needed), Esc to cancel.",
+  },
   addTextTrack: { "pt-BR": "Adicionar faixa de texto", en: "Add text track" },
   addShapeTrack: { "pt-BR": "Adicionar faixa de forma", en: "Add shape track" },
   hideTrack: { "pt-BR": "Ocultar faixa", en: "Hide track" },
