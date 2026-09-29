@@ -104,13 +104,14 @@ Known gaps versus the egui shell, in migration order:
    compound clip", a secondary entry point distinct from wrapping a selection) backs a new
    command and a per-tab "insert as compound clip" button in `SequenceTabs.tsx` (disabled for the
    active tab itself), verified end to end
-   (`e2e/test_insert_sequence_as_compound_clip.py`). Only `open_nested_sequence` (double-click a
-   compound clip on the timeline canvas to jump into its tab) remains unported -- deliberately
-   skipped this pass: it needs new hit-testing/double-click plumbing on the canvas-based timeline
-   (`Timeline.tsx`'s `onPointerDown`, which has no double-click handling at all yet), a higher-risk
-   change for a rarely-used affordance, and is trivially portable later via the already-existing
-   `select_sequence` command once the frontend resolves `nested_sequence_id` -> tab index. Doesn't
-   block `crates/ui` deletion on its own merit.
+   (`e2e/test_insert_sequence_as_compound_clip.py`). **`open_nested_sequence` done too:**
+   `Timeline.tsx`'s canvas gained an `onDoubleClick` handler (it had none before) that hit-tests
+   the double-clicked clip, reads its real `nested_sequence_id` (not the geometry-only
+   `TimelineSpan` the drag/trim code uses), and calls the already-existing `select_sequence`
+   command -- no new backend command needed. Verified end to end
+   (`e2e/test_open_nested_sequence.py`, a real double-click via WebDriver `ActionChains` at the
+   clip's canvas position). This closes the full compound-clip feature set: create, insert an
+   existing sequence, and now enter one.
 2. **Done:** roll/slip/slide tools (timeline toolbar tool switcher, repurposing edge/body drags
    into `avcore::Timeline`'s `Track::roll_edit`/`ClipInstance::slip`/`Track::slide_clip`);
    composite-block body drag (`Timeline::move_clip_with_group`) and "Mesclar em bloco composto";
@@ -305,22 +306,17 @@ Known gaps versus the egui shell, in migration order:
    `e2e/conftest.py`'s `OCA_DESKTOP_EXE` env var can still point at a debug build if it ever
    launches cleanly elsewhere.
 
-   **`crates/ui` is not yet deleted, but every previously-named blocker is now closed.** The
+   **`crates/ui` is not yet deleted, and no previously-named blocker remains open.** The
    packaging bug is fixed, the launch crash is diagnosed and non-blocking, the WebDriver harness
    is proven working, gap 3's previously-missing features (on-canvas layer transform, speed-ramp
    preset, collapsible property sections, Text tool, custom shape drawing and vertex editing, the
-   full text/shape property field set, compound-clip *creation*, and now "insert an existing
-   sequence as a compound clip" too) are all shipped, and gap 1's compound-clip preview/export
-   gap is closed too (along with a real shared `resolved_asset_id` bug this fix surfaced, see
-   gap 1's own entry). What's left is narrower and lower-stakes than any prior blocker:
-   `open_nested_sequence` (double-click a compound clip on the timeline to jump into its tab --
-   trivially portable onto the already-existing `select_sequence` command once the canvas gets
-   double-click hit-testing) remains unported. Not load-bearing for a typical editing session the
-   way on-canvas layer transform or the Text tool were. The migration's own top-level strategy
-   ("New crate in parallel, egui untouched until parity") no longer has a concrete, named
+   full text/shape property field set, and the complete compound-clip feature set -- create,
+   insert an existing sequence, and enter one via double-click) are all shipped, and gap 1's
+   compound-clip preview/export gap is closed too (along with a real shared `resolved_asset_id`
+   bug this fix surfaced, see gap 1's own entry). The migration's own top-level strategy ("New
+   crate in parallel, egui untouched until parity") no longer has a concrete, named
    counter-example blocking it; whether that's "close enough" to delete `crates/ui` is a product
-   call for the
-   project owner to make, not something this doc should decide unilaterally.
+   call for the project owner to make, not something this doc should decide unilaterally.
 
 Each gap migrates as its own slice: move any egui-free logic from `crates/ui/src/app/` into
 `core` first (commit), then add the command(s) (commit), then the React UI (commit), then tests.
