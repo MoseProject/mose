@@ -103,9 +103,20 @@ export interface TextClip {
   font_size: number;
   font_family: string;
   font_style: TextFontStyle;
+  /** `wght` axis value (100..=900); only meaningful for a variable-source family. */
+  font_weight: number | null;
   color_rgba: Rgba;
+  background_rgba: Rgba;
+  background_padding: number;
+  background_corner_radius: number;
+  direction: TextDirection;
   pos_x: number;
   pos_y: number;
+  pos_x_keyframes: Keyframe<number>[];
+  pos_y_keyframes: Keyframe<number>[];
+  scale_keyframes: Keyframe<number>[];
+  rotation_keyframes: Keyframe<number>[];
+  opacity_keyframes: Keyframe<number>[];
   /** Per-word timing from transcription; word highlight only applies when non-empty. */
   words: unknown[];
   highlight_enabled: boolean;
@@ -120,8 +131,15 @@ export interface ShapeClip {
   shape_kind: ShapeKind;
   center_x: number;
   center_y: number;
+  center_x_keyframes: Keyframe<number>[];
+  center_y_keyframes: Keyframe<number>[];
   width: number;
   height: number;
+  width_keyframes: Keyframe<number>[];
+  height_keyframes: Keyframe<number>[];
+  rotation_deg: number;
+  rotation_keyframes: Keyframe<number>[];
+  stroke_thickness_px: number;
   color_rgba: Rgba;
 }
 
@@ -131,6 +149,7 @@ export type ShapeKind = "Ellipse" | { Polygon: [number, number][] };
 export type Rgba = [number, number, number, number];
 export type TextFontStyle = "Regular" | "Bold";
 export type TextAlign = "Auto" | "Left" | "Center" | "Right" | "Start" | "End";
+export type TextDirection = "Auto" | "Ltr" | "Rtl";
 export type ShapePreset = "Ellipse" | "Rectangle" | "Triangle" | "Trapezoid" | "Arrow" | "Custom";
 
 export interface TextClipPatch {
@@ -138,29 +157,52 @@ export interface TextClipPatch {
   fontFamily?: string;
   fontStyle?: TextFontStyle;
   fontSize?: number;
+  fontWeight?: number;
   colorRgba?: Rgba;
+  backgroundRgba?: Rgba;
+  backgroundPadding?: number;
+  backgroundCornerRadius?: number;
+  direction?: TextDirection;
   textAlign?: TextAlign;
   posX?: number;
   posY?: number;
+  posXKeyframes?: Keyframe<number>[];
+  posYKeyframes?: Keyframe<number>[];
+  scaleKeyframes?: Keyframe<number>[];
+  rotationKeyframes?: Keyframe<number>[];
+  opacityKeyframes?: Keyframe<number>[];
   highlightEnabled?: boolean;
   highlightColorRgba?: Rgba;
+  startSecs?: number;
+  durationSecs?: number;
 }
 
 export interface ShapeClipPatch {
   shapeKind?: ShapePreset;
+  /** Shape-local unit-square vertices -- see `ShapeClip.shape_kind`'s `Polygon` variant. */
+  polygonVertices?: [number, number][];
   colorRgb?: [number, number, number];
   opacity?: number;
   centerX?: number;
   centerY?: number;
+  centerXKeyframes?: Keyframe<number>[];
+  centerYKeyframes?: Keyframe<number>[];
   width?: number;
   height?: number;
+  widthKeyframes?: Keyframe<number>[];
+  heightKeyframes?: Keyframe<number>[];
+  rotationDeg?: number;
+  rotationKeyframes?: Keyframe<number>[];
+  strokeThicknessPx?: number;
+  startSecs?: number;
+  durationSecs?: number;
 }
 
 export type FontCategory = "Sans" | "Display" | "Serif" | "Handwritten" | "Monospace" | "International";
 
 /** `commands::overlays::OverlayCatalog`: static font/shape data owned by `core`. */
 export interface OverlayCatalog {
-  fonts: { id: string; displayName: string; category: FontCategory; supportsBold: boolean }[];
+  fonts: { id: string; displayName: string; category: FontCategory; supportsBold: boolean; isVariable: boolean }[];
   shapePresets: { preset: ShapePreset; kind: ShapeKind }[];
 }
 

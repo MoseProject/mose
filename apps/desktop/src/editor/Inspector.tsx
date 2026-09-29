@@ -73,7 +73,7 @@ export function Inspector({ session }: { session: SessionView }) {
  *  selection change (`key={clip.id}` above), so each newly selected clip's sections
  *  recompute their own default-open state fresh, same per-clip behavior egui's
  *  `default_open` argument has. */
-function Section({ label, defaultOpen, testId, children }: { label: string; defaultOpen: boolean; testId?: string; children: ReactNode }) {
+export function Section({ label, defaultOpen, testId, children }: { label: string; defaultOpen: boolean; testId?: string; children: ReactNode }) {
   return (
     <details className="property-section" open={defaultOpen} data-testid={testId}>
       <summary>{label}</summary>

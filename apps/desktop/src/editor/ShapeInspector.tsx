@@ -7,7 +7,8 @@ import { api } from "../ipc";
 import { shapePresetOf } from "../overlays";
 import { run } from "../store";
 import type { ShapeClip, ShapeClipPatch, ShapePreset } from "../types";
-import { Slider } from "./Inspector";
+import { F32KeyframeList } from "./KeyframeEditor";
+import { Section, Slider } from "./Inspector";
 import { ColorField, SelectField, useOverlayCatalog } from "./OverlayFields";
 
 const PRESET_LABELS: Record<ShapePreset, TextKey> = {
@@ -26,6 +27,7 @@ export function ShapeInspector({ clip }: { clip: ShapeClip }) {
   const commit = (patch: ShapeClipPatch) => void run(api.updateShapeClip(clip.id, patch));
   const presets = catalog?.shapePresets ?? [];
   const current = catalog ? shapePresetOf(clip.shape_kind, presets) : null;
+  const vertices = typeof clip.shape_kind === "object" ? clip.shape_kind.Polygon : null;
 
   return (
     <>
@@ -50,6 +52,49 @@ export function ShapeInspector({ clip }: { clip: ShapeClip }) {
           </option>
         )}
       </SelectField>
+
+      {/* Vertex editor -- every preset except Ellipse is already a Polygon under the hood, so
+          this lets the user hand-edit any of them into a custom shape too. */}
+      {vertices && (
+        <Section label={t("shapeVertices")} defaultOpen={true}>
+          <p className="muted" style={{ fontSize: 11, margin: "0 0 4px" }}>
+            {t("shapeVerticesHint")}
+          </p>
+          {vertices.map(([x, y], i) => (
+            <div className="field" key={i}>
+              <label>#{i + 1}</label>
+              <div style={{ display: "flex", gap: 4 }}>
+                <input
+                  type="number"
+                  step={0.01}
+                  value={x}
+                  onChange={(e) => {
+                    const next = vertices.map((v, j) => (j === i ? [Number(e.target.value), v[1]] : v)) as [number, number][];
+                    commit({ polygonVertices: next });
+                  }}
+                />
+                <input
+                  type="number"
+                  step={0.01}
+                  value={y}
+                  onChange={(e) => {
+                    const next = vertices.map((v, j) => (j === i ? [v[0], Number(e.target.value)] : v)) as [number, number][];
+                    commit({ polygonVertices: next });
+                  }}
+                />
+                <button
+                  className="icon"
+                  disabled={vertices.length <= 3}
+                  onClick={() => commit({ polygonVertices: vertices.filter((_, j) => j !== i) })}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          ))}
+        </Section>
+      )}
+
       <ColorField
         label={t("shapeColor")}
         rgb={clip.color_rgba}
@@ -82,6 +127,28 @@ export function ShapeInspector({ clip }: { clip: ShapeClip }) {
         format={percent}
         onCommit={(centerY) => commit({ centerY })}
       />
+      <Section label={t("posXKeyframes")} defaultOpen={clip.center_x_keyframes.length > 0}>
+        <F32KeyframeList
+          label={t("posXKeyframes")}
+          keyframes={clip.center_x_keyframes}
+          min={0}
+          max={1}
+          step={0.01}
+          defaultValue={clip.center_x}
+          onCommit={(centerXKeyframes) => commit({ centerXKeyframes })}
+        />
+      </Section>
+      <Section label={t("posYKeyframes")} defaultOpen={clip.center_y_keyframes.length > 0}>
+        <F32KeyframeList
+          label={t("posYKeyframes")}
+          keyframes={clip.center_y_keyframes}
+          min={0}
+          max={1}
+          step={0.01}
+          defaultValue={clip.center_y}
+          onCommit={(centerYKeyframes) => commit({ centerYKeyframes })}
+        />
+      </Section>
       <Slider
         label={t("width")}
         value={clip.width}
@@ -100,6 +167,81 @@ export function ShapeInspector({ clip }: { clip: ShapeClip }) {
         format={percent}
         onCommit={(height) => commit({ height })}
       />
+      <Section label={t("widthKeyframes")} defaultOpen={clip.width_keyframes.length > 0}>
+        <F32KeyframeList
+          label={t("widthKeyframes")}
+          keyframes={clip.width_keyframes}
+          min={0.01}
+          max={1}
+          step={0.01}
+          defaultValue={clip.width}
+          onCommit={(widthKeyframes) => commit({ widthKeyframes })}
+        />
+      </Section>
+      <Section label={t("heightKeyframes")} defaultOpen={clip.height_keyframes.length > 0}>
+        <F32KeyframeList
+          label={t("heightKeyframes")}
+          keyframes={clip.height_keyframes}
+          min={0.01}
+          max={1}
+          step={0.01}
+          defaultValue={clip.height}
+          onCommit={(heightKeyframes) => commit({ heightKeyframes })}
+        />
+      </Section>
+      <Slider
+        label={t("shapeRotation")}
+        value={clip.rotation_deg}
+        min={0}
+        max={360}
+        step={1}
+        format={(v) => `${v.toFixed(0)}°`}
+        onCommit={(rotationDeg) => commit({ rotationDeg })}
+      />
+      <Section label={t("rotationKeyframes")} defaultOpen={clip.rotation_keyframes.length > 0}>
+        <F32KeyframeList
+          label={t("rotationKeyframes")}
+          keyframes={clip.rotation_keyframes}
+          min={0}
+          max={360}
+          step={1}
+          defaultValue={clip.rotation_deg}
+          onCommit={(rotationKeyframes) => commit({ rotationKeyframes })}
+        />
+      </Section>
+      <div className="field">
+        <label>{t("shapeStroke")}</label>
+        <input
+          type="number"
+          min={0}
+          step={0.5}
+          defaultValue={clip.stroke_thickness_px}
+          onBlur={(e) => commit({ strokeThicknessPx: Number(e.target.value) })}
+        />
+      </div>
+      <p className="muted" style={{ fontSize: 10, margin: 0 }}>
+        {t("shapeStrokeHint")}
+      </p>
+      <div className="field">
+        <label>{t("overlayStart")}</label>
+        <input
+          type="number"
+          min={0}
+          step={0.1}
+          defaultValue={clip.start_secs}
+          onBlur={(e) => commit({ startSecs: Number(e.target.value) })}
+        />
+      </div>
+      <div className="field">
+        <label>{t("overlayDuration")}</label>
+        <input
+          type="number"
+          min={0.1}
+          step={0.1}
+          defaultValue={clip.duration_secs}
+          onBlur={(e) => commit({ durationSecs: Number(e.target.value) })}
+        />
+      </div>
     </>
   );
 }

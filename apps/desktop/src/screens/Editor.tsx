@@ -98,6 +98,8 @@ export function Editor({ session }: { session: SessionView }) {
         void run(api.splitAtPlayhead(selected));
       } else if (!ctrl && e.key.toLowerCase() === "m") {
         void run(api.addMarker());
+      } else if (!ctrl && e.key.toLowerCase() === "t") {
+        patchUi({ tool: "text" });
       } else if (e.key === "Delete" || e.key === "Backspace") {
         if (selected.length > 0) void run(api.deleteClips(selected, e.shiftKey));
       } else if (e.key === "ArrowLeft") {

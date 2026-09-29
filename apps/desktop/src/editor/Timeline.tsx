@@ -44,11 +44,12 @@ import {
 
 /** Seeks sent while scrubbing the ruler are coalesced to preview cadence (egui: 33 ms). */
 const SCRUB_SEEK_INTERVAL_MS = 33;
-const TOOLS: [EditorTool, "toolSelect" | "toolRoll" | "toolSlip" | "toolSlide"][] = [
+const TOOLS: [EditorTool, "toolSelect" | "toolRoll" | "toolSlip" | "toolSlide" | "toolText"][] = [
   ["select", "toolSelect"],
   ["roll", "toolRoll"],
   ["slip", "toolSlip"],
   ["slide", "toolSlide"],
+  ["text", "toolText"],
 ];
 const UI_FONT = "11px 'Segoe UI', system-ui, sans-serif";
 const MONO_FONT = "11px 'Cascadia Mono', Consolas, monospace";

@@ -107,16 +107,21 @@ export function PreviewPanel() {
   };
 
   const onCanvasClick = (e: ReactPointerEvent) => {
-    if (ui.drawingShapePoints === null || !hasCanvas) return;
+    if (!hasCanvas) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const fracX = (e.clientX - rect.left - canvasRect.left) / Math.max(1, canvasRect.width);
-    const fracY = (e.clientY - rect.top - canvasRect.top) / Math.max(1, canvasRect.height);
-    patchUi({
-      drawingShapePoints: [
-        ...ui.drawingShapePoints,
-        [Math.min(1, Math.max(0, fracX)), Math.min(1, Math.max(0, fracY))],
-      ],
-    });
+    const fracX = Math.min(1, Math.max(0, (e.clientX - rect.left - canvasRect.left) / Math.max(1, canvasRect.width)));
+    const fracY = Math.min(1, Math.max(0, (e.clientY - rect.top - canvasRect.top) / Math.max(1, canvasRect.height)));
+
+    if (ui.drawingShapePoints !== null) {
+      patchUi({ drawingShapePoints: [...ui.drawingShapePoints, [fracX, fracY]] });
+      return;
+    }
+    if (ui.tool === "text") {
+      void run(api.addTextClip(t("defaultTextContent"), fracX, fracY)).then((id) => {
+        if (id != null) patchUi({ selectedClipIds: [id] });
+        patchUi({ tool: "select" });
+      });
+    }
   };
 
   let body: ReactNode = null;
@@ -131,7 +136,7 @@ export function PreviewPanel() {
   }
 
   let overlay: ReactNode = null;
-  if (tick.hasClip && tick.frameSeq > 0 && clip && hasCanvas && ui.drawingShapePoints === null) {
+  if (tick.hasClip && tick.frameSeq > 0 && clip && hasCanvas && ui.drawingShapePoints === null && ui.tool !== "text") {
     const position = ghostPos ?? clip.position_keyframes[0]?.value ?? { x: 0, y: 0 };
     const scaleX = ghostScale?.x ?? clip.layer_scale_x;
     const scaleY = ghostScale?.y ?? clip.layer_scale_y;
@@ -236,6 +241,8 @@ export function PreviewPanel() {
         ref={monitorRef}
         className="monitor"
         data-testid="preview-monitor"
+        style={ui.tool === "text" || ui.drawingShapePoints !== null ? { cursor: "crosshair" } : undefined}
+        title={ui.tool === "text" ? t("textToolHint") : ui.drawingShapePoints !== null ? t("drawCustomShapeHint") : undefined}
         onPointerMove={onOverlayPointerMove}
         onPointerUp={onOverlayPointerUp}
       >

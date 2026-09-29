@@ -53,7 +53,7 @@ export type Screen = "home" | "editor" | "prefs" | "watch";
 
 /** Timeline edit tool -- egui's `EditorTool`. "select" is the default drag-to-move/trim mode;
  *  the others repurpose a body/edge drag into the matching Premiere/DaVinci/FCP-style edit. */
-export type EditorTool = "select" | "roll" | "slip" | "slide";
+export type EditorTool = "select" | "roll" | "slip" | "slide" | "text";
 
 export interface UiState {
   screen: Screen;

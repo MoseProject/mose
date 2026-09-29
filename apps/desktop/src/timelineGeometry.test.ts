@@ -75,11 +75,23 @@ function track(id: number, clips: ClipInstance[]): Track {
 }
 
 function textClip(id: number, start: number, duration: number): TextClip {
-  return { id, start_secs: start, duration_secs: duration, text: "Text", font_size: 48, font_family: "lato", font_style: "Regular", color_rgba: [255, 255, 255, 255], pos_x: 0.1, pos_y: 0.85, words: [], highlight_enabled: false, highlight_color_rgba: [255, 220, 0, 255], text_align: "Auto" };
+  return {
+    id, start_secs: start, duration_secs: duration, text: "Text", font_size: 48, font_family: "lato",
+    font_style: "Regular", font_weight: null, color_rgba: [255, 255, 255, 255],
+    background_rgba: [0, 0, 0, 0], background_padding: 0, background_corner_radius: 0, direction: "Auto",
+    pos_x: 0.1, pos_y: 0.85, pos_x_keyframes: [], pos_y_keyframes: [], scale_keyframes: [],
+    rotation_keyframes: [], opacity_keyframes: [], words: [], highlight_enabled: false,
+    highlight_color_rgba: [255, 220, 0, 255], text_align: "Auto",
+  };
 }
 
 function shapeClip(id: number, start: number, duration: number): ShapeClip {
-  return { id, start_secs: start, duration_secs: duration, shape_kind: "Ellipse", center_x: 0.5, center_y: 0.5, width: 0.3, height: 0.3, color_rgba: [255, 255, 255, 255] };
+  return {
+    id, start_secs: start, duration_secs: duration, shape_kind: "Ellipse", center_x: 0.5, center_y: 0.5,
+    center_x_keyframes: [], center_y_keyframes: [], width: 0.3, height: 0.3, width_keyframes: [],
+    height_keyframes: [], rotation_deg: 0, rotation_keyframes: [], stroke_thickness_px: 0,
+    color_rgba: [255, 255, 255, 255],
+  };
 }
 
 const rowY = (index: number) => RULER_HEIGHT + index * TRACK_HEIGHT + TRACK_HEIGHT / 2;
