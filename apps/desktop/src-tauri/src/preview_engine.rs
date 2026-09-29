@@ -15,17 +15,19 @@
 //! one-slot [`LatestFrame`] served by the `oca://` protocol; the webview learns a new one exists
 //! from the throttled [`PREVIEW_TICK`] event.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use avcore::nested_sequence::{cache_dir_for_project, materialize_nested_sequences, NestedSequenceCache};
 use avcore::preview_worker::{
     clip_seek_offset, LiveUpdateKey, PreviewOpenRequest, PreviewSeek, PreviewStatus, PreviewWorker,
 };
 use avcore::timeline::{ClipInstance, ShapeClip, TextClip, Timeline, TrackKind};
-use avcore::{live_preview_updates, DeflickerHistory, Lut3D, MediaAsset, PreviewCpuEffects};
+use avcore::{live_preview_updates, DeflickerHistory, Lut3D, MediaAsset, PreviewCpuEffects, Project};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
@@ -48,8 +50,7 @@ pub type LatestFrame = Arc<Mutex<Option<Arc<Vec<u8>>>>>;
 
 enum Command {
     Content {
-        timeline: Box<Timeline>,
-        media: Vec<MediaAsset>,
+        project: Box<Project>,
     },
     Seek(f64),
     Step(i64),
@@ -98,10 +99,9 @@ impl PreviewEngine {
         }
     }
 
-    pub fn set_content(&self, timeline: Timeline, media: Vec<MediaAsset>) {
+    pub fn set_content(&self, project: Project) {
         let _ = self.tx.send(Command::Content {
-            timeline: Box::new(timeline),
-            media,
+            project: Box::new(project),
         });
     }
 
@@ -200,17 +200,15 @@ fn preview_source_path(asset: &MediaAsset) -> Option<PathBuf> {
 }
 
 /// Resolves which clips cover `at_secs`. The background is the first visible video track with
-/// a clip there; later visible video tracks composite over it. Clips whose media cannot be
-/// found (or compound clips, not yet materialized by this shell) are left out rather than
-/// failing the whole preview.
+/// a clip there; later visible video tracks composite over it. A compound clip resolves via
+/// `resolved_asset_id()` against the synthetic asset `Command::Content`'s handler merges into
+/// `media` (see `materialize_nested_sequences`); clips whose media still can't be found are
+/// left out rather than failing the whole preview.
 pub(crate) fn resolve_layers(timeline: &Timeline, media: &[MediaAsset], at_secs: f64) -> Layers {
     let with_source = |clip: &ClipInstance| {
-        if clip.nested_sequence_id.is_some() {
-            return None;
-        }
         media
             .iter()
-            .find(|asset| asset.id == clip.asset_id)
+            .find(|asset| asset.id == clip.resolved_asset_id())
             .and_then(preview_source_path)
             .map(|path| (path, clip.clone()))
     };
@@ -369,6 +367,10 @@ fn run(
     let mut lut_cache: Option<(String, Option<Lut3D>)> = None;
     let mut deflicker_history: (Option<u64>, DeflickerHistory) = (None, DeflickerHistory::new());
     let mut effect_seed = 0u64;
+    // Persists across `Command::Content`s so an edit unrelated to any nested sequence doesn't
+    // force a re-encode -- mirrors `ui::App`'s own `nested_sequence_render_state` cache, keyed
+    // the same way (`NestedSequenceCache`'s `Timeline`-equality check).
+    let mut nested_cache: HashMap<u64, NestedSequenceCache> = HashMap::new();
 
     loop {
         let mut commands = Vec::new();
@@ -381,12 +383,22 @@ fn run(
 
         for command in commands {
             match command {
-                Command::Content {
-                    timeline: next,
-                    media: next_media,
-                } => {
-                    timeline = *next;
-                    media = next_media;
+                Command::Content { project: next } => {
+                    timeline = next.timeline().clone();
+                    media = next.media_library.clone();
+                    // A real FFmpeg re-encode per nested sequence -- blocks this dedicated
+                    // preview thread only (never the UI thread or a session-mutating command),
+                    // same "known cost, deliberately not hidden" tradeoff `nested_sequence`'s own
+                    // doc comment records for `ui`'s synchronous export path. Cached by `Timeline`
+                    // equality, so an edit that doesn't touch a nested sequence's content is free.
+                    let cache_dir = cache_dir_for_project(&next);
+                    match materialize_nested_sequences(&next, &timeline, &cache_dir, &mut nested_cache)
+                    {
+                        Ok(nested_assets) => media.extend(nested_assets.into_values()),
+                        Err(error) => {
+                            tracing::warn!(%error, "failed to materialize nested sequence for preview");
+                        }
+                    }
                     playhead = playhead.clamp(0.0, timeline.duration_secs());
                     dirty = true;
                 }

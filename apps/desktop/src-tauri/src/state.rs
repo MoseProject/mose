@@ -10,6 +10,7 @@
 //! [`SessionView`] as the `session-changed` event, so undo, persistence and preview all read
 //! one source of truth -- the same role `ui::App` plays for the egui shell.
 
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use avcore::timeline::{ClipFormatting, ClipInstance, TrackKind};
@@ -141,6 +142,11 @@ pub struct AppState {
     /// Live toggle for `telemetry.rs`'s resource samplers -- checked each sampling tick, kept in
     /// sync with `prefs.telemetry_enabled` by `commands::prefs::set_prefs`.
     pub telemetry_enabled: Arc<std::sync::atomic::AtomicBool>,
+    /// [`avcore::nested_sequence::materialize_nested_sequences`]'s cache for `start_export` --
+    /// separate from `PreviewEngine`'s own copy (it lives on that dedicated thread), so a
+    /// compound clip's nested content isn't re-rendered on every export of the same sequence.
+    pub nested_sequence_cache:
+        Mutex<HashMap<u64, avcore::nested_sequence::NestedSequenceCache>>,
 }
 
 impl AppState {
@@ -163,10 +169,7 @@ impl AppState {
 /// Every command that mutates [`Session`] ends with this.
 pub fn publish(app: &AppHandle, session: &Session) {
     let state = app.state::<AppState>();
-    state.preview.set_content(
-        session.project.timeline().clone(),
-        session.project.media_library.clone(),
-    );
+    state.preview.set_content(session.project.clone());
     if let Err(error) = app.emit(SESSION_CHANGED, session.view()) {
         tracing::warn!(%error, "failed to emit session-changed");
     }

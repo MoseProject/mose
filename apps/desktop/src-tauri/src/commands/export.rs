@@ -40,8 +40,27 @@ pub fn start_export(app: AppHandle, path: String, rename: bool) -> Result<u64, S
     let (prepared, title) = {
         let state = app.state::<AppState>();
         let session = state.session();
+        // A compound clip needs its nested sequence rendered and merged in first -- same
+        // synchronous, blocks-this-call tradeoff `ui::App`'s own export path takes (see
+        // `avcore::nested_sequence`'s doc comment), cached across exports via
+        // `AppState::nested_sequence_cache` so re-exporting the same sequence doesn't re-render
+        // unchanged nested content.
+        let project = {
+            let cache_dir = avcore::nested_sequence::cache_dir_for_project(&session.project);
+            let mut cache = state.nested_sequence_cache.lock().unwrap();
+            let nested_assets = avcore::nested_sequence::materialize_nested_sequences(
+                &session.project,
+                session.project.timeline(),
+                &cache_dir,
+                &mut cache,
+            )
+            .map_err(|e| e.to_string())?;
+            let mut project = session.project.clone();
+            project.media_library.extend(nested_assets.into_values());
+            project
+        };
         (
-            prepare_export(&session.project)?,
+            prepare_export(&project)?,
             session.project.active_sequence().name.clone(),
         )
     };

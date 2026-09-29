@@ -99,6 +99,7 @@ fn main() {
                 error_reporter: Mutex::new(error_reporter),
                 pending_crash_review: Mutex::new(pending_crash_review),
                 telemetry_enabled,
+                nested_sequence_cache: Mutex::new(std::collections::HashMap::new()),
             });
             autosave::spawn(handle);
             Ok(())
