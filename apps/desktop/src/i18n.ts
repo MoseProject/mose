@@ -162,6 +162,33 @@ const strings = {
     en: "yt-dlp is not installed.",
   },
 
+  crashReviewOffer: {
+    "pt-BR": "O oca fechou inesperadamente na última vez. Você quer enviar um relatório para ajudar a corrigir isso?",
+    en: "oca closed unexpectedly last time. Would you like to send a report to help fix this?",
+  },
+  crashReviewShowPayload: { "pt-BR": "Ver dados do relatório", en: "Show report payload" },
+  crashReviewSendOnce: { "pt-BR": "Enviar uma vez", en: "Send once" },
+  crashReviewAlwaysSend: { "pt-BR": "Sempre enviar relatórios", en: "Always send error reports" },
+  crashReviewDoNotSend: { "pt-BR": "Não enviar", en: "Do not send" },
+
+  telemetryEnabled: { "pt-BR": "Telemetria local (nunca enviada)", en: "Local telemetry (never sent)" },
+  errorReportingConsent: { "pt-BR": "Sempre enviar relatórios de erro", en: "Always send error reports" },
+  queuedReports: { "pt-BR": "relatórios na fila", en: "queued reports" },
+  deleteQueuedReports: { "pt-BR": "Excluir relatórios na fila", en: "Delete queued reports" },
+
+  checkForUpdate: { "pt-BR": "Verificar atualizações", en: "Check for updates" },
+  updateCheckUpToDate: { "pt-BR": "Você está usando a versão mais recente.", en: "You're up to date." },
+  updateCheckFailed: { "pt-BR": "Falha ao verificar atualizações.", en: "Failed to check for updates." },
+  updateAvailable: { "pt-BR": "Nova versão disponível", en: "New version available" },
+  updateInstall: { "pt-BR": "Instalar", en: "Install" },
+  updateOpenRelease: { "pt-BR": "Abrir página de lançamento", en: "Open release page" },
+  updateInstalled: {
+    "pt-BR": "Atualização instalada. Reinicie para aplicar.",
+    en: "Update installed. Restart to apply.",
+  },
+  updateInstallFailed: { "pt-BR": "Falha ao instalar atualização.", en: "Failed to install update." },
+  updateRestart: { "pt-BR": "Reiniciar", en: "Restart" },
+
   silenceReview: { "pt-BR": "Revisar silêncio", en: "Review silence" },
   silenceReviewTitle: { "pt-BR": "Revisar silêncio", en: "Review silence" },
   silenceReviewEmpty: { "pt-BR": "Nenhum silêncio encontrado.", en: "No silence found." },

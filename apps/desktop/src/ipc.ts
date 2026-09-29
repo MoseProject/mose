@@ -30,6 +30,9 @@ import type {
   TtsEvent,
   WatchFolderEvent,
   YoutubeDownloadEvent,
+  CrashReview,
+  ErrorReportingConsent,
+  UpdateCheckEvent,
 } from "./types";
 
 export const events = {
@@ -45,6 +48,7 @@ export const events = {
   tts: "tts-event",
   watchFolder: "watch-folder-event",
   youtubeDownload: "youtube-download-event",
+  updateCheck: "update-check-event",
 } as const;
 
 export function onSession(handler: (view: SessionView) => void): Promise<UnlistenFn> {
@@ -91,6 +95,10 @@ export function onTts(handler: (event: TtsEvent) => void): Promise<UnlistenFn> {
 
 export function onWatchFolder(handler: (event: WatchFolderEvent) => void): Promise<UnlistenFn> {
   return listen<WatchFolderEvent>(events.watchFolder, (e) => handler(e.payload));
+}
+
+export function onUpdateCheck(handler: (event: UpdateCheckEvent) => void): Promise<UnlistenFn> {
+  return listen<UpdateCheckEvent>(events.updateCheck, (e) => handler(e.payload));
 }
 
 export function onYoutubeDownload(
@@ -249,6 +257,20 @@ export const api = {
   downloadYoutube: (url: string, format: "mp4" | "mp3", quality: string) =>
     invoke<void>("download_youtube", { url, format, quality }),
   cancelYoutubeDownload: () => invoke<void>("cancel_youtube_download"),
+
+  getPendingCrashReview: () => invoke<CrashReview | null>("get_pending_crash_review"),
+  sendCrashOnce: () => invoke<void>("send_crash_once"),
+  alwaysSendCrash: () => invoke<void>("always_send_crash"),
+  dismissCrashReview: () => invoke<void>("dismiss_crash_review"),
+  setErrorReportingConsent: (consent: ErrorReportingConsent) =>
+    invoke<void>("set_error_reporting_consent", { consent }),
+  getQueuedReportCount: () => invoke<number>("get_queued_report_count"),
+  deleteQueuedReports: () => invoke<void>("delete_queued_reports"),
+
+  checkForUpdate: () => invoke<void>("check_for_update"),
+  installAvailableUpdate: (version: string) =>
+    invoke<void>("install_available_update", { version }),
+  restartAfterUpdate: () => invoke<void>("restart_after_update"),
 
   addMarker: (kind: MarkerKind = "Standard") => invoke<void>("add_marker", { kind }),
   removeMarker: (markerId: number) => invoke<void>("remove_marker", { markerId }),

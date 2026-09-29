@@ -231,7 +231,27 @@ export interface PrefsView {
   backgroundRemovalModelPath: string;
   ttsModelPath: string;
   soundLibraryPath: string;
+  errorReportingConsent: ErrorReportingConsent;
+  lastReviewedCrashUnix: number;
+  telemetryEnabled: boolean;
 }
+
+export type ErrorReportingConsent = "disabled" | "always_send";
+
+export interface CrashReview {
+  timestamp: number;
+  appVersion: string;
+  location: string;
+  message: string;
+  payloadPreview: string;
+}
+
+export type UpdateCheckEvent =
+  | { type: "newerVersionAvailable"; version: string; htmlUrl: string; autoUpdateAvailable: boolean }
+  | { type: "upToDate" }
+  | { type: "failed" }
+  | { type: "installed"; version: string }
+  | { type: "installFailed" };
 
 export interface LibraryTrack {
   name: string;

@@ -1,6 +1,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { localeSnapshot, subscribeLocale, t } from "./i18n";
 import { api, exportActiveSequence } from "./ipc";
+import { CrashReviewModal } from "./screens/CrashReviewModal";
 import { Editor } from "./screens/Editor";
 import { Home } from "./screens/Home";
 import { Prefs } from "./screens/Prefs";
@@ -64,6 +65,7 @@ export function App() {
           </button>
         </div>
       )}
+      <CrashReviewModal />
     </div>
   );
 }
