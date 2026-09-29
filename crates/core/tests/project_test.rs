@@ -358,7 +358,9 @@ fn create_compound_clip_wraps_a_single_clip_into_a_new_nested_sequence() {
     };
     project.sequences[0].timeline.tracks = vec![compound_video_track(1, vec![clip])];
 
-    let new_sequence_id = project.create_compound_clip(7, &[7]).expect("should compound");
+    let new_sequence_id = project
+        .create_compound_clip(7, &[7])
+        .expect("should compound");
 
     assert_eq!(project.sequences.len(), 2);
     let nested = project
@@ -369,15 +371,25 @@ fn create_compound_clip_wraps_a_single_clip_into_a_new_nested_sequence() {
     assert_eq!(nested.timeline.tracks.len(), 1);
     let inner = &nested.timeline.tracks[0].clips[0];
     assert_eq!(inner.id, 7);
-    assert_eq!(inner.start_secs, 0.0, "rebased to the nested track's own 0.0");
+    assert_eq!(
+        inner.start_secs, 0.0,
+        "rebased to the nested track's own 0.0"
+    );
     assert_eq!(inner.source_in_secs, 0.5);
     assert_eq!(inner.source_out_secs, 3.5);
 
     let wrapper = &project.sequences[0].timeline.tracks[0].clips[0];
     assert_eq!(wrapper.id, 7, "wrapper reuses the original clip's own id");
     assert_eq!(wrapper.nested_sequence_id, Some(new_sequence_id));
-    assert_eq!(wrapper.start_secs, 2.0, "wrapper keeps the original timeline position");
-    assert_eq!(wrapper.duration_secs(), 3.0, "wrapper spans the nested content's own length");
+    assert_eq!(
+        wrapper.start_secs, 2.0,
+        "wrapper keeps the original timeline position"
+    );
+    assert_eq!(
+        wrapper.duration_secs(),
+        3.0,
+        "wrapper spans the nested content's own length"
+    );
 }
 
 #[test]
@@ -416,8 +428,7 @@ fn create_compound_clip_compounds_the_whole_multi_selection_when_unambiguous() {
         source_out_secs: 1.0,
         ..compound_clip(2, None)
     };
-    project.sequences[0].timeline.tracks =
-        vec![compound_video_track(1, vec![first, second])];
+    project.sequences[0].timeline.tracks = vec![compound_video_track(1, vec![first, second])];
 
     let new_sequence_id = project
         .create_compound_clip(1, &[1, 2])
@@ -434,12 +445,23 @@ fn create_compound_clip_compounds_the_whole_multi_selection_when_unambiguous() {
         .map(|c| c.id)
         .collect();
     inner_ids.sort();
-    assert_eq!(inner_ids, vec![1, 2], "both selected clips moved into the nested sequence");
+    assert_eq!(
+        inner_ids,
+        vec![1, 2],
+        "both selected clips moved into the nested sequence"
+    );
 
     assert_eq!(project.sequences[0].timeline.tracks[0].clips.len(), 1);
     let wrapper = &project.sequences[0].timeline.tracks[0].clips[0];
-    assert_eq!(wrapper.start_secs, 0.0, "spans from the earliest member's start");
-    assert_eq!(wrapper.duration_secs(), 3.0, "spans through the latest member's own end");
+    assert_eq!(
+        wrapper.start_secs, 0.0,
+        "spans from the earliest member's start"
+    );
+    assert_eq!(
+        wrapper.duration_secs(),
+        3.0,
+        "spans through the latest member's own end"
+    );
 }
 
 #[test]
@@ -472,6 +494,66 @@ fn create_compound_clip_falls_back_to_single_clip_when_selection_already_has_a_c
         .clips
         .iter()
         .any(|c| c.id == 2 && c.nested_sequence_id == Some(99)));
+}
+
+#[test]
+fn insert_sequence_as_compound_clip_appends_to_the_active_timelines_video_track() {
+    let mut project = test_project();
+    let nested_id = project.new_sequence("Nested".to_string());
+    project.sequences[1].timeline.tracks =
+        vec![compound_video_track(1, vec![compound_clip(1, None)])];
+    project.active_sequence = 0;
+    project.sequences[0].timeline.tracks = vec![compound_video_track(1, vec![])];
+
+    let inserted = project.insert_sequence_as_compound_clip(nested_id);
+
+    assert!(inserted);
+    let clips = &project.sequences[0].timeline.tracks[0].clips;
+    assert_eq!(clips.len(), 1);
+    assert_eq!(clips[0].nested_sequence_id, Some(nested_id));
+    assert_eq!(clips[0].start_secs, 0.0, "appends at the end of an empty track");
+    assert_eq!(clips[0].duration_secs(), 1.0, "matches the nested sequence's own duration");
+}
+
+#[test]
+fn insert_sequence_as_compound_clip_creates_a_video_track_when_none_exists() {
+    let mut project = test_project();
+    let nested_id = project.new_sequence("Nested".to_string());
+    project.sequences[1].timeline.tracks =
+        vec![compound_video_track(1, vec![compound_clip(1, None)])];
+    project.active_sequence = 0;
+    assert!(project.sequences[0].timeline.tracks.is_empty());
+
+    let inserted = project.insert_sequence_as_compound_clip(nested_id);
+
+    assert!(inserted);
+    assert_eq!(project.sequences[0].timeline.tracks.len(), 1);
+    assert_eq!(project.sequences[0].timeline.tracks[0].kind, TrackKind::Video);
+}
+
+#[test]
+fn insert_sequence_as_compound_clip_is_a_no_op_for_the_active_sequence_itself() {
+    let mut project = test_project();
+    let self_id = project.sequences[0].id;
+
+    assert!(!project.insert_sequence_as_compound_clip(self_id));
+    assert!(project.sequences[0].timeline.tracks.is_empty());
+}
+
+#[test]
+fn insert_sequence_as_compound_clip_is_a_no_op_for_a_missing_sequence() {
+    let mut project = test_project();
+
+    assert!(!project.insert_sequence_as_compound_clip(999));
+}
+
+#[test]
+fn insert_sequence_as_compound_clip_is_a_no_op_for_an_empty_nested_sequence() {
+    let mut project = test_project();
+    let nested_id = project.new_sequence("Empty".to_string());
+    project.active_sequence = 0;
+
+    assert!(!project.insert_sequence_as_compound_clip(nested_id));
 }
 
 #[test]
