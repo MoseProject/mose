@@ -170,10 +170,26 @@ Known gaps versus the egui shell, in migration order:
    every command error path -- a much larger, separate refactor than this pass's scope). Editor
    layout persistence is done per project: the resizable library, inspector, and timeline
    dimensions write `Project::panel_layout` and restore when that project is opened.
-7. Packaging: Windows/Linux/macOS assembly scripts now package the Tauri `oca-desktop` binary,
-   retaining the established resource layout and installer contract. Remaining release work is
-   to port `e2e/` from pywinauto to WebDriver (`tauri-driver`) and retire `crates/ui` only after
-   the Tauri release bundles are validated on every target platform.
+7. Packaging: **in progress.** Windows/Linux/macOS `packaging/*` scripts, `windows-installer.iss`,
+   the Debian/AppImage/desktop-entry metadata, `validate_bundle.py`/`validate_deb.py`, and
+   `release.yml` now build and ship `oca-desktop(.exe)` instead of `ui(.exe)` (the frontend is
+   rebuilt via `npm run build` before `cargo build --release` so the embedded `frontendDist` is
+   fresh); `windows-installer.iss` warns if WebView2 Runtime is missing instead of bundling an
+   unpinned bootstrapper. `e2e/conftest.py` now drives `oca-desktop.exe` through
+   `tauri-driver`/Selenium instead of pywinauto; `test_launch.py`/`test_navigation.py` are
+   ported against real `data-testid` selectors added to `App.tsx`/`Home.tsx`/`Editor.tsx`/
+   `Prefs.tsx`/`WatchFolder.tsx`. The other ten e2e files are quarantined in
+   `e2e/legacy_pywinauto/` (excluded from collection; its `README.md` explains the remaining
+   port work and dependency order) rather than left broken or guess-ported, because porting
+   their pixel-precise egui canvas interactions needs a live run this environment can't
+   currently do: a debug `oca-desktop.exe` builds clean but aborts on launch with a "Microsoft
+   Visual C++ Runtime Library" dialog before any log line is written (no crash file, no fresh
+   `oca.log`) -- plausibly the CRT-linkage conflict `cargo build`'s own `LNK4098 defaultlib
+   conflicts` warnings point at for the `desktop` binary specifically. **`crates/ui` is not
+   deleted.** Deleting the only other shipping shell before that launch crash is fixed and
+   reproduced-working on a real machine would leave the project without a working editor at
+   all -- the "critical problem" carve-out this gap's own autonomous-execution instruction
+   allows for.
 
 Each gap migrates as its own slice: move any egui-free logic from `crates/ui/src/app/` into
 `core` first (commit), then add the command(s) (commit), then the React UI (commit), then tests.

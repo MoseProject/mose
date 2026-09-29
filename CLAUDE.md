@@ -98,15 +98,18 @@ Single test: `cargo test -p core --test probe_test measure_loudness` or
 and `.clang-format`. Skipping `npm install` just means no hook runs; `make fmt`/`cargo fmt`
 still work standalone.
 
-**End-to-end tests** (`e2e/`) drive the real `ui.exe` via Windows UI Automation
-(`pytest` + `pywinauto`, `backend="uia"`). One-time setup:
-`python -m pip install -r e2e/requirements.txt`. **Use a real Python, not a Windows Store
-alias** — a Store-packaged `python.exe` carries MSIX package identity that breaks DLL
-loading for spawned child processes (`ui.exe` crashes with `STATUS_DLL_NOT_FOUND` even with
-`PATH` set correctly), while the identical binary launched directly from PowerShell works
-fine. Needs a debug build first and FFmpeg/GStreamer DLL dirs on `PATH` (`make test-e2e`
-exports both). The `oca_window` fixture calls `set_focus()` before yielding — without it,
-synthetic clicks land on whatever window has focus.
+**End-to-end tests** (`e2e/`) drive the real `oca-desktop.exe` via WebDriver
+(`pytest` + `selenium`, through `tauri-driver`'s WebView2/msedgedriver bridge) — ported from the
+egui shell's pywinauto/UI-Automation harness once the desktop shell had a real DOM to target.
+One-time setup: `cargo install tauri-driver` and
+`python -m pip install -r e2e/requirements.txt`. Needs a debug build first
+(`cargo build -p desktop`) and FFmpeg/GStreamer DLL dirs on `PATH` (`make test-e2e` exports
+both). Only `test_launch.py`/`test_navigation.py` are ported so far; `e2e/legacy_pywinauto/`
+holds the ten still-untouched pywinauto tests (excluded from collection via `e2e/pytest.ini`)
+and its `README.md` explains why and in what order to port them. **Use a real Python, not a
+Windows Store alias** — a Store-packaged `python.exe` carries MSIX package identity that breaks
+DLL loading for spawned child processes even with `PATH` set correctly, while the identical
+binary launched directly from PowerShell works fine.
 
 ## Architecture
 

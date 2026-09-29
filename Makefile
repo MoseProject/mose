@@ -112,9 +112,10 @@ test-desktop:
 	cd apps/desktop && npm run typecheck && npm test
 	cargo test -p desktop
 
-# End-to-end tests (e2e/, pytest + pywinauto) driving the real built ui.exe through Windows
-# UI Automation. Needs a debug build first (this target doesn't build one for you, since e2e
-# runs typically follow a `make build`/`make run` you already did) and Python deps installed
+# End-to-end tests (e2e/, pytest + selenium) driving the real built oca-desktop.exe through
+# tauri-driver's WebDriver bridge. Needs a debug build first (this target doesn't build one for
+# you, since e2e runs typically follow a `make desktop-build`/`make desktop-dev` you already
+# did), `tauri-driver` installed once (`cargo install tauri-driver`), and Python deps installed
 # once: `python -m pip install -r e2e/requirements.txt`.
 test-e2e:
 	cd e2e && python -m pytest
