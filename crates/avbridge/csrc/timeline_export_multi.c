@@ -118,7 +118,9 @@ static int build_vfilter_descr(const ClipSegment *seg, int cw, int ch, int fps_n
     char setpts[192];
     build_setpts_str(seg, seg->source_out_secs - seg->source_in_secs, setpts, sizeof(setpts));
 
-    char trans[2048] = "";
+    /* A Zoom transition expands `inside` three times, alongside six coordinate
+       expressions. Keep this comfortably above their bounded worst-case expansion. */
+    char trans[8192] = "";
     if (seg->transition_in != 0) {
         double tf = (double)seg->transition_duration_secs * (double)fps_num / (double)fps_den;
         if (tf < 1.0) tf = 1.0;
@@ -139,7 +141,7 @@ static int build_vfilter_descr(const ClipSegment *seg, int cw, int ch, int fps_n
                      tf, tf, tf);
             break;
         case 3: {
-            char z[160], sx[224], sy[224], inside[768];
+            char z[160], sx[224], sy[224], inside[1024];
             snprintf(z, sizeof(z), "(0.5+0.5*lt(N,%g)*N/%g+0.5*gte(N,%g))", tf, tf, tf);
             snprintf(sx, sizeof(sx), "((X-W/2)/%s+W/2)", z);
             snprintf(sy, sizeof(sy), "((Y-H/2)/%s+H/2)", z);
