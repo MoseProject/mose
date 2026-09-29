@@ -310,17 +310,25 @@ Known gaps versus the egui shell, in migration order:
    `e2e/conftest.py`'s `OCA_DESKTOP_EXE` env var can still point at a debug build if it ever
    launches cleanly elsewhere.
 
-   **`crates/ui` is not yet deleted, and no previously-named blocker remains open.** The
-   packaging bug is fixed, the launch crash is diagnosed and non-blocking, the WebDriver harness
-   is proven working, gap 3's previously-missing features (on-canvas layer transform, speed-ramp
-   preset, collapsible property sections, Text tool, custom shape drawing and vertex editing, the
-   full text/shape property field set, and the complete compound-clip feature set -- create,
-   insert an existing sequence, and enter one via double-click) are all shipped, and gap 1's
-   compound-clip preview/export gap is closed too (along with a real shared `resolved_asset_id`
-   bug this fix surfaced, see gap 1's own entry). The migration's own top-level strategy ("New
-   crate in parallel, egui untouched until parity") no longer has a concrete, named
-   counter-example blocking it; whether that's "close enough" to delete `crates/ui` is a product
-   call for the project owner to make, not something this doc should decide unilaterally.
+   **`crates/ui` deleted (2026-09-29).** The packaging bug is fixed, the launch crash is
+   diagnosed and non-blocking, the WebDriver harness is proven working, gap 3's
+   previously-missing features (on-canvas layer transform, speed-ramp preset, collapsible
+   property sections, Text tool, custom shape drawing and vertex editing, the full text/shape
+   property field set, and the complete compound-clip feature set -- create, insert an existing
+   sequence, and enter one via double-click) shipped, and gap 1's compound-clip preview/export
+   gap closed too (along with a real shared `resolved_asset_id` bug this fix surfaced, see gap
+   1's own entry). With no concrete, named counter-example left against the migration's own
+   top-level strategy ("New crate in parallel, egui untouched until parity"), the project owner
+   confirmed deleting `crates/ui` as its own explicit decision -- this doc never made that call
+   unilaterally. Removed alongside it: `e2e/legacy_pywinauto/` (its 2 remaining tests drove
+   `ui.exe`, which no longer builds), the `run`/`debug`/`test-app`/`icon-font` Makefile targets,
+   and the `-p ui` build step in `release.yml`'s three platform jobs (the assemble scripts never
+   packaged `ui.exe` to begin with -- confirmed by reading `packaging/assemble_windows.ps1`/
+   `assemble_linux.sh` before removing the build step, not assumed). `avcore`/`avbridge`/
+   `ytbridge`/`apps/desktop` are unaffected -- nothing in the dependency graph pointed at `ui`.
+   `spec/matrix/*.md` and `spec/architecture/*.md` written against the egui shell's own file
+   paths are left as historical record rather than rewritten wholesale; this migration doc and
+   the repo-root/`​.claude/CLAUDE.md` files are the ones kept current.
 
 Each gap migrates as its own slice: move any egui-free logic from `crates/ui/src/app/` into
 `core` first (commit), then add the command(s) (commit), then the React UI (commit), then tests.

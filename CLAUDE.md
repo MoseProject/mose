@@ -4,23 +4,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-oca — a native Rust video editor (`egui`/`eframe`) for cutting gameplay footage for the
-PacoPaçoca YouTube channel. Headline features: automatic loudness normalization and
-export-that-matches-the-source-bitrate. Full phased plan: [`features/request.md`](features/request.md).
+oca — a native Rust video editor for cutting gameplay footage for the PacoPaçoca YouTube
+channel, shipped as a Tauri 2 desktop app (React/TypeScript webview over a Rust backend).
+Headline features: automatic loudness normalization and export-that-matches-the-source-bitrate.
+Full original phased plan: [`features/request.md`](features/request.md) — written against the
+project's first shell, a since-retired `egui`/`eframe` GUI (`crates/ui`, deleted once the Tauri
+shell reached parity; see [`spec/architecture/tauri-migration.md`](spec/architecture/tauri-migration.md)
+for the migration's own history and the deletion decision).
 
 ## Status
 
 Fase 1-8 of the original phased plan (`features/request.md`) are done — probe/export/loudness/
 proxy, timeline editing, effects/keyframes/AI features, export queue, robustness, performance
-work, and packaging/auto-update all shipped. **Detailed status now lives in `spec/`, not here**
-— start at [`spec/INDEX.md`](spec/INDEX.md), then [`spec/ROADMAP.md`](spec/ROADMAP.md) to pick
-up the next task. `spec/matrix/*.md` are done/needed checklists per area (engine, timeline,
-effects, AI features, preview pipeline, robustness, performance, packaging); `spec/matrix/
-changelog.md` is the old narrative status log (verification caveats, real bugs found, empirical
-discoveries) moved here verbatim; `spec/architecture/*.md` covers the newly-proposed
-differentiator features and the performance/caching patterns ported from nimble (sibling
-project). Check `features/request.md` for the original plan's own wording before assuming a
-Fase-4+ feature is live — when in doubt, `graphify query`.
+work, and packaging/auto-update all shipped, originally against the egui shell. **Detailed
+status now lives in `spec/`, not here** — start at [`spec/INDEX.md`](spec/INDEX.md), then
+[`spec/ROADMAP.md`](spec/ROADMAP.md) to pick up the next task. `spec/matrix/*.md` are
+done/needed checklists per area (engine, timeline, effects, AI features, preview pipeline,
+robustness, performance, packaging); `spec/matrix/changelog.md` is the old narrative status log
+(verification caveats, real bugs found, empirical discoveries) moved here verbatim, written
+against the egui shell — features it describes now live in `apps/desktop`/`crates/core` instead;
+`spec/architecture/*.md` covers the newly-proposed differentiator features and the
+performance/caching patterns ported from nimble (sibling project). Check `features/request.md`
+for the original plan's own wording before assuming a Fase-4+ feature is live — when in doubt,
+`graphify query`.
 
 ## Commands
 
@@ -63,27 +69,27 @@ all of this: copy just that file (plus its `#[cfg(test)]` module) into a throwaw
 with no dependencies and `cargo test` it there — real execution, not just a parse check.
 
 Going one step further: `cargo check` (type/borrow-check, no linking) for the *entire* workspace
-— `core` and `ui`, lib and test code alike — can be made to pass even with the FFmpeg-too-old
-`filters.c` gap in place, by locally (never committed) `#define`-shimming its two missing 7.1
-symbols to dummy no-op implementations just so `cc` accepts the file; `git checkout -- crates/
-avbridge/csrc/filters.c` throws the shim away afterward with zero trace. This validates every
-type, borrow, and trait bound across a whole session's Rust changes — far stronger than `cargo
-fmt --check` alone — while still being honest that it's not a real build: the shimmed function
-bodies are wrong (a real filters.c fix needs a genuine FFmpeg-version-aware implementation, not
-this), and `cargo test`'s final link step separately needs `libonnxruntime` (`ort`'s
-`download-binaries` feature needs `cdn.pyke.io`, blocked in this sandbox same as before) — so
-tests still can't *run* here, only type-check.
+can be made to pass even with the FFmpeg-too-old `filters.c` gap in place, by locally (never
+committed) `#define`-shimming its two missing 7.1 symbols to dummy no-op implementations just so
+`cc` accepts the file; `git checkout -- crates/avbridge/csrc/filters.c` throws the shim away
+afterward with zero trace. This validates every type, borrow, and trait bound across a whole
+session's Rust changes — far stronger than `cargo fmt --check` alone — while still being honest
+that it's not a real build: the shimmed function bodies are wrong (a real filters.c fix needs a
+genuine FFmpeg-version-aware implementation, not this), and `cargo test`'s final link step
+separately needs `libonnxruntime` (`ort`'s `download-binaries` feature needs `cdn.pyke.io`,
+blocked in this sandbox same as before) — so tests still can't *run* here, only type-check.
 
 **Do not remove `avbridge/build.rs`'s import-lib-renaming step.** GStreamer bundles its
 own FFmpeg (gst-libav) with identically named import libs — `build.rs` copies them into
 `OUT_DIR` under unique names to prevent silent ABI-mismatch linking at runtime.
 
 ```bash
-make build     # debug build, whole workspace
-make run       # run the GUI app (debug)
+make build     # debug build, whole workspace (core, avbridge, ytbridge, desktop, xtask)
 make test      # run every crate's test suite
 make test-core # cargo test -p core only
-make test-e2e  # pytest + pywinauto against a built target/debug/ui.exe
+make desktop-dev   # Vite + Tauri dev server with hot reload -- the app itself
+make test-desktop  # desktop frontend typecheck + unit tests, then cargo test -p desktop
+make test-e2e  # pytest + selenium against a built target/release/oca-desktop.exe
 make bench     # criterion benchmarks -> target/criterion/report/index.html
 make fmt       # cargo fmt --all
 make lint      # cargo clippy --workspace --all-targets
@@ -91,7 +97,7 @@ make check     # cargo check --workspace --all-targets (fast compile-only loop)
 ```
 
 Single test: `cargo test -p core --test probe_test measure_loudness` or
-`cargo test -p ui i18n::tests`.
+`cd apps/desktop && npx vitest run`.
 
 **Git hooks**: `npm install` (Node, one-time) sets up a husky pre-commit hook that runs
 `rustfmt`/`clang-format` on staged `.rs`/`.c`/`.h` files via `lint-staged` — see `package.json`
@@ -99,50 +105,50 @@ and `.clang-format`. Skipping `npm install` just means no hook runs; `make fmt`/
 still work standalone.
 
 **End-to-end tests** (`e2e/`) drive the real `oca-desktop.exe` via WebDriver
-(`pytest` + `selenium`, through `tauri-driver`'s WebView2/msedgedriver bridge) — ported from the
-egui shell's pywinauto/UI-Automation harness once the desktop shell had a real DOM to target.
-One-time setup: `cargo install tauri-driver` and
-`python -m pip install -r e2e/requirements.txt`. **Build via the Tauri CLI, never plain
-`cargo build`**: `cd apps/desktop && npm run tauri build -- --no-bundle` (or `make
-desktop-build`) — a binary from a bare `cargo build -p desktop` (even `--release`) embeds
-`devUrl` instead of the built frontend and shows a WebView2 error page with no dev server
-running; this was a real bug in `release.yml` until diagnosed (see
+(`pytest` + `selenium`, through `tauri-driver`'s WebView2/msedgedriver bridge). One-time setup:
+`cargo install tauri-driver` and `python -m pip install -r e2e/requirements.txt`. **Build via
+the Tauri CLI, never plain `cargo build`**: `cd apps/desktop && npm run tauri build --
+--no-bundle` (or `make desktop-build`) — a binary from a bare `cargo build -p desktop` (even
+`--release`) embeds `devUrl` instead of the built frontend and shows a WebView2 error page with
+no dev server running; this was a real ship-blocking bug in `release.yml` until diagnosed (see
 `spec/architecture/tauri-migration.md` gap 7). `OCA_DESKTOP_EXE` (`e2e/conftest.py`) picks which
 built binary to launch, `TAURI_NATIVE_DRIVER` points at a specific `msedgedriver.exe` when
 needed, and both plus FFmpeg/GStreamer DLL dirs must be on `PATH` for the launched process
-(`make test-e2e` exports the DLL dirs). All three ran and passed for real (2026-09-28):
-`test_launch.py`, `test_navigation.py`'s two tests. `e2e/legacy_pywinauto/` holds the ten
-still-untouched pywinauto tests (excluded from collection via `e2e/pytest.ini`) and its
-`README.md` explains why and in what order to port them. **Use a real Python, not a Windows
-Store alias** — a Store-packaged `python.exe` carries MSIX package identity that breaks DLL
-loading for spawned child processes even with `PATH` set correctly, while the identical binary
-launched directly from PowerShell works fine.
+(`make test-e2e` exports the DLL dirs). All commands are invoked directly through
+`window.__TAURI_INTERNALS__.invoke` (`e2e/helpers.py`) rather than fighting native OS dialogs
+WebDriver can't reach. **Use a real Python, not a Windows Store alias** — a Store-packaged
+`python.exe` carries MSIX package identity that breaks DLL loading for spawned child processes
+even with `PATH` set correctly, while the identical binary launched directly from PowerShell
+works fine.
 
 ## Architecture
 
-Three-crate split, enforced by dependency direction: `avbridge` → `core` → `ui`.
+Dependency direction: `avbridge` → `core` → `desktop` (`apps/desktop`), plus an isolated
+`ytbridge`.
 
 - **`avbridge`** — thin C bridge (`csrc/bridge.c`) over libavformat/libavcodec/libavfilter/
   libavutil, called via FFI. Exposes probing, timeline export rendering, loudness
   measurement, proxy generation, and waveform extraction.
-- **`core`** — project/timeline/media data model plus wrappers (`probe`, `render`,
-  `loudness`, `proxy`, `waveform`), GStreamer playback pipeline (`preview`), and `.ocproj`
-  save/load (`persistence`) — gzip-compressed MessagePack (struct-map mode, so
-  `#[serde(default)]` still lets an older-saved project load after a new field is added).
-  Locale-neutral — stores enums, never pre-formatted strings. No mock/sample data anywhere.
-- **`ui`** — eframe/egui GUI (glow/OpenGL): `app.rs` holds `App` and mutation methods;
-  `screens/` has one module per screen; `theme.rs` is the dark/teal palette; **all UI
-  strings live in `i18n.rs`** (pt-BR and English) — never hardcode display text.
-
-- **`apps/desktop`** — Tauri 2 shell replacing `ui` screen by screen: React/TypeScript webview
-  (`src/`, Vite) over a Rust crate `desktop` (`src-tauri/`, bin `oca-desktop`) that owns the
-  session, preview engine, import and export via `core`. Webview talks to Rust only through
-  `src/ipc.ts`. Status, decisions and remaining gaps:
-  [`spec/architecture/tauri-migration.md`](spec/architecture/tauri-migration.md). Logic both
-  shells need moves into `core`, never duplicated. `make desktop-dev` / `make test-desktop`.
+- **`core`** — package name `core`, `[lib] name = "avcore"` (Rust code imports it as `avcore`,
+  never `core`, since that would shadow libcore). Project/timeline/media data model plus
+  wrappers (`probe`, `render`, `loudness`, `proxy`, `waveform`), GStreamer playback pipeline
+  (`preview`/`preview_worker`), and `.ocproj` save/load (`persistence`) — gzip-compressed
+  MessagePack (struct-map mode, so `#[serde(default)]` still lets an older-saved project load
+  after a new field is added). Locale-neutral — stores enums, never pre-formatted strings. No
+  mock/sample data anywhere.
+- **`apps/desktop`** — the app itself: a Tauri 2 shell, React/TypeScript webview (`src/`, Vite)
+  over a Rust crate `desktop` (`src-tauri/`, bin `oca-desktop`) that owns the session, preview
+  engine, import and export via `core`. Webview talks to Rust only through `src/ipc.ts`. `tokio`
+  is used with only the `sync` feature (channel primitives, not a task runtime — background work
+  is plain `std::thread::spawn`). Design history, decisions, and the now-closed migration gaps
+  that got it here: [`spec/architecture/tauri-migration.md`](spec/architecture/tauri-migration.md).
+  `make desktop-dev` / `make test-desktop`.
+- **`ytbridge`** — standalone binary, deliberately isolated from `core`/`desktop`'s dependency
+  graph; vendors its own Python runtime via `pyo3` for yt-dlp.
 
 Test placement: `core` and `avbridge` have `[lib]` targets → integration tests in
-`crates/<crate>/tests/`. `ui` is bin-only → unit tests in `src/<module>/<module>_test.rs`.
+`crates/<crate>/tests/`. `desktop` (`apps/desktop/src-tauri`) is bin-only → unit tests in
+`src/<module>/<module>_test.rs`.
 
 ## Approach
 
@@ -153,12 +159,12 @@ Test placement: `core` and `avbridge` have `[lib]` targets → integration tests
 - Do not guess APIs, versions, flags, or package names. Verify by reading code or docs.
 - Write all code and commit messages in English.
 - Commit using Conventional Commits format (`feat:`, `fix:`, `refactor:`, etc.).
-- Keep commits small and split by crate/layer — never bundle `avbridge` (C/FFI), `core`, `ui`,
-  and test changes for one feature into a single commit. Commit each layer separately, in
-  dependency order (`avbridge` → `core` → `ui` → tests), even when they land in the same
-  session for the same feature. A commit that only adds/changes tests for already-committed
-  code gets its own `test:`-prefixed commit rather than being folded into the `feat:` commit
-  it covers.
+- Keep commits small and split by crate/layer — never bundle `avbridge` (C/FFI), `core`,
+  `desktop` (Rust command + React frontend), and test changes for one feature into a single
+  commit. Commit each layer separately, in dependency order (`avbridge` → `core` → `desktop`
+  backend → `desktop` frontend → tests), even when they land in the same session for the same
+  feature. A commit that only adds/changes tests for already-committed code gets its own
+  `test:`-prefixed commit rather than being folded into the `feat:` commit it covers.
 
 ## graphify
 

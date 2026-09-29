@@ -1,4 +1,4 @@
-# Claude Code Configuration for Rust + egui Video Editor
+# Claude Code Configuration for Rust + Tauri Video Editor
 
 This directory is a context and workflow package for building a professional desktop video editor.
 

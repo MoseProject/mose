@@ -16,9 +16,10 @@ For the post-P4 product-growth queue, read
 ROADMAP and RULES. It contains the current competitor evidence, ordered implementation slices,
 acceptance criteria, security constraints, and deliberate non-goals.
 
-For anything touching the new Tauri shell (`apps/desktop`) or moving a screen off egui, read
+For anything touching the desktop shell (`apps/desktop`), read
 **[architecture/tauri-migration.md](architecture/tauri-migration.md)** first: decisions, data
-flow, what already has parity and the ordered list of remaining gaps.
+flow, and the migration's own history (the original `egui`/`eframe` shell, `crates/ui`, is
+deleted — this doc records why parity was reached and when).
 
 Before broad beta distribution, read
 **[architecture/client-error-reporting.md](architecture/client-error-reporting.md)** for ER-01's
