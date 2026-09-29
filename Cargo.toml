@@ -2,7 +2,6 @@
 resolver = "2"
 members = [
     "crates/core",
-    "crates/ui",
     "crates/avbridge",
     "crates/ytbridge",
     "apps/desktop/src-tauri",
