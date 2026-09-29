@@ -218,7 +218,7 @@ input[type="range"] {
 /* ---- editor ---- */
 .editor {
   display: grid;
-  grid-template-columns: 260px 1fr 280px;
+  grid-template-columns: var(--library-width, 260px) 6px minmax(0, 1fr) 6px var(--inspector-width, 280px);
   grid-template-rows: minmax(200px, 1fr) 6px var(--timeline-height, 300px);
   min-height: 0;
   background: var(--bg-workspace);
@@ -241,19 +241,19 @@ input[type="range"] {
 
 .editor .preview {
   grid-row: 1;
-  grid-column: 2;
+  grid-column: 3;
   background: var(--bg);
 }
 
 .editor .inspector {
   grid-row: 1;
-  grid-column: 3;
+  grid-column: 5;
   border-left: 1px solid var(--border-subtle);
 }
 
 .editor .splitter {
   grid-row: 2;
-  grid-column: 1 / 4;
+  grid-column: 1 / 6;
   cursor: row-resize;
   background: var(--border-subtle);
 }
@@ -264,10 +264,14 @@ input[type="range"] {
 
 .editor .timeline {
   grid-row: 3;
-  grid-column: 1 / 4;
+  grid-column: 1 / 6;
 }
 
-.editor > .sequence-tabs { grid-row: 3; grid-column: 1 / 4; align-self: start; z-index: 1; display: flex; min-height: 30px; background: var(--surface); border-bottom: 1px solid var(--border-subtle); }
+.editor > .sequence-tabs { grid-row: 3; grid-column: 1 / 6; align-self: start; z-index: 1; display: flex; min-height: 30px; background: var(--surface); border-bottom: 1px solid var(--border-subtle); }
+.panel-splitter { grid-row: 1; cursor: col-resize; background: var(--border-subtle); }
+.panel-splitter:hover { background: var(--accent-active); }
+.library-splitter { grid-column: 2; }
+.inspector-splitter { grid-column: 4; }
 .sequence-tabs + .timeline { padding-top: 30px; }
 .tab-list, .marker-row { display: flex; align-items: center; gap: 2px; }
 .tab-list { overflow-x: auto; flex: 1; padding: 3px 6px; }

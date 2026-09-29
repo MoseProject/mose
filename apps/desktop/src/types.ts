@@ -207,7 +207,14 @@ export interface Project {
   media_library: MediaAsset[];
   sequences: Sequence[];
   active_sequence: number;
+  panel_layout: PanelLayout | null;
   recent_asset_ids: number[];
+}
+
+export interface PanelLayout {
+  lib_panel_width: number;
+  props_panel_width: number;
+  timeline_height: number;
 }
 
 export interface SessionView {

@@ -116,6 +116,8 @@ export const frameUrl = (seq: number) => `${schemeBase}/frame/${seq}`;
 export const thumbnailUrl = (assetId: number) => `${schemeBase}/thumb/${assetId}`;
 
 export const api = {
+  setPanelLayout: (libraryWidth: number, inspectorWidth: number, timelineHeight: number) =>
+    invoke<void>("set_panel_layout", { libraryWidth, inspectorWidth, timelineHeight }),
   getSession: () => invoke<SessionView>("get_session"),
   newProject: (name: string, sequenceName: string) =>
     invoke<void>("new_project", { name, sequenceName }),

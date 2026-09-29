@@ -105,6 +105,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_session,
+            commands::set_panel_layout,
             commands::new_project,
             commands::open_project,
             commands::open_project_path,

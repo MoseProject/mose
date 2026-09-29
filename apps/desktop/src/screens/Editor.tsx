@@ -12,11 +12,25 @@ import { patchUi, previewStore, run, uiStore } from "../store";
 import type { SessionView } from "../types";
 
 const MIN_TIMELINE_HEIGHT = 140;
+const MIN_LIBRARY_WIDTH = 160;
+const MIN_INSPECTOR_WIDTH = 180;
+const MAX_PANEL_WIDTH = 640;
+
+function initialLayout(session: SessionView) {
+  const layout = session.project.panel_layout;
+  return {
+    libraryWidth: Math.max(MIN_LIBRARY_WIDTH, Math.min(MAX_PANEL_WIDTH, layout?.lib_panel_width ?? 260)),
+    inspectorWidth: Math.max(MIN_INSPECTOR_WIDTH, Math.min(MAX_PANEL_WIDTH, layout?.props_panel_width ?? 280)),
+    timelineHeight: Math.max(MIN_TIMELINE_HEIGHT, layout?.timeline_height ?? 300),
+  };
+}
 
 export function Editor({ session }: { session: SessionView }) {
-  const [timelineHeight, setTimelineHeight] = useState(300);
+  const [layout, setLayout] = useState(() => initialLayout(session));
   const [dropping, setDropping] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => setLayout(initialLayout(session)), [session.project.id]);
 
   // OS file drops import into the media library (egui: `App::handle_dropped_files`).
   useEffect(() => {
@@ -87,17 +101,44 @@ export function Editor({ session }: { session: SessionView }) {
 
   const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
     const startY = e.clientY;
-    const startHeight = timelineHeight;
+    const startHeight = layout.timelineHeight;
     const maxHeight = (editorRef.current?.clientHeight ?? 800) - 200;
     const target = e.currentTarget;
     target.setPointerCapture(e.pointerId);
     const move = (ev: PointerEvent) => {
       const next = startHeight + (startY - ev.clientY);
-      setTimelineHeight(Math.max(MIN_TIMELINE_HEIGHT, Math.min(maxHeight, next)));
+      setLayout((current) => ({ ...current, timelineHeight: Math.max(MIN_TIMELINE_HEIGHT, Math.min(maxHeight, next)) }));
     };
     const up = () => {
       target.removeEventListener("pointermove", move);
       target.removeEventListener("pointerup", up);
+      const current = uiLayout.current;
+      void run(api.setPanelLayout(current.libraryWidth, current.inspectorWidth, current.timelineHeight));
+    };
+    target.addEventListener("pointermove", move);
+    target.addEventListener("pointerup", up);
+  };
+
+  const uiLayout = useRef(layout);
+  uiLayout.current = layout;
+  const startPanelResize = (side: "library" | "inspector") => (e: React.PointerEvent<HTMLDivElement>) => {
+    const startX = e.clientX;
+    const initial = layout;
+    const target = e.currentTarget;
+    target.setPointerCapture(e.pointerId);
+    const move = (event: PointerEvent) => {
+      const delta = event.clientX - startX;
+      setLayout((current) => ({
+        ...current,
+        libraryWidth: side === "library" ? Math.max(MIN_LIBRARY_WIDTH, Math.min(MAX_PANEL_WIDTH, initial.libraryWidth + delta)) : current.libraryWidth,
+        inspectorWidth: side === "inspector" ? Math.max(MIN_INSPECTOR_WIDTH, Math.min(MAX_PANEL_WIDTH, initial.inspectorWidth - delta)) : current.inspectorWidth,
+      }));
+    };
+    const up = () => {
+      target.removeEventListener("pointermove", move);
+      target.removeEventListener("pointerup", up);
+      const current = uiLayout.current;
+      void run(api.setPanelLayout(current.libraryWidth, current.inspectorWidth, current.timelineHeight));
     };
     target.addEventListener("pointermove", move);
     target.addEventListener("pointerup", up);
@@ -107,10 +148,16 @@ export function Editor({ session }: { session: SessionView }) {
     <div
       ref={editorRef}
       className="editor"
-      style={{ "--timeline-height": `${timelineHeight}px` } as React.CSSProperties}
+      style={{
+        "--library-width": `${layout.libraryWidth}px`,
+        "--inspector-width": `${layout.inspectorWidth}px`,
+        "--timeline-height": `${layout.timelineHeight}px`,
+      } as React.CSSProperties}
     >
       <MediaLibrary session={session} />
+      <div className="panel-splitter library-splitter" onPointerDown={startPanelResize("library")} />
       <PreviewPanel />
+      <div className="panel-splitter inspector-splitter" onPointerDown={startPanelResize("inspector")} />
       <Inspector session={session} />
       <ExportPanel />
       <div className="splitter" onPointerDown={startResize} />

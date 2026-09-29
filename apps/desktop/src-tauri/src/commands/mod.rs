@@ -34,7 +34,7 @@ pub mod youtube_download;
 
 use std::path::PathBuf;
 
-use avcore::{ExportAspectRatio, Project};
+use avcore::{ExportAspectRatio, PanelLayout, Project};
 use tauri::{AppHandle, Manager, State};
 
 use crate::state::{blank_project, publish, AppState, Session};
@@ -75,6 +75,35 @@ pub(crate) fn undoable(
 #[tauri::command]
 pub fn get_session(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     serde_json::to_value(state.session().view()).map_err(|e| e.to_string())
+}
+
+/// Saves the active project's editor dimensions. Layout changes are not undoable timeline edits,
+/// but are included in the next normal project save through `Project::panel_layout`.
+#[tauri::command]
+pub fn set_panel_layout(
+    app: AppHandle,
+    library_width: f32,
+    inspector_width: f32,
+    timeline_height: f32,
+) -> Result<(), String> {
+    if !library_width.is_finite()
+        || !inspector_width.is_finite()
+        || !timeline_height.is_finite()
+        || !(160.0..=640.0).contains(&library_width)
+        || !(180.0..=640.0).contains(&inspector_width)
+        || !(140.0..=1_200.0).contains(&timeline_height)
+    {
+        return Err("invalid panel layout".to_string());
+    }
+    with_session(&app, |session| {
+        session.project.panel_layout = Some(PanelLayout {
+            lib_panel_width: library_width,
+            props_panel_width: inspector_width,
+            timeline_height,
+        });
+        session.dirty = true;
+        Ok(())
+    })
 }
 
 #[tauri::command]
