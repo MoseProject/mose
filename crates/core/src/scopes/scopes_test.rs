@@ -61,6 +61,21 @@ fn luma_waveform_is_empty_for_a_zero_sized_input_or_output() {
 }
 
 #[test]
+fn scopes_reject_non_packed_rgba_buffers_without_reading_past_their_end() {
+    let truncated = vec![255; 15];
+    let padded = vec![255; 17];
+
+    assert!(luma_waveform_rgba(&truncated, 2, 2, 4, 4).is_empty());
+    assert!(vectorscope_rgba(&truncated, 2, 2, 5).is_empty());
+    assert_eq!(
+        render_scopes_rgba(&truncated, 2, 2, 4, 4, 5),
+        (Vec::new(), Vec::new())
+    );
+    assert!(luma_waveform_rgba(&padded, 2, 2, 4, 4).is_empty());
+    assert!(vectorscope_rgba(&padded, 2, 2, 5).is_empty());
+}
+
+#[test]
 fn vectorscope_centers_a_neutral_gray_field() {
     let src = solid_rgba(4, 4, 128, 128, 128);
     let out = vectorscope_rgba(&src, 4, 4, 5);

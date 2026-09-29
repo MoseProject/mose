@@ -43,6 +43,16 @@ fn chroma_cb_cr(r: u8, g: u8, b: u8) -> (u8, u8) {
     (cb.round() as u8, cr.round() as u8)
 }
 
+/// Returns whether `src_rgba` is a complete, tightly-packed RGBA frame of the declared size.
+/// Scope rendering has no stride parameter, so accepting a partial or padded frame would make
+/// its pixel addressing ambiguous.
+fn is_packed_rgba_frame(src_rgba: &[u8], src_w: u32, src_h: u32) -> bool {
+    (src_w as usize)
+        .checked_mul(src_h as usize)
+        .and_then(|pixels| pixels.checked_mul(4))
+        == Some(src_rgba.len())
+}
+
 /// Renders a luma waveform monitor from `src_rgba` (`src_w x src_h`, packed RGBA) into an
 /// `out_w x out_h` grayscale-as-RGBA image: each source column contributes its pixels' luma
 /// values as brightness accumulated into that same output column, brightest row = the darkest
@@ -62,7 +72,12 @@ pub fn luma_waveform_rgba(
     out_w: u32,
     out_h: u32,
 ) -> Vec<u8> {
-    if src_w == 0 || src_h == 0 || out_w == 0 || out_h == 0 {
+    if src_w == 0
+        || src_h == 0
+        || out_w == 0
+        || out_h == 0
+        || !is_packed_rgba_frame(src_rgba, src_w, src_h)
+    {
         return Vec::new();
     }
     const GAIN: f64 = 6.0;
@@ -100,7 +115,7 @@ pub fn luma_waveform_rgba(
 /// [`luma_waveform_rgba`] uses, rather than a global max, for the same reason (one saturated
 /// blob shouldn't suppress the rest of the trace's visibility).
 pub fn vectorscope_rgba(src_rgba: &[u8], src_w: u32, src_h: u32, out_size: u32) -> Vec<u8> {
-    if src_w == 0 || src_h == 0 || out_size == 0 {
+    if src_w == 0 || src_h == 0 || out_size == 0 || !is_packed_rgba_frame(src_rgba, src_w, src_h) {
         return Vec::new();
     }
     const GAIN: f64 = 40.0;
@@ -145,7 +160,7 @@ pub fn render_scopes_rgba(
     waveform_out_h: u32,
     vectorscope_out_size: u32,
 ) -> (Vec<u8>, Vec<u8>) {
-    if src_w == 0 || src_h == 0 {
+    if src_w == 0 || src_h == 0 || !is_packed_rgba_frame(src_rgba, src_w, src_h) {
         return (Vec::new(), Vec::new());
     }
     let waveform_ready = waveform_out_w != 0 && waveform_out_h != 0;
