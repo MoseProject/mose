@@ -217,6 +217,19 @@ pub fn create_compound_clip(
     Ok(created)
 }
 
+/// Inserts `sequence_id` (an existing sequence elsewhere in the project) as a compound clip on
+/// the active sequence's timeline -- see `avcore::Project::insert_sequence_as_compound_clip`'s
+/// own doc comment for the no-op cases.
+#[tauri::command]
+pub fn insert_sequence_as_compound_clip(app: AppHandle, sequence_id: u64) -> Result<bool, String> {
+    let mut inserted = false;
+    undoable(&app, |project| {
+        inserted = project.insert_sequence_as_compound_clip(sequence_id);
+        inserted
+    })?;
+    Ok(inserted)
+}
+
 /// Captures `clip_id` (and its composite group, if any) into the clip clipboard -- `Ctrl+C`.
 /// Not undoable: it doesn't touch the project.
 #[tauri::command]
