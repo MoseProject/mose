@@ -214,10 +214,18 @@ fn render_nested_sequence(
     Ok(output)
 }
 
+/// The [`MediaAsset::id`] a nested sequence's synthetic asset gets, offset into a private range
+/// (`u64::MAX / 2 +`) so it can never collide with a real imported asset's id. Every clip
+/// lookup by asset id (`render.rs`'s resolve functions, `ui`'s preview clip resolution, the
+/// desktop preview engine) must go through [`crate::timeline::ClipInstance::resolved_asset_id`]
+/// rather than the raw `asset_id` field so a compound clip resolves to this same id.
+pub fn synthetic_asset_id(nested_sequence_id: u64) -> u64 {
+    u64::MAX / 2 + nested_sequence_id
+}
+
 /// A synthetic [`MediaAsset`] standing in for a rendered nested-sequence file — probed for real
 /// (resolution/fps/duration/audio), so it resolves through the ordinary asset pipeline exactly
-/// like an imported file. `id` is the nested sequence's own id, offset into a private range
-/// (`u64::MAX / 2 +`) so it can never collide with a real imported asset's id — this asset is
+/// like an imported file. `id` is [`synthetic_asset_id`] of the nested sequence — this asset is
 /// never inserted into `Project::media_library` itself, only into a throwaway clone passed to
 /// the resolve functions, so no persistence/uniqueness contract with real asset ids is at risk.
 fn synthetic_asset(
@@ -226,7 +234,7 @@ fn synthetic_asset(
 ) -> Result<MediaAsset, RenderError> {
     let info = avbridge::probe(rendered_path).map_err(|_| RenderError::ProbeNestedSequence)?;
     Ok(MediaAsset {
-        id: u64::MAX / 2 + nested_sequence_id,
+        id: synthetic_asset_id(nested_sequence_id),
         file_name: rendered_path
             .file_name()
             .and_then(|n| n.to_str())

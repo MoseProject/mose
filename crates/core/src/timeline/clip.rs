@@ -1009,6 +1009,19 @@ impl ClipInstance {
         self.nested_sequence_id.is_some()
     }
 
+    /// The [`crate::media::MediaAsset::id`] this clip actually resolves to: `asset_id` for an
+    /// ordinary clip, or [`crate::nested_sequence::synthetic_asset_id`] of
+    /// [`ClipInstance::nested_sequence_id`] for a compound clip (whose `asset_id` field is left
+    /// at whatever it was when the clip was wrapped — see that field's own doc comment). Every
+    /// asset-id lookup for a clip must go through this method, never read `asset_id` directly,
+    /// so a compound clip resolves against the synthetic asset
+    /// [`crate::nested_sequence::materialize_nested_sequences`] merges into a `media_library`.
+    pub fn resolved_asset_id(&self) -> u64 {
+        self.nested_sequence_id
+            .map(crate::nested_sequence::synthetic_asset_id)
+            .unwrap_or(self.asset_id)
+    }
+
     /// `true` if a layer mask ([`ClipInstance::mask_shape`]) is applied.
     pub fn is_masked(&self) -> bool {
         self.mask_shape != MaskShape::None

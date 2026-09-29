@@ -460,7 +460,7 @@ pub fn resolve_timeline_segments(
     for clip in &clips {
         let asset = media_library
             .iter()
-            .find(|a| a.id == clip.asset_id)
+            .find(|a| a.id == clip.resolved_asset_id())
             .ok_or(RenderError::MissingAsset)?;
         if dimensions_fps.is_none() {
             let (width, height) = asset.resolution.ok_or(RenderError::NoVideoStream)?;
@@ -633,7 +633,7 @@ pub fn resolve_audio_segments(
         for clip in &track.clips {
             let asset = media_library
                 .iter()
-                .find(|asset| asset.id == clip.asset_id)
+                .find(|asset| asset.id == clip.resolved_asset_id())
                 .ok_or(RenderError::MissingAsset)?;
             if !asset.has_audio {
                 continue;
@@ -1262,7 +1262,7 @@ pub fn resolve_timeline_segments_multi(
         for clip in &clips {
             let asset = media_library
                 .iter()
-                .find(|a| a.id == clip.asset_id)
+                .find(|a| a.id == clip.resolved_asset_id())
                 .ok_or(RenderError::MissingAsset)?;
             if dimensions_fps.is_none() {
                 let (width, height) = asset.resolution.ok_or(RenderError::NoVideoStream)?;
