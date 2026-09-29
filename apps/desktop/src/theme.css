@@ -366,6 +366,52 @@ input[type="range"] {
   object-fit: contain;
 }
 
+/* On-canvas layer transform (drag to position, handle to resize) -- see PreviewPanel.tsx.
+   .preview-canvas mirrors the export canvas's own aspect ratio; only matches the plain <img>
+   above pixel-for-pixel when the export aspect ratio is "Original" (the common case), since
+   the <img> itself is fit to the whole .monitor box by the video's native aspect instead. */
+.preview-canvas {
+  position: absolute;
+  pointer-events: none;
+}
+
+.preview-layer {
+  position: absolute;
+  pointer-events: auto;
+  border: 1.5px solid var(--accent);
+  box-sizing: border-box;
+  /* .export-panel floats fixed over the whole viewport at z-index 5 and can visually overlap
+     the preview's bottom-right corner -- without this, a clip positioned there becomes
+     ungrabbable, since the export panel wins hit-testing at that point. */
+  z-index: 6;
+}
+
+.preview-layer.draggable {
+  cursor: grab;
+}
+
+.preview-layer.draggable:active {
+  cursor: grabbing;
+}
+
+.preview-layer.animated {
+  border-color: var(--text-muted);
+  cursor: default;
+}
+
+.preview-layer-handle {
+  position: absolute;
+  right: -8px;
+  bottom: -8px;
+  width: 16px;
+  height: 16px;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  border-radius: 3px;
+  cursor: nwse-resize;
+  pointer-events: auto;
+}
+
 .transport {
   display: flex;
   align-items: center;

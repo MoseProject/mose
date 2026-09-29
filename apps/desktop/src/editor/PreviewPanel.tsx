@@ -1,12 +1,58 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { formatTime, t } from "../i18n";
 import { api, frameUrl } from "../ipc";
-import { previewStore, run, sessionStore, useStore } from "../store";
-import { activeTimeline, clipDuration } from "../types";
+import { previewStore, run, sessionStore, uiStore, useStore } from "../store";
+import {
+  activeTimeline,
+  aspectRatioDims,
+  clipDuration,
+  type ClipInstance,
+  type Position,
+} from "../types";
+
+/** Fits `aspect` (width/height) centered inside `avail`, matching `crates/ui/src/screens/
+ *  editor/mod.rs`'s `preview_canvas_size`/layer-fit letterboxing (no zoom tool here yet, so
+ *  this is always the plain "fit" case, not `preview_canvas_size`'s zoomed variants). */
+function fitRect(avail: { width: number; height: number }, aspect: number) {
+  let width = avail.width;
+  let height = width / aspect;
+  if (height > avail.height) {
+    height = avail.height;
+    width = height * aspect;
+  }
+  return {
+    width,
+    height,
+    left: (avail.width - width) / 2,
+    top: (avail.height - height) / 2,
+  };
+}
+
+type DragState =
+  | { mode: "move"; startClientX: number; startClientY: number; startPos: Position }
+  | { mode: "resize"; startClientX: number; startClientY: number; startScaleX: number; startScaleY: number };
 
 export function PreviewPanel() {
   const tick = useStore(previewStore);
   const session = useStore(sessionStore);
+  const ui = useStore(uiStore);
+  const monitorRef = useRef<HTMLDivElement>(null);
+  const [monitorSize, setMonitorSize] = useState({ width: 0, height: 0 });
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const [ghostPos, setGhostPos] = useState<Position | null>(null);
+  const [ghostScale, setGhostScale] = useState<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    const el = monitorRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setMonitorSize({ width, height });
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   const duration = session
     ? Math.max(
         0,
@@ -16,8 +62,37 @@ export function PreviewPanel() {
       )
     : 0;
 
-  // The backend keeps the last frame while a new pipeline opens at a cut, so keep showing it
-  // instead of flashing the placeholder; it clears the frame itself when nothing is there.
+  let clip: ClipInstance | undefined;
+  let asset: { resolution: [number, number] | null } | undefined;
+  if (session && ui.selectedClipIds.length === 1) {
+    clip = activeTimeline(session.project)
+      .tracks.flatMap((track) => track.clips)
+      .find((c) => c.id === ui.selectedClipIds[0]);
+    asset = clip && session.project.media_library.find((a) => a.id === clip!.asset_id);
+  }
+
+  // Square-root the linear peak so quiet speech still visibly moves the bar.
+  const meterWidth = (peak: number) => `${Math.min(1, Math.sqrt(Math.max(0, peak))) * 100}%`;
+
+  const commitMove = (pos: Position) => {
+    if (!clip) return;
+    void run(api.updateClip(clip.id, { positionKeyframes: [{ time_fraction: 0, value: pos }] }));
+  };
+  const commitResize = (scaleX: number, scaleY: number) => {
+    if (!clip) return;
+    void run(api.updateClip(clip.id, { layerScaleX: scaleX, layerScaleY: scaleY }));
+  };
+
+  const onLayerPointerDown = (e: ReactPointerEvent, position: Position) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDrag({ mode: "move", startClientX: e.clientX, startClientY: e.clientY, startPos: position });
+  };
+  const onHandlePointerDown = (e: ReactPointerEvent, scaleX: number, scaleY: number) => {
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDrag({ mode: "resize", startClientX: e.clientX, startClientY: e.clientY, startScaleX: scaleX, startScaleY: scaleY });
+  };
+
   let body: ReactNode = null;
   if (tick.hasClip && tick.error) {
     body = (
@@ -25,18 +100,112 @@ export function PreviewPanel() {
         {t("previewUnavailable")}
       </span>
     );
-  } else if (tick.hasClip && tick.frameSeq > 0) {
-    body = <img src={frameUrl(tick.frameSeq)} alt="" draggable={false} />;
   } else if (!tick.hasClip) {
     body = <span className="muted">{t("previewEmpty")}</span>;
   }
 
-  // Square-root the linear peak so quiet speech still visibly moves the bar.
-  const meterWidth = (peak: number) => `${Math.min(1, Math.sqrt(Math.max(0, peak))) * 100}%`;
+  let overlay: ReactNode = null;
+  if (tick.hasClip && tick.frameSeq > 0 && clip && monitorSize.width > 0 && monitorSize.height > 0) {
+    const texAspect = asset?.resolution ? asset.resolution[0] / asset.resolution[1] : 16 / 9;
+    const aspectRatio = session
+      ? session.project.sequences[session.project.active_sequence].export_settings.aspect_ratio
+      : "Original";
+    const [canvasW, canvasH] = aspectRatioDims(aspectRatio, asset?.resolution ?? [1920, 1080]);
+    const canvasAspect = canvasW / canvasH;
+
+    const canvasRect = fitRect(monitorSize, canvasAspect);
+    const base = fitRect({ width: canvasRect.width, height: canvasRect.height }, texAspect);
+
+    const position = ghostPos ?? clip.position_keyframes[0]?.value ?? { x: 0, y: 0 };
+    const scaleX = ghostScale?.x ?? clip.layer_scale_x;
+    const scaleY = ghostScale?.y ?? clip.layer_scale_y;
+    const layerW = base.width * scaleX;
+    const layerH = base.height * scaleY;
+    const layerLeft = canvasRect.left + position.x * canvasRect.width;
+    const layerTop = canvasRect.top + position.y * canvasRect.height;
+
+    const draggable = clip.position_keyframes.length <= 1;
+
+    overlay = (
+      <div
+        className="preview-canvas"
+        style={{ left: canvasRect.left, top: canvasRect.top, width: canvasRect.width, height: canvasRect.height }}
+      >
+        <div
+          data-testid="preview-layer"
+          className={`preview-layer ${draggable ? "draggable" : "animated"}`}
+          style={{ left: layerLeft - canvasRect.left, top: layerTop - canvasRect.top, width: layerW, height: layerH }}
+          onPointerDown={draggable ? (e) => onLayerPointerDown(e, position) : undefined}
+          title={draggable ? t("layerTransformDragHint") : t("layerTransformAnimatedHint")}
+        >
+          {draggable && (
+            <div
+              data-testid="preview-layer-resize-handle"
+              className="preview-layer-handle"
+              onPointerDown={(e) => onHandlePointerDown(e, scaleX, scaleY)}
+              title={t("layerTransformResizeHint")}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const onOverlayPointerMove = (e: ReactPointerEvent) => {
+    if (!drag || !clip) return;
+    const texAspect = asset?.resolution ? asset.resolution[0] / asset.resolution[1] : 16 / 9;
+    const aspectRatio = session
+      ? session.project.sequences[session.project.active_sequence].export_settings.aspect_ratio
+      : "Original";
+    const [canvasW, canvasH] = aspectRatioDims(aspectRatio, asset?.resolution ?? [1920, 1080]);
+    const canvasRect = fitRect(monitorSize, canvasW / canvasH);
+    const base = fitRect({ width: canvasRect.width, height: canvasRect.height }, texAspect);
+
+    if (drag.mode === "move") {
+      const dx = (e.clientX - drag.startClientX) / Math.max(1, canvasRect.width);
+      const dy = (e.clientY - drag.startClientY) / Math.max(1, canvasRect.height);
+      // Clamped to one full canvas width/height of overflow on either side, same bound
+      // crates/ui/src/screens/editor/mod.rs's layer_transform_preview uses -- generous enough
+      // for a slide-in/out animation's endpoints, without letting the value wander off to
+      // where the layer becomes unreachable to drag back.
+      setGhostPos({
+        x: Math.min(2, Math.max(-1, drag.startPos.x + dx)),
+        y: Math.min(2, Math.max(-1, drag.startPos.y + dy)),
+      });
+    } else {
+      const baseW = Math.max(1, base.width);
+      const baseH = Math.max(1, base.height);
+      const dx = (e.clientX - drag.startClientX) / baseW;
+      const dy = (e.clientY - drag.startClientY) / baseH;
+      setGhostScale({
+        x: Math.max(0.05, drag.startScaleX + dx),
+        y: Math.max(0.05, drag.startScaleY + dy),
+      });
+    }
+  };
+  const onOverlayPointerUp = () => {
+    if (!drag) return;
+    if (drag.mode === "move" && ghostPos) commitMove(ghostPos);
+    if (drag.mode === "resize" && ghostScale) commitResize(ghostScale.x, ghostScale.y);
+    setDrag(null);
+    setGhostPos(null);
+    setGhostScale(null);
+  };
 
   return (
     <section className="panel preview">
-      <div className="monitor">{body}</div>
+      <div
+        ref={monitorRef}
+        className="monitor"
+        onPointerMove={onOverlayPointerMove}
+        onPointerUp={onOverlayPointerUp}
+      >
+        {tick.hasClip && tick.frameSeq > 0 && !tick.error && (
+          <img src={frameUrl(tick.frameSeq)} alt="" draggable={false} />
+        )}
+        {body}
+        {overlay}
+      </div>
       <div className="transport">
         <button className="icon" title={t("stepBack")} onClick={() => run(api.step(-1))}>
           ⏮

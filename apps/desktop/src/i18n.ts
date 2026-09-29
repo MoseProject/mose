@@ -34,6 +34,18 @@ const strings = {
   analyzing: { "pt-BR": "analisando…", en: "analyzing…" },
 
   previewUnavailable: { "pt-BR": "Pré-visualização indisponível", en: "Preview unavailable" },
+  layerTransformDragHint: {
+    "pt-BR": "Arraste para posicionar a camada — efeito visível só em faixas de overlay.",
+    en: "Drag to position the layer — only visible on overlay tracks.",
+  },
+  layerTransformResizeHint: {
+    "pt-BR": "Arraste para redimensionar a camada — efeito visível só em faixas de overlay.",
+    en: "Drag to resize the layer — only visible on overlay tracks.",
+  },
+  layerTransformAnimatedHint: {
+    "pt-BR": "Posição animada — edite pela lista de keyframes.",
+    en: "Position is animated — edit via the keyframe list.",
+  },
   previewEmpty: {
     "pt-BR": "Nada na timeline nesta posição",
     en: "Nothing on the timeline at this position",

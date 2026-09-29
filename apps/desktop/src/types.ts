@@ -80,6 +80,8 @@ export interface ClipInstance {
   transition_duration_secs: number;
   blend_mode: BlendMode;
   position_keyframes: Keyframe<Position>[];
+  layer_scale_x: number;
+  layer_scale_y: number;
   scale_keyframes: Keyframe<number>[];
   rotation_keyframes: Keyframe<number>[];
   opacity_keyframes: Keyframe<number>[];
@@ -396,6 +398,8 @@ export interface ClipPatch {
   transitionDurationSecs?: number;
   blendMode?: BlendMode;
   positionKeyframes?: Keyframe<Position>[];
+  layerScaleX?: number;
+  layerScaleY?: number;
   scaleKeyframes?: Keyframe<number>[];
   rotationKeyframes?: Keyframe<number>[];
   opacityKeyframes?: Keyframe<number>[];
@@ -416,4 +420,19 @@ export function clipDuration(clip: ClipInstance): number {
 
 export function activeTimeline(project: Project): Timeline {
   return project.sequences[project.active_sequence].timeline;
+}
+
+/** Mirrors `avcore::export::ExportAspectRatio::dims_or` -- the canvas dimensions the real
+ *  export/compositing pipeline frames everything against. */
+export function aspectRatioDims(ratio: ExportAspectRatio, fallback: [number, number]): [number, number] {
+  switch (ratio) {
+    case "Landscape":
+      return [1920, 1080];
+    case "Portrait":
+      return [1080, 1920];
+    case "Square":
+      return [1080, 1080];
+    default:
+      return fallback;
+  }
 }

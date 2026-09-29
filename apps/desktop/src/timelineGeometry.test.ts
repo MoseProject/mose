@@ -43,6 +43,8 @@ function clip(id: number, start: number, duration: number, speed = 1): ClipInsta
     transition_duration_secs: 0.5,
     blend_mode: "Normal",
     position_keyframes: [],
+    layer_scale_x: 1,
+    layer_scale_y: 1,
     scale_keyframes: [],
     rotation_keyframes: [],
     opacity_keyframes: [],
