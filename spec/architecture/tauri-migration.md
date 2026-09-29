@@ -100,9 +100,18 @@ Known gaps versus the egui shell, in migration order:
    extended `ClipPatch` -- one whole-list `Vec<Keyframe<T>>` write-back per add/remove/edit,
    mirroring egui's `f32_keyframe_editor`/`position_keyframe_editor` shape. Value ranges/clamps
    mirror `crates/ui/src/app/mod.rs`'s constants exactly (`CROP_MIN_SIZE`, `MASK_CORNER_RADIUS_
-   RANGE`, `TRANSITION_DURATION_RANGE`, etc). Still missing: timeline keyframe markers, on-canvas
-   crop/mask handles, per-effect enable indicators the properties panel's collapsible sections
-   give egui. **Text and shape clips (first part) done:** toolbar
+   RANGE`, `TRANSITION_DURATION_RANGE`, etc). **On-canvas layer transform done:** the preview
+   panel (`PreviewPanel.tsx`) draws the selected clip's position/scale box directly over the
+   frame, matching `layer_transform_preview`'s model exactly -- drag the box to write a single
+   `position_keyframes` entry (disabled once more than one keyframe exists, same "animated,
+   edit via the list" fallback egui shows), drag the bottom-right handle to scale via the new
+   `layer_scale_x`/`_y` `ClipPatch` fields (not wired in desktop until now, though `avcore`
+   already had them). Verified live end to end (`e2e/test_layer_transform.py`, both drag and
+   resize), including a real bug the resize handle's small hit target surfaced: `.export-panel`
+   floats `position: fixed` over the whole viewport at `z-index: 5` and can overlap the
+   preview's bottom-right corner, making a clip positioned there ungrabbable -- fixed by giving
+   `.preview-layer` `z-index: 6`. Still missing: timeline keyframe markers, on-canvas crop/mask
+   handles, per-effect enable indicators the properties panel's collapsible sections give egui. **Text and shape clips (first part) done:** toolbar
    "Add text"/"Add shape" create a clip at the playhead on an auto-created Text/Shape track via
    `core`'s `TextClip::new`/`ShapeClip::new` and select it; overlays draw on the timeline canvas
    and move/trim/snap/delete through the same drag paths as media clips; the inspector edits
