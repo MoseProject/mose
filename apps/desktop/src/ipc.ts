@@ -173,6 +173,8 @@ export const api = {
   pasteClip: () => invoke<number[]>("paste_clip"),
   copyClipFormatting: (clipId: number) => invoke<void>("copy_clip_formatting", { clipId }),
   pasteClipFormatting: (clipId: number) => invoke<void>("paste_clip_formatting", { clipId }),
+  applySpeedRampToClip: (clipId: number, startSpeed: number, endSpeed: number, steps: number) =>
+    invoke<void>("apply_speed_ramp_to_clip", { clipId, startSpeed, endSpeed, steps }),
   overlayCatalog: () => invoke<OverlayCatalog>("overlay_catalog"),
   /** Resolves to the new clip's id, or null when the target track is locked. */
   addTextClip: (text: string) => invoke<number | null>("add_text_clip", { text }),

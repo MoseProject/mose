@@ -34,6 +34,15 @@ const strings = {
   analyzing: { "pt-BR": "analisando…", en: "analyzing…" },
 
   previewUnavailable: { "pt-BR": "Pré-visualização indisponível", en: "Preview unavailable" },
+  speedRamp: { "pt-BR": "Rampa de velocidade", en: "Speed ramp" },
+  speedRampSlowToFast: {
+    "pt-BR": "Lento → Rápido (0.5x → 2x)",
+    en: "Slow → Fast (0.5x → 2x)",
+  },
+  speedRampFastToSlow: {
+    "pt-BR": "Rápido → Lento (2x → 0.5x)",
+    en: "Fast → Slow (2x → 0.5x)",
+  },
   layerTransformDragHint: {
     "pt-BR": "Arraste para posicionar a camada — efeito visível só em faixas de overlay.",
     en: "Drag to position the layer — only visible on overlay tracks.",

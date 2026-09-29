@@ -90,6 +90,23 @@ function ClipControls({ clip }: { clip: ClipInstance }) {
         format={(v) => `${v.toFixed(2)}×`}
         onCommit={(v) => commit({ speedFactor: v })}
       />
+      <div className="field">
+        <span>{t("speedRamp")}</span>
+        <div className="export-actions">
+          <button
+            className="icon"
+            onClick={() => run(api.applySpeedRampToClip(clip.id, 0.5, 2.0, 4))}
+          >
+            {t("speedRampSlowToFast")}
+          </button>
+          <button
+            className="icon"
+            onClick={() => run(api.applySpeedRampToClip(clip.id, 2.0, 0.5, 4))}
+          >
+            {t("speedRampFastToSlow")}
+          </button>
+        </div>
+      </div>
       <Slider
         label={t("brightness")}
         value={clip.brightness}
