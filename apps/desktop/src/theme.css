@@ -466,6 +466,45 @@ input[type="range"] {
   color: var(--text-secondary);
 }
 
+/* Collapsible inspector property groups -- mirrors crates/ui/src/components/property.rs's
+   property_section (CollapsingHeader), closed by default unless the clip's own values differ
+   from default (see Inspector.tsx's per-section defaultOpen checks). */
+.property-section {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 6px;
+}
+
+.property-section summary {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  cursor: pointer;
+  list-style: none;
+}
+
+.property-section summary::-webkit-details-marker {
+  display: none;
+}
+
+.property-section summary::before {
+  content: "▸";
+  display: inline-block;
+  width: 1em;
+}
+
+.property-section[open] > summary::before {
+  content: "▾";
+}
+
+.property-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 0 2px;
+}
+
 .field select {
   grid-column: 1 / 3;
   width: 100%;

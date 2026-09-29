@@ -34,6 +34,8 @@ const strings = {
   analyzing: { "pt-BR": "analisando…", en: "analyzing…" },
 
   previewUnavailable: { "pt-BR": "Pré-visualização indisponível", en: "Preview unavailable" },
+  colorAdjust: { "pt-BR": "Ajuste de cor", en: "Color adjust" },
+  keyframes: { "pt-BR": "Keyframes", en: "Keyframes" },
   speedRamp: { "pt-BR": "Rampa de velocidade", en: "Speed ramp" },
   speedRampSlowToFast: {
     "pt-BR": "Lento → Rápido (0.5x → 2x)",

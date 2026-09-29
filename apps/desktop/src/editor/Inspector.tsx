@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { t } from "../i18n";
 import { api } from "../ipc";
 import { run, uiStore, useStore } from "../store";
@@ -67,73 +67,97 @@ export function Inspector({ session }: { session: SessionView }) {
     </section>
   );
 }
+/** Collapsible property group, closed by default unless `defaultOpen` -- mirrors
+ *  `crates/ui/src/components/property.rs`'s `property_section`. Uncontrolled (`<details
+ *  open>` sets only the *initial* state): the parent `ClipControls` remounts on every clip
+ *  selection change (`key={clip.id}` above), so each newly selected clip's sections
+ *  recompute their own default-open state fresh, same per-clip behavior egui's
+ *  `default_open` argument has. */
+function Section({ label, defaultOpen, testId, children }: { label: string; defaultOpen: boolean; testId?: string; children: ReactNode }) {
+  return (
+    <details className="property-section" open={defaultOpen} data-testid={testId}>
+      <summary>{label}</summary>
+      <div className="property-section-body">{children}</div>
+    </details>
+  );
+}
+
 function ClipControls({ clip }: { clip: ClipInstance }) {
   const commit = (patch: ClipPatch) => run(api.updateClip(clip.id, patch));
   const [region, setRegion] = useState({ centerX: 0.5, centerY: 0.5, width: 0.3, height: 0.3 });
   return (
     <>
-      <Slider
-        label={t("gain")}
-        value={clip.gain_db}
-        min={-24}
-        max={24}
-        step={0.5}
-        format={(v) => `${v > 0 ? "+" : ""}${v.toFixed(1)} dB`}
-        onCommit={(v) => commit({ gainDb: v })}
-      />
-      <Slider
-        label={t("speed")}
-        value={clip.speed_factor}
-        min={0.25}
-        max={4}
-        step={0.05}
-        format={(v) => `${v.toFixed(2)}×`}
-        onCommit={(v) => commit({ speedFactor: v })}
-      />
-      <div className="field">
-        <span>{t("speedRamp")}</span>
-        <div className="export-actions">
-          <button
-            className="icon"
-            onClick={() => run(api.applySpeedRampToClip(clip.id, 0.5, 2.0, 4))}
-          >
-            {t("speedRampSlowToFast")}
-          </button>
-          <button
-            className="icon"
-            onClick={() => run(api.applySpeedRampToClip(clip.id, 2.0, 0.5, 4))}
-          >
-            {t("speedRampFastToSlow")}
-          </button>
+      <Section label={t("gain")} defaultOpen={clip.gain_db !== 0} testId="section-gain">
+        <Slider
+          label={t("gain")}
+          value={clip.gain_db}
+          min={-24}
+          max={24}
+          step={0.5}
+          format={(v) => `${v > 0 ? "+" : ""}${v.toFixed(1)} dB`}
+          onCommit={(v) => commit({ gainDb: v })}
+        />
+      </Section>
+      <Section label={t("speed")} defaultOpen={clip.speed_factor !== 1}>
+        <Slider
+          label={t("speed")}
+          value={clip.speed_factor}
+          min={0.25}
+          max={4}
+          step={0.05}
+          format={(v) => `${v.toFixed(2)}×`}
+          onCommit={(v) => commit({ speedFactor: v })}
+        />
+        <div className="field">
+          <span>{t("speedRamp")}</span>
+          <div className="export-actions">
+            <button
+              className="icon"
+              onClick={() => run(api.applySpeedRampToClip(clip.id, 0.5, 2.0, 4))}
+            >
+              {t("speedRampSlowToFast")}
+            </button>
+            <button
+              className="icon"
+              onClick={() => run(api.applySpeedRampToClip(clip.id, 2.0, 0.5, 4))}
+            >
+              {t("speedRampFastToSlow")}
+            </button>
+          </div>
         </div>
-      </div>
-      <Slider
-        label={t("brightness")}
-        value={clip.brightness}
-        min={-1}
-        max={1}
-        step={0.01}
-        format={(v) => v.toFixed(2)}
-        onCommit={(v) => commit({ brightness: v })}
-      />
-      <Slider
-        label={t("contrast")}
-        value={clip.contrast}
-        min={0}
-        max={2}
-        step={0.01}
-        format={(v) => v.toFixed(2)}
-        onCommit={(v) => commit({ contrast: v })}
-      />
-      <Slider
-        label={t("saturation")}
-        value={clip.saturation}
-        min={0}
-        max={2}
-        step={0.01}
-        format={(v) => v.toFixed(2)}
-        onCommit={(v) => commit({ saturation: v })}
-      />
+      </Section>
+      <Section
+        label={t("colorAdjust")}
+        defaultOpen={clip.brightness !== 0 || clip.contrast !== 1 || clip.saturation !== 1}
+      >
+        <Slider
+          label={t("brightness")}
+          value={clip.brightness}
+          min={-1}
+          max={1}
+          step={0.01}
+          format={(v) => v.toFixed(2)}
+          onCommit={(v) => commit({ brightness: v })}
+        />
+        <Slider
+          label={t("contrast")}
+          value={clip.contrast}
+          min={0}
+          max={2}
+          step={0.01}
+          format={(v) => v.toFixed(2)}
+          onCommit={(v) => commit({ contrast: v })}
+        />
+        <Slider
+          label={t("saturation")}
+          value={clip.saturation}
+          min={0}
+          max={2}
+          step={0.01}
+          format={(v) => v.toFixed(2)}
+          onCommit={(v) => commit({ saturation: v })}
+        />
+      </Section>
       <label className="check">
         <input
           type="checkbox"
@@ -159,98 +183,104 @@ function ClipControls({ clip }: { clip: ClipInstance }) {
         {t("voiceCleanup")}
       </label>
 
-      <div className="field">
-        <label>{t("crop")}</label>
-      </div>
-      <Slider
-        label="x"
-        value={clip.crop_x}
-        min={0}
-        max={1}
-        step={0.01}
-        format={(v) => v.toFixed(2)}
-        onCommit={(v) => commit({ cropX: v })}
-      />
-      <Slider
-        label="y"
-        value={clip.crop_y}
-        min={0}
-        max={1}
-        step={0.01}
-        format={(v) => v.toFixed(2)}
-        onCommit={(v) => commit({ cropY: v })}
-      />
-      <Slider
-        label="w"
-        value={clip.crop_w}
-        min={0.05}
-        max={1}
-        step={0.01}
-        format={(v) => v.toFixed(2)}
-        onCommit={(v) => commit({ cropW: v })}
-      />
-      <Slider
-        label="h"
-        value={clip.crop_h}
-        min={0.05}
-        max={1}
-        step={0.01}
-        format={(v) => v.toFixed(2)}
-        onCommit={(v) => commit({ cropH: v })}
-      />
-      <button className="icon" onClick={() => commit({ cropX: 0, cropY: 0, cropW: 1, cropH: 1 })}>
-        {t("cropReset")}
-      </button>
-
-      <div className="field">
-        <label>{t("mask")}</label>
-        <select
-          value={clip.mask_shape}
-          onChange={(e) => commit({ maskShape: e.target.value as MaskShape })}
-        >
-          {MASK_SHAPES.map(({ value, label }) => (
-            <option key={value} value={value}>
-              {label()}
-            </option>
-          ))}
-        </select>
-      </div>
-      {clip.mask_shape === "RoundedRect" && (
+      <Section
+        label={t("crop")}
+        defaultOpen={clip.crop_x !== 0 || clip.crop_y !== 0 || clip.crop_w !== 1 || clip.crop_h !== 1}
+      >
         <Slider
-          label={t("maskCornerRadius")}
-          value={clip.mask_corner_radius}
+          label="x"
+          value={clip.crop_x}
           min={0}
           max={1}
           step={0.01}
           format={(v) => v.toFixed(2)}
-          onCommit={(v) => commit({ maskCornerRadius: v })}
+          onCommit={(v) => commit({ cropX: v })}
         />
-      )}
-
-      <div className="field">
-        <label>{t("transition")}</label>
-        <select
-          value={clip.transition_in}
-          onChange={(e) => commit({ transitionIn: e.target.value as TransitionType })}
-        >
-          {TRANSITION_TYPES.map(({ value, label }) => (
-            <option key={value} value={value}>
-              {label()}
-            </option>
-          ))}
-        </select>
-      </div>
-      {clip.transition_in !== "None" && (
         <Slider
-          label={t("transitionDuration")}
-          value={clip.transition_duration_secs}
-          min={0.1}
-          max={3}
-          step={0.1}
-          format={(v) => `${v.toFixed(1)}s`}
-          onCommit={(v) => commit({ transitionDurationSecs: v })}
+          label="y"
+          value={clip.crop_y}
+          min={0}
+          max={1}
+          step={0.01}
+          format={(v) => v.toFixed(2)}
+          onCommit={(v) => commit({ cropY: v })}
         />
-      )}
+        <Slider
+          label="w"
+          value={clip.crop_w}
+          min={0.05}
+          max={1}
+          step={0.01}
+          format={(v) => v.toFixed(2)}
+          onCommit={(v) => commit({ cropW: v })}
+        />
+        <Slider
+          label="h"
+          value={clip.crop_h}
+          min={0.05}
+          max={1}
+          step={0.01}
+          format={(v) => v.toFixed(2)}
+          onCommit={(v) => commit({ cropH: v })}
+        />
+        <button className="icon" onClick={() => commit({ cropX: 0, cropY: 0, cropW: 1, cropH: 1 })}>
+          {t("cropReset")}
+        </button>
+      </Section>
+
+      <Section label={t("mask")} defaultOpen={clip.mask_shape !== "None"}>
+        <div className="field">
+          <label>{t("mask")}</label>
+          <select
+            value={clip.mask_shape}
+            onChange={(e) => commit({ maskShape: e.target.value as MaskShape })}
+          >
+            {MASK_SHAPES.map(({ value, label }) => (
+              <option key={value} value={value}>
+                {label()}
+              </option>
+            ))}
+          </select>
+        </div>
+        {clip.mask_shape === "RoundedRect" && (
+          <Slider
+            label={t("maskCornerRadius")}
+            value={clip.mask_corner_radius}
+            min={0}
+            max={1}
+            step={0.01}
+            format={(v) => v.toFixed(2)}
+            onCommit={(v) => commit({ maskCornerRadius: v })}
+          />
+        )}
+      </Section>
+
+      <Section label={t("transition")} defaultOpen={clip.transition_in !== "None"}>
+        <div className="field">
+          <label>{t("transition")}</label>
+          <select
+            value={clip.transition_in}
+            onChange={(e) => commit({ transitionIn: e.target.value as TransitionType })}
+          >
+            {TRANSITION_TYPES.map(({ value, label }) => (
+              <option key={value} value={value}>
+                {label()}
+              </option>
+            ))}
+          </select>
+        </div>
+        {clip.transition_in !== "None" && (
+          <Slider
+            label={t("transitionDuration")}
+            value={clip.transition_duration_secs}
+            min={0.1}
+            max={3}
+            step={0.1}
+            format={(v) => `${v.toFixed(1)}s`}
+            onCommit={(v) => commit({ transitionDurationSecs: v })}
+          />
+        )}
+      </Section>
 
       <div className="field">
         <label>{t("blendMode")}</label>
@@ -266,6 +296,23 @@ function ClipControls({ clip }: { clip: ClipInstance }) {
         </select>
       </div>
 
+      <Section
+        label={t("keyframes")}
+        defaultOpen={
+          clip.position_keyframes.length > 0 ||
+          clip.scale_keyframes.length > 0 ||
+          clip.rotation_keyframes.length > 0 ||
+          clip.opacity_keyframes.length > 0 ||
+          clip.gain_keyframes.length > 0 ||
+          clip.brightness_keyframes.length > 0 ||
+          clip.contrast_keyframes.length > 0 ||
+          clip.saturation_keyframes.length > 0 ||
+          clip.crop_x_keyframes.length > 0 ||
+          clip.crop_y_keyframes.length > 0 ||
+          clip.crop_w_keyframes.length > 0 ||
+          clip.crop_h_keyframes.length > 0
+        }
+      >
       <PositionKeyframeList
         label={t("positionKeyframes")}
         keyframes={clip.position_keyframes}
@@ -370,6 +417,7 @@ function ClipControls({ clip }: { clip: ClipInstance }) {
         defaultValue={1}
         onCommit={(next) => commit({ cropHKeyframes: next })}
       />
+      </Section>
 
       <div className="field">
         <label>{t("aiActions")}</label>
