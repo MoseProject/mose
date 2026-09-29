@@ -2845,20 +2845,7 @@ impl Preview {
             let Ok(layer_plane) = layer_frame.plane_data(0) else {
                 continue;
             };
-            for (base_px, layer_px) in rgba
-                .as_chunks_mut::<4>()
-                .0
-                .iter_mut()
-                .zip(layer_plane.as_chunks::<4>().0)
-            {
-                if layer_px[3] == 0 {
-                    continue;
-                }
-                for channel in 0..3 {
-                    base_px[channel] =
-                        blend_over_channel(*mode, layer_px[channel], base_px[channel], layer_px[3]);
-                }
-            }
+            blend_rgba_frame(&mut rgba, layer_plane, *mode);
         }
 
         Some(VideoFrame {
@@ -2877,6 +2864,33 @@ fn blend_over_channel(mode: BlendMode, top: u8, bottom: u8, top_alpha: u8) -> u8
     let blended = blend_channel(mode, top, bottom) as u16;
     let alpha = top_alpha as u16;
     ((blended * alpha + bottom as u16 * (u16::from(u8::MAX) - alpha) + 127) / 255) as u8
+}
+
+/// Blends one packed RGBA frame over another. This is deliberately independent of GStreamer so
+/// the pixel contract can be tested with deterministic synthetic buffers.
+///
+/// Returns `false` without mutating `base` when either buffer is not complete packed RGBA data
+/// or their sizes differ.
+fn blend_rgba_frame(base: &mut [u8], layer: &[u8], mode: BlendMode) -> bool {
+    if base.len() != layer.len() || !base.len().is_multiple_of(4) {
+        return false;
+    }
+
+    for (base_px, layer_px) in base
+        .as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .zip(layer.as_chunks::<4>().0)
+    {
+        if layer_px[3] == 0 {
+            continue;
+        }
+        for channel in 0..3 {
+            base_px[channel] =
+                blend_over_channel(mode, layer_px[channel], base_px[channel], layer_px[3]);
+        }
+    }
+    true
 }
 
 impl Drop for Preview {
