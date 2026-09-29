@@ -316,6 +316,100 @@ pub fn delete_clips(app: AppHandle, clip_ids: Vec<u64>, ripple: bool) -> Result<
     })
 }
 
+/// Splits `clip_id` into `steps` equal-duration pieces (at its current speed) and assigns each
+/// piece a linearly interpolated `speed_factor` from `start_speed` to `end_speed` -- mirrors
+/// `ui::App::apply_speed_ramp_to_selected_clip` exactly (the Clip menu's "Rampa de velocidade"
+/// presets: Slow -> Fast 0.5x->2x, Fast -> Slow 2x->0.5x, both 4 steps).
+#[tauri::command]
+pub fn apply_speed_ramp_to_clip(
+    app: AppHandle,
+    clip_id: u64,
+    start_speed: f32,
+    end_speed: f32,
+    steps: usize,
+) -> Result<(), String> {
+    undoable(&app, |project| {
+        apply_speed_ramp(
+            project.timeline_mut(),
+            clip_id,
+            start_speed,
+            end_speed,
+            steps,
+        )
+    })
+}
+
+/// Mirrors `crates/ui/src/app/timeline_ops.rs`'s `apply_speed_ramp_to_selected_clip` -- same
+/// split-then-reflow algorithm, `SPEED_FACTOR_RANGE` clamp (0.25..=4.0, matching
+/// `apply_patch`'s `speed_factor` clamp already above), and `speed_ramp_end_factor` reset (a
+/// prior smooth-ramp application may have left it set, which would make `duration_secs()`
+/// ignore the plain `speed_factor` this stepped mode sets).
+fn apply_speed_ramp(
+    timeline: &mut Timeline,
+    clip_id: u64,
+    start_speed: f32,
+    end_speed: f32,
+    steps: usize,
+) -> bool {
+    if steps < 2 {
+        return false;
+    }
+    let Some(index) = track_of(timeline, clip_id) else {
+        return false;
+    };
+    if timeline.tracks[index].locked {
+        return false;
+    }
+    let Some(clip) = timeline.clip_mut(clip_id) else {
+        return false;
+    };
+    let (start_secs, original_duration_secs) = (clip.start_secs, clip.duration_secs());
+    if original_duration_secs <= 0.0 {
+        return false;
+    }
+
+    let mut next_id = timeline
+        .tracks
+        .iter()
+        .flat_map(|t| &t.clips)
+        .map(|c| c.id)
+        .max()
+        .unwrap_or(0)
+        + 1;
+
+    // Split into `steps` equal-duration pieces (at the clip's still-unramped speed) by cutting
+    // at each internal boundary left to right, so an earlier split never shifts a later
+    // boundary's position.
+    let mut clip_ids = vec![clip_id];
+    for i in 1..steps {
+        let boundary = start_secs + original_duration_secs * (i as f64 / steps as f64);
+        if timeline.tracks[index].split_clip_at(boundary, next_id) {
+            clip_ids.push(next_id);
+            next_id += 1;
+        }
+    }
+
+    // Assign each piece's ramped speed, then reflow start_secs left to right so the pieces stay
+    // contiguous despite each one's own duration now changing.
+    let ramped_steps = clip_ids.len();
+    let mut cursor_secs = start_secs;
+    for (i, &id) in clip_ids.iter().enumerate() {
+        let t = if ramped_steps > 1 {
+            i as f32 / (ramped_steps - 1) as f32
+        } else {
+            0.0
+        };
+        let speed = (start_speed + (end_speed - start_speed) * t).clamp(0.25, 4.0);
+        if let Some(c) = timeline.clip_mut(id) {
+            c.speed_factor = speed;
+            c.speed_ramp_end_factor = None;
+            c.start_secs = cursor_secs;
+            cursor_secs += c.duration_secs();
+        }
+    }
+    true
+}
+
 #[tauri::command]
 pub fn update_clip(app: AppHandle, clip_id: u64, patch: ClipPatch) -> Result<(), String> {
     undoable(&app, |project| {

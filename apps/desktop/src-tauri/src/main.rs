@@ -169,6 +169,7 @@ fn main() {
             commands::timeline::paste_clip,
             commands::timeline::copy_clip_formatting,
             commands::timeline::paste_clip_formatting,
+            commands::timeline::apply_speed_ramp_to_clip,
             commands::overlays::overlay_catalog,
             commands::overlays::add_text_clip,
             commands::overlays::add_shape_clip,
