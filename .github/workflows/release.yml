@@ -52,7 +52,7 @@ jobs:
 
       - name: Build release binaries
         run: |
-          cargo build --release --locked -p ui -p ytbridge
+          cargo build --release --locked -p ytbridge
           cd apps/desktop
           npm ci
           npm run tauri build -- --no-bundle
@@ -133,7 +133,7 @@ jobs:
 
       - name: Build release binaries
         run: |
-          cargo build --release --locked -p ui -p ytbridge
+          cargo build --release --locked -p ytbridge
           cd apps/desktop
           npm ci
           npm run tauri build -- --no-bundle
@@ -246,7 +246,7 @@ jobs:
 
       - name: Build release binaries
         run: |
-          cargo build --release --locked -p ui -p ytbridge
+          cargo build --release --locked -p ytbridge
           cd apps/desktop
           npm ci
           npm run tauri build -- --no-bundle
