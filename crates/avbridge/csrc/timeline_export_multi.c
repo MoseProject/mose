@@ -1110,6 +1110,34 @@ EncodeStatus avbridge_encode_timeline_export_multi(
             }
         }
 
+        /* `blend` is framesync-backed and may retain its final frames until every input reaches
+           EOF. Drain the graph before freeing it so a short blend-only segment cannot leave an
+           otherwise valid export with audio but no video stream. */
+        if (status == ENCODE_OK && cur_mode == 2 && ov_graph) {
+            if (av_buffersrc_add_frame_flags(ov_src0, NULL, 0) < 0) {
+                status = ENCODE_ERR_PIPELINE;
+            }
+            for (int i = 0; i < overlay_track_count && status == ENCODE_OK; i++) {
+                OverlayTrackState *track = &overlay_tracks[i];
+                if (track->video_source &&
+                    av_buffersrc_add_frame_flags(track->video_source, NULL, 0) < 0) {
+                    status = ENCODE_ERR_PIPELINE;
+                    break;
+                }
+                if (track->matte_source &&
+                    av_buffersrc_add_frame_flags(track->matte_source, NULL, 0) < 0) {
+                    status = ENCODE_ERR_PIPELINE;
+                    break;
+                }
+            }
+            while (status == ENCODE_OK && av_buffersink_get_frame(ov_sink, filt_frame) == 0) {
+                filt_frame->pts = next_vpts++;
+                if (encode_write_packet(out_ctx, venc_ctx, vout_stream, filt_frame, enc_pkt) < 0)
+                    status = ENCODE_ERR_PIPELINE;
+                av_frame_unref(filt_frame);
+            }
+        }
+
         elapsed += smooth_speed_ramp_timeline_elapsed(
             seg0, seg0->source_out_secs - seg0->source_in_secs);
 
