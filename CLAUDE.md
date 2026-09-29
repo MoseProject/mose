@@ -102,14 +102,21 @@ still work standalone.
 (`pytest` + `selenium`, through `tauri-driver`'s WebView2/msedgedriver bridge) — ported from the
 egui shell's pywinauto/UI-Automation harness once the desktop shell had a real DOM to target.
 One-time setup: `cargo install tauri-driver` and
-`python -m pip install -r e2e/requirements.txt`. Needs a debug build first
-(`cargo build -p desktop`) and FFmpeg/GStreamer DLL dirs on `PATH` (`make test-e2e` exports
-both). Only `test_launch.py`/`test_navigation.py` are ported so far; `e2e/legacy_pywinauto/`
-holds the ten still-untouched pywinauto tests (excluded from collection via `e2e/pytest.ini`)
-and its `README.md` explains why and in what order to port them. **Use a real Python, not a
-Windows Store alias** — a Store-packaged `python.exe` carries MSIX package identity that breaks
-DLL loading for spawned child processes even with `PATH` set correctly, while the identical
-binary launched directly from PowerShell works fine.
+`python -m pip install -r e2e/requirements.txt`. **Build via the Tauri CLI, never plain
+`cargo build`**: `cd apps/desktop && npm run tauri build -- --no-bundle` (or `make
+desktop-build`) — a binary from a bare `cargo build -p desktop` (even `--release`) embeds
+`devUrl` instead of the built frontend and shows a WebView2 error page with no dev server
+running; this was a real bug in `release.yml` until diagnosed (see
+`spec/architecture/tauri-migration.md` gap 7). `OCA_DESKTOP_EXE` (`e2e/conftest.py`) picks which
+built binary to launch, `TAURI_NATIVE_DRIVER` points at a specific `msedgedriver.exe` when
+needed, and both plus FFmpeg/GStreamer DLL dirs must be on `PATH` for the launched process
+(`make test-e2e` exports the DLL dirs). All three ran and passed for real (2026-09-28):
+`test_launch.py`, `test_navigation.py`'s two tests. `e2e/legacy_pywinauto/` holds the ten
+still-untouched pywinauto tests (excluded from collection via `e2e/pytest.ini`) and its
+`README.md` explains why and in what order to port them. **Use a real Python, not a Windows
+Store alias** — a Store-packaged `python.exe` carries MSIX package identity that breaks DLL
+loading for spawned child processes even with `PATH` set correctly, while the identical binary
+launched directly from PowerShell works fine.
 
 ## Architecture
 

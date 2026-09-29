@@ -113,10 +113,11 @@ test-desktop:
 	cargo test -p desktop
 
 # End-to-end tests (e2e/, pytest + selenium) driving the real built oca-desktop.exe through
-# tauri-driver's WebDriver bridge. Needs a debug build first (this target doesn't build one for
-# you, since e2e runs typically follow a `make desktop-build`/`make desktop-dev` you already
-# did), `tauri-driver` installed once (`cargo install tauri-driver`), and Python deps installed
-# once: `python -m pip install -r e2e/requirements.txt`.
+# tauri-driver's WebDriver bridge. Needs a build first via `make desktop-build` (this target
+# doesn't build one for you) -- never a bare `cargo build -p desktop`, which embeds the Vite dev
+# URL instead of the real frontend (see e2e/conftest.py's header) -- plus `tauri-driver`
+# installed once (`cargo install tauri-driver`) and Python deps installed once:
+# `python -m pip install -r e2e/requirements.txt`.
 test-e2e:
 	cd e2e && python -m pytest
 

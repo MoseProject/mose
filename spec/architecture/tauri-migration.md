@@ -171,22 +171,52 @@ Known gaps versus the egui shell, in migration order:
    layout persistence is done per project: the resizable library, inspector, and timeline
    dimensions write `Project::panel_layout` and restore when that project is opened.
 7. Packaging: **in progress.** Windows/Linux/macOS `packaging/*` scripts, `windows-installer.iss`,
-   the Debian/AppImage/desktop-entry metadata, `validate_bundle.py`/`validate_deb.py`, and
-   `release.yml` now build and ship `oca-desktop(.exe)` instead of `ui(.exe)` (the frontend is
-   rebuilt via `npm run build` before `cargo build --release` so the embedded `frontendDist` is
-   fresh); `windows-installer.iss` warns if WebView2 Runtime is missing instead of bundling an
-   unpinned bootstrapper. `e2e/conftest.py` now drives `oca-desktop.exe` through
-   `tauri-driver`/Selenium instead of pywinauto; `test_launch.py`/`test_navigation.py` are
-   ported against real `data-testid` selectors added to `App.tsx`/`Home.tsx`/`Editor.tsx`/
-   `Prefs.tsx`/`WatchFolder.tsx`. The other ten e2e files are quarantined in
-   `e2e/legacy_pywinauto/` (excluded from collection; its `README.md` explains the remaining
-   port work and dependency order) rather than left broken or guess-ported, because porting
-   their pixel-precise egui canvas interactions needs a live run. The desktop binary itself
-   remains running under the required DLL environment; the direct `tauri-driver` 2.1.0/native
-   EdgeDriver path instead misidentifies `oca-desktop.exe` as the Edge binary and fails before
-   creating a WebView session. **`crates/ui` is not deleted.** The remaining harness must move
-   to Tauri's embedded WebDriver provider, or the direct native-driver configuration must be
-   corrected and proven on every release target, before retiring the other shipping shell.
+   the Debian/AppImage/desktop-entry metadata, and `validate_bundle.py`/`validate_deb.py` now
+   ship `oca-desktop(.exe)` instead of `ui(.exe)`; `windows-installer.iss` warns if WebView2
+   Runtime is missing instead of bundling an unpinned bootstrapper.
+
+   **Critical packaging bug found and fixed:** `release.yml` originally built `desktop` via a
+   plain `cargo build --workspace --release`. Verified live (2026-09-28) that this embeds the
+   dev server URL (`http://localhost:5173`) into the binary instead of the built frontend --
+   WebView2 shows a "can't reach this page" error on any machine without a Vite dev server
+   running, i.e. every real install. Only building through the Tauri CLI
+   (`npm run tauri build -- --no-bundle`) makes it embed the actual `frontendDist` (confirmed:
+   the CLI-built binary loads `http://tauri.localhost/` with the real `<title>oca</title>` and
+   JS/CSS assets; the plain-cargo one doesn't). `release.yml` now builds `ui`/`ytbridge` via
+   `cargo build --release -p ui -p ytbridge` and `desktop` separately via
+   `cd apps/desktop && npm run tauri build -- --no-bundle`, matching `make desktop-build`'s
+   existing (already-correct) invocation -- this was a real ship-blocking regression this gap's
+   own packaging slice introduced, not present in `crates/ui`'s build.
+
+   **e2e harness ported and proven working end-to-end.** `e2e/conftest.py` drives
+   `oca-desktop.exe` through `tauri-driver`/Selenium instead of pywinauto; `test_launch.py` and
+   `test_navigation.py` (rewritten against the desktop shell's actual topbar/screen model, which
+   never had egui's five-destination nav rail) pass for real -- launched, WebDriver session
+   created, real DOM located via `data-testid` selectors added to `App.tsx`/`Home.tsx`/
+   `Editor.tsx`/`Prefs.tsx`/`WatchFolder.tsx`, 3/3 green. The other ten e2e files are quarantined
+   in `e2e/legacy_pywinauto/` (excluded from collection; its `README.md` explains the remaining
+   port work and dependency order) rather than left broken or guess-ported -- their pixel-precise
+   egui canvas interactions still need re-deriving against the React timeline's real geometry.
+
+   **Debug-build launch crash diagnosed, confirmed not a shipping blocker.** A `cargo build -p
+   desktop` (debug profile) binary aborted at startup with an unlogged "Microsoft Visual C++
+   Runtime Library" dialog. Captured a real crash dump (Sysinternals `procdump -ma -x`, no admin
+   needed) and analyzed it with `cdb.exe` (extracted from the Windows SDK installer via
+   `msiexec /a ... TARGETDIR=...`, also no admin -- WinDbg Preview's GUI `-c`/`-cf` automation
+   did not work headlessly in this environment). Symbolized stack: `ucrtbased!_free_dbg` ->
+   `_CrtDbgReportW` -> the observed dialog, called from `oca_desktop!std::_Tree_val<...
+   std::pair<enum asr_tensor const, char const*>...>::_Erase_tree` -- the debug CRT's heap
+   validator catching a destructor call on a `std::map` owned by a statically-linked C++
+   dependency (most likely whisper.cpp via whisper-rs-sys), during static initialization. A
+   `--release` build (non-debug `ucrtbase.dll`, no such validation) launches fine -- confirmed
+   directly, and it's what both the installer and `e2e/` now use by default. `scripts/
+   diagnose-desktop-crash.ps1` reproduces this capture+analysis on another machine.
+   `e2e/conftest.py`'s `OCA_DESKTOP_EXE` env var can still point at a debug build if it ever
+   launches cleanly elsewhere.
+
+   **`crates/ui` is not yet deleted** -- the ten quarantined e2e files still need porting before
+   this gap can honestly call itself done, even though the packaging/harness blockers above are
+   resolved.
 
 Each gap migrates as its own slice: move any egui-free logic from `crates/ui/src/app/` into
 `core` first (commit), then add the command(s) (commit), then the React UI (commit), then tests.
