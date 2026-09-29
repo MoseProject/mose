@@ -127,11 +127,23 @@ Known gaps versus the egui shell, in migration order:
    text (content, bundled-catalog font grouped by category, Bold only where the family ships
    one, size, color, alignment, position, word highlight when the clip has word timing) and
    shapes (preset via `core`'s `ShapePreset`, color, opacity, position, size), one undo step per
-   commit, with the preview reopening on the changed layer. Still missing from egui: Text tool
-   (T) click-to-create on the preview, direct on-canvas drag/resize, custom shape drawing and
-   vertex editing, font weight (variable fonts), text direction, background box, rotation,
-   stroke thickness, start/duration fields, per-property keyframes, split of overlay clips,
-   add-empty-Text/Shape-track buttons.
+   commit, with the preview reopening on the changed layer. **Custom shape drawing done:** the
+   toolbar's "Draw shape" button enters a click-to-place-vertex mode (`uiStore.
+   drawingShapePoints`, purely frontend state until committed) -- each click on the preview
+   canvas appends a canvas-fraction point, Enter with >=3 points calls the new
+   `add_custom_shape_clip` command (a direct port of `ui::App::finish_drawing_custom_shape`'s
+   bounding-box normalization into `ShapeKind::Polygon`), Escape cancels. Verified live
+   (`e2e/test_custom_shape.py`). **Add-empty-Text/Shape-track buttons done:** two more toolbar
+   buttons next to the existing video/audio ones, calling `add_track` with the already-supported
+   `Text`/`Shape` kinds. Adding these surfaced a real pre-existing bug: `.timeline-toolbar` had
+   no `flex-wrap`, so once enough buttons accumulated they silently overflowed off the right
+   edge of the default 1280px window width with no way to reach them (confirmed live: `Draw
+   shape` rendered at `x=1429`, `display: none` per WebDriver) -- fixed with `flex-wrap: wrap`.
+   Still missing from egui: Text tool (T) click-to-create on the preview, direct on-canvas
+   drag/resize for text/shape overlays, custom shape *vertex editing* (only initial placement,
+   not re-editing an existing polygon's points), font weight (variable fonts), text direction,
+   background box, rotation, stroke thickness, start/duration fields, per-property keyframes,
+   split of overlay clips.
 4. Export queue parity: persistent `.ocqueue` snapshots, bounded worker pool, pause/resume/cancel/remove, loudness matching, GPU encoder preference, output conflict choices, and SRT export are implemented. **Visual coverage done:** `ExportPanel.test.tsx` (jsdom + `@testing-library/react`, `../ipc` mocked) covers empty/queued/rendering/paused render states, the loudness-match shortcuts' >=2-queued-jobs gate, and action-button wiring. True end-to-end coverage still needs the WebDriver harness gap 7 will port from `e2e/`'s current pywinauto suite.
 5. AI features. **Transcription/transcript panel done:** the media library's per-asset "📝"
    button runs Whisper on a background thread (`avcore::transcribe`, bundled Whisper Base model
