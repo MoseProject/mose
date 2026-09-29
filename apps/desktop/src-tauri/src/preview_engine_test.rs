@@ -106,6 +106,24 @@ fn a_gap_on_the_top_track_promotes_the_next_track_to_background() {
 }
 
 #[test]
+fn a_compound_clip_resolves_via_its_synthetic_asset_id() {
+    // Regression test for the bug this session found and fixed in `avcore::nested_sequence`/
+    // `ClipInstance::resolved_asset_id`: a compound clip's own `asset_id` field is left at 0
+    // (never rewritten), so it only resolves once `resolve_layers`' lookup goes through
+    // `resolved_asset_id()` against the synthetic asset `Command::Content`'s handler merges in.
+    let nested_sequence_id = 7u64;
+    let synthetic_id = avcore::nested_sequence::synthetic_asset_id(nested_sequence_id);
+    let media = vec![asset(synthetic_id, fixture())];
+    let mut nested_clip = ClipInstance::new(10, 0, 0.0, 0.0, 3.0);
+    nested_clip.nested_sequence_id = Some(nested_sequence_id);
+    let timeline = timeline(vec![track(1, TrackKind::Video, vec![nested_clip])]);
+
+    let layers = resolve_layers(&timeline, &media, 1.0);
+
+    assert_eq!(layers.background.as_ref().map(|(_, c)| c.id), Some(10));
+}
+
+#[test]
 fn missing_media_and_hidden_tracks_are_left_out() {
     let media = vec![asset(1, PathBuf::from("Z:/definitely/missing.mp4"))];
     let mut hidden = track(
