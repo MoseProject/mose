@@ -271,7 +271,7 @@ fn sparse_axis_keyframes(
     }
     let (last_time, last_crop) = samples[samples.len() - 1];
     let last_value = axis(last_crop);
-    if (last_value - out.last().unwrap().value).abs() > epsilon || out.len() == 1 {
+    if last_time != out.last().unwrap().time_fraction {
         out.push(Keyframe {
             time_fraction: last_time,
             value: last_value,

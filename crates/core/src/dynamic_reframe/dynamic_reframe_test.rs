@@ -148,11 +148,13 @@ fn sparse_crop_keyframes_emits_a_point_where_a_value_crosses_the_threshold() {
         (1.0, crop(0.5, 0.5, 0.5, 0.5)),    // matches the last emitted value -- no new point
     ];
     let (xs, _ys, _ws, _hs) = sparse_crop_keyframes(&samples, 0.01);
-    assert_eq!(xs.len(), 2);
+    assert_eq!(xs.len(), 3);
     assert_eq!(xs[0].time_fraction, 0.0);
     assert_eq!(xs[0].value, 0.1);
     assert_eq!(xs[1].time_fraction, 0.6);
     assert_eq!(xs[1].value, 0.5);
+    assert_eq!(xs[2].time_fraction, 1.0);
+    assert_eq!(xs[2].value, 0.5);
 }
 
 #[test]
@@ -165,8 +167,9 @@ fn sparse_crop_keyframes_sparsifies_each_axis_independently() {
         (1.0, crop(0.6, 0.3, 0.5, 0.5)),
     ];
     let (xs, ys, _ws, _hs) = sparse_crop_keyframes(&samples, 0.01);
-    assert_eq!(xs.len(), 2);
+    assert_eq!(xs.len(), 3);
     assert_eq!(xs[1].time_fraction, 0.5);
+    assert_eq!(xs[2].time_fraction, 1.0);
     assert_eq!(ys.len(), 2);
     assert_eq!(ys[0].time_fraction, 0.0);
     assert_eq!(ys[1].time_fraction, 1.0);
