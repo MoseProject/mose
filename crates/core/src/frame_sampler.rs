@@ -67,7 +67,7 @@ impl FrameSampler {
         }
     }
 
-    /// `sample_count` timestamps evenly spaced across `[start_secs, end_secs)`, where
+    /// `sample_count` timestamps evenly spaced across `[start_secs, end_secs]`, where
     /// `sample_count = round(duration * samples_per_sec)` clamped to
     /// `[min_samples, max_samples]` — the "dense enough to follow motion, bounded for a long
     /// clip" shape motion-tracking/background-removal each computed inline with their own rate
@@ -83,6 +83,7 @@ impl FrameSampler {
         if duration <= 0.0 {
             return Vec::new();
         }
+        let min_samples = min_samples.min(max_samples);
         let sample_count =
             ((duration * samples_per_sec).round() as usize).clamp(min_samples, max_samples);
         (0..sample_count)
