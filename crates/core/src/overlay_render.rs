@@ -270,7 +270,7 @@ fn draw_text_segment_onto(
     let (x, max_width) = text_horizontal_box(resolved_align, anchor_x, canvas_width as f32);
 
     text_layout::with_shared_engine(|engine, swash_cache| {
-        let shaped = engine.shape(
+        let Ok(shaped) = engine.try_shape(
             &segment.text,
             segment.font_family.clone(),
             segment.font_style,
@@ -280,7 +280,9 @@ fn draw_text_segment_onto(
             (x, y),
             segment.direction,
             resolved_align,
-        );
+        ) else {
+            return;
+        };
         if let Some(ink_bbox) =
             shaped_ink_bbox(&shaped, segment.glyph_byte_range, engine, swash_cache)
         {

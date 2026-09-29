@@ -56,10 +56,10 @@ for exact export-vs-preview wiring per effect).
       (`.ocproj` stores the enum variant name, not a stable `family_id`) and FONT-01C's
       categorized/searchable selector (today's picker is a flat 43-item list). See
       `../architecture/built-in-font-catalog.md`.
-- [ ] Complex shaping/bidi — the current per-character metrics and left-to-right `fontdue::Layout`
-      do not correctly handle Arabic contextual forms, mixed bidi, Indic conjuncts, ligature-safe
-      timed highlights, or Unicode line breaking. TEXT-01 defines a bundled-only shaping engine,
-      seven international fallbacks, cluster mapping, resource limits, and conformance tests; see
+- [~] Complex shaping/bidi — `avcore::text_layout` now uses bundled-only `cosmic-text` for
+      OpenType shaping, mixed-direction paragraphs, ligatures, Indic conjuncts, deterministic
+      international fallback, cache bounds, and validated caption resource limits. Remaining:
+      cluster-overlap timed highlights and off-thread shaping; see
       `../architecture/complex-text-shaping.md`.
 - [x] Geometric shapes: presets (rectangle/ellipse/triangle/trapezoid/arrow) + hand-drawn
       custom polygon (click-to-place on preview).

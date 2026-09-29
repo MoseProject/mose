@@ -60,6 +60,45 @@ use cosmic_text::{
     fontdb, Align, Attrs, Buffer, Fallback, Family, FontSystem, Metrics, PhysicalGlyph, Shaping,
     SwashCache, Weight,
 };
+use unicode_segmentation::UnicodeSegmentation;
+
+/// Resource limits for one user-controlled caption. They bound the synchronous shaping path
+/// until the planned background worker can take ownership of layout requests.
+pub const MAX_TEXT_LAYOUT_BYTES: usize = 32 * 1024;
+pub const MAX_TEXT_LAYOUT_GRAPHEMES: usize = 8_192;
+pub const MAX_TEXT_LAYOUT_PARAGRAPHS: usize = 256;
+pub const MAX_TEXT_LAYOUT_GLYPHS: usize = 32_768;
+pub const MAX_TEXT_LAYOUT_LINES: usize = 512;
+pub const MAX_TEXT_LAYOUT_FONT_SIZE_PX: f32 = 4_096.0;
+pub const MAX_TEXT_LAYOUT_WIDTH_PX: f32 = 32_768.0;
+pub const MAX_TEXT_LAYOUT_ORIGIN_PX: f32 = 1_000_000.0;
+
+/// Why a text-layout request was rejected before it could consume unbounded shaping work.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TextLayoutError {
+    TextTooLong,
+    TooManyGraphemes,
+    TooManyParagraphs,
+    InvalidGeometry,
+    TooManyGlyphs,
+    TooManyLines,
+}
+
+impl std::fmt::Display for TextLayoutError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let message = match self {
+            Self::TextTooLong => "text exceeds the layout byte limit",
+            Self::TooManyGraphemes => "text exceeds the layout grapheme limit",
+            Self::TooManyParagraphs => "text exceeds the layout paragraph limit",
+            Self::InvalidGeometry => "text layout geometry must be finite and within bounds",
+            Self::TooManyGlyphs => "text layout produced too many glyphs",
+            Self::TooManyLines => "text layout produced too many lines",
+        };
+        f.write_str(message)
+    }
+}
+
+impl std::error::Error for TextLayoutError {}
 use unicode_script::Script;
 
 use crate::font_catalog;
@@ -313,6 +352,51 @@ impl ShapedText {
     }
 }
 
+fn validate_layout_input(
+    text: &str,
+    font_size_px: f32,
+    max_width_px: Option<f32>,
+    origin: (f32, f32),
+) -> Result<(), TextLayoutError> {
+    if text.len() > MAX_TEXT_LAYOUT_BYTES {
+        return Err(TextLayoutError::TextTooLong);
+    }
+    if text
+        .graphemes(true)
+        .take(MAX_TEXT_LAYOUT_GRAPHEMES + 1)
+        .count()
+        > MAX_TEXT_LAYOUT_GRAPHEMES
+    {
+        return Err(TextLayoutError::TooManyGraphemes);
+    }
+    if text.lines().take(MAX_TEXT_LAYOUT_PARAGRAPHS + 1).count() > MAX_TEXT_LAYOUT_PARAGRAPHS {
+        return Err(TextLayoutError::TooManyParagraphs);
+    }
+    let valid_width = max_width_px
+        .is_none_or(|width| width.is_finite() && (0.0..=MAX_TEXT_LAYOUT_WIDTH_PX).contains(&width));
+    if !font_size_px.is_finite()
+        || !(0.0..=MAX_TEXT_LAYOUT_FONT_SIZE_PX).contains(&font_size_px)
+        || !valid_width
+        || !origin.0.is_finite()
+        || !origin.1.is_finite()
+        || origin.0.abs() > MAX_TEXT_LAYOUT_ORIGIN_PX
+        || origin.1.abs() > MAX_TEXT_LAYOUT_ORIGIN_PX
+    {
+        return Err(TextLayoutError::InvalidGeometry);
+    }
+    Ok(())
+}
+
+fn validate_shaped_text(shaped: ShapedText) -> Result<ShapedText, TextLayoutError> {
+    if shaped.lines.len() > MAX_TEXT_LAYOUT_LINES {
+        return Err(TextLayoutError::TooManyLines);
+    }
+    if shaped.glyph_count() > MAX_TEXT_LAYOUT_GLYPHS {
+        return Err(TextLayoutError::TooManyGlyphs);
+    }
+    Ok(shaped)
+}
+
 /// Every input that can change [`TextLayoutEngine::shape`]'s output, used as a [`ShapeCache`]
 /// key. Floats are compared by exact bit pattern (`to_bits`) rather than derived `PartialEq`
 /// smoothing over NaN/epsilon concerns — this only ever needs to recognize "the exact same call
@@ -544,6 +628,35 @@ impl TextLayoutEngine {
         direction: TextDirection,
         align: TextAlign,
     ) -> ShapedText {
+        self.try_shape(
+            text,
+            family,
+            style,
+            weight_override,
+            font_size_px,
+            max_width_px,
+            origin,
+            direction,
+            align,
+        )
+        .unwrap_or_default()
+    }
+
+    /// Shapes text after enforcing the bounded-resource contract for untrusted captions.
+    #[allow(clippy::too_many_arguments)]
+    pub fn try_shape(
+        &mut self,
+        text: &str,
+        family: TextFontFamily,
+        style: TextFontStyle,
+        weight_override: Option<u16>,
+        font_size_px: f32,
+        max_width_px: Option<f32>,
+        origin: (f32, f32),
+        direction: TextDirection,
+        align: TextAlign,
+    ) -> Result<ShapedText, TextLayoutError> {
+        validate_layout_input(text, font_size_px, max_width_px, origin)?;
         let key = ShapeCacheKey::new(
             text,
             family.clone(),
@@ -556,7 +669,7 @@ impl TextLayoutEngine {
             align,
         );
         if let Some(cached) = self.shape_cache.get(&key) {
-            return cached;
+            return validate_shaped_text(cached);
         }
         let shaped = self.shape_uncached(
             text,
@@ -569,8 +682,9 @@ impl TextLayoutEngine {
             direction,
             align,
         );
+        let shaped = validate_shaped_text(shaped)?;
         self.shape_cache.insert(key, shaped.clone());
-        shaped
+        Ok(shaped)
     }
 
     #[allow(clippy::too_many_arguments)]
