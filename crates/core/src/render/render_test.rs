@@ -60,6 +60,24 @@ fn text_segment() -> TextSegment {
     }
 }
 
+fn audio_segment() -> avbridge::AudioSegment {
+    avbridge::AudioSegment {
+        source_path: "fixture.wav".into(),
+        source_in_secs: 0.0,
+        source_out_secs: 2.0,
+        timeline_start_secs: 0.0,
+        gain_db: 0.0,
+        speed_factor: 1.0,
+        gain_keyframe_expr: String::new(),
+        duck_role: 0,
+        voice_cleanup_enabled: false,
+        voice_cleanup_noise_floor_db: -30.0,
+        voice_cleanup_compressor_threshold_db: -18.0,
+        voice_cleanup_compressor_ratio: 3.0,
+        voice_cleanup_ceiling_linear: 0.95,
+    }
+}
+
 #[test]
 fn render_validation_accepts_a_complete_segment() {
     assert!(validate_segment_list(&[segment()], canvas(), -16.0).is_ok());
@@ -127,6 +145,16 @@ fn render_validation_rejects_text_that_cannot_be_shaped() {
     assert!(matches!(
         validate_text_segments(&[invalid], canvas()),
         Err(RenderError::InvalidTextLayout)
+    ));
+}
+
+#[test]
+fn render_validation_rejects_invalid_audio_mix_segments() {
+    let mut invalid = audio_segment();
+    invalid.voice_cleanup_ceiling_linear = f32::NAN;
+    assert!(matches!(
+        validate_audio_segments(&[invalid]),
+        Err(RenderError::InvalidAudioSegment)
     ));
 }
 

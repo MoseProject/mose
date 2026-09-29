@@ -158,6 +158,8 @@ pub enum RenderError {
     InvalidTargetLufs,
     /// A text overlay cannot be shaped within the engine's bounded resource contract.
     InvalidTextLayout,
+    /// An audio mix contributor has an invalid source range or filter parameter.
+    InvalidAudioSegment,
     /// The native multi-track audio mixing pass failed after the video render completed.
     AudioMix(String),
     /// Stream-copying the rendered video together with the mixed audio failed.
@@ -208,6 +210,7 @@ impl std::fmt::Display for RenderError {
             }
             RenderError::InvalidTargetLufs => write!(f, "loudness target must be finite"),
             RenderError::InvalidTextLayout => write!(f, "text overlay has invalid layout input"),
+            RenderError::InvalidAudioSegment => write!(f, "audio mix contains an invalid segment"),
             RenderError::AudioMix(message) => write!(f, "audio mix failed: {message}"),
             RenderError::MediaMux(message) => write!(f, "audio mux failed: {message}"),
             RenderError::ReplaceOutput(error) => write!(f, "failed to replace export: {error}"),
@@ -366,6 +369,34 @@ fn validate_text_segments(
         crate::overlay_render::validate_text_segment(segment, canvas.width, canvas.height)
             .map_err(|_| RenderError::InvalidTextLayout)
     })
+}
+
+fn valid_audio_segment(segment: &avbridge::AudioSegment) -> bool {
+    !segment.source_path.as_os_str().is_empty()
+        && segment.source_in_secs.is_finite()
+        && segment.source_out_secs.is_finite()
+        && segment.source_in_secs >= 0.0
+        && segment.source_out_secs > segment.source_in_secs
+        && segment.timeline_start_secs.is_finite()
+        && segment.timeline_start_secs >= 0.0
+        && segment.gain_db.is_finite()
+        && segment.speed_factor.is_finite()
+        && segment.speed_factor > 0.0
+        && segment.duck_role <= 2
+        && segment.voice_cleanup_noise_floor_db.is_finite()
+        && segment.voice_cleanup_compressor_threshold_db.is_finite()
+        && segment.voice_cleanup_compressor_ratio.is_finite()
+        && segment.voice_cleanup_compressor_ratio > 0.0
+        && segment.voice_cleanup_ceiling_linear.is_finite()
+        && (0.0..=1.0).contains(&segment.voice_cleanup_ceiling_linear)
+}
+
+fn validate_audio_segments(audio_segments: &[avbridge::AudioSegment]) -> Result<(), RenderError> {
+    audio_segments
+        .iter()
+        .all(valid_audio_segment)
+        .then_some(())
+        .ok_or(RenderError::InvalidAudioSegment)
 }
 
 /// Resolves `sequence`'s first non-empty video track into export segments (in `start_secs`
@@ -1410,6 +1441,7 @@ pub fn render_export_job_multi_with_audio(
 ) -> Result<RenderOutcome, RenderError> {
     validate_timeline_segments(track_segments, canvas, target_lufs)?;
     validate_text_segments(text_segments, canvas)?;
+    validate_audio_segments(audio_segments)?;
     if track_segments.len() == 1 {
         let outcome = render_export_job(
             &track_segments[0],
