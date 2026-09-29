@@ -139,11 +139,23 @@ Known gaps versus the egui shell, in migration order:
    no `flex-wrap`, so once enough buttons accumulated they silently overflowed off the right
    edge of the default 1280px window width with no way to reach them (confirmed live: `Draw
    shape` rendered at `x=1429`, `display: none` per WebDriver) -- fixed with `flex-wrap: wrap`.
-   Still missing from egui: Text tool (T) click-to-create on the preview, direct on-canvas
-   drag/resize for text/shape overlays, custom shape *vertex editing* (only initial placement,
-   not re-editing an existing polygon's points), font weight (variable fonts), text direction,
-   background box, rotation, stroke thickness, start/duration fields, per-property keyframes,
-   split of overlay clips.
+   **Text tool done:** T switches to a click-to-create mode (`uiStore.tool === "text"`,
+   `PreviewPanel.tsx`'s `onCanvasClick`), calling `add_text_clip` with the clicked canvas
+   fraction as `pos_x`/`pos_y` (port of `ui::App::add_text_clip_at`), selecting the new clip and
+   returning to the Select tool. **Custom shape vertex editing done:** `ShapeInspector.tsx`
+   renders per-vertex X/Y fields for `ShapeKind::Polygon` clips (remove disabled below 3
+   vertices), committed via the new `polygonVertices` patch field (`patch_shape` gives it
+   priority over `shape_kind`). **Text/shape property fields done:** font weight (only shown for
+   variable fonts, via new `FontOption.is_variable`), text direction, background box (color/
+   padding/corner radius), shape rotation, stroke thickness, start/duration, and
+   position/scale/rotation/opacity (text) or center/width/height/rotation (shape) keyframes are
+   all in `TextClipPatch`/`ShapeClipPatch` now, surfaced through collapsible `Section` +
+   `F32KeyframeList` blocks reused from the earlier keyframe-editor work. Verified live
+   (`e2e/test_text_tool.py`, `e2e/test_overlay_properties.py`). **Confirmed NOT real gaps** (grepped
+   `crates/ui`, feature absent from both shells): direct on-canvas drag/resize for text/shape
+   overlays, split of overlay clips — neither exists in egui either, so these are shared
+   limitations, not migration parity gaps, matching the earlier finding for on-canvas crop/mask
+   handles, ghost rendering, and the clipboard indicator.
 4. Export queue parity: persistent `.ocqueue` snapshots, bounded worker pool, pause/resume/cancel/remove, loudness matching, GPU encoder preference, output conflict choices, and SRT export are implemented. **Visual coverage done:** `ExportPanel.test.tsx` (jsdom + `@testing-library/react`, `../ipc` mocked) covers empty/queued/rendering/paused render states, the loudness-match shortcuts' >=2-queued-jobs gate, and action-button wiring. True end-to-end coverage still needs the WebDriver harness gap 7 will port from `e2e/`'s current pywinauto suite.
 5. AI features. **Transcription/transcript panel done:** the media library's per-asset "📝"
    button runs Whisper on a background thread (`avcore::transcribe`, bundled Whisper Base model
