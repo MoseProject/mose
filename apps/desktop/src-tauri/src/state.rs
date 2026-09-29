@@ -145,8 +145,7 @@ pub struct AppState {
     /// [`avcore::nested_sequence::materialize_nested_sequences`]'s cache for `start_export` --
     /// separate from `PreviewEngine`'s own copy (it lives on that dedicated thread), so a
     /// compound clip's nested content isn't re-rendered on every export of the same sequence.
-    pub nested_sequence_cache:
-        Mutex<HashMap<u64, avcore::nested_sequence::NestedSequenceCache>>,
+    pub nested_sequence_cache: Mutex<HashMap<u64, avcore::nested_sequence::NestedSequenceCache>>,
 }
 
 impl AppState {

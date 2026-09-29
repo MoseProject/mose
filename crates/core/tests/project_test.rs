@@ -511,8 +511,15 @@ fn insert_sequence_as_compound_clip_appends_to_the_active_timelines_video_track(
     let clips = &project.sequences[0].timeline.tracks[0].clips;
     assert_eq!(clips.len(), 1);
     assert_eq!(clips[0].nested_sequence_id, Some(nested_id));
-    assert_eq!(clips[0].start_secs, 0.0, "appends at the end of an empty track");
-    assert_eq!(clips[0].duration_secs(), 1.0, "matches the nested sequence's own duration");
+    assert_eq!(
+        clips[0].start_secs, 0.0,
+        "appends at the end of an empty track"
+    );
+    assert_eq!(
+        clips[0].duration_secs(),
+        1.0,
+        "matches the nested sequence's own duration"
+    );
 }
 
 #[test]
@@ -528,7 +535,10 @@ fn insert_sequence_as_compound_clip_creates_a_video_track_when_none_exists() {
 
     assert!(inserted);
     assert_eq!(project.sequences[0].timeline.tracks.len(), 1);
-    assert_eq!(project.sequences[0].timeline.tracks[0].kind, TrackKind::Video);
+    assert_eq!(
+        project.sequences[0].timeline.tracks[0].kind,
+        TrackKind::Video
+    );
 }
 
 #[test]
