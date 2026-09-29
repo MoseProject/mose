@@ -153,16 +153,23 @@ Known gaps versus the egui shell, in migration order:
    downloads via `avcore::download_youtube`/`ytbridge` (`youtube-download-event`) -- all three
    import through the existing `import_media` pipeline on success.
 
-   **Deliberately not ported this pass: layout persistence, crash-report review, error-reporting
-   consent/telemetry delivery, update check.** These four are one tightly-coupled subsystem in
-   `ui::App` (`error_reporting.rs`'s ~700-line process-wide report builder/bounded on-disk queue/
-   Sentry-envelope delivery worker, `crash_review.rs`'s panic-hook-file review modal, and
-   `update_check.rs`) that isn't `core`-shared logic today -- porting it correctly means either
-   duplicating consent/privacy-sensitive code (real risk of a subtly wrong "opted out means
-   nothing is ever sent" guarantee) or first moving it into `avcore` behind review, not a
-   same-session autonomous port. Layout persistence is lower-stakes but architecturally mismatched
-   (desktop's CSS-grid panels vs. egui's immediate-mode resize) rather than a quick win. Flagging
-   rather than guessing at consent-affecting code.
+   **Crash review, error-reporting consent/telemetry, and update check done:** ported as
+   `apps/desktop/src-tauri/src/error_reporting.rs` (orchestration only -- the schema/sanitization/
+   validation it depends on, `avcore::ErrorReportBuilder`/`validate_report`/`validate_envelope`,
+   was already shared from `core`, not duplicated), `telemetry.rs` (local-only CPU/RAM/GPU
+   sampling via `avcore::record_event`, never sent), and `commands/update_check.rs` (entirely
+   through existing `avcore::update_check` functions -- release-asset naming is already generic
+   to the whole app, so no packaging change was needed; auto-install stays Linux-only, same
+   platform limitation the egui shell already has). A panic hook mirroring `ui::main.rs` writes
+   `crash_<unix>.txt` to the same `platform_log_dir` both shells share, so a crash from either
+   surfaces through the same post-crash "Send once / Always send / Do not send" review
+   (`CrashReviewModal.tsx`). Consent stays two-state (`Disabled`/`AlwaysSend`, default
+   `Disabled`): with no reporter held, nothing is built, validated, queued, or sent. Shared
+   `prefs.oc` keys: `error_reporting_consent`, `last_reviewed_crash_unix`, `telemetry_enabled`.
+   Not ported: per-call-site `report_error` instrumentation (ER-01A's fine-grained wiring across
+   every command's error path -- a much larger, separate refactor than this pass's scope) and
+   layout persistence (architecturally mismatched: desktop's CSS-grid panels vs. egui's
+   immediate-mode resize, not a quick win).
 7. Packaging: replace `crates/ui` in the installer and auto-update flow, port `e2e/` from
    pywinauto to WebDriver (`tauri-driver`), then delete `crates/ui`.
 
