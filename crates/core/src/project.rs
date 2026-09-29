@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use crate::export::ExportAspectRatio;
 use crate::media::MediaAsset;
 use crate::smart_bins::SmartBin;
-use crate::timeline::Timeline;
+use crate::timeline::{ClipInstance, Timeline, TrackKind};
 
 /// How long ago a project was last edited. Locale-neutral by design — the UI layer is
 /// responsible for turning this into a translated label.
@@ -230,6 +230,117 @@ impl Project {
                 })
             })
             .collect()
+    }
+
+    /// Wraps `clip_id` (and, per the multi-select rule below, its whole current selection) in a
+    /// new nested sequence ("compound clip" — Premiere/DaVinci/FCP all have this) on the active
+    /// sequence's timeline. Ported from `ui::App::create_compound_clip_from_selected_clip` so
+    /// both shells share one implementation — see [`crate::nested_sequence`]'s own module doc
+    /// comment for the underlying design and its "renders synchronously, blocks briefly" known
+    /// cost at preview/export time.
+    ///
+    /// Moves the clip's own data (trim range, every effect/keyframe) into a fresh [`Sequence`]'s
+    /// own new V1 track, rebased to start at `0.0`, then replaces it in place on the original
+    /// track with a plain nested-sequence clip (same id as `clip_id`) spanning the same
+    /// start/duration. Only `Video`-track clips.
+    ///
+    /// **Multi-clip compounding**: if `selected_clip_ids` has more than one member, includes
+    /// `clip_id`, and every member sits on that same track with no `nested_sequence_id` of its
+    /// own already — the unambiguous case, one nested track, no z-order/flattening decision to
+    /// make — the whole selection is compounded together instead of just `clip_id`: each member
+    /// is rebased relative to the *earliest* member's own `start_secs` (not `0.0` individually)
+    /// so their relative spacing/gaps survive inside the nested sequence, and the single
+    /// resulting wrapper clip spans from the earliest member's start to the latest member's own
+    /// end. Falls back to the single-clip behavior above (silently, not an error) when the
+    /// selection spans more than one track or already contains a compound clip.
+    ///
+    /// Returns `None` (no-op) if `clip_id` isn't on any `Video` track in the active sequence —
+    /// else the new nested [`Sequence`]'s id.
+    pub fn create_compound_clip(&mut self, clip_id: u64, selected_clip_ids: &[u64]) -> Option<u64> {
+        let timeline = self.timeline();
+        let track_index = timeline
+            .tracks
+            .iter()
+            .position(|t| t.kind == TrackKind::Video && t.clips.iter().any(|c| c.id == clip_id))?;
+        let track = &timeline.tracks[track_index];
+
+        let group_ids: Vec<u64> = if selected_clip_ids.len() > 1
+            && selected_clip_ids.contains(&clip_id)
+            && selected_clip_ids.iter().all(|id| {
+                track
+                    .clips
+                    .iter()
+                    .any(|c| c.id == *id && c.nested_sequence_id.is_none())
+            }) {
+            selected_clip_ids.to_vec()
+        } else {
+            vec![clip_id]
+        };
+        let mut members: Vec<ClipInstance> = track
+            .clips
+            .iter()
+            .filter(|c| group_ids.contains(&c.id))
+            .cloned()
+            .collect();
+        if members.is_empty() {
+            return None;
+        }
+        members.sort_by(|a, b| a.start_secs.total_cmp(&b.start_secs));
+        let primary = members
+            .iter()
+            .find(|c| c.id == clip_id)
+            .cloned()
+            .unwrap_or_else(|| members[0].clone());
+        let min_start = members[0].start_secs;
+        let max_end = members
+            .iter()
+            .map(|c| c.start_secs + c.duration_secs())
+            .fold(f64::NEG_INFINITY, f64::max);
+        let duration_secs = max_end - min_start;
+
+        let new_sequence_id = self.sequences.iter().map(|s| s.id).max().unwrap_or(0) + 1;
+        let compound_number = self.sequences.len() + 1;
+        let export_settings = self.active_sequence().export_settings;
+
+        let mut nested_timeline = Timeline {
+            tracks: Vec::new(),
+            playhead_secs: 0.0,
+            markers: Vec::new(),
+            multicam_groups: Vec::new(),
+        };
+        let nested_track_index = nested_timeline.create_track(TrackKind::Video);
+        for member in &members {
+            let mut inner_clip = member.clone();
+            inner_clip.start_secs = member.start_secs - min_start;
+            nested_timeline.tracks[nested_track_index]
+                .clips
+                .push(inner_clip);
+        }
+
+        self.sequences.push(Sequence {
+            id: new_sequence_id,
+            name: format!("Compound {compound_number}"),
+            timeline: nested_timeline,
+            export_settings,
+        });
+
+        let timeline = self.timeline_mut();
+        for track in &mut timeline.tracks {
+            if track.clips.iter().any(|c| group_ids.contains(&c.id)) {
+                track.clips.retain(|c| !group_ids.contains(&c.id));
+                let mut wrapper = ClipInstance::new(clip_id, 0, min_start, 0.0, duration_secs);
+                wrapper.nested_sequence_id = Some(new_sequence_id);
+                wrapper.composite_id = if group_ids.len() == 1 {
+                    primary.composite_id
+                } else {
+                    None
+                };
+                wrapper.color_label = primary.color_label;
+                track.clips.push(wrapper);
+                break;
+            }
+        }
+        Some(new_sequence_id)
     }
 
     /// Moves one sequence to `target_index`, keeping the currently active sequence active even
