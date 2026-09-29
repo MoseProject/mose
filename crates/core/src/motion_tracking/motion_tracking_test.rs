@@ -195,6 +195,48 @@ fn empty_frames_produce_no_tracked_positions() {
 }
 
 #[test]
+fn rgba_to_gray_rejects_incomplete_packed_frames() {
+    let frame = rgba_to_gray(&[255; 15], 2, 2);
+    assert_eq!(frame.width, 2);
+    assert_eq!(frame.height, 2);
+    assert!(frame.data.is_empty());
+    assert!(!frame.is_complete());
+}
+
+#[test]
+fn tracking_rejects_undersized_or_incomplete_frames() {
+    let undersized = GrayFrame {
+        width: 3,
+        height: 3,
+        data: vec![0; 9],
+    };
+    assert!(track_region(&[undersized], 0.5, 0.5, 0.2, 0.2, 0.1).is_empty());
+
+    let incomplete = GrayFrame {
+        width: FRAME_W,
+        height: FRAME_H,
+        data: vec![0; (FRAME_W * FRAME_H - 1) as usize],
+    };
+    let result = track_region_with_scores(&[incomplete], 0.5, 0.5, 0.2, 0.2, 0.1);
+    assert!(result.positions.is_empty());
+    assert!(result.scores.is_empty());
+    assert_eq!((result.template_width, result.template_height), (0, 0));
+}
+
+#[test]
+fn tracking_rejects_a_sequence_with_mismatched_frame_dimensions() {
+    let frames = vec![
+        frame_with_block(30, 20, 0),
+        GrayFrame {
+            width: FRAME_W - 1,
+            height: FRAME_H,
+            data: vec![0; ((FRAME_W - 1) * FRAME_H) as usize],
+        },
+    ];
+    assert!(track_region(&frames, 0.5, 0.5, 0.2, 0.2, 0.1).is_empty());
+}
+
+#[test]
 fn a_single_frame_produces_one_clamped_position() {
     let frame = frame_with_block(30, 20, 0);
     let tracked = track_region(&[frame], 0.5, 0.5, 0.2, 0.2, 0.1);
