@@ -1,20 +1,14 @@
 # Retired pywinauto/UI Automation e2e tests
 
-These 5 files drove `crates/ui`'s egui shell through Windows UI Automation (pywinauto). They
+These 4 files drove `crates/ui`'s egui shell through Windows UI Automation (pywinauto). They
 are excluded from collection (`e2e/pytest.ini`'s `--ignore=legacy_pywinauto`) and, unlike the
 rest of this directory's original ten, they are **not** blocked on tooling -- the WebDriver
-harness works and is proven against 8 real, passing tests in the parent directory (`test_launch.py`,
-`test_navigation.py`, `test_import.py`, `test_undo_redo.py`, `test_export.py`,
-`test_silence_review.py`, `test_clip_selection.py`, and the skip-unless-model-present
-`test_auto_reframe.py`). Each of these 5 tests a feature or an implementation detail the desktop
-shell genuinely doesn't have a counterpart for yet:
+harness works and is proven against 10 real, passing tests in the parent directory
+(`test_launch.py`, `test_navigation.py`, `test_import.py`, `test_undo_redo.py`,
+`test_export.py`, `test_silence_review.py`, `test_clip_selection.py`, `test_layer_transform.py`,
+and the skip-unless-model-present `test_auto_reframe.py`). Each of these 4 tests a feature or
+an implementation detail the desktop shell genuinely doesn't have a counterpart for yet:
 
-- **`test_layer_transform.py`** -- dragging the preview panel's layer box directly (on-canvas
-  position/resize handles). Desktop's inspector exposes position/scale only as plain number
-  inputs (`apps/desktop/src/editor/Inspector.tsx`'s `ClipControls`); per
-  `spec/architecture/tauri-migration.md` gap 3, on-canvas drag/resize handles are an explicitly
-  *not yet implemented* feature in the desktop shell, not a testing gap. Porting this test needs
-  that feature built first.
 - **`test_speed_ramp.py`** -- applying a speed-ramp preset from the Clip menu. No
   `apply_speed_ramp`-shaped command exists in `apps/desktop/src-tauri/src/commands/`, and no
   menu wires to one; `types.ts`/`timelineGeometry.test.ts` reference the *type* but nothing
@@ -37,7 +31,11 @@ shell genuinely doesn't have a counterpart for yet:
   `apps/desktop/src/theme.css`) and already has its own panel-layout persistence feature
   (gap 6). None of the three bugs this file guards against can occur in a CSS layout at all.
 
-Porting any of these needs either new desktop feature work (layer_transform, speed_ramp,
+`test_layer_transform.py` (on-canvas position/resize drag, previously listed here) is now
+ported and passing: `PreviewPanel.tsx` implements the missing feature this test needed, so it
+moved to the parent directory instead of staying quarantined.
+
+Porting any of the remaining 4 needs either new desktop feature work (speed_ramp,
 properties_panel_disclosure) or a bespoke test written against the real React/canvas
 implementation (viewport_culling, editor_layout_geometry) -- not a mechanical rewrite of what's
 here.
