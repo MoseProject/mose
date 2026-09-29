@@ -21,6 +21,7 @@ export function SequenceTabs({ session }: { session: SessionView }) {
         <button className="icon" title={t("removeSequence")} disabled={project.sequences.length === 1} onClick={() => run(api.removeSequence(sequence.id))}>x</button>
         <button className="icon" title={t("moveSequenceLeft")} disabled={index === 0} onClick={() => run(api.moveSequence(index, index - 1))}>‹</button>
         <button className="icon" title={t("moveSequenceRight")} disabled={index === project.sequences.length - 1} onClick={() => run(api.moveSequence(index, index + 1))}>›</button>
+        <button className="icon" title={t("insertAsCompoundClip")} disabled={index === project.active_sequence} onClick={() => run(api.insertSequenceAsCompoundClip(sequence.id))}>📦</button>
       </div>)}
       <button className="icon" title={t("addSequence")} onClick={() => run(api.addSequence(`${t("sequence")} ${project.sequences.length + 1}`))}>+</button>
     </div>

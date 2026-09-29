@@ -171,6 +171,8 @@ export const api = {
   /** Resolves to the new nested sequence's id, or null if clipId isn't on a Video track. */
   createCompoundClip: (clipId: number, selectedClipIds: number[]) =>
     invoke<number | null>("create_compound_clip", { clipId, selectedClipIds }),
+  insertSequenceAsCompoundClip: (sequenceId: number) =>
+    invoke<boolean>("insert_sequence_as_compound_clip", { sequenceId }),
   copyClip: (clipId: number) => invoke<void>("copy_clip", { clipId }),
   cutClip: (clipId: number) => invoke<void>("cut_clip", { clipId }),
   pasteClip: () => invoke<number[]>("paste_clip"),
