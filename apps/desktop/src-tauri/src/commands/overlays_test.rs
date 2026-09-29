@@ -17,9 +17,9 @@ fn timeline() -> Timeline {
 fn inserting_overlays_auto_creates_their_track_at_the_playhead() {
     let mut timeline = timeline();
     timeline.playhead_secs = 2.0;
-    let text = insert_text(&mut timeline, "Texto".into()).unwrap();
+    let text = insert_text(&mut timeline, "Texto".into(), None, None).unwrap();
     let shape = insert_shape(&mut timeline).unwrap();
-    let again = insert_text(&mut timeline, "Texto".into()).unwrap();
+    let again = insert_text(&mut timeline, "Texto".into(), None, None).unwrap();
 
     let kinds: Vec<_> = timeline.tracks.iter().map(|t| t.kind).collect();
     assert_eq!(kinds.iter().filter(|k| **k == TrackKind::Text).count(), 1);
@@ -46,7 +46,7 @@ fn inserting_onto_a_locked_track_is_rejected() {
 #[test]
 fn overlays_move_within_and_across_tracks_of_the_same_kind() {
     let mut timeline = timeline();
-    let id = insert_text(&mut timeline, "a".into()).unwrap();
+    let id = insert_text(&mut timeline, "a".into(), None, None).unwrap();
     let first = timeline.tracks[0].id;
     let second = timeline.create_track(TrackKind::Text);
     let second = timeline.tracks[second].id;
@@ -80,7 +80,7 @@ fn trimming_keeps_a_minimum_duration() {
 #[test]
 fn text_patches_clamp_and_respect_bold_support() {
     let mut timeline = timeline();
-    let id = insert_text(&mut timeline, "a".into()).unwrap();
+    let id = insert_text(&mut timeline, "a".into(), None, None).unwrap();
     assert!(patch_text(
         &mut timeline,
         id,
@@ -130,7 +130,7 @@ fn shape_patches_switch_presets_and_keep_alpha_separate_from_color() {
 #[test]
 fn removing_overlays_skips_locked_tracks() {
     let mut timeline = timeline();
-    let text = insert_text(&mut timeline, "a".into()).unwrap();
+    let text = insert_text(&mut timeline, "a".into(), None, None).unwrap();
     let shape = insert_shape(&mut timeline).unwrap();
     timeline.tracks[1].locked = true;
     assert!(remove_overlay(&mut timeline, text));

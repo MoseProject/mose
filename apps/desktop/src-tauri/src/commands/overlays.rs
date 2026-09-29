@@ -35,12 +35,26 @@ pub struct TextClipPatch {
     pub font_family: Option<TextFontFamily>,
     pub font_style: Option<TextFontStyle>,
     pub font_size: Option<f32>,
+    /// A `wght` axis value (100..=900) -- only meaningful for a variable-source family; the
+    /// frontend hides this control otherwise, same as egui's `is_variable_family` gate.
+    pub font_weight: Option<u16>,
     pub color_rgba: Option<[u8; 4]>,
+    pub background_rgba: Option<[u8; 4]>,
+    pub background_padding: Option<f32>,
+    pub background_corner_radius: Option<f32>,
+    pub direction: Option<avcore::TextDirection>,
     pub text_align: Option<TextAlign>,
     pub pos_x: Option<f32>,
     pub pos_y: Option<f32>,
+    pub pos_x_keyframes: Option<Vec<avcore::Keyframe<f32>>>,
+    pub pos_y_keyframes: Option<Vec<avcore::Keyframe<f32>>>,
+    pub scale_keyframes: Option<Vec<avcore::Keyframe<f32>>>,
+    pub rotation_keyframes: Option<Vec<avcore::Keyframe<f32>>>,
+    pub opacity_keyframes: Option<Vec<avcore::Keyframe<f32>>>,
     pub highlight_enabled: Option<bool>,
     pub highlight_color_rgba: Option<[u8; 4]>,
+    pub start_secs: Option<f64>,
+    pub duration_secs: Option<f64>,
 }
 
 /// Shape inspector changes; `None` fields are left untouched. `opacity` is the color's alpha.
@@ -48,12 +62,26 @@ pub struct TextClipPatch {
 #[serde(rename_all = "camelCase")]
 pub struct ShapeClipPatch {
     pub shape_kind: Option<ShapePreset>,
+    /// Hand-edited vertex list (canvas-fraction, shape-local unit-square space -- see
+    /// `ShapeKind::Polygon`'s doc) -- every preset except `Ellipse` is already a `Polygon` under
+    /// the hood, so this lets any of them be nudged into a custom shape, not just a dedicated
+    /// "Custom" starting point. Takes priority over `shape_kind` when both are present.
+    pub polygon_vertices: Option<Vec<(f32, f32)>>,
     pub color_rgb: Option<[u8; 3]>,
     pub opacity: Option<u8>,
     pub center_x: Option<f32>,
     pub center_y: Option<f32>,
+    pub center_x_keyframes: Option<Vec<avcore::Keyframe<f32>>>,
+    pub center_y_keyframes: Option<Vec<avcore::Keyframe<f32>>>,
     pub width: Option<f32>,
     pub height: Option<f32>,
+    pub width_keyframes: Option<Vec<avcore::Keyframe<f32>>>,
+    pub height_keyframes: Option<Vec<avcore::Keyframe<f32>>>,
+    pub rotation_deg: Option<f32>,
+    pub rotation_keyframes: Option<Vec<avcore::Keyframe<f32>>>,
+    pub stroke_thickness_px: Option<f32>,
+    pub start_secs: Option<f64>,
+    pub duration_secs: Option<f64>,
 }
 
 /// Static data the inspectors need from `core`: the bundled font catalog and each shape
@@ -74,6 +102,9 @@ pub struct FontOption {
     pub display_name: &'static str,
     pub category: &'static str,
     pub supports_bold: bool,
+    /// Whether this family ships a real `wght` variable axis (FONT-01B) -- gates the inspector's
+    /// font-weight slider, same as egui's own `is_variable_family` check.
+    pub is_variable: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -89,13 +120,21 @@ pub fn overlay_catalog() -> OverlayCatalog {
 }
 
 /// Adds a text clip at the playhead on the first Text track (created when missing), like
-/// egui's "+ Add text". `text` is the localized placeholder content. Returns the new clip's id
-/// so the webview can select it, `None` when the target track is locked.
+/// egui's "+ Add text". `text` is the localized placeholder content. `pos_x`/`pos_y` (canvas
+/// fraction) override `TextClip::new`'s default anchor -- what the Text tool's click-to-create
+/// uses (`ui::App::add_text_clip_at`); omitted for the toolbar button's fixed placement.
+/// Returns the new clip's id so the webview can select it, `None` when the target track is
+/// locked.
 #[tauri::command]
-pub fn add_text_clip(app: AppHandle, text: String) -> Result<Option<u64>, String> {
+pub fn add_text_clip(
+    app: AppHandle,
+    text: String,
+    pos_x: Option<f32>,
+    pos_y: Option<f32>,
+) -> Result<Option<u64>, String> {
     let mut created = None;
     undoable(&app, |project| {
-        created = insert_text(project.timeline_mut(), text);
+        created = insert_text(project.timeline_mut(), text, pos_x, pos_y);
         created.is_some()
     })?;
     Ok(created)
@@ -185,6 +224,7 @@ pub(crate) fn catalog() -> OverlayCatalog {
                 display_name: entry.display_name,
                 category: category_name(entry.category),
                 supports_bold: family.supports_bold(),
+                is_variable: entry.source_kind == font_catalog::FontSourceKind::Variable,
             })
         })
         .collect();
@@ -213,16 +253,26 @@ fn category_name(category: FontCategory) -> &'static str {
     }
 }
 
-pub(crate) fn insert_text(timeline: &mut Timeline, text: String) -> Option<u64> {
+pub(crate) fn insert_text(
+    timeline: &mut Timeline,
+    text: String,
+    pos_x: Option<f32>,
+    pos_y: Option<f32>,
+) -> Option<u64> {
     let index = timeline.resolve_or_create_track(TrackKind::Text, None);
     if timeline.tracks[index].locked {
         return None;
     }
     let id = timeline.next_clip_id();
     let start = timeline.playhead_secs;
-    timeline.tracks[index]
-        .text_clips
-        .push(TextClip::new(id, start, text));
+    let mut clip = TextClip::new(id, start, text);
+    if let Some(x) = pos_x.filter(|v| v.is_finite()) {
+        clip.pos_x = x.clamp(0.0, 1.0);
+    }
+    if let Some(y) = pos_y.filter(|v| v.is_finite()) {
+        clip.pos_y = y.clamp(0.0, 1.0);
+    }
+    timeline.tracks[index].text_clips.push(clip);
     Some(id)
 }
 
@@ -420,8 +470,23 @@ pub(crate) fn patch_text(timeline: &mut Timeline, clip_id: u64, patch: TextClipP
     if let Some(size) = patch.font_size.filter(|v| v.is_finite()) {
         clip.font_size = size.clamp(FONT_SIZE_RANGE.0, FONT_SIZE_RANGE.1);
     }
+    if let Some(weight) = patch.font_weight {
+        clip.font_weight = Some(weight.clamp(100, 900));
+    }
     if let Some(color) = patch.color_rgba {
         clip.color_rgba = color;
+    }
+    if let Some(color) = patch.background_rgba {
+        clip.background_rgba = color;
+    }
+    if let Some(padding) = patch.background_padding.filter(|v| v.is_finite()) {
+        clip.background_padding = padding.clamp(0.0, 64.0);
+    }
+    if let Some(radius) = patch.background_corner_radius.filter(|v| v.is_finite()) {
+        clip.background_corner_radius = radius.clamp(0.0, 64.0);
+    }
+    if let Some(direction) = patch.direction {
+        clip.direction = direction;
     }
     if let Some(align) = patch.text_align {
         clip.text_align = align;
@@ -432,11 +497,32 @@ pub(crate) fn patch_text(timeline: &mut Timeline, clip_id: u64, patch: TextClipP
     if let Some(y) = patch.pos_y.filter(|v| v.is_finite()) {
         clip.pos_y = y.clamp(0.0, 1.0);
     }
+    if let Some(keyframes) = patch.pos_x_keyframes {
+        clip.pos_x_keyframes = keyframes;
+    }
+    if let Some(keyframes) = patch.pos_y_keyframes {
+        clip.pos_y_keyframes = keyframes;
+    }
+    if let Some(keyframes) = patch.scale_keyframes {
+        clip.scale_keyframes = keyframes;
+    }
+    if let Some(keyframes) = patch.rotation_keyframes {
+        clip.rotation_keyframes = keyframes;
+    }
+    if let Some(keyframes) = patch.opacity_keyframes {
+        clip.opacity_keyframes = keyframes;
+    }
     if let Some(enabled) = patch.highlight_enabled {
         clip.highlight_enabled = enabled;
     }
     if let Some(color) = patch.highlight_color_rgba {
         clip.highlight_color_rgba = color;
+    }
+    if let Some(start) = patch.start_secs.filter(|v| v.is_finite()) {
+        clip.start_secs = start.max(0.0);
+    }
+    if let Some(duration) = patch.duration_secs.filter(|v| v.is_finite()) {
+        clip.duration_secs = duration.max(MIN_OVERLAY_SECS);
     }
     *clip != before
 }
@@ -453,7 +539,9 @@ pub(crate) fn patch_shape(timeline: &mut Timeline, clip_id: u64, patch: ShapeCli
         return false;
     };
     let before = clip.clone();
-    if let Some(kind) = patch.shape_kind.and_then(ShapePreset::to_kind) {
+    if let Some(vertices) = patch.polygon_vertices {
+        clip.shape_kind = ShapeKind::Polygon(vertices);
+    } else if let Some(kind) = patch.shape_kind.and_then(ShapePreset::to_kind) {
         clip.shape_kind = kind;
     }
     if let Some([r, g, b]) = patch.color_rgb {
@@ -468,11 +556,38 @@ pub(crate) fn patch_shape(timeline: &mut Timeline, clip_id: u64, patch: ShapeCli
     if let Some(y) = patch.center_y.filter(|v| v.is_finite()) {
         clip.center_y = y.clamp(0.0, 1.0);
     }
+    if let Some(keyframes) = patch.center_x_keyframes {
+        clip.center_x_keyframes = keyframes;
+    }
+    if let Some(keyframes) = patch.center_y_keyframes {
+        clip.center_y_keyframes = keyframes;
+    }
     if let Some(width) = patch.width.filter(|v| v.is_finite()) {
         clip.width = width.clamp(MIN_SHAPE_SIZE, 1.0);
     }
     if let Some(height) = patch.height.filter(|v| v.is_finite()) {
         clip.height = height.clamp(MIN_SHAPE_SIZE, 1.0);
+    }
+    if let Some(keyframes) = patch.width_keyframes {
+        clip.width_keyframes = keyframes;
+    }
+    if let Some(keyframes) = patch.height_keyframes {
+        clip.height_keyframes = keyframes;
+    }
+    if let Some(rotation) = patch.rotation_deg.filter(|v| v.is_finite()) {
+        clip.rotation_deg = rotation.clamp(0.0, 360.0);
+    }
+    if let Some(keyframes) = patch.rotation_keyframes {
+        clip.rotation_keyframes = keyframes;
+    }
+    if let Some(stroke) = patch.stroke_thickness_px.filter(|v| v.is_finite()) {
+        clip.stroke_thickness_px = stroke.max(0.0);
+    }
+    if let Some(start) = patch.start_secs.filter(|v| v.is_finite()) {
+        clip.start_secs = start.max(0.0);
+    }
+    if let Some(duration) = patch.duration_secs.filter(|v| v.is_finite()) {
+        clip.duration_secs = duration.max(MIN_OVERLAY_SECS);
     }
     *clip != before
 }
