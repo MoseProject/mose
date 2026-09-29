@@ -415,6 +415,19 @@ export function Timeline({ session }: { session: SessionView }) {
           };
   };
 
+  // Double-clicking a compound clip jumps the Editor to its nested sequence's tab -- the
+  // common "enter" affordance every NLE with this feature has (ui::App::open_nested_sequence).
+  const onDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const { x, y } = lanePoint(e);
+    if (y < RULER_HEIGHT) return;
+    const hit = hitTest(tracks, x, y + scrollY, ui.pxPerSec, scrollSecs);
+    if (!hit) return;
+    const clip = tracks[hit.trackIndex].clips.find((c) => c.id === hit.clipId);
+    if (clip?.nested_sequence_id == null) return;
+    const index = session.project.sequences.findIndex((s) => s.id === clip.nested_sequence_id);
+    if (index >= 0) void run(api.selectSequence(index));
+  };
+
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const { x, y } = lanePoint(e);
     const drag = dragRef.current;
@@ -637,6 +650,7 @@ export function Timeline({ session }: { session: SessionView }) {
             data-testid="timeline-canvas"
             style={{ cursor }}
             onPointerDown={onPointerDown}
+            onDoubleClick={onDoubleClick}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onWheel={onWheel}
