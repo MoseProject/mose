@@ -10,13 +10,28 @@
 # One-time setup:
 #   cargo install tauri-driver
 #   python -m pip install -r e2e/requirements.txt
-# Needs a debug build first (`cargo build -p desktop` / `make desktop-build` debug variant) and
-# the FFmpeg/GStreamer runtime DLL directories on PATH for the *launched process* -- same
-# requirement as running target/debug/oca-desktop.exe by hand (see CLAUDE.md's Commands
-# section). `make test-e2e` exports both before invoking pytest.
+# Needs a build first -- **through the Tauri CLI** (`cd apps/desktop && npm run tauri build --
+# --no-bundle`, or `make desktop-build`), never a plain `cargo build -p desktop`. Confirmed the
+# hard way: a binary built by plain `cargo build` (even `--release`) embeds `devUrl`
+# ("http://localhost:5173") instead of the built `frontendDist`, so the launched window shows a
+# WebView2 "can't reach this page" error with no Vite dev server running -- this is exactly the
+# packaging bug `release.yml` had until this was diagnosed (see tauri-migration.md gap 7); the
+# Tauri CLI sets env/cfg state a bare `cargo build` never does. Also needs the FFmpeg/GStreamer
+# runtime DLL directories on PATH for the *launched process* -- same requirement as running
+# target/release/oca-desktop.exe by hand (see CLAUDE.md's Commands section). `make test-e2e`
+# exports both before invoking pytest.
 #
 # tauri-driver listens on TAURI_DRIVER_PORT (default 4444) and spawns msedgedriver itself; only
 # one instance may own that port at a time, so it's started once per test session, not per test.
+# TAURI_NATIVE_DRIVER points tauri-driver at a specific msedgedriver.exe when it can't find one
+# matching the installed WebView2 Runtime automatically.
+#
+# OCA_DESKTOP_EXE overrides which built binary to launch (default: target/release/oca-desktop.exe,
+# since a *debug* build can abort at startup with an unlogged "Microsoft Visual C++ Runtime
+# Library" dialog on some machines -- confirmed via a real WinDbg/procdump capture to be a
+# debug-CRT-only heap-validation false alarm on a statically-linked C++ dependency's global
+# std::map destructor, absent from `--release` builds, and not a shipping concern since
+# release.yml only ever builds `--release`).
 from __future__ import annotations
 
 import os
@@ -28,7 +43,7 @@ import pytest
 from selenium import webdriver
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-APP_EXE = REPO_ROOT / "target" / "debug" / "oca-desktop.exe"
+APP_EXE = Path(os.environ.get("OCA_DESKTOP_EXE", REPO_ROOT / "target" / "release" / "oca-desktop.exe"))
 DRIVER_PORT = int(os.environ.get("TAURI_DRIVER_PORT", "4444"))
 NATIVE_DRIVER = os.environ.get("TAURI_NATIVE_DRIVER")
 LAUNCH_TIMEOUT_SECS = 20
@@ -81,7 +96,7 @@ def oca_driver(tauri_driver_process):
     """Launches a fresh oca-desktop.exe under tauri-driver, yields a Selenium WebDriver bound to
     its WebView2 window, then tears both down."""
     if not APP_EXE.exists():
-        pytest.fail(f"{APP_EXE} not found -- build it first: cargo build -p desktop")
+        pytest.fail(f"{APP_EXE} not found -- build it first: cd apps/desktop && npm run tauri build -- --no-bundle")
 
     capabilities = {
         "tauri:options": {"application": str(APP_EXE)},
