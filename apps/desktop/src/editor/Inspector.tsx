@@ -50,12 +50,12 @@ export function Inspector({ session }: { session: SessionView }) {
       <div className="panel-title">{t("inspector")}</div>
       <div className="inspector-body">
         {clip ? (
-          <>
+          <div data-testid="inspector-clip">
             <div className="muted" title={asset?.source_path}>
               {t("source")}: {asset?.file_name ?? "—"}
             </div>
             <ClipControls key={clip.id} clip={clip} />
-          </>
+          </div>
         ) : textClip ? (
           <TextInspector key={textClip.id} clip={textClip} />
         ) : shapeClip ? (

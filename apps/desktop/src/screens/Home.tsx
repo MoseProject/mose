@@ -40,7 +40,7 @@ export function Home() {
         </button>
         <button onClick={openProject}>{t("openProject")}</button>
         {session && (
-          <button onClick={() => patchUi({ screen: "editor" })}>{t("backToEditor")}</button>
+          <button data-testid="back-to-editor" onClick={() => patchUi({ screen: "editor" })}>{t("backToEditor")}</button>
         )}
       </div>
       {recent.length > 0 && <section className="recent-projects">

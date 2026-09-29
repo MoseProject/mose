@@ -612,6 +612,7 @@ export function Timeline({ session }: { session: SessionView }) {
         <div className="timeline-lanes" ref={lanesRef}>
           <canvas
             ref={canvasRef}
+            data-testid="timeline-canvas"
             style={{ cursor }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
