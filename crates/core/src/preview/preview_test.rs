@@ -69,3 +69,14 @@ fn live_element_names_are_distinct_per_role_for_the_same_clip() {
 fn live_element_names_are_distinct_per_clip_for_the_same_role() {
     assert_ne!(live_balance_element_name(1), live_balance_element_name(2));
 }
+
+#[test]
+fn blend_over_channel_respects_the_overlay_alpha() {
+    use crate::timeline::BlendMode;
+
+    // Addition of 100 over 100 is 200; at 50% alpha it must be halfway between that and the
+    // original bottom value, rather than replacing it outright as the old CPU path did.
+    assert_eq!(blend_over_channel(BlendMode::Addition, 100, 100, 128), 150);
+    assert_eq!(blend_over_channel(BlendMode::Addition, 100, 100, 0), 100);
+    assert_eq!(blend_over_channel(BlendMode::Addition, 100, 100, 255), 200);
+}

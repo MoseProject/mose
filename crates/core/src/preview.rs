@@ -227,10 +227,12 @@ impl VideoFrame {
 // rotation/opacity below, position needs a compositing (`overlay`) stage that this single-clip
 // pipeline doesn't have at all; adding it would mean building out multi-track preview
 // compositing first, not just picking a GStreamer element.
-/// `include_opacity` is `false` for an overlay branch in [`Preview::open_composited`]'s
-/// pipeline — there, opacity keyframes drive `compositor`'s own per-pad `alpha` property
-/// instead (real alpha blending against whatever's under it), so baking a second, redundant
-/// uniform-alpha stage in here via the `alpha` element would just double-apply the same ramp.
+/// `include_opacity` is `false` for an ordinary overlay branch in
+/// [`Preview::open_composited`]'s pipeline — there, opacity keyframes drive `compositor`'s own
+/// per-pad `alpha` property instead (real alpha blending against whatever's under it), so baking
+/// a second, redundant uniform-alpha stage in here via the `alpha` element would just
+/// double-apply the same ramp. Blend-mode overlays bypass `compositor`, so they keep this stage
+/// and [`Preview::current_frame`] applies its resulting alpha during CPU compositing.
 /// Every other caller (the single-clip [`Preview::open`] path, and a composited pipeline's
 /// background branch, which has nothing under it to blend against) keeps the old behavior.
 ///
@@ -1145,8 +1147,11 @@ fn build_composite_branch(
 
     let mut shake_handle: Option<ShakeMarginHandle> = None;
     if let Some(clip) = branch.clip {
-        let (filter_bin, branch_shake_handle) =
-            build_video_filter_bin(clip, branch.resolution, !branch.is_overlay)?;
+        let (filter_bin, branch_shake_handle) = build_video_filter_bin(
+            clip,
+            branch.resolution,
+            !branch.is_overlay || clip.has_blend_mode(),
+        )?;
         if let Some(filter_bin) = filter_bin {
             chain.push(filter_bin);
         }
@@ -2851,7 +2856,8 @@ impl Preview {
                     continue;
                 }
                 for channel in 0..3 {
-                    base_px[channel] = blend_channel(*mode, layer_px[channel], base_px[channel]);
+                    base_px[channel] =
+                        blend_over_channel(*mode, layer_px[channel], base_px[channel], layer_px[3]);
                 }
             }
         }
@@ -2862,6 +2868,16 @@ impl Preview {
             rgba,
         })
     }
+}
+
+/// Applies a blend-mode result as the top RGBA layer over an already composited bottom pixel.
+/// The dedicated blend-mode appsink bypasses GStreamer's `compositor`, so its output alpha must
+/// be applied here instead of being discarded. The normal composited output always has an opaque
+/// background-video branch, so only the top alpha participates in this fast path.
+fn blend_over_channel(mode: BlendMode, top: u8, bottom: u8, top_alpha: u8) -> u8 {
+    let blended = blend_channel(mode, top, bottom) as u16;
+    let alpha = top_alpha as u16;
+    ((blended * alpha + bottom as u16 * (u16::from(u8::MAX) - alpha) + 127) / 255) as u8
 }
 
 impl Drop for Preview {
