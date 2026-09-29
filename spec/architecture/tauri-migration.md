@@ -181,15 +181,12 @@ Known gaps versus the egui shell, in migration order:
    `Prefs.tsx`/`WatchFolder.tsx`. The other ten e2e files are quarantined in
    `e2e/legacy_pywinauto/` (excluded from collection; its `README.md` explains the remaining
    port work and dependency order) rather than left broken or guess-ported, because porting
-   their pixel-precise egui canvas interactions needs a live run this environment can't
-   currently do: a debug `oca-desktop.exe` builds clean but aborts on launch with a "Microsoft
-   Visual C++ Runtime Library" dialog before any log line is written (no crash file, no fresh
-   `oca.log`) -- plausibly the CRT-linkage conflict `cargo build`'s own `LNK4098 defaultlib
-   conflicts` warnings point at for the `desktop` binary specifically. **`crates/ui` is not
-   deleted.** Deleting the only other shipping shell before that launch crash is fixed and
-   reproduced-working on a real machine would leave the project without a working editor at
-   all -- the "critical problem" carve-out this gap's own autonomous-execution instruction
-   allows for.
+   their pixel-precise egui canvas interactions needs a live run. The desktop binary itself
+   remains running under the required DLL environment; the direct `tauri-driver` 2.1.0/native
+   EdgeDriver path instead misidentifies `oca-desktop.exe` as the Edge binary and fails before
+   creating a WebView session. **`crates/ui` is not deleted.** The remaining harness must move
+   to Tauri's embedded WebDriver provider, or the direct native-driver configuration must be
+   corrected and proven on every release target, before retiring the other shipping shell.
 
 Each gap migrates as its own slice: move any egui-free logic from `crates/ui/src/app/` into
 `core` first (commit), then add the command(s) (commit), then the React UI (commit), then tests.
