@@ -129,18 +129,21 @@ impl Lut3D {
                 continue;
             }
 
-            let values: Vec<f32> = line
-                .split_whitespace()
-                .filter_map(|s| s.parse().ok())
-                .collect();
-            if values.len() != 3 {
+            let values: Result<Vec<f32>, _> = line.split_whitespace().map(str::parse).collect();
+            let Ok(values) = values else {
+                return Err(LutParseError::MalformedRow(data.len()));
+            };
+            if values.len() != 3 || values.iter().any(|value| !value.is_finite()) {
                 return Err(LutParseError::MalformedRow(data.len()));
             }
             data.push([values[0], values[1], values[2]]);
         }
 
         let size = size.ok_or(LutParseError::MissingSize)?;
-        let expected = size * size * size;
+        let expected = size
+            .checked_mul(size)
+            .and_then(|entries| entries.checked_mul(size))
+            .ok_or(LutParseError::InvalidSize)?;
         if data.len() != expected {
             return Err(LutParseError::WrongRowCount {
                 expected,
@@ -166,9 +169,16 @@ impl Lut3D {
     /// inputs are clamped, never a panic or a wraparound).
     pub fn sample(&self, r: f32, g: f32, b: f32) -> [f32; 3] {
         let max_index = (self.size - 1) as f32;
-        let fx = r.clamp(0.0, 1.0) * max_index;
-        let fy = g.clamp(0.0, 1.0) * max_index;
-        let fz = b.clamp(0.0, 1.0) * max_index;
+        let normalized = |value: f32| {
+            if value.is_finite() {
+                value.clamp(0.0, 1.0)
+            } else {
+                0.0
+            }
+        };
+        let fx = normalized(r) * max_index;
+        let fy = normalized(g) * max_index;
+        let fz = normalized(b) * max_index;
 
         let x0 = fx.floor() as usize;
         let y0 = fy.floor() as usize;
@@ -411,6 +421,16 @@ mod tests {
     }
 
     #[test]
+    fn rejects_non_finite_lut_entries() {
+        for value in ["NaN", "inf", "-inf"] {
+            let cube = format!(
+                "LUT_3D_SIZE 2\n{value} 0 0\n0 0 0\n0 0 0\n0 0 0\n0 0 0\n0 0 0\n0 0 0\n0 0 0\n"
+            );
+            assert_eq!(Lut3D::parse(&cube), Err(LutParseError::MalformedRow(0)));
+        }
+    }
+
+    #[test]
     fn identity_lut_samples_are_a_no_op() {
         let lut = Lut3D::parse(&identity_cube(16)).unwrap();
         let [r, g, b] = lut.sample(0.5, 0.25, 0.75);
@@ -424,6 +444,15 @@ mod tests {
         let lut = Lut3D::parse(&identity_cube(4)).unwrap();
         assert_eq!(lut.sample(0.0, 0.0, 0.0), [0.0, 0.0, 0.0]);
         assert_eq!(lut.sample(1.0, 1.0, 1.0), [1.0, 1.0, 1.0]);
+    }
+
+    #[test]
+    fn non_finite_lut_coordinates_fall_back_to_the_black_corner() {
+        let lut = Lut3D::parse(&identity_cube(2)).unwrap();
+        assert_eq!(
+            lut.sample(f32::NAN, f32::INFINITY, f32::NEG_INFINITY),
+            [0.0; 3]
+        );
     }
 
     #[test]
