@@ -29,7 +29,7 @@ def main() -> None:
         root = pathlib.Path(temp)
         bundle = root / "bundle"
         executable_paths = [
-            "ui",
+            "oca-desktop",
             "ytbridge",
             "deno",
             "resources/runtime/bin/ffmpeg",

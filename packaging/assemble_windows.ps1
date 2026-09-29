@@ -14,7 +14,7 @@ $Resources = Join-Path $OutputDir "resources"
 $Runtime = Join-Path $Resources "runtime"
 New-Item -ItemType Directory -Force -Path (Join-Path $Runtime "bin") | Out-Null
 
-Copy-Item (Join-Path $BuildDir "ui.exe") $OutputDir
+Copy-Item (Join-Path $BuildDir "oca-desktop.exe") $OutputDir
 Copy-Item (Join-Path $BuildDir "ytbridge.exe") $OutputDir
 Copy-Item (Join-Path $BuildDir "deno.exe") $OutputDir
 Copy-Item (Join-Path $BuildDir "espeak-ng-data") $OutputDir -Recurse
@@ -22,7 +22,7 @@ Copy-Item (Join-Path $BuildDir "python310.dll") $OutputDir
 Copy-Item (Join-Path $BuildDir "DLLs") $OutputDir -Recurse
 Copy-Item (Join-Path $BuildDir "Lib") $OutputDir -Recurse
 
-# libav DLLs must be beside ui.exe for the Windows loader. The CLI is kept in runtime/bin and
+# libav DLLs must be beside the desktop executable for the Windows loader. The CLI is kept in runtime/bin and
 # added to PATH by configure_bundled_runtime() for yt-dlp merging/audio extraction.
 Copy-Item (Join-Path $FfmpegDir "bin\*.dll") $OutputDir
 Copy-Item (Join-Path $FfmpegDir "bin\ffmpeg.exe") (Join-Path $Runtime "bin")

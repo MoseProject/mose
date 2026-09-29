@@ -51,7 +51,12 @@ jobs:
           "$((Resolve-Path ffmpeg-dev/bin).Path)" >> $env:GITHUB_PATH
 
       - name: Build release binaries
-        run: cargo build --workspace --release --locked
+        run: |
+          cd apps/desktop
+          npm ci
+          npm run build
+          cd ../..
+          cargo build --workspace --release --locked
 
       - name: Assemble and validate complete bundle
         shell: pwsh
@@ -76,8 +81,8 @@ jobs:
             throw "Expected Inno Setup 6.7.1, found $compilerVersion"
           }
           $metadata = cargo metadata --no-deps --format-version 1 | ConvertFrom-Json
-          $version = ($metadata.packages | Where-Object name -eq "ui").version
-          if (-not $version) { throw "Could not resolve the UI package version" }
+          $version = ($metadata.packages | Where-Object name -eq "desktop").version
+          if (-not $version) { throw "Could not resolve the desktop package version" }
           $source = (Resolve-Path dist/oca).Path
           $output = Join-Path $PWD "dist\installer"
           New-Item -ItemType Directory -Force -Path $output | Out-Null
@@ -128,7 +133,12 @@ jobs:
           echo "PYO3_PYTHON=$PWD/vendor/python-runtime/bin/python3.10" >> "$GITHUB_ENV"
 
       - name: Build release binaries
-        run: cargo build --workspace --release --locked
+        run: |
+          cd apps/desktop
+          npm ci
+          npm run build
+          cd ../..
+          cargo build --workspace --release --locked
 
       - name: Assemble and validate complete portable tree
         run: |
@@ -138,7 +148,7 @@ jobs:
       - name: Build and validate Debian package
         run: |
           version=$(cargo metadata --no-deps --format-version 1 \
-            | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "ui"))')
+            | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "desktop"))')
           SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
           export SOURCE_DATE_EPOCH
           python3 packaging/tests/test_deb_package.py
@@ -237,12 +247,17 @@ jobs:
           echo "OCA_CODESIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
 
       - name: Build release binaries
-        run: cargo build --workspace --release --locked
+        run: |
+          cd apps/desktop
+          npm ci
+          npm run build
+          cd ../..
+          cargo build --workspace --release --locked
 
       - name: Assemble and validate macOS application
         run: |
           version=$(cargo metadata --no-deps --format-version 1 \
-            | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "ui"))')
+            | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "desktop"))')
           mkdir -p dist/macos
           ./packaging/assemble_macos.sh \
             target/release "$FFMPEG_DIR" "$GSTREAMER_DIR" \

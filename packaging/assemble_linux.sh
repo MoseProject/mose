@@ -15,7 +15,7 @@ python3 "$SCRIPT_DIR/verify_ffmpeg_runtime.py" "$FFMPEG_DIR/bin/ffmpeg" --platfo
 
 rm -rf -- "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR/resources/runtime/bin" "$OUTPUT_DIR/resources/runtime/lib"
-cp "$BUILD_DIR/ui" "$BUILD_DIR/ytbridge" "$BUILD_DIR/deno" "$OUTPUT_DIR/"
+cp "$BUILD_DIR/oca-desktop" "$BUILD_DIR/ytbridge" "$BUILD_DIR/deno" "$OUTPUT_DIR/"
 cp -a "$BUILD_DIR/espeak-ng-data" "$OUTPUT_DIR/"
 cp -a "$BUILD_DIR/lib" "$OUTPUT_DIR/"
 cp "$FFMPEG_DIR/bin/ffmpeg" "$OUTPUT_DIR/resources/runtime/bin/"
@@ -41,7 +41,7 @@ cp "$scanner" "$GST_ROOT/libexec/gstreamer-1.0/"
 while IFS= read -r library; do
     cp -Ln "$library" "$GST_ROOT/lib/" 2>/dev/null || true
 done < <(
-    find "$OUTPUT_DIR/ui" "$OUTPUT_DIR/ytbridge" "$OUTPUT_DIR/deno" "$scanner" \
+    find "$OUTPUT_DIR/oca-desktop" "$OUTPUT_DIR/ytbridge" "$OUTPUT_DIR/deno" "$scanner" \
         "$OUTPUT_DIR/resources/runtime/bin" "$OUTPUT_DIR/resources/runtime/lib" \
         "$GST_PLUGINS" -type f -print0 \
         | xargs -0 -r ldd 2>/dev/null \
@@ -50,9 +50,9 @@ done < <(
         | sort -u
 )
 
-mv "$OUTPUT_DIR/ui" "$OUTPUT_DIR/ui-bin"
-cp "$SCRIPT_DIR/linux-launcher.sh" "$OUTPUT_DIR/ui"
-chmod +x "$OUTPUT_DIR/ui" "$OUTPUT_DIR/ui-bin" "$OUTPUT_DIR/ytbridge" "$OUTPUT_DIR/deno"
+mv "$OUTPUT_DIR/oca-desktop" "$OUTPUT_DIR/oca-desktop-bin"
+cp "$SCRIPT_DIR/linux-launcher.sh" "$OUTPUT_DIR/oca-desktop"
+chmod +x "$OUTPUT_DIR/oca-desktop" "$OUTPUT_DIR/oca-desktop-bin" "$OUTPUT_DIR/ytbridge" "$OUTPUT_DIR/deno"
 python3 "$SCRIPT_DIR/fetch_models.py" "$OUTPUT_DIR/resources"
 cp "$SCRIPT_DIR/bundle-manifest.json" "$OUTPUT_DIR/resources/"
 python3 "$SCRIPT_DIR/generate_third_party_notices.py" "$OUTPUT_DIR/resources/licenses"

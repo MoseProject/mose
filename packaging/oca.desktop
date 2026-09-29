@@ -2,7 +2,7 @@
 Type=Application
 Name=oca
 Comment=Native video editor
-Exec=ui
+Exec=oca-desktop
 Icon=oca
 Categories=AudioVideo;Video;
 Terminal=false
