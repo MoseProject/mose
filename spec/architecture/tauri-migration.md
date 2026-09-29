@@ -93,9 +93,18 @@ Known gaps versus the egui shell, in migration order:
    own "known cost, deliberately not hidden" tradeoff for a real FFmpeg re-encode);
    `start_export` does the same synchronously with its own `AppState`-held cache. Verified against
    the real release binary via the existing e2e suite (no regressions) plus new unit coverage in
-   both crates -- no dedicated e2e test yet, since desktop has no UI path to *create* a compound
-   clip (the "wrap selection as compound clip" command itself is a separate, not-yet-ported
-   feature, gap 3 material, not this gap).
+   both crates. **Compound-clip creation done too:** `avcore::Project::create_compound_clip`
+   (ported from `ui::App::create_compound_clip_from_selected_clip`, single-clip plus the
+   unambiguous multi-select-compounding case) backs a new `create_compound_clip` command and a
+   timeline toolbar button, verified end to end against the real binary
+   (`e2e/test_compound_clip.py`) -- wrapping a clip now actually renders correctly in both
+   preview and export, closing the loop this gap's own resolve-side fix opened. `ui::App::
+   insert_sequence_as_compound_clip` ("insert an existing sequence as a compound clip" — a
+   different, less-used entry point than wrapping a selection) and `open_nested_sequence`
+   (double-click to jump into a compound clip's tab, trivially portable via the already-existing
+   `select_sequence` command once the frontend resolves nested_sequence_id -> tab index) remain
+   unported; neither blocks `crates/ui` deletion on its own merit, but are worth picking up if a
+   real workflow needs them.
 2. **Done:** roll/slip/slide tools (timeline toolbar tool switcher, repurposing edge/body drags
    into `avcore::Timeline`'s `Track::roll_edit`/`ClipInstance::slip`/`Track::slide_clip`);
    composite-block body drag (`Timeline::move_clip_with_group`) and "Mesclar em bloco composto";
@@ -290,21 +299,22 @@ Known gaps versus the egui shell, in migration order:
    `e2e/conftest.py`'s `OCA_DESKTOP_EXE` env var can still point at a debug build if it ever
    launches cleanly elsewhere.
 
-   **`crates/ui` is not yet deleted.** The packaging bug is fixed, the launch crash is diagnosed
-   and non-blocking, the WebDriver harness is proven working, gap 3's previously-missing features
-   (on-canvas layer transform, speed-ramp preset, collapsible property sections, Text tool,
-   custom shape drawing and vertex editing, and the full text/shape property field set) are all
-   shipped, and gap 1's compound-clip preview/export gap is closed too (along with a real shared
-   `resolved_asset_id` bug this fix surfaced, see gap 1's own entry). The remaining blocker per
-   the migration's own top-level strategy ("New crate in parallel, egui untouched until parity")
-   is narrower now: desktop has no UI path to actually *create* a compound clip -- egui's
-   "wrap selection as compound clip" / "insert existing sequence as compound clip" commands
-   (`ui::App::create_compound_clip_from_selected_clip`/`insert_sequence_as_compound_clip`) were
-   never ported, only the resolve-side rendering. A project that already has a compound clip
-   (from egui, or from a hand-authored `.ocproj`) now previews and exports correctly in desktop,
-   but a desktop-only user has no way to make one. Deleting the egui shell before that command is
-   built would be a genuine feature regression, independent of how much of gap 7 itself is done.
-   That's its own gap-3 slice, not part of "port e2e" or "replace the installer."
+   **`crates/ui` is not yet deleted, but every previously-named blocker is now closed.** The
+   packaging bug is fixed, the launch crash is diagnosed and non-blocking, the WebDriver harness
+   is proven working, gap 3's previously-missing features (on-canvas layer transform, speed-ramp
+   preset, collapsible property sections, Text tool, custom shape drawing and vertex editing, the
+   full text/shape property field set, and now compound-clip *creation*) are all shipped, and
+   gap 1's compound-clip preview/export gap is closed too (along with a real shared
+   `resolved_asset_id` bug this fix surfaced, see gap 1's own entry). What's left is narrower and
+   lower-stakes than any prior blocker: `ui::App::insert_sequence_as_compound_clip` ("insert an
+   existing sequence as a compound clip", a secondary entry point distinct from "wrap the current
+   selection" which is now ported) and `open_nested_sequence` (double-click a compound clip to
+   jump into its tab -- trivially portable onto the already-existing `select_sequence` command)
+   remain unported. Neither is load-bearing for a typical editing session the way on-canvas
+   layer transform or the Text tool were. The migration's own top-level strategy ("New crate in
+   parallel, egui untouched until parity") no longer has a concrete, named counter-example
+   blocking it; whether that's "close enough" to delete `crates/ui` is a product call for the
+   project owner to make, not something this doc should decide unilaterally.
 
 Each gap migrates as its own slice: move any egui-free logic from `crates/ui/src/app/` into
 `core` first (commit), then add the command(s) (commit), then the React UI (commit), then tests.
