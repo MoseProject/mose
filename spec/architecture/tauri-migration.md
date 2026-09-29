@@ -230,8 +230,9 @@ Known gaps versus the egui shell, in migration order:
    existing (already-correct) invocation -- this was a real ship-blocking regression this gap's
    own packaging slice introduced, not present in `crates/ui`'s build.
 
-   **e2e harness ported and proven working end-to-end -- 9/14 real passing tests, 1 skipped, 4
-   left blocked on missing desktop features (not testing gaps).** `e2e/conftest.py` drives
+   **e2e harness ported and proven working end-to-end -- 17/18 real passing tests, 1 skipped, 2
+   left quarantined as egui-implementation-detail tests with no CSS/React equivalent (not
+   feature gaps).** `e2e/conftest.py` drives
    `oca-desktop.exe` through `tauri-driver`/Selenium instead of pywinauto, invoking Tauri
    commands directly via `window.__TAURI_INTERNALS__.invoke` (`e2e/helpers.py`) rather than
    fighting native OS dialogs WebDriver can't reach. Ported and passing for real:
@@ -244,18 +245,18 @@ Known gaps versus the egui shell, in migration order:
    tree, same condition the retired version used). `data-testid` selectors added to `App.tsx`/
    `Home.tsx`/`Editor.tsx`/`Prefs.tsx`/`WatchFolder.tsx`/`Timeline.tsx`/`Inspector.tsx`.
 
-   The other 5 files stay quarantined in `e2e/legacy_pywinauto/` (excluded from collection) --
-   not because porting them is hard, but because each tests a feature or an egui implementation
-   detail the desktop shell doesn't have yet, confirmed by reading the actual current source
-   rather than assumed: on-canvas layer drag/resize (gap 3, already documented missing), the
-   speed-ramp preset menu (no command or menu wiring exists in `apps/desktop/src-tauri/src/
-   commands/` at all), collapsible property sections (gap 3, already documented missing;
-   `Inspector.tsx` renders everything flat), viewport-culling drag continuation and specific
-   historical layout bugs (both pure egui-immediate-mode implementation details with no React/
-   CSS-grid equivalent to test). `e2e/legacy_pywinauto/README.md` has the full per-file
-   reasoning. Porting these needs the missing desktop features built first (a separate,
-   substantial slice of work, not part of "port e2e to WebDriver"), or, for the two
-   egui-specific ones, a bespoke test designed against desktop's actual drag/layout code.
+   Only 2 files now stay quarantined in `e2e/legacy_pywinauto/` (excluded from collection) --
+   `test_timeline_viewport_culling.py` (viewport-culling drag continuation, an egui per-frame
+   `ui.interact()` culling concern with no equivalent in the desktop canvas's own, differently-
+   implemented horizontal culling) and `test_editor_layout_geometry.py` (three historical
+   egui-immediate-mode layout bugs -- `ui.horizontal` max-child-height, `ScrollArea::auto_shrink`
+   defaults, menu bar as a separate row -- that cannot occur in desktop's real CSS grid/flexbox
+   layout at all). `on-canvas layer drag/resize`, the speed-ramp preset, and collapsible property
+   sections were also quarantined here originally but are now ported and passing as
+   `test_layer_transform.py`/`test_speed_ramp.py`/`test_properties_panel_disclosure.py` in the
+   parent directory, once those desktop features shipped. `e2e/legacy_pywinauto/README.md` has
+   the full per-file reasoning. Porting the remaining 2 needs a bespoke test written against
+   desktop's actual drag/layout code, not a mechanical rewrite of an egui-specific test.
 
    **Debug-build launch crash diagnosed, confirmed not a shipping blocker.** A `cargo build -p
    desktop` (debug profile) binary aborted at startup with an unlogged "Microsoft Visual C++
@@ -273,14 +274,16 @@ Known gaps versus the egui shell, in migration order:
    `e2e/conftest.py`'s `OCA_DESKTOP_EXE` env var can still point at a debug build if it ever
    launches cleanly elsewhere.
 
-   **`crates/ui` is not yet deleted.** Not because of a new blocker -- the packaging bug is
-   fixed, the launch crash is diagnosed and non-blocking, and the WebDriver harness is proven
-   working -- but because the migration's own top-level strategy ("New crate in parallel, egui
-   untouched until parity") was never actually met: on-canvas layer transform, the speed-ramp
-   preset, and collapsible property sections are real, confirmed-missing desktop features, not
-   e2e-porting gaps. Deleting the egui shell before those are built would be a genuine feature
-   regression for real users, independent of how much of gap 7 itself is done. That feature work
-   is its own slice, not part of "port e2e" or "replace the installer."
+   **`crates/ui` is not yet deleted.** The packaging bug is fixed, the launch crash is diagnosed
+   and non-blocking, the WebDriver harness is proven working, and gap 3's previously-missing
+   features (on-canvas layer transform, speed-ramp preset, collapsible property sections, Text
+   tool, custom shape drawing and vertex editing, and the full text/shape property field set) are
+   now all shipped. The remaining blocker per the migration's own top-level strategy ("New crate
+   in parallel, egui untouched until parity") is gap 1: compound clips are still skipped in the
+   desktop preview pipeline, a real, confirmed-missing feature (not an e2e-porting gap). Deleting
+   the egui shell before that is built would be a genuine feature regression for real users using
+   compound clips, independent of how much of gap 7 itself is done. That feature work is its own
+   slice, not part of "port e2e" or "replace the installer."
 
 Each gap migrates as its own slice: move any egui-free logic from `crates/ui/src/app/` into
 `core` first (commit), then add the command(s) (commit), then the React UI (commit), then tests.
