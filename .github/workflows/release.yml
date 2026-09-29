@@ -52,11 +52,10 @@ jobs:
 
       - name: Build release binaries
         run: |
+          cargo build --release --locked -p ui -p ytbridge
           cd apps/desktop
           npm ci
-          npm run build
-          cd ../..
-          cargo build --workspace --release --locked
+          npm run tauri build -- --no-bundle
 
       - name: Assemble and validate complete bundle
         shell: pwsh
@@ -134,11 +133,10 @@ jobs:
 
       - name: Build release binaries
         run: |
+          cargo build --release --locked -p ui -p ytbridge
           cd apps/desktop
           npm ci
-          npm run build
-          cd ../..
-          cargo build --workspace --release --locked
+          npm run tauri build -- --no-bundle
 
       - name: Assemble and validate complete portable tree
         run: |
@@ -248,11 +246,10 @@ jobs:
 
       - name: Build release binaries
         run: |
+          cargo build --release --locked -p ui -p ytbridge
           cd apps/desktop
           npm ci
-          npm run build
-          cd ../..
-          cargo build --workspace --release --locked
+          npm run tauri build -- --no-bundle
 
       - name: Assemble and validate macOS application
         run: |
