@@ -343,6 +343,45 @@ impl Project {
         Some(new_sequence_id)
     }
 
+    /// Inserts an existing `Sequence` (elsewhere in this project) as a compound clip onto the
+    /// active sequence's timeline — the "drag an existing sequence tab onto another timeline as
+    /// a nested clip" direction, a secondary entry point distinct from
+    /// [`Project::create_compound_clip`]'s "wrap the current selection in a brand-new nested
+    /// sequence." Ported from `ui::App::insert_sequence_as_compound_clip`.
+    ///
+    /// Lands on the first `Video` track (auto-creating one if none exists), right after
+    /// whatever's already there — the same "append" placement a double-clicked media-library
+    /// asset already uses. The new clip's duration comes from the nested sequence's own edited
+    /// [`Timeline::duration_secs`] — not a real FFmpeg render/probe (that only happens lazily,
+    /// the first time this clip is actually previewed or exported, via
+    /// [`crate::nested_sequence::materialize_nested_sequences`]).
+    ///
+    /// Returns `false` (no-op) if `sequence_id` doesn't exist in this project, is the active
+    /// sequence itself (the trivial direct self-nesting cycle — a deeper indirect cycle is
+    /// instead caught gracefully at render/materialize time by `nested_sequence`'s own cycle
+    /// detection), or is itself empty (`Timeline::duration_secs() == 0.0`).
+    pub fn insert_sequence_as_compound_clip(&mut self, sequence_id: u64) -> bool {
+        if self.active_sequence().id == sequence_id {
+            return false;
+        }
+        let duration_secs = match self.sequences.iter().find(|s| s.id == sequence_id) {
+            Some(nested) => nested.timeline.duration_secs(),
+            None => return false,
+        };
+        if duration_secs <= 0.0 {
+            return false;
+        }
+
+        let timeline = self.timeline_mut();
+        let track_index = timeline.resolve_or_create_track(TrackKind::Video, None);
+        let start_secs = timeline.tracks[track_index].duration_secs();
+        let clip_id = timeline.next_clip_id();
+        let mut clip = ClipInstance::new(clip_id, 0, start_secs, 0.0, duration_secs);
+        clip.nested_sequence_id = Some(sequence_id);
+        timeline.tracks[track_index].clips.push(clip);
+        true
+    }
+
     /// Moves one sequence to `target_index`, keeping the currently active sequence active even
     /// when indices shift around it. Returns `false` for invalid indices or a no-op move.
     pub fn move_sequence(&mut self, from_index: usize, target_index: usize) -> bool {
