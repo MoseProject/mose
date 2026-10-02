@@ -31,7 +31,7 @@ mkdir -p \
     "$PACKAGE_ROOT/usr/share/icons/hicolor/1024x1024/apps"
 
 cp -a "$BUNDLE_DIR/." "$PACKAGE_ROOT/opt/oca/"
-ln -s /opt/oca/ui "$PACKAGE_ROOT/usr/bin/oca"
+ln -s /opt/oca/oca-desktop "$PACKAGE_ROOT/usr/bin/oca"
 install -m 0644 "$SCRIPT_DIR/oca-deb.desktop" \
     "$PACKAGE_ROOT/usr/share/applications/oca.desktop"
 install -m 0644 "$REPO_ROOT/logo.png" \

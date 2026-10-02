@@ -2210,3 +2210,58 @@ fn text_font_family_unknown_renders_and_behaves_as_lato() {
         "an unrecognized id has no catalog entry to check a bold face against"
     );
 }
+
+#[test]
+fn every_fixed_shape_preset_round_trips_through_its_own_shape_kind() {
+    use avcore::timeline::ShapePreset;
+    for preset in ShapePreset::PICKABLE {
+        let kind = preset.to_kind().expect("pickable presets have geometry");
+        assert_eq!(ShapePreset::from_kind(&kind), preset);
+    }
+    assert_eq!(ShapePreset::Custom.to_kind(), None);
+}
+
+#[test]
+fn a_polygon_matching_no_preset_is_custom_even_with_a_preset_vertex_count() {
+    use avcore::timeline::ShapePreset;
+    let hand_drawn = ShapeKind::Polygon(vec![(0.1, 0.1), (0.2, 0.3), (-0.4, 0.1)]);
+    assert_eq!(ShapePreset::from_kind(&hand_drawn), ShapePreset::Custom);
+    let rectangle_like =
+        ShapeKind::Polygon(vec![(-0.4, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5)]);
+    assert_eq!(ShapePreset::from_kind(&rectangle_like), ShapePreset::Custom);
+}
+
+#[test]
+fn new_overlay_clips_use_the_manual_insert_defaults() {
+    let text = avcore::timeline::TextClip::new(7, 2.5, "Text".to_string());
+    assert_eq!(
+        (text.id, text.start_secs, text.duration_secs),
+        (7, 2.5, 3.0)
+    );
+    assert_eq!((text.pos_x, text.pos_y, text.font_size), (0.1, 0.85, 48.0));
+    assert_eq!(text.text, "Text");
+    let shape = ShapeClip::new(8, 1.0);
+    assert_eq!(
+        (shape.id, shape.start_secs, shape.duration_secs),
+        (8, 1.0, 3.0)
+    );
+    assert_eq!(shape.shape_kind, ShapeKind::rectangle());
+    assert_eq!((shape.center_x, shape.center_y), (0.5, 0.5));
+}
+
+#[test]
+fn switching_to_a_family_without_bold_drops_bold_and_static_families_drop_weight() {
+    use avcore::timeline::{TextClip, TextFontFamily, TextFontStyle};
+    let mut clip = TextClip::new(1, 0.0, String::new());
+    clip.font_style = TextFontStyle::Bold;
+    clip.font_weight = Some(600);
+    assert!(clip.set_font_family(TextFontFamily::BebasNeue));
+    assert_eq!(clip.font_family, TextFontFamily::BebasNeue);
+    assert_eq!(clip.font_style, TextFontStyle::Regular);
+    assert_eq!(clip.font_weight, None);
+
+    let mut clip = TextClip::new(1, 0.0, String::new());
+    clip.font_style = TextFontStyle::Bold;
+    assert!(!clip.set_font_family(TextFontFamily::Lato));
+    assert_eq!(clip.font_style, TextFontStyle::Bold);
+}

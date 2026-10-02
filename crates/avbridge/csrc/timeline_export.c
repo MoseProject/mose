@@ -322,7 +322,9 @@ EncodeStatus avbridge_encode_timeline_export(const ClipSegment *segments, int se
                comma-separated arguments are safe (verified against a real ffmpeg build, not
                just read off the docs). n/N reset to 0 at the start of each segment's filter
                graph, so they count frames from this clip's first frame. */
-            char transition_str[2048] = "";
+            /* A Zoom transition expands `inside` three times, alongside six coordinate
+               expressions. Keep this comfortably above their bounded worst-case expansion. */
+            char transition_str[8192] = "";
             if (seg->transition_in != 0) {
                 double tf = (double)seg->transition_duration_secs * (double)canvas_fps.num /
                             (double)canvas_fps.den;
@@ -370,7 +372,7 @@ EncodeStatus avbridge_encode_timeline_export(const ClipSegment *segments, int se
                        %-substitution counts right, and each sub-expression only needs to
                        reference tf/z's %g-formatted text once instead of retyping the
                        argument list at every nesting level. */
-                    char z[160], sx[224], sy[224], inside[768];
+                    char z[160], sx[224], sy[224], inside[1024];
                     snprintf(z, sizeof(z), "(0.5+0.5*lt(N,%g)*N/%g+0.5*gte(N,%g))", tf, tf, tf);
                     snprintf(sx, sizeof(sx), "((X-W/2)/%s+W/2)", z);
                     snprintf(sy, sizeof(sy), "((Y-H/2)/%s+H/2)", z);

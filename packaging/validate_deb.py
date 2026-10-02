@@ -65,8 +65,8 @@ def main() -> None:
         )
 
         command = root / "usr" / "bin" / "oca"
-        if not command.is_symlink() or command.readlink() != pathlib.Path("/opt/oca/ui"):
-            errors.append("usr/bin/oca is not a symlink to /opt/oca/ui")
+        if not command.is_symlink() or command.readlink() != pathlib.Path("/opt/oca/oca-desktop"):
+            errors.append("usr/bin/oca is not a symlink to /opt/oca/oca-desktop")
 
         desktop_path = root / "usr" / "share" / "applications" / "oca.desktop"
         desktop = desktop_path.read_text(encoding="utf-8") if desktop_path.is_file() else ""

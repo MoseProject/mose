@@ -52,6 +52,8 @@ pub fn detect_scene_cuts(samples: &[(f64, GrayFrame)], threshold: f32) -> Vec<Sc
         if frame_a.width != frame_b.width
             || frame_a.height != frame_b.height
             || frame_a.data.is_empty()
+            || !frame_a.is_complete()
+            || !frame_b.is_complete()
         {
             continue;
         }
@@ -129,6 +131,22 @@ mod tests {
         let samples = vec![(0.0, solid_frame(0, 4, 4)), (1.0, solid_frame(255, 2, 2))];
         let cuts = detect_scene_cuts(&samples, DEFAULT_SCENE_CUT_THRESHOLD);
         assert!(cuts.is_empty());
+    }
+
+    #[test]
+    fn skips_incomplete_frames_instead_of_comparing_partial_data() {
+        let samples = vec![
+            (0.0, solid_frame(0, 4, 4)),
+            (
+                1.0,
+                GrayFrame {
+                    width: 4,
+                    height: 4,
+                    data: vec![255; 15],
+                },
+            ),
+        ];
+        assert!(detect_scene_cuts(&samples, DEFAULT_SCENE_CUT_THRESHOLD).is_empty());
     }
 
     #[test]

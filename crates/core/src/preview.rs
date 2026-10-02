@@ -200,7 +200,8 @@ impl VideoFrame {
 /// narrower (no vignette — no matching element in this GStreamer install; no chroma key — only
 /// meaningful once layering exists; gain is handled by the separate audio pipeline; no
 /// glitch/transitions — animated per-frame in export via avfilter's `n` frame-count expressions
-/// with no static element equivalent GStreamer-side; position keyframes aren't wired to preview
+/// with no static element equivalent GStreamer-side; position keyframes are applied by the
+/// composited-overlay branch's compositor-pad probe
 /// — they need a compositing (`overlay`) stage, which this single-clip pipeline doesn't have,
 /// the same reason position has no visible effect on a single/background track in export either
 /// — see `keyframe` module docs; scale/rotation/opacity each get a pad probe re-evaluating
@@ -223,14 +224,14 @@ impl VideoFrame {
 // split moves — see each block below for specifics. HardCut and None both still render nothing
 // here, same as export.
 //
-// TODO: position keyframes aren't wired to preview (see crate::keyframe module docs) — unlike
-// rotation/opacity below, position needs a compositing (`overlay`) stage that this single-clip
-// pipeline doesn't have at all; adding it would mean building out multi-track preview
-// compositing first, not just picking a GStreamer element.
-/// `include_opacity` is `false` for an overlay branch in [`Preview::open_composited`]'s
-/// pipeline — there, opacity keyframes drive `compositor`'s own per-pad `alpha` property
-/// instead (real alpha blending against whatever's under it), so baking a second, redundant
-/// uniform-alpha stage in here via the `alpha` element would just double-apply the same ramp.
+// Position keyframes require compositing, so the single-clip path has no placement work to do;
+// composited overlay branches update their compositor pad's `xpos` and `ypos` per buffer below.
+/// `include_opacity` is `false` for an ordinary overlay branch in
+/// [`Preview::open_composited`]'s pipeline — there, opacity keyframes drive `compositor`'s own
+/// per-pad `alpha` property instead (real alpha blending against whatever's under it), so baking
+/// a second, redundant uniform-alpha stage in here via the `alpha` element would just
+/// double-apply the same ramp. Blend-mode overlays bypass `compositor`, so they keep this stage
+/// and [`Preview::current_frame`] applies its resulting alpha during CPU compositing.
 /// Every other caller (the single-clip [`Preview::open`] path, and a composited pipeline's
 /// background branch, which has nothing under it to blend against) keeps the old behavior.
 ///
@@ -1145,8 +1146,11 @@ fn build_composite_branch(
 
     let mut shake_handle: Option<ShakeMarginHandle> = None;
     if let Some(clip) = branch.clip {
-        let (filter_bin, branch_shake_handle) =
-            build_video_filter_bin(clip, branch.resolution, !branch.is_overlay)?;
+        let (filter_bin, branch_shake_handle) = build_video_filter_bin(
+            clip,
+            branch.resolution,
+            !branch.is_overlay || clip.has_blend_mode(),
+        )?;
         if let Some(filter_bin) = filter_bin {
             chain.push(filter_bin);
         }
@@ -2841,19 +2845,7 @@ impl Preview {
             let Ok(layer_plane) = layer_frame.plane_data(0) else {
                 continue;
             };
-            for (base_px, layer_px) in rgba
-                .as_chunks_mut::<4>()
-                .0
-                .iter_mut()
-                .zip(layer_plane.as_chunks::<4>().0)
-            {
-                if layer_px[3] == 0 {
-                    continue;
-                }
-                for channel in 0..3 {
-                    base_px[channel] = blend_channel(*mode, layer_px[channel], base_px[channel]);
-                }
-            }
+            blend_rgba_frame(&mut rgba, layer_plane, *mode);
         }
 
         Some(VideoFrame {
@@ -2862,6 +2854,43 @@ impl Preview {
             rgba,
         })
     }
+}
+
+/// Applies a blend-mode result as the top RGBA layer over an already composited bottom pixel.
+/// The dedicated blend-mode appsink bypasses GStreamer's `compositor`, so its output alpha must
+/// be applied here instead of being discarded. The normal composited output always has an opaque
+/// background-video branch, so only the top alpha participates in this fast path.
+fn blend_over_channel(mode: BlendMode, top: u8, bottom: u8, top_alpha: u8) -> u8 {
+    let blended = blend_channel(mode, top, bottom) as u16;
+    let alpha = top_alpha as u16;
+    ((blended * alpha + bottom as u16 * (u16::from(u8::MAX) - alpha) + 127) / 255) as u8
+}
+
+/// Blends one packed RGBA frame over another. This is deliberately independent of GStreamer so
+/// the pixel contract can be tested with deterministic synthetic buffers.
+///
+/// Returns `false` without mutating `base` when either buffer is not complete packed RGBA data
+/// or their sizes differ.
+fn blend_rgba_frame(base: &mut [u8], layer: &[u8], mode: BlendMode) -> bool {
+    if base.len() != layer.len() || !base.len().is_multiple_of(4) {
+        return false;
+    }
+
+    for (base_px, layer_px) in base
+        .as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .zip(layer.as_chunks::<4>().0)
+    {
+        if layer_px[3] == 0 {
+            continue;
+        }
+        for channel in 0..3 {
+            base_px[channel] =
+                blend_over_channel(mode, layer_px[channel], base_px[channel], layer_px[3]);
+        }
+    }
+    true
 }
 
 impl Drop for Preview {

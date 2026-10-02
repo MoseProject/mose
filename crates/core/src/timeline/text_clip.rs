@@ -399,6 +399,60 @@ pub struct TextClip {
     pub text_align: TextAlign,
 }
 
+impl TextClip {
+    /// The manually inserted default: white 48 pt Lato near the lower-left corner, lasting 3
+    /// seconds from `start_secs`. Every shell's "add text" goes through this; `text` is passed in
+    /// because the placeholder content is localized by the caller.
+    pub fn new(id: u64, start_secs: f64, text: String) -> Self {
+        Self {
+            id,
+            start_secs,
+            duration_secs: 3.0,
+            text,
+            font_size: 48.0,
+            font_family: TextFontFamily::default(),
+            font_style: TextFontStyle::default(),
+            font_weight: None,
+            color_rgba: [255, 255, 255, 255],
+            background_rgba: [0, 0, 0, 0],
+            background_padding: default_text_background_padding(),
+            background_corner_radius: default_text_background_corner_radius(),
+            pos_x: 0.1,
+            pos_y: 0.85,
+            pos_x_keyframes: Vec::new(),
+            pos_y_keyframes: Vec::new(),
+            scale_keyframes: Vec::new(),
+            rotation_keyframes: Vec::new(),
+            words: Vec::new(),
+            highlight_enabled: false,
+            highlight_color_rgba: default_highlight_color(),
+            opacity_keyframes: Vec::new(),
+            direction: TextDirection::default(),
+            language: None,
+            text_align: TextAlign::default(),
+        }
+    }
+
+    /// Switches the font family, dropping settings the new family can't honor: Bold falls back
+    /// to Regular when the family has no bold face, and an explicit `wght` value is cleared for a
+    /// static (non-variable) family. Returns whether anything changed.
+    pub fn set_font_family(&mut self, family: TextFontFamily) -> bool {
+        let before = (self.font_family.clone(), self.font_style, self.font_weight);
+        let is_variable =
+            crate::font_catalog::find_family(family.family_id()).is_some_and(|entry| {
+                entry.source_kind == crate::font_catalog::FontSourceKind::Variable
+            });
+        if !family.supports_bold() {
+            self.font_style = TextFontStyle::Regular;
+        }
+        if !is_variable {
+            self.font_weight = None;
+        }
+        self.font_family = family;
+        before != (self.font_family.clone(), self.font_style, self.font_weight)
+    }
+}
+
 fn default_text_background_padding() -> f32 {
     8.0
 }

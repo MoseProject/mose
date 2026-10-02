@@ -1,42 +1,39 @@
-from conftest import poll_for_descendants
+# The egui shell had a single persistent nav rail with five destinations (Editor/Mídia/Fila/
+# Ajustes/Início as separate top-level screens). The desktop shell's navigation model is
+# different (see spec/architecture/tauri-migration.md): the topbar only ever switches between
+# Home, Preferences and the Watch-folder screen; the editor (media library, timeline, export
+# queue) is one screen reached by opening/creating a project, not three separate destinations.
+# This test asserts the equivalent guarantee -- every topbar destination is reachable and
+# renders its own screen -- against that real structure instead of the retired one.
+from selenium.webdriver.common.by import By
 
-# Nav rail labels (short) -> the breadcrumb title each one navigates to (see i18n.rs's
-# NavX/ScreenTitleX pairs — they're not always the same string, e.g. "Fila" vs. "Fila de
-# exportação"). App launches in pt-BR (OcaApp::new), so these are the pt-BR strings.
-NAV_LABEL_TO_SCREEN_TITLE = {
-    "Editor": "Editor",
-    "Mídia": "Mídia",
-    "Fila": "Fila de exportação",
-    "Ajustes": "Ajustes",
-    "Início": "Início",
+from conftest import poll_until
+
+NAV_TESTID_TO_SCREEN_TESTID = {
+    "nav-prefs": "screen-prefs",
+    "nav-watch": "screen-watch",
+    "nav-home": "screen-home",
 }
 
 
-def test_navigating_to_each_screen_updates_the_breadcrumb(oca_window):
-    for nav_label, screen_title in NAV_LABEL_TO_SCREEN_TITLE.items():
-        oca_window.child_window(title=nav_label, control_type="Button").click_input()
+def test_navigating_topbar_destinations_updates_the_screen(oca_driver):
+    for nav_testid, screen_testid in NAV_TESTID_TO_SCREEN_TESTID.items():
+        oca_driver.find_element(By.CSS_SELECTOR, f'[data-testid="{nav_testid}"]').click()
 
-        assert oca_window.exists()  # still alive: no panic mid-navigation
-        # descendants(), not child_window().exists() — some screens repeat their breadcrumb
-        # title as their own on-screen heading too (e.g. the Fila screen's "Fila de
-        # exportação"), so child_window() would raise ElementAmbiguousError on a screen where
-        # navigation actually worked correctly. Polled rather than a single snapshot — the
-        # app only repaints every 200ms while idle (OcaApp::ui's request_repaint_after), so
-        # the click's effect isn't necessarily visible to UI Automation yet the instant
-        # click_input() returns.
-        matches = poll_for_descendants(oca_window, screen_title, timeout_secs=3.0)
-        if not matches:
-            # "Ajustes" opens `egui::Modal`'s prefs dialog rather than switching
-            # `app.screen` (see `App::show_prefs_modal`) — a click on the *next* nav item
-            # while that modal's full-screen backdrop is still capturing input can land as
-            # "dismiss the modal" alone (backdrop swallows it) rather than also registering as
-            # the nav click, depending on exactly which frame the click's down/up events land
-            # in relative to the modal opening. One retry click clears this empirically (the
-            # modal is already closed by the first click's dismiss, so the retry is a normal
-            # nav click against the plain nav rail underneath) rather than the click genuinely
-            # never having worked.
-            oca_window.child_window(
-                title=nav_label, control_type="Button"
-            ).click_input()
-            matches = poll_for_descendants(oca_window, screen_title, timeout_secs=3.0)
-        assert matches, f"no Text control titled {screen_title!r} after clicking {nav_label!r}"
+        found = poll_until(
+            lambda testid=screen_testid: oca_driver.find_elements(
+                By.CSS_SELECTOR, f'[data-testid="{testid}"]'
+            ),
+            timeout_secs=3.0,
+        )
+        assert found, f"no [data-testid={screen_testid!r}] after clicking [data-testid={nav_testid!r}]"
+
+
+def test_new_project_opens_the_editor_screen(oca_driver):
+    oca_driver.find_element(By.CSS_SELECTOR, '[data-testid="new-project"]').click()
+
+    found = poll_until(
+        lambda: oca_driver.find_elements(By.CSS_SELECTOR, '[data-testid="screen-editor"]'),
+        timeout_secs=5.0,
+    )
+    assert found, "no [data-testid=screen-editor] after creating a new project"

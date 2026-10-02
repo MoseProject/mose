@@ -45,7 +45,7 @@ def main() -> None:
     else:
         executable_root = root
         resources = root / "resources"
-        executable = "ui.exe" if args.platform == "windows" else "ui"
+        executable = "oca-desktop.exe" if args.platform == "windows" else "oca-desktop"
         helper = "ytbridge.exe" if args.platform == "windows" else "ytbridge"
         deno = "deno.exe" if args.platform == "windows" else "deno"
         espeak = root / "espeak-ng-data"

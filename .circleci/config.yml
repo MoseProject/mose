@@ -46,8 +46,10 @@ executors:
     resource_class: medium
 
 commands:
-  # Shared by both jobs below: native toolchain/library setup that has nothing to do with
-  # whether the run is coverage or a parallel test partition.
+  # Shared by the quality and coverage jobs: native toolchain/library setup and only the
+  # dependency caches that are smaller than the work they avoid. In particular, do not cache
+  # `target/`: revision-keyed build outputs dominated storage and took longer to transfer than
+  # Cargo needed to rebuild them.
   setup-native-deps:
     steps:
       - run:
@@ -108,34 +110,20 @@ commands:
       - restore_cache:
           name: Restore Cargo registry
           keys:
-            - v2-cargo-registry-{{ checksum "Cargo.lock" }}
-            - v2-cargo-registry-
+            - v3-cargo-registry-{{ checksum "Cargo.lock" }}
 
-      # Separate from the cargo-registry cache above: these two binaries aren't in
-      # Cargo.lock, so they're keyed on their own pinned versions instead.
+      # This tool is not in Cargo.lock, so cache the small verified binary independently.
       - restore_cache:
           keys:
-            - cargo-tools-<< pipeline.parameters.cargo-llvm-cov-version >>-<< pipeline.parameters.cargo-nextest-version >>
+            - v3-cargo-nextest-<< pipeline.parameters.cargo-nextest-version >>
 
       - run:
-          name: Download and verify cargo-llvm-cov and cargo-nextest (prebuilt binaries)
+          name: Download and verify cargo-nextest (prebuilt binary)
           command: |
-            rustup component add llvm-tools-preview
-
             mkdir -p cargo-tools
-            if [ -x cargo-tools/cargo-llvm-cov ] && [ -x cargo-tools/cargo-nextest ]; then
-              echo "cargo-llvm-cov/cargo-nextest already cached, skipping download."
+            if [ -x cargo-tools/cargo-nextest ]; then
+              echo "cargo-nextest already cached, skipping download."
             else
-              llvm_cov_version="<< pipeline.parameters.cargo-llvm-cov-version >>"
-              llvm_cov_sha256="<< pipeline.parameters.cargo-llvm-cov-linux64-sha256 >>"
-              curl -fsSL -o llvm-cov.tar.gz "https://github.com/taiki-e/cargo-llvm-cov/releases/download/v${llvm_cov_version}/cargo-llvm-cov-x86_64-unknown-linux-gnu.tar.gz"
-              actual=$(sha256sum llvm-cov.tar.gz | awk '{print $1}')
-              if [ "$actual" != "$llvm_cov_sha256" ]; then
-                echo "cargo-llvm-cov checksum mismatch! Expected: $llvm_cov_sha256, Got: $actual" >&2
-                exit 1
-              fi
-              tar -xzf llvm-cov.tar.gz -C cargo-tools
-
               nextest_version="<< pipeline.parameters.cargo-nextest-version >>"
               nextest_sha256="<< pipeline.parameters.cargo-nextest-linux64-sha256 >>"
               curl -fsSL -o nextest.tar.gz "https://get.nexte.st/${nextest_version}/x86_64-unknown-linux-gnu.tar.gz"
@@ -145,13 +133,13 @@ commands:
                 exit 1
               fi
               tar -xzf nextest.tar.gz -C cargo-tools
-              chmod +x cargo-tools/cargo-llvm-cov cargo-tools/cargo-nextest
+              chmod +x cargo-tools/cargo-nextest
             fi
 
             echo "export PATH=$(pwd)/cargo-tools:\$PATH" >> "$BASH_ENV"
 
       - save_cache:
-          key: cargo-tools-<< pipeline.parameters.cargo-llvm-cov-version >>-<< pipeline.parameters.cargo-nextest-version >>
+          key: v3-cargo-nextest-<< pipeline.parameters.cargo-nextest-version >>
           paths:
             - cargo-tools
 
@@ -235,25 +223,50 @@ commands:
               exit 1
             fi
 
+  install-coverage-tool:
+    steps:
+      # Keep this out of the pull-request quality job: LLVM coverage instrumentation is
+      # substantially slower and the verifier only needs it on the protected branch.
+      - restore_cache:
+          keys:
+            - v3-cargo-llvm-cov-<< pipeline.parameters.cargo-llvm-cov-version >>
+
+      - run:
+          name: Download and verify cargo-llvm-cov (prebuilt binary)
+          command: |
+            rustup component add llvm-tools-preview
+            mkdir -p cargo-tools
+            if [ -x cargo-tools/cargo-llvm-cov ]; then
+              echo "cargo-llvm-cov already cached, skipping download."
+            else
+              llvm_cov_version="<< pipeline.parameters.cargo-llvm-cov-version >>"
+              llvm_cov_sha256="<< pipeline.parameters.cargo-llvm-cov-linux64-sha256 >>"
+              curl -fsSL -o llvm-cov.tar.gz "https://github.com/taiki-e/cargo-llvm-cov/releases/download/v${llvm_cov_version}/cargo-llvm-cov-x86_64-unknown-linux-gnu.tar.gz"
+              actual=$(sha256sum llvm-cov.tar.gz | awk '{print $1}')
+              if [ "$actual" != "$llvm_cov_sha256" ]; then
+                echo "cargo-llvm-cov checksum mismatch! Expected: $llvm_cov_sha256, Got: $actual" >&2
+                exit 1
+              fi
+              tar -xzf llvm-cov.tar.gz -C cargo-tools
+              chmod +x cargo-tools/cargo-llvm-cov
+            fi
+            echo "export PATH=$(pwd)/cargo-tools:\$PATH" >> "$BASH_ENV"
+
+      - save_cache:
+          key: v3-cargo-llvm-cov-<< pipeline.parameters.cargo-llvm-cov-version >>
+          paths:
+            - cargo-tools/cargo-llvm-cov
+
 jobs:
-  build-and-test:
+  quality:
     executor: linux
     retention:
-      caches: 7d
+      caches: 3d
     environment:
       CARGO_TERM_COLOR: always
     steps:
       - checkout
       - setup-native-deps
-
-      # Keep coverage/clippy artifacts separate from the regular nextest cache. The
-      # revision-specific key makes retries exact, while the prefix fallback lets Cargo
-      # incrementally rebuild from the latest successful revision on the same toolchain.
-      - restore_cache:
-          name: Restore quality build artifacts
-          keys:
-            - v2-cargo-target-quality-{{ arch }}-rust-<< pipeline.parameters.rust-version >>-{{ checksum "Cargo.lock" }}-{{ .Revision }}
-            - v2-cargo-target-quality-{{ arch }}-rust-<< pipeline.parameters.rust-version >>-{{ checksum "Cargo.lock" }}-
 
       - run:
           name: Check formatting
@@ -261,105 +274,60 @@ jobs:
             source "$BASH_ENV"
             cargo fmt --all -- --check
 
-      # No separate `cargo build --workspace` step: clippy uses a different rustc wrapper
-      # than plain build, so their target/ caches invalidate each other — running both back
-      # to back recompiles the whole workspace twice for no extra coverage (clippy's checks
-      # are a superset of build's). `cargo llvm-cov nextest` below still catches any build
-      # break, just as part of the coverage/test step rather than a separately labeled one.
       - run:
           name: Clippy
           command: |
             source "$BASH_ENV"
             cargo clippy --workspace --all-targets
 
-      # Runs the full, unpartitioned suite deliberately: cargo-llvm-cov's own nextest
-      # integration has no supported way to merge coverage instrumentation collected across
-      # separate --partition shards (open upstream issue: taiki-e/cargo-llvm-cov#281 — each
-      # partition only sees its own subset of tests, so a partitioned coverage run would
-      # under-report real coverage). See the `test-fast` job below for parallel test
-      # execution without coverage.
       - run:
-          name: Test with coverage
+          name: Test
           command: |
             source "$BASH_ENV"
-            # Preserve instrumented build products across CI runs, but never reuse raw
-            # execution profiles: those belong only to the current test invocation.
-            find target/llvm-cov-target -type f -name '*.profraw' -delete 2>/dev/null || true
-            cargo llvm-cov nextest --workspace --no-clean --lcov --output-path lcov.info --profile ci
-            test -s lcov.info
-
-      - store_test_results:
-          path: target/nextest/ci
-
-      # Keep the generated report available even when Codecov rejects or cannot process an
-      # upload. This makes coverage generation independently verifiable from CircleCI.
-      - store_artifacts:
-          path: lcov.info
-          destination: coverage/lcov.info
+            cargo nextest run --workspace --profile ci
 
       - save_cache:
           name: Save Cargo registry
-          key: v2-cargo-registry-{{ checksum "Cargo.lock" }}
+          key: v3-cargo-registry-{{ checksum "Cargo.lock" }}
           paths:
             - ~/.cargo/registry
 
-      - save_cache:
-          name: Save quality build artifacts
-          key: v2-cargo-target-quality-{{ arch }}-rust-<< pipeline.parameters.rust-version >>-{{ checksum "Cargo.lock" }}-{{ .Revision }}
-          paths:
-            - target/debug
-            - target/llvm-cov-target
-
-      - codecov/upload:
-          disable_search: true
-          fail_on_error: true
-          files: lcov.info
-          flags: rust
-          token: CODECOV_TOKEN
-          upload_name: rust-coverage
-          verbose: true
-
-  # Fast, parallel pass/fail feedback via nextest's native CI partitioning (not coverage —
-  # see the comment on build-and-test's "Test with coverage" step for why the two don't mix).
-  # store_test_results here also feeds CircleCI's timing-based "Smarter Testing" balancing for
-  # future runs of this job.
-  test-fast:
+  coverage:
     executor: linux
-    parallelism: 2
     retention:
-      caches: 7d
+      caches: 3d
     environment:
       CARGO_TERM_COLOR: always
     steps:
       - checkout
       - setup-native-deps
-
-      - restore_cache:
-          name: Restore fast-test build artifacts
-          keys:
-            - v2-cargo-target-fast-{{ arch }}-rust-<< pipeline.parameters.rust-version >>-{{ checksum "Cargo.lock" }}-{{ .Revision }}
-            - v2-cargo-target-fast-{{ arch }}-rust-<< pipeline.parameters.rust-version >>-{{ checksum "Cargo.lock" }}-
+      - install-coverage-tool
 
       - run:
-          name: Test (partitioned)
+          name: Test with coverage
           command: |
             source "$BASH_ENV"
-            node=$((CIRCLE_NODE_INDEX + 1))
-            cargo nextest run --workspace --profile ci --partition "count:${node}/${CIRCLE_NODE_TOTAL}"
+            find target/llvm-cov-target -type f -name '*.profraw' -delete 2>/dev/null || true
+            cargo llvm-cov nextest --workspace --no-clean --lcov --output-path lcov.info --profile ci
+            test -s lcov.info
 
-      - store_test_results:
-          path: target/nextest/ci
-
-      # Both shards compile the same workspace before filtering tests, so either shard's
-      # immutable cache is a complete warm start for the next revision.
       - save_cache:
-          name: Save fast-test build artifacts
-          key: v2-cargo-target-fast-{{ arch }}-rust-<< pipeline.parameters.rust-version >>-{{ checksum "Cargo.lock" }}-{{ .Revision }}
+          name: Save Cargo registry
+          key: v3-cargo-registry-{{ checksum "Cargo.lock" }}
           paths:
-            - target/debug
+            - ~/.cargo/registry
+
+      - codecov/upload:
+          disable_search: true
+          fail_on_error: false
+          files: lcov.info
+          flags: rust
+          token: CODECOV_TOKEN
+          upload_name: rust-coverage
 
 workflows:
   ci:
     jobs:
-      - build-and-test
-      - test-fast
+      - quality
+      - coverage:
+          filters: pipeline.git.branch == "main"

@@ -38,6 +38,25 @@ fn computes_peaks_for_a_real_audio_file() {
 }
 
 #[test]
+fn one_bucket_contains_the_global_extrema_of_finer_waveforms() {
+    let one_bucket = generate_waveform(&fixture("audio.m4a"), 1).unwrap();
+    let fine_buckets = generate_waveform(&fixture("audio.m4a"), 64).unwrap();
+
+    let expected_min = fine_buckets
+        .iter()
+        .map(|(min, _)| *min)
+        .min_by(f32::total_cmp)
+        .unwrap();
+    let expected_max = fine_buckets
+        .iter()
+        .map(|(_, max)| *max)
+        .max_by(f32::total_cmp)
+        .unwrap();
+
+    assert_eq!(one_bucket, vec![(expected_min, expected_max)]);
+}
+
+#[test]
 fn fails_on_missing_input() {
     let err = generate_waveform(&fixture("does_not_exist.mp4"), 64).unwrap_err();
     assert!(matches!(err, WaveformError::OpenInput));

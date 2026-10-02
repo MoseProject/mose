@@ -150,6 +150,16 @@ pub enum RenderError {
     /// (`render_timeline_export` only) a clip's `asset_id` isn't in the project's media
     /// library.
     MissingAsset,
+    /// A caller supplied a canvas with no renderable dimensions or frame rate.
+    InvalidCanvas,
+    /// A caller supplied a timeline segment with an invalid source range or render parameter.
+    InvalidTimelineSegment,
+    /// Loudness targets must be finite before crossing the native encoder boundary.
+    InvalidTargetLufs,
+    /// A text overlay cannot be shaped within the engine's bounded resource contract.
+    InvalidTextLayout,
+    /// An audio mix contributor has an invalid source range or filter parameter.
+    InvalidAudioSegment,
     /// The native multi-track audio mixing pass failed after the video render completed.
     AudioMix(String),
     /// Stream-copying the rendered video together with the mixed audio failed.
@@ -192,6 +202,15 @@ impl std::fmt::Display for RenderError {
             }
             RenderError::EmptyTimeline => write!(f, "sequence has no video clips to export"),
             RenderError::MissingAsset => write!(f, "a clip references a missing media asset"),
+            RenderError::InvalidCanvas => {
+                write!(f, "render canvas has invalid dimensions or frame rate")
+            }
+            RenderError::InvalidTimelineSegment => {
+                write!(f, "timeline contains an invalid render segment")
+            }
+            RenderError::InvalidTargetLufs => write!(f, "loudness target must be finite"),
+            RenderError::InvalidTextLayout => write!(f, "text overlay has invalid layout input"),
+            RenderError::InvalidAudioSegment => write!(f, "audio mix contains an invalid segment"),
             RenderError::AudioMix(message) => write!(f, "audio mix failed: {message}"),
             RenderError::MediaMux(message) => write!(f, "audio mux failed: {message}"),
             RenderError::ReplaceOutput(error) => write!(f, "failed to replace export: {error}"),
@@ -262,6 +281,7 @@ pub fn render_export(
     cancel: &AtomicBool,
     mut on_progress: impl FnMut(u8),
 ) -> Result<RenderOutcome, RenderError> {
+    validate_target_lufs(target_lufs)?;
     let outcome = avbridge::encode_export(source, output, target_lufs, cancel, |secs| {
         if duration_secs > 0.0 {
             let percent = ((secs / duration_secs) * 100.0).clamp(0.0, 100.0) as u8;
@@ -276,6 +296,107 @@ pub fn render_export(
         }
         avbridge::EncodeOutcome::Cancelled => RenderOutcome::Cancelled,
     })
+}
+
+fn validate_target_lufs(target_lufs: f32) -> Result<(), RenderError> {
+    target_lufs
+        .is_finite()
+        .then_some(())
+        .ok_or(RenderError::InvalidTargetLufs)
+}
+
+fn validate_canvas(canvas: Canvas) -> Result<(), RenderError> {
+    (canvas.width > 0 && canvas.height > 0 && canvas.fps_num > 0 && canvas.fps_den > 0)
+        .then_some(())
+        .ok_or(RenderError::InvalidCanvas)
+}
+
+fn valid_clip_segment(segment: &avbridge::ClipSegment) -> bool {
+    !segment.source_path.as_os_str().is_empty()
+        && segment.source_in_secs.is_finite()
+        && segment.source_out_secs.is_finite()
+        && segment.source_in_secs >= 0.0
+        && segment.source_out_secs > segment.source_in_secs
+        && segment.gain_db.is_finite()
+        && segment.speed_factor.is_finite()
+        && segment.speed_factor > 0.0
+        && segment.smooth_speed_ramp_end_factor.is_finite()
+        && segment.timeline_start_secs.is_finite()
+        && segment.timeline_start_secs >= 0.0
+        && segment.transition_duration_secs.is_finite()
+        && segment.transition_duration_secs >= 0.0
+        && segment.anchor_x.is_finite()
+        && segment.anchor_y.is_finite()
+        && (0.0..=1.0).contains(&segment.anchor_x)
+        && (0.0..=1.0).contains(&segment.anchor_y)
+}
+
+fn validate_segment_list(
+    segments: &[avbridge::ClipSegment],
+    canvas: Canvas,
+    target_lufs: f32,
+) -> Result<(), RenderError> {
+    validate_canvas(canvas)?;
+    validate_target_lufs(target_lufs)?;
+    if segments.is_empty() {
+        return Err(RenderError::EmptyTimeline);
+    }
+    if segments.iter().any(|segment| !valid_clip_segment(segment)) {
+        return Err(RenderError::InvalidTimelineSegment);
+    }
+    Ok(())
+}
+
+fn validate_timeline_segments(
+    track_segments: &[Vec<avbridge::ClipSegment>],
+    canvas: Canvas,
+    target_lufs: f32,
+) -> Result<(), RenderError> {
+    if track_segments.is_empty() || track_segments[0].is_empty() {
+        return Err(RenderError::EmptyTimeline);
+    }
+    for track in track_segments {
+        validate_segment_list(track, canvas, target_lufs)?;
+    }
+    Ok(())
+}
+
+fn validate_text_segments(
+    text_segments: &[TextSegment],
+    canvas: Canvas,
+) -> Result<(), RenderError> {
+    text_segments.iter().try_for_each(|segment| {
+        crate::overlay_render::validate_text_segment(segment, canvas.width, canvas.height)
+            .map_err(|_| RenderError::InvalidTextLayout)
+    })
+}
+
+fn valid_audio_segment(segment: &avbridge::AudioSegment) -> bool {
+    !segment.source_path.as_os_str().is_empty()
+        && segment.source_in_secs.is_finite()
+        && segment.source_out_secs.is_finite()
+        && segment.source_in_secs >= 0.0
+        && segment.source_out_secs > segment.source_in_secs
+        && segment.timeline_start_secs.is_finite()
+        && segment.timeline_start_secs >= 0.0
+        && segment.gain_db.is_finite()
+        && segment.speed_factor.is_finite()
+        && segment.speed_factor > 0.0
+        && segment.duck_role <= 2
+        && segment.voice_cleanup_noise_floor_db.is_finite()
+        && segment.voice_cleanup_compressor_threshold_db.is_finite()
+        && segment.voice_cleanup_compressor_ratio.is_finite()
+        && segment.voice_cleanup_compressor_ratio > 0.0
+        && segment.voice_cleanup_ceiling_linear.is_finite()
+        && (0.0..=1.0).contains(&segment.voice_cleanup_ceiling_linear)
+}
+
+fn validate_audio_segments(audio_segments: &[avbridge::AudioSegment]) -> Result<(), RenderError> {
+    audio_segments
+        .iter()
+        .all(valid_audio_segment)
+        .then_some(())
+        .ok_or(RenderError::InvalidAudioSegment)
 }
 
 /// Resolves `sequence`'s first non-empty video track into export segments (in `start_secs`
@@ -383,7 +504,7 @@ pub fn resolve_timeline_segments(
     for clip in &clips {
         let asset = media_library
             .iter()
-            .find(|a| a.id == clip.asset_id)
+            .find(|a| a.id == clip.resolved_asset_id())
             .ok_or(RenderError::MissingAsset)?;
         if dimensions_fps.is_none() {
             let (width, height) = asset.resolution.ok_or(RenderError::NoVideoStream)?;
@@ -460,6 +581,8 @@ pub fn render_export_job(
     cancel: &AtomicBool,
     mut on_progress: impl FnMut(u8),
 ) -> Result<RenderOutcome, RenderError> {
+    validate_segment_list(segments, canvas, target_lufs)?;
+    validate_text_segments(text_segments, canvas)?;
     let total_duration_secs: f64 = segments.iter().map(clip_segment_duration_secs).sum();
 
     let outcome = avbridge::encode_timeline_export(
@@ -555,7 +678,7 @@ pub fn resolve_audio_segments(
         for clip in &track.clips {
             let asset = media_library
                 .iter()
-                .find(|asset| asset.id == clip.asset_id)
+                .find(|asset| asset.id == clip.resolved_asset_id())
                 .ok_or(RenderError::MissingAsset)?;
             if !asset.has_audio {
                 continue;
@@ -1184,7 +1307,7 @@ pub fn resolve_timeline_segments_multi(
         for clip in &clips {
             let asset = media_library
                 .iter()
-                .find(|a| a.id == clip.asset_id)
+                .find(|a| a.id == clip.resolved_asset_id())
                 .ok_or(RenderError::MissingAsset)?;
             if dimensions_fps.is_none() {
                 let (width, height) = asset.resolution.ok_or(RenderError::NoVideoStream)?;
@@ -1316,9 +1439,9 @@ pub fn render_export_job_multi_with_audio(
     cancel: &AtomicBool,
     mut on_progress: impl FnMut(u8),
 ) -> Result<RenderOutcome, RenderError> {
-    if track_segments.is_empty() || track_segments[0].is_empty() {
-        return Err(RenderError::EmptyTimeline);
-    }
+    validate_timeline_segments(track_segments, canvas, target_lufs)?;
+    validate_text_segments(text_segments, canvas)?;
+    validate_audio_segments(audio_segments)?;
     if track_segments.len() == 1 {
         let outcome = render_export_job(
             &track_segments[0],
@@ -1396,15 +1519,7 @@ pub fn render_export_job_multi_with_audio(
 fn timeline_duration(track_segments: &[Vec<avbridge::ClipSegment>]) -> f64 {
     track_segments
         .first()
-        .map(|track| {
-            track
-                .iter()
-                .map(|segment| {
-                    (segment.source_out_secs - segment.source_in_secs)
-                        / (segment.speed_factor as f64).max(0.0001)
-                })
-                .sum()
-        })
+        .map(|track| track.iter().map(clip_segment_duration_secs).sum())
         .unwrap_or(0.0)
 }
 
@@ -1471,7 +1586,7 @@ fn apply_audio_mix_pass(
 /// than a true lowest-terms rational (e.g. NTSC's canonical `30000/1001`), which is precise
 /// enough for a canvas frame rate and doesn't need a full rational-approximation algorithm.
 fn fps_to_rational(fps: f32) -> (u32, u32) {
-    if fps <= 0.0 {
+    if !fps.is_finite() || fps <= 0.0 {
         return (30, 1);
     }
     let rounded = fps.round();

@@ -53,45 +53,52 @@ else
   endif
 endif
 
-.PHONY: build release run debug test test-core test-app test-xtask test-e2e bench bench-bush fmt fmt-check lint graph docs check clean icon-font
+.PHONY: build release test test-core test-xtask test-e2e bench bench-bush fmt fmt-check lint graph docs check clean desktop-install desktop-dev desktop-build test-desktop
 
-# Debug build of the whole workspace (core, ui, xtask).
+# Debug build of the whole workspace (core, avbridge, ytbridge, desktop, xtask).
 build:
 	cargo build --workspace
 
-# Optimized build. Binary ends up at target/release/ui(.exe).
+# Optimized build. Binary ends up at target/release/oca-desktop(.exe) -- but see
+# `desktop-build` for the one that actually embeds the built frontend (never a bare
+# `cargo build --release`, see apps/desktop/CLAUDE.md).
 release:
 	cargo build --workspace --release
 
-# Run the GUI app (debug build).
-run:
-	cargo run -p ui
-
-# Run the GUI app with a backtrace on panic — use this over `run` when chasing a crash.
-# (Set as a target-specific variable, not `VAR=val cargo run`, so it doesn't depend on make
-# invoking a POSIX shell — this works the same under sh.exe and cmd.exe on Windows.)
-debug: export RUST_BACKTRACE = 1
-debug:
-	cargo run -p ui
-
-# Run every crate's test suite (core's ffprobe/loudness parsers, ui's i18n
-# catalog, xtask's codegraph scanner).
+# Run every crate's test suite (core's ffprobe/loudness parsers, xtask's codegraph scanner).
 test:
 	cargo test --workspace
 
 test-core:
 	cargo test -p core
 
-test-app:
-	cargo test -p ui
-
 test-xtask:
 	cargo test -p xtask
 
-# End-to-end tests (e2e/, pytest + pywinauto) driving the real built ui.exe through Windows
-# UI Automation. Needs a debug build first (this target doesn't build one for you, since e2e
-# runs typically follow a `make build`/`make run` you already did) and Python deps installed
-# once: `python -m pip install -r e2e/requirements.txt`.
+# Tauri shell (apps/desktop): React/TypeScript webview over the same avcore engine, migrating
+# the egui screens one by one -- see spec/architecture/tauri-migration.md. Node/npm required.
+desktop-install:
+	cd apps/desktop && npm install
+
+# Runs Vite's dev server and the Tauri app with hot reload.
+desktop-dev:
+	cd apps/desktop && npm run tauri dev
+
+# Release bundle (installer under target/release/bundle/).
+desktop-build:
+	cd apps/desktop && npm run tauri build
+
+# Frontend typecheck + unit tests, then the Rust shell's own tests.
+test-desktop:
+	cd apps/desktop && npm run typecheck && npm test
+	cargo test -p desktop
+
+# End-to-end tests (e2e/, pytest + selenium) driving the real built oca-desktop.exe through
+# tauri-driver's WebDriver bridge. Needs a build first via `make desktop-build` (this target
+# doesn't build one for you) -- never a bare `cargo build -p desktop`, which embeds the Vite dev
+# URL instead of the real frontend (see e2e/conftest.py's header) -- plus `tauri-driver`
+# installed once (`cargo install tauri-driver`) and Python deps installed once:
+# `python -m pip install -r e2e/requirements.txt`.
 test-e2e:
 	cd e2e && python -m pytest
 
@@ -105,13 +112,6 @@ bench:
 # bounded-cache primitives without requiring FFmpeg or GStreamer development environments.
 bench-bush:
 	cargo bench -p bush
-
-# Regenerates crates/ui/assets/fonts/lucide-oca.{ttf,json} from spec/architecture/assets/
-# icons/*.svg — run after adding/removing a vendored icon SVG (see
-# spec/architecture/editor-ui-visual-redesign.md's "Icon set" section). Node/npm only, not
-# part of the Cargo build; output is committed like any other generated asset.
-icon-font:
-	cd tools/icon-font && npm install && npm run build
 
 fmt:
 	cargo fmt --all

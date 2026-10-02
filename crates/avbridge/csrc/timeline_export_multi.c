@@ -118,7 +118,9 @@ static int build_vfilter_descr(const ClipSegment *seg, int cw, int ch, int fps_n
     char setpts[192];
     build_setpts_str(seg, seg->source_out_secs - seg->source_in_secs, setpts, sizeof(setpts));
 
-    char trans[2048] = "";
+    /* A Zoom transition expands `inside` three times, alongside six coordinate
+       expressions. Keep this comfortably above their bounded worst-case expansion. */
+    char trans[8192] = "";
     if (seg->transition_in != 0) {
         double tf = (double)seg->transition_duration_secs * (double)fps_num / (double)fps_den;
         if (tf < 1.0) tf = 1.0;
@@ -139,7 +141,7 @@ static int build_vfilter_descr(const ClipSegment *seg, int cw, int ch, int fps_n
                      tf, tf, tf);
             break;
         case 3: {
-            char z[160], sx[224], sy[224], inside[768];
+            char z[160], sx[224], sy[224], inside[1024];
             snprintf(z, sizeof(z), "(0.5+0.5*lt(N,%g)*N/%g+0.5*gte(N,%g))", tf, tf, tf);
             snprintf(sx, sizeof(sx), "((X-W/2)/%s+W/2)", z);
             snprintf(sy, sizeof(sy), "((Y-H/2)/%s+H/2)", z);
@@ -1105,6 +1107,34 @@ EncodeStatus avbridge_encode_timeline_export_multi(
                     av_packet_unref(pkt);
                 }
                 if (status != ENCODE_OK) break;
+            }
+        }
+
+        /* `blend` is framesync-backed and may retain its final frames until every input reaches
+           EOF. Drain the graph before freeing it so a short blend-only segment cannot leave an
+           otherwise valid export with audio but no video stream. */
+        if (status == ENCODE_OK && cur_mode == 2 && ov_graph) {
+            if (av_buffersrc_add_frame_flags(ov_src0, NULL, 0) < 0) {
+                status = ENCODE_ERR_PIPELINE;
+            }
+            for (int i = 0; i < overlay_track_count && status == ENCODE_OK; i++) {
+                OverlayTrackState *track = &overlay_tracks[i];
+                if (track->video_source &&
+                    av_buffersrc_add_frame_flags(track->video_source, NULL, 0) < 0) {
+                    status = ENCODE_ERR_PIPELINE;
+                    break;
+                }
+                if (track->matte_source &&
+                    av_buffersrc_add_frame_flags(track->matte_source, NULL, 0) < 0) {
+                    status = ENCODE_ERR_PIPELINE;
+                    break;
+                }
+            }
+            while (status == ENCODE_OK && av_buffersink_get_frame(ov_sink, filt_frame) == 0) {
+                filt_frame->pts = next_vpts++;
+                if (encode_write_packet(out_ctx, venc_ctx, vout_stream, filt_frame, enc_pkt) < 0)
+                    status = ENCODE_ERR_PIPELINE;
+                av_frame_unref(filt_frame);
             }
         }
 

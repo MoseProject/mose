@@ -31,7 +31,7 @@ GST_ROOT="$RUNTIME/gstreamer"
 mkdir -p "$MACOS" "$RESOURCES" "$RUNTIME/bin" \
     "$GST_ROOT/lib" "$GST_ROOT/libexec/gstreamer-1.0" "$RESOURCES/python"
 
-install -m 0755 "$BUILD_DIR/ui" "$MACOS/oca"
+install -m 0755 "$BUILD_DIR/oca-desktop" "$MACOS/oca"
 install -m 0755 "$BUILD_DIR/ytbridge" "$MACOS/ytbridge"
 install -m 0755 "$PYTHON_RUNTIME/tools/deno" "$MACOS/deno"
 cp -a "$BUILD_DIR/espeak-ng-data" "$RESOURCES/"

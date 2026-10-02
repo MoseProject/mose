@@ -257,6 +257,53 @@ fn renders_a_real_nested_sequence_to_a_probeable_synthetic_asset() {
 }
 
 #[test]
+fn a_materialized_compound_clip_resolves_through_resolve_timeline_segments_multi() {
+    // Regression test for the bug this session found: `ClipInstance::asset_id` is left
+    // untouched (0) when a clip is wrapped as a compound clip -- only `resolved_asset_id()`
+    // (which substitutes `synthetic_asset_id(nested_sequence_id)`) matches the id
+    // `materialize_nested_sequences` gives the rendered nested sequence's synthetic
+    // `MediaAsset`. Before `resolved_asset_id()` existed, every resolve function's plain
+    // `clip.asset_id` lookup would miss this asset and fail with `RenderError::MissingAsset`,
+    // silently breaking compound clips in both the render/export path and (via the same
+    // pattern) preview, in every shell.
+    use crate::render::resolve_timeline_segments_multi;
+
+    let path = fixture("video.mp4");
+    let asset = probe_media(&path)
+        .unwrap()
+        .into_media_asset(1, "video.mp4".to_string(), path);
+
+    let child_timeline = timeline_with(vec![video_track(1, vec![clip(1, 1, 0.0, 0.0, 0.3)])]);
+    let child = sequence(2, child_timeline);
+
+    let mut nested_clip = clip(10, 0, 0.0, 0.0, 0.3);
+    nested_clip.nested_sequence_id = Some(2);
+    assert_eq!(nested_clip.resolved_asset_id(), synthetic_asset_id(2));
+    let parent_timeline = timeline_with(vec![video_track(1, vec![nested_clip])]);
+    let parent = sequence(1, parent_timeline.clone());
+
+    let proj = project(vec![parent.clone(), child], vec![asset.clone()]);
+    let cache_dir = std::env::temp_dir().join(format!(
+        "oca_nested_sequence_test_resolve_{}",
+        std::process::id()
+    ));
+    let mut cache = HashMap::new();
+
+    let nested_assets =
+        materialize_nested_sequences(&proj, &parent_timeline, &cache_dir, &mut cache).unwrap();
+    let mut media_library = vec![asset];
+    media_library.extend(nested_assets.into_values());
+
+    let result = resolve_timeline_segments_multi(&parent, &media_library);
+    assert!(
+        result.is_ok(),
+        "compound clip should resolve via resolved_asset_id(), got {result:?}"
+    );
+
+    let _ = std::fs::remove_dir_all(&cache_dir);
+}
+
+#[test]
 fn reuses_the_cached_render_when_the_nested_timeline_is_unchanged() {
     let path = fixture("video.mp4");
     let asset = probe_media(&path)

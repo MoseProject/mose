@@ -1,0 +1,50 @@
+import { useEffect, useState } from "react";
+import { t } from "../i18n";
+import { api } from "../ipc";
+import { run } from "../store";
+import type { CrashReview } from "../types";
+
+/** Post-crash "Send once / Always send / Do not send" review -- mirrors `ui::App`'s
+ *  `crash_review.rs` modal. Checked once at startup; renders nothing once dismissed. */
+export function CrashReviewModal() {
+  const [crash, setCrash] = useState<CrashReview | null>(null);
+  const [showPayload, setShowPayload] = useState(false);
+
+  useEffect(() => {
+    void run(api.getPendingCrashReview()).then((result) => setCrash(result ?? null));
+  }, []);
+
+  if (!crash) return null;
+
+  const finish = (action: () => Promise<unknown>) => {
+    setCrash(null);
+    void run(action());
+  };
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <p>{t("crashReviewOffer")}</p>
+        <button className="icon" onClick={() => setShowPayload((v) => !v)}>
+          {t("crashReviewShowPayload")}
+        </button>
+        {showPayload && (
+          <pre style={{ maxHeight: 220, overflow: "auto", fontSize: 11, whiteSpace: "pre-wrap" }}>
+            {crash.payloadPreview}
+          </pre>
+        )}
+        <div className="modal-actions">
+          <button className="icon" onClick={() => finish(() => api.sendCrashOnce())}>
+            {t("crashReviewSendOnce")}
+          </button>
+          <button className="icon" onClick={() => finish(() => api.alwaysSendCrash())}>
+            {t("crashReviewAlwaysSend")}
+          </button>
+          <button className="icon" onClick={() => finish(() => api.dismissCrashReview())}>
+            {t("crashReviewDoNotSend")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

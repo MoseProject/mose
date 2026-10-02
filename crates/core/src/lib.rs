@@ -25,6 +25,7 @@
 //! Nothing in this crate depends on `egui` or any GUI toolkit — `ui` is the only
 //! consumer, and it owns all presentation/formatting concerns (see its `i18n` module).
 
+pub mod app_paths;
 pub mod auto_reframe;
 pub mod background_removal;
 pub mod blend_mode;
@@ -34,6 +35,7 @@ pub mod dynamic_reframe;
 pub mod entitlement;
 pub mod error_reporting;
 pub mod export;
+pub mod export_queue;
 pub mod font_catalog;
 pub mod frame_sampler;
 pub mod gameplay_events;
@@ -51,6 +53,8 @@ pub mod overlay_render;
 pub mod persistence;
 pub mod preview;
 pub mod preview_effects;
+pub mod preview_live_updates;
+pub mod preview_worker;
 pub mod privacy_blur;
 pub mod probe;
 pub mod project;
@@ -109,6 +113,11 @@ pub use error_reporting::{
     STATE_TRANSITIONS,
 };
 pub use export::{ExportAspectRatio, ExportJob, ExportJobStatus, PlatformExportPreset};
+pub use export_queue::{
+    export_queue_path, load_export_queue_from_path, next_available_path,
+    normalize_loaded_export_queue, persisted_export_queue_snapshot, save_export_queue_to_path,
+    RenderControl,
+};
 pub use frame_sampler::FrameSampler;
 pub use highlight_detection::{
     clip_amplitude_samples, detect_highlight_candidates, HighlightCandidate,
@@ -134,6 +143,9 @@ pub use preview::{AudioLevel, Preview, PreviewError};
 pub use preview_effects::{
     apply_deflicker_to_rgba, apply_glitch_to_rgba, apply_lut_to_rgba, apply_vignette_to_rgba,
     DeflickerHistory, Lut3D, LutParseError,
+};
+pub use preview_live_updates::{
+    live_preview_updates, live_shape_update, live_text_update, LivePreviewUpdate, PreviewCpuEffects,
 };
 pub use probe::{probe_media, ProbeError, ProbedMedia};
 pub use project::{PanelLayout, Project, Recency, Sequence, SequenceExportSettings};

@@ -1,6 +1,40 @@
 use super::*;
 
 #[test]
+fn try_shape_rejects_unbounded_or_nonfinite_inputs() {
+    let mut engine = TextLayoutEngine::new_from_locked_catalog();
+    let too_long = "a".repeat(MAX_TEXT_LAYOUT_BYTES + 1);
+    assert!(matches!(
+        engine.try_shape(
+            &too_long,
+            TextFontFamily::Lato,
+            TextFontStyle::Regular,
+            None,
+            32.0,
+            None,
+            (0.0, 0.0),
+            TextDirection::Auto,
+            TextAlign::Auto,
+        ),
+        Err(TextLayoutError::TextTooLong)
+    ));
+    assert!(matches!(
+        engine.try_shape(
+            "caption",
+            TextFontFamily::Lato,
+            TextFontStyle::Regular,
+            None,
+            f32::NAN,
+            Some(640.0),
+            (0.0, 0.0),
+            TextDirection::Auto,
+            TextAlign::Auto,
+        ),
+        Err(TextLayoutError::InvalidGeometry)
+    ));
+}
+
+#[test]
 fn origin_shifts_every_glyph_by_exactly_that_offset() {
     let mut engine = TextLayoutEngine::new_from_locked_catalog();
     let at_zero = engine.shape(

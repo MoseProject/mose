@@ -64,3 +64,9 @@ fn even_sample_times_does_not_divide_by_zero_for_a_single_sample() {
     let times = FrameSampler::even_sample_times(1.0, 1.0 + 1e-9, 1.0, 1, 1);
     assert_eq!(times, vec![1.0]);
 }
+
+#[test]
+fn even_sample_times_honors_the_maximum_when_bounds_are_reversed() {
+    let times = FrameSampler::even_sample_times(0.0, 10.0, 1.0, 10, 3);
+    assert_eq!(times, vec![0.0, 5.0, 10.0]);
+}

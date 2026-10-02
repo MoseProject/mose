@@ -129,18 +129,21 @@ impl Lut3D {
                 continue;
             }
 
-            let values: Vec<f32> = line
-                .split_whitespace()
-                .filter_map(|s| s.parse().ok())
-                .collect();
-            if values.len() != 3 {
+            let values: Result<Vec<f32>, _> = line.split_whitespace().map(str::parse).collect();
+            let Ok(values) = values else {
+                return Err(LutParseError::MalformedRow(data.len()));
+            };
+            if values.len() != 3 || values.iter().any(|value| !value.is_finite()) {
                 return Err(LutParseError::MalformedRow(data.len()));
             }
             data.push([values[0], values[1], values[2]]);
         }
 
         let size = size.ok_or(LutParseError::MissingSize)?;
-        let expected = size * size * size;
+        let expected = size
+            .checked_mul(size)
+            .and_then(|entries| entries.checked_mul(size))
+            .ok_or(LutParseError::InvalidSize)?;
         if data.len() != expected {
             return Err(LutParseError::WrongRowCount {
                 expected,
@@ -166,9 +169,16 @@ impl Lut3D {
     /// inputs are clamped, never a panic or a wraparound).
     pub fn sample(&self, r: f32, g: f32, b: f32) -> [f32; 3] {
         let max_index = (self.size - 1) as f32;
-        let fx = r.clamp(0.0, 1.0) * max_index;
-        let fy = g.clamp(0.0, 1.0) * max_index;
-        let fz = b.clamp(0.0, 1.0) * max_index;
+        let normalized = |value: f32| {
+            if value.is_finite() {
+                value.clamp(0.0, 1.0)
+            } else {
+                0.0
+            }
+        };
+        let fx = normalized(r) * max_index;
+        let fy = normalized(g) * max_index;
+        let fz = normalized(b) * max_index;
 
         let x0 = fx.floor() as usize;
         let y0 = fy.floor() as usize;
@@ -202,6 +212,9 @@ impl Lut3D {
 /// untouched) — what [`crate::timeline::ClipInstance::lut_path`] means for a live preview frame,
 /// via [`Lut3D::sample`]. No-op if `rgba`'s length isn't a multiple of 4.
 pub fn apply_lut_to_rgba(rgba: &mut [u8], lut: &Lut3D) {
+    if !rgba.len().is_multiple_of(4) {
+        return;
+    }
     for pixel in rgba.as_chunks_mut::<4>().0 {
         let [r, g, b] = lut.sample(
             pixel[0] as f32 / 255.0,
@@ -259,10 +272,10 @@ pub fn apply_vignette_to_rgba(rgba: &mut [u8], width: u32, height: u32, intensit
 /// output for the same input, which is what this function's own unit tests rely on. Uses a
 /// simple xorshift64* PRNG, seeded per pixel from `seed` — fast, deterministic, no external
 /// dependency, and no cryptographic-quality requirement (this is a visual effect, not security-
-/// sensitive). No-op if `rgba` is empty.
+/// sensitive). No-op if `rgba` is empty or not a complete packed RGBA8 buffer.
 pub fn apply_glitch_to_rgba(rgba: &mut [u8], intensity: f32, seed: u64) {
     let intensity = intensity.clamp(0.0, 1.0);
-    if intensity <= 0.0 || rgba.is_empty() {
+    if intensity <= 0.0 || rgba.is_empty() || !rgba.len().is_multiple_of(4) {
         return;
     }
     let strength = (intensity * 40.0).round() as i64;
@@ -411,6 +424,16 @@ mod tests {
     }
 
     #[test]
+    fn rejects_non_finite_lut_entries() {
+        for value in ["NaN", "inf", "-inf"] {
+            let cube = format!(
+                "LUT_3D_SIZE 2\n{value} 0 0\n0 0 0\n0 0 0\n0 0 0\n0 0 0\n0 0 0\n0 0 0\n0 0 0\n"
+            );
+            assert_eq!(Lut3D::parse(&cube), Err(LutParseError::MalformedRow(0)));
+        }
+    }
+
+    #[test]
     fn identity_lut_samples_are_a_no_op() {
         let lut = Lut3D::parse(&identity_cube(16)).unwrap();
         let [r, g, b] = lut.sample(0.5, 0.25, 0.75);
@@ -424,6 +447,15 @@ mod tests {
         let lut = Lut3D::parse(&identity_cube(4)).unwrap();
         assert_eq!(lut.sample(0.0, 0.0, 0.0), [0.0, 0.0, 0.0]);
         assert_eq!(lut.sample(1.0, 1.0, 1.0), [1.0, 1.0, 1.0]);
+    }
+
+    #[test]
+    fn non_finite_lut_coordinates_fall_back_to_the_black_corner() {
+        let lut = Lut3D::parse(&identity_cube(2)).unwrap();
+        assert_eq!(
+            lut.sample(f32::NAN, f32::INFINITY, f32::NEG_INFINITY),
+            [0.0; 3]
+        );
     }
 
     #[test]
@@ -455,6 +487,20 @@ mod tests {
             "blue preserved via identity"
         );
         assert_eq!(rgba[3], 200, "alpha untouched");
+    }
+
+    #[test]
+    fn lut_and_glitch_leave_incomplete_rgba_buffers_unchanged() {
+        let lut = Lut3D::parse(&identity_cube(2)).unwrap();
+        let mut lut_buffer = vec![100, 110, 120, 130, 140];
+        let lut_before = lut_buffer.clone();
+        apply_lut_to_rgba(&mut lut_buffer, &lut);
+        assert_eq!(lut_buffer, lut_before);
+
+        let mut glitch_buffer = vec![100, 110, 120, 130, 140];
+        let glitch_before = glitch_buffer.clone();
+        apply_glitch_to_rgba(&mut glitch_buffer, 1.0, 42);
+        assert_eq!(glitch_buffer, glitch_before);
     }
 
     #[test]

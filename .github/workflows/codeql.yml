@@ -38,7 +38,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Rust (avcore/avbridge/ui) and Python (e2e/ UI tests, packaging/ release scripts) are
+          # Rust (avcore/avbridge/desktop/ytbridge) and Python (e2e/ UI tests, packaging/ release
+          # scripts) are
           # both database-extraction languages -- CodeQL builds their database straight from
           # source, no compiler invocation needed.
           - language: rust

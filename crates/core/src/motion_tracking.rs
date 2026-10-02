@@ -44,10 +44,39 @@ pub struct GrayFrame {
     pub data: Vec<u8>,
 }
 
+impl GrayFrame {
+    /// Whether `data` contains exactly one luma byte for each declared pixel.
+    pub fn is_complete(&self) -> bool {
+        (self.width as usize).checked_mul(self.height as usize) == Some(self.data.len())
+    }
+}
+
 /// Converts a decoded RGBA frame (e.g. [`crate::preview::VideoFrame::rgba`]) to a [`GrayFrame`]
 /// via the standard luma weights.
 pub fn rgba_to_gray(rgba: &[u8], width: u32, height: u32) -> GrayFrame {
-    let mut data = vec![0u8; (width * height) as usize];
+    let Some(pixel_count) = (width as usize).checked_mul(height as usize) else {
+        return GrayFrame {
+            width,
+            height,
+            data: Vec::new(),
+        };
+    };
+    let Some(expected_rgba_len) = pixel_count.checked_mul(4) else {
+        return GrayFrame {
+            width,
+            height,
+            data: Vec::new(),
+        };
+    };
+    if rgba.len() != expected_rgba_len {
+        return GrayFrame {
+            width,
+            height,
+            data: Vec::new(),
+        };
+    }
+
+    let mut data = vec![0u8; pixel_count];
     for (i, px) in data.iter_mut().enumerate() {
         let base = i * 4;
         let r = rgba[base] as u32;
@@ -170,6 +199,20 @@ pub fn track_region_with_scores(
             template_height: 0,
         };
     };
+    if first.width < 4
+        || first.height < 4
+        || !first.is_complete()
+        || frames.iter().any(|frame| {
+            frame.width != first.width || frame.height != first.height || !frame.is_complete()
+        })
+    {
+        return TrackResult {
+            positions: Vec::new(),
+            scores: Vec::new(),
+            template_width: 0,
+            template_height: 0,
+        };
+    }
     let (w, h) = (first.width as i32, first.height as i32);
     let short_side = w.min(h);
     let width = ((template_width_frac * short_side as f32).round() as i32).clamp(4, w);

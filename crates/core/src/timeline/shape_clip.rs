@@ -82,6 +82,51 @@ impl ShapeKind {
     }
 }
 
+/// A `Copy`-friendly name for [`ShapeKind`]'s fixed presets, shared by every shell's shape
+/// picker (`ShapeKind` itself can't be `Copy`: its `Polygon` variant holds a `Vec`). `Custom`
+/// stands for a `Polygon` that matches no preset's exact vertex list -- only ever shown as the
+/// current value, never offered as something to pick.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ShapePreset {
+    Ellipse,
+    Rectangle,
+    Triangle,
+    Trapezoid,
+    Arrow,
+    Custom,
+}
+
+impl ShapePreset {
+    /// The presets a picker offers, in display order (`Custom` excluded).
+    pub const PICKABLE: [Self; 5] = [
+        Self::Ellipse,
+        Self::Rectangle,
+        Self::Triangle,
+        Self::Trapezoid,
+        Self::Arrow,
+    ];
+
+    /// Classifies `kind` by exact vertex comparison, not vertex count.
+    pub fn from_kind(kind: &ShapeKind) -> Self {
+        Self::PICKABLE
+            .into_iter()
+            .find(|preset| preset.to_kind().as_ref() == Some(kind))
+            .unwrap_or(Self::Custom)
+    }
+
+    /// The shape this preset stands for; `None` for `Custom`, which has no fixed geometry.
+    pub fn to_kind(self) -> Option<ShapeKind> {
+        match self {
+            Self::Ellipse => Some(ShapeKind::Ellipse),
+            Self::Rectangle => Some(ShapeKind::rectangle()),
+            Self::Triangle => Some(ShapeKind::triangle()),
+            Self::Trapezoid => Some(ShapeKind::trapezoid()),
+            Self::Arrow => Some(ShapeKind::arrow()),
+            Self::Custom => None,
+        }
+    }
+}
+
 /// One placed geometric shape on a [`super::Track`] whose [`super::TrackKind`] is
 /// [`super::TrackKind::Shape`]. Rendered the same way [`super::TextClip`] is — a `geq`-based
 /// post-processing pass after the main timeline encode, see `avcore::shape_render`/
@@ -151,4 +196,29 @@ pub struct ShapeClip {
     /// (clamped to the shape's own half-extent, so a thickness larger than the shape still
     /// renders as filled rather than vanishing).
     pub stroke_thickness_px: f32,
+}
+
+impl ShapeClip {
+    /// The manually inserted default: a centered white rectangle, 30% of the canvas on each
+    /// axis, lasting 3 seconds from `start_secs`. Every shell's "add shape" goes through this.
+    pub fn new(id: u64, start_secs: f64) -> Self {
+        Self {
+            id,
+            start_secs,
+            duration_secs: 3.0,
+            shape_kind: ShapeKind::rectangle(),
+            center_x: 0.5,
+            center_y: 0.5,
+            center_x_keyframes: Vec::new(),
+            center_y_keyframes: Vec::new(),
+            width: 0.3,
+            height: 0.3,
+            width_keyframes: Vec::new(),
+            height_keyframes: Vec::new(),
+            rotation_deg: 0.0,
+            rotation_keyframes: Vec::new(),
+            color_rgba: [255, 255, 255, 255],
+            stroke_thickness_px: 0.0,
+        }
+    }
 }
