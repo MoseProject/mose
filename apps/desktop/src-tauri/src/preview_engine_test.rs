@@ -1,10 +1,10 @@
 use std::path::{Path, PathBuf};
 
 use avcore::preview_worker::PreviewSeek;
-use avcore::timeline::{AudioRole, ClipInstance, Timeline, Track, TrackKind};
+use avcore::timeline::{AudioRole, ClipInstance, ShapeClip, TextClip, Timeline, Track, TrackKind};
 use avcore::{MediaAsset, MediaKind};
 
-use super::{live_updates_between, resolve_layers, seek_for, timeline_position};
+use super::{live_updates_between, resolve_layers, seek_for, timeline_position, Layers};
 
 fn fixture() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../crates/core/tests/fixtures/video.mp4")
@@ -204,7 +204,7 @@ fn live_video_property_changes_keep_the_loaded_layers() {
     after.tracks[0].clips[0].brightness = 0.25;
     let before = resolve_layers(&before, &media, 1.0);
     let after = resolve_layers(&after, &media, 1.0);
-    assert!(live_updates_between(&before, &after).is_some());
+    assert!(live_updates_between(&before, &after, 1.0).is_some());
 }
 
 #[test]
@@ -219,5 +219,43 @@ fn trim_changes_reopen_the_loaded_layers() {
     after.tracks[0].clips[0].source_out_secs = 2.0;
     let before = resolve_layers(&before, &media, 1.0);
     let after = resolve_layers(&after, &media, 1.0);
-    assert!(live_updates_between(&before, &after).is_none());
+    assert!(live_updates_between(&before, &after, 1.0).is_none());
+}
+
+#[test]
+fn unchanged_layers_yield_no_live_updates() {
+    let layers = Layers {
+        text: vec![TextClip::new(1, 0.0, "hi".into())],
+        shapes: vec![ShapeClip::new(2, 0.0)],
+        ..Layers::default()
+    };
+    assert_eq!(
+        live_updates_between(&layers, &layers.clone(), 1.0),
+        Some(Vec::new())
+    );
+}
+
+#[test]
+fn text_and_shape_content_edits_are_live_but_placement_edits_reopen() {
+    let before = Layers {
+        text: vec![TextClip::new(1, 0.5, "hi".into())],
+        shapes: vec![ShapeClip::new(2, 0.0)],
+        ..Layers::default()
+    };
+    let mut content = before.clone();
+    content.text[0].text = "bye".into();
+    content.shapes[0].width = 0.5;
+    let updates = live_updates_between(&before, &content, 1.5).expect("content edit is live");
+    assert_eq!(updates.len(), 2);
+    assert!(matches!(
+        &updates[0],
+        avcore::LivePreviewUpdate::TextOverlay { local_time_secs, .. } if (*local_time_secs - 1.0).abs() < 1e-9
+    ));
+
+    let mut moved = before.clone();
+    moved.text[0].start_secs = 0.0;
+    assert!(live_updates_between(&before, &moved, 1.5).is_none());
+    let mut resized = before.clone();
+    resized.shapes[0].duration_secs += 1.0;
+    assert!(live_updates_between(&before, &resized, 1.5).is_none());
 }
