@@ -28,6 +28,10 @@ pub struct DecodeSource {
 pub enum DecodeSourceError {
     Decode(DecodeError),
     InvalidFrame(VideoFrameError),
+    /// Frame-accurate seek decoded `limit` frames without reaching the target.
+    SeekSearchLimit {
+        limit: u32,
+    },
 }
 
 impl From<DecodeError> for DecodeSourceError {
@@ -41,6 +45,10 @@ impl From<VideoFrameError> for DecodeSourceError {
         Self::InvalidFrame(error)
     }
 }
+
+/// Upper bound on frames decoded forward from a key unit to reach an exact target. Bounds
+/// worst-case latency on hostile or very long-GOP media instead of decoding to EOF.
+pub const MAX_SEEK_SEARCH_FRAMES: u32 = 600;
 
 impl DecodeSource {
     /// Opens one local video source. No project, UI, or timeline state is retained.
@@ -86,5 +94,35 @@ impl DecodeSource {
                 .map_err(Into::into)
             })
             .transpose()
+    }
+
+    /// Frame-accurate seek: the frame presented at `target_secs`, i.e. the last decoded frame
+    /// with `timestamp <= target`. Seeks to the preceding key unit, then decodes forward,
+    /// discarding intermediate frames. If the first frame is already past the target (a
+    /// target before the stream start) it is returned. `Ok(None)` means cancelled, or the
+    /// stream ended before producing any frame.
+    pub fn frame_at(
+        &mut self,
+        target_secs: f64,
+        cancel: &AtomicBool,
+    ) -> Result<Option<VideoFrame>, DecodeSourceError> {
+        self.seek(target_secs)?;
+        let mut held: Option<VideoFrame> = None;
+        for _ in 0..MAX_SEEK_SEARCH_FRAMES {
+            let Some(frame) = self.next_frame(cancel)? else {
+                return Ok(if cancel.load(std::sync::atomic::Ordering::Acquire) {
+                    None
+                } else {
+                    held
+                });
+            };
+            if frame.timestamp_secs() > target_secs + 1e-6 {
+                return Ok(Some(held.unwrap_or(frame)));
+            }
+            held = Some(frame);
+        }
+        Err(DecodeSourceError::SeekSearchLimit {
+            limit: MAX_SEEK_SEARCH_FRAMES,
+        })
     }
 }

@@ -23,7 +23,7 @@ pub use audio_block::{AudioBlock, AudioBlockError};
 pub use audio_mixer::{AudioMixer, MixError, MixInput};
 pub use byte_cache::{ByteCache, CacheError, CacheInsert};
 pub use cpu_renderer::{CpuRenderer, LayerFrame, RenderError};
-pub use decode_source::{DecodeSource, DecodeSourceError, SourceInfo};
+pub use decode_source::{DecodeSource, DecodeSourceError, SourceInfo, MAX_SEEK_SEARCH_FRAMES};
 pub use frame_mailbox::{FrameMailbox, PublishedFrame};
 pub use latest_intent::{Generation, LatestIntent, PendingIntent};
 pub use preview_worker::{
