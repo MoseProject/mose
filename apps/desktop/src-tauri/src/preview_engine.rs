@@ -158,19 +158,22 @@ impl Layers {
     }
 }
 
-/// Returns all live updates when layer identity and every pipeline-shaping field are unchanged.
-/// Text, shapes, audio, paths, and missing layers still require a reopen.
+/// Returns the live updates needed when layer identity and every pipeline-shaping field are
+/// unchanged; unchanged layers contribute nothing. Audio, paths, placement changes, and
+/// missing layers still require a reopen.
 fn live_updates_between(
     previous: &Layers,
     next: &Layers,
+    playhead: f64,
 ) -> Option<Vec<avcore::LivePreviewUpdate>> {
     let mut updates = Vec::new();
     let mut compare_video = |before: &(PathBuf, ClipInstance), after: &(PathBuf, ClipInstance)| {
         if before.0 != after.0 {
             return None;
         }
-        let next_updates = live_preview_updates(&before.1, &after.1)?;
-        updates.extend(next_updates);
+        if before.1 != after.1 {
+            updates.extend(live_preview_updates(&before.1, &after.1)?);
+        }
         Some(())
     };
     match (&previous.background, &next.background) {
@@ -180,13 +183,19 @@ fn live_updates_between(
     }
     if previous.overlays.len() != next.overlays.len()
         || previous.audio != next.audio
-        || previous.text != next.text
-        || previous.shapes != next.shapes
+        || previous.text.len() != next.text.len()
+        || previous.shapes.len() != next.shapes.len()
     {
         return None;
     }
     for (before, after) in previous.overlays.iter().zip(&next.overlays) {
         compare_video(before, after)?;
+    }
+    for (before, after) in previous.text.iter().zip(&next.text) {
+        updates.extend(avcore::live_text_update(before, after, playhead)?);
+    }
+    for (before, after) in previous.shapes.iter().zip(&next.shapes) {
+        updates.extend(avcore::live_shape_update(before, after)?);
     }
     Some(updates)
 }
@@ -456,7 +465,7 @@ fn run(
         let layers = resolve_layers(&timeline, &media, playhead);
         let live_updates = loaded
             .as_ref()
-            .and_then(|previous| live_updates_between(previous, &layers));
+            .and_then(|previous| live_updates_between(previous, &layers, playhead));
         if !seek_pending && loaded.as_ref().is_some() && live_updates.is_some() {
             for update in live_updates.unwrap_or_default() {
                 worker.live_update(update);
