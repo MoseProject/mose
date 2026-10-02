@@ -4,7 +4,7 @@
 //! mutable GStreamer elements, so frontends can update them without reopening the decoder.
 
 use crate::preview::Preview;
-use crate::timeline::{ClipInstance, ColorFilter, MaskShape};
+use crate::timeline::{ClipInstance, ColorFilter, MaskShape, ShapeClip, TextClip};
 
 /// CPU-only effects applied after decode to the background preview frame.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -68,6 +68,15 @@ pub enum LivePreviewUpdate {
         clip_id: u64,
         shape: MaskShape,
         corner_radius: f32,
+    },
+    /// Re-rasterizes one text overlay branch. `local_time_secs` is the playhead relative to the
+    /// clip's start, which picks the active highlighted word.
+    TextOverlay {
+        clip: TextClip,
+        local_time_secs: f64,
+    },
+    ShapeOverlay {
+        clip: ShapeClip,
     },
 }
 
@@ -159,6 +168,15 @@ impl LivePreviewUpdate {
             } => {
                 let _ = preview.set_live_mask(clip_id, shape, corner_radius);
             }
+            Self::TextOverlay {
+                clip,
+                local_time_secs,
+            } => {
+                let _ = preview.refresh_text_overlay(&clip, local_time_secs);
+            }
+            Self::ShapeOverlay { clip } => {
+                let _ = preview.refresh_shape_overlay(&clip);
+            }
         }
     }
 }
@@ -193,4 +211,44 @@ pub fn live_preview_updates(
     normalized.mask_shape = previous.mask_shape;
     normalized.mask_corner_radius = previous.mask_corner_radius;
     (normalized == *previous).then(|| LivePreviewUpdate::for_clip(next))
+}
+
+/// Live update for a text clip whose edit left its timeline placement untouched. `None` means
+/// start/duration/identity changed (it may now cover a different playhead range), so the
+/// pipeline must be reopened. Equal clips yield `Some(None)`: nothing to push.
+pub fn live_text_update(
+    previous: &TextClip,
+    next: &TextClip,
+    playhead_secs: f64,
+) -> Option<Option<LivePreviewUpdate>> {
+    if previous.id != next.id
+        || previous.start_secs != next.start_secs
+        || previous.duration_secs != next.duration_secs
+    {
+        return None;
+    }
+    if previous == next {
+        return Some(None);
+    }
+    Some(Some(LivePreviewUpdate::TextOverlay {
+        clip: next.clone(),
+        local_time_secs: (playhead_secs - next.start_secs).max(0.0),
+    }))
+}
+
+/// Shape counterpart of [`live_text_update`].
+pub fn live_shape_update(
+    previous: &ShapeClip,
+    next: &ShapeClip,
+) -> Option<Option<LivePreviewUpdate>> {
+    if previous.id != next.id
+        || previous.start_secs != next.start_secs
+        || previous.duration_secs != next.duration_secs
+    {
+        return None;
+    }
+    if previous == next {
+        return Some(None);
+    }
+    Some(Some(LivePreviewUpdate::ShapeOverlay { clip: next.clone() }))
 }

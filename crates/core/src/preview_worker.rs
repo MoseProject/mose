@@ -388,6 +388,12 @@ impl PreviewWorker {
             }
             LivePreviewUpdate::Shake { clip_id, .. } => LiveUpdateKey::for_clip("shake", *clip_id),
             LivePreviewUpdate::Mask { clip_id, .. } => LiveUpdateKey::for_clip("mask", *clip_id),
+            LivePreviewUpdate::TextOverlay { clip, .. } => {
+                LiveUpdateKey::for_clip("text-overlay", clip.id)
+            }
+            LivePreviewUpdate::ShapeOverlay { clip } => {
+                LiveUpdateKey::for_clip("shape-overlay", clip.id)
+            }
         };
         self.live(key, move |preview| update.apply(preview));
     }

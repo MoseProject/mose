@@ -144,7 +144,9 @@ pub use preview_effects::{
     apply_deflicker_to_rgba, apply_glitch_to_rgba, apply_lut_to_rgba, apply_vignette_to_rgba,
     DeflickerHistory, Lut3D, LutParseError,
 };
-pub use preview_live_updates::{live_preview_updates, LivePreviewUpdate, PreviewCpuEffects};
+pub use preview_live_updates::{
+    live_preview_updates, live_shape_update, live_text_update, LivePreviewUpdate, PreviewCpuEffects,
+};
 pub use probe::{probe_media, ProbeError, ProbedMedia};
 pub use project::{PanelLayout, Project, Recency, Sequence, SequenceExportSettings};
 pub use proxy::{ensure_proxy, PreviewQuality, ProxyError};
