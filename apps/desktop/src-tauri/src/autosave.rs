@@ -126,3 +126,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 }
+
+#[cfg(test)]
+#[path = "autosave_test.rs"]
+mod spawn_tests;
