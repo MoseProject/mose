@@ -100,6 +100,27 @@ pub(crate) fn harness() -> Harness {
     Harness { app, preview, dir }
 }
 
+/// A video asset that exists only in the library (nothing on disk behind `source_path`).
+pub(crate) fn video_asset(id: u64, duration_secs: f64) -> avcore::MediaAsset {
+    avcore::MediaAsset {
+        id,
+        file_name: format!("asset-{id}.mp4"),
+        source_path: PathBuf::from(format!("asset-{id}.mp4")),
+        kind: avcore::MediaKind::Video,
+        has_audio: true,
+        duration_secs,
+        codec: "h264".into(),
+        source_bitrate_mbps: 8.0,
+        resolution: None,
+        fps: None,
+        sample_rate_khz: None,
+        loudness: None,
+        proxy_path: None,
+        waveform_peaks: None,
+        favorited: false,
+    }
+}
+
 /// `dir/name`, for tests that need a path next to the harness's other files.
 pub(crate) fn path_in(dir: &Path, name: &str) -> PathBuf {
     dir.join(name)

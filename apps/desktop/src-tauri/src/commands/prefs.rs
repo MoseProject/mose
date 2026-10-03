@@ -233,3 +233,7 @@ pub fn apply_layer_template<R: Runtime>(
         changed
     })
 }
+
+#[cfg(test)]
+#[path = "prefs_test.rs"]
+mod tests;
