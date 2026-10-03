@@ -123,3 +123,29 @@ fn hardware_session_decodes_the_whole_stream_and_tears_down() {
     }
     assert_eq!(frames, 25);
 }
+
+#[test]
+fn shared_hardware_device_is_reused_released_and_recreated() {
+    let cancel = AtomicBool::new(false);
+    let open = || {
+        DecodeSession::open_with_policy(Path::new(H264), DecodePolicy::HardwareWithFallback)
+            .unwrap()
+    };
+
+    // Two live sessions share one cached device.
+    let (mut first, _) = open();
+    let (mut second, _) = open();
+    assert!(first.next_rgba(&cancel).unwrap().is_some());
+    assert!(second.next_rgba(&cancel).unwrap().is_some());
+
+    // Releasing the cache while sessions are open must not break them...
+    avbridge::release_cached_hardware_devices();
+    assert!(first.next_rgba(&cancel).unwrap().is_some());
+    drop(first);
+    drop(second);
+
+    // ...and a later open creates a fresh device.
+    avbridge::release_cached_hardware_devices();
+    let (mut third, _) = open();
+    assert!(third.next_rgba(&cancel).unwrap().is_some());
+}
