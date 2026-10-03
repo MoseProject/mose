@@ -131,3 +131,17 @@ fn an_invalid_native_frame_is_reported_as_invalid_frame() {
         DecodeSourceError::InvalidFrame(_)
     ));
 }
+
+#[test]
+fn a_target_further_than_the_frame_cap_is_a_search_limit_error() {
+    let mut source = DecodeSource::open(&fixture()).unwrap();
+    let cancel = AtomicBool::new(false);
+    // The target is several frames past the first one, so a cap of one frame cannot reach it.
+    let error = source.frame_at_within(0.6, &cancel, 1).unwrap_err();
+    assert!(matches!(
+        error,
+        DecodeSourceError::SeekSearchLimit { limit: 1 }
+    ));
+    // The same request within the default cap succeeds.
+    assert!(source.frame_at(0.6, &cancel).unwrap().is_some());
+}
