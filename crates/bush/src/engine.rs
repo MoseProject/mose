@@ -131,6 +131,8 @@ pub struct EngineStats {
     pub cache_hits: u64,
     pub cache_misses: u64,
     pub cancelled: u64,
+    /// Times a GPU failure switched the compositor to the CPU renderer mid-session.
+    pub gpu_fallbacks: u64,
 }
 
 #[derive(Debug, Default)]
@@ -142,6 +144,7 @@ struct Counters {
     cache_hits: AtomicU64,
     cache_misses: AtomicU64,
     cancelled: AtomicU64,
+    gpu_fallbacks: AtomicU64,
 }
 
 struct Pending {
@@ -186,6 +189,18 @@ impl Engine {
             .filter(|bytes| *bytes <= MAX_CANVAS_PIXELS * 4)
             .ok_or(EngineError::InvalidConfig)?;
         let renderer = create_renderer(config.renderer, max_bytes)?;
+        Self::with_renderer(config, renderer)
+    }
+
+    /// Starts an engine on a caller-supplied compositor. A [crate::RenderError::Gpu] from it
+    /// switches the engine to the CPU renderer for the rest of the session.
+    pub fn with_renderer(
+        config: EngineConfig,
+        renderer: Box<dyn Renderer>,
+    ) -> Result<Self, EngineError> {
+        canvas_budget(&config)
+            .filter(|bytes| *bytes <= MAX_CANVAS_PIXELS * 4)
+            .ok_or(EngineError::InvalidConfig)?;
         let renderer_name = renderer.name();
         let cache =
             ByteCache::new(config.frame_cache_bytes).map_err(|_| EngineError::InvalidConfig)?;
@@ -312,6 +327,7 @@ impl Engine {
             cache_hits: counters.cache_hits.load(Ordering::Relaxed),
             cache_misses: counters.cache_misses.load(Ordering::Relaxed),
             cancelled: counters.cancelled.load(Ordering::Relaxed),
+            gpu_fallbacks: counters.gpu_fallbacks.load(Ordering::Relaxed),
         }
     }
 
@@ -604,12 +620,32 @@ impl EngineThread {
                 lut: placement.lut.as_deref(),
             })
             .collect();
-        match self.renderer.render(
+        let mut result = self.renderer.render(
             self.config.canvas_width,
             self.config.canvas_height,
             playhead,
             &layer_frames,
-        ) {
+        );
+        // A lost or broken GPU must not end the session: switch to the CPU compositor (same
+        // output) and retry this frame once.
+        if matches!(result, Err(crate::RenderError::Gpu(_))) {
+            if let Some(budget) = canvas_budget(&self.config) {
+                if let Ok(cpu) = CpuRenderer::new(budget) {
+                    self.renderer = Box::new(cpu);
+                    self.shared
+                        .counters
+                        .gpu_fallbacks
+                        .fetch_add(1, Ordering::Relaxed);
+                    result = self.renderer.render(
+                        self.config.canvas_width,
+                        self.config.canvas_height,
+                        playhead,
+                        &layer_frames,
+                    );
+                }
+            }
+        }
+        match result {
             Ok(frame) => RenderOutcome::Frame(frame),
             Err(error) => RenderOutcome::Failed(format!("render failed: {error:?}")),
         }

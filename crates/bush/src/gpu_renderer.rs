@@ -5,6 +5,9 @@
 //! reference arithmetic (including the byte-exact fast paths), so parity with [`CpuRenderer`]
 //! is checked pixel by pixel in tests and any difference is a bug, not a quality setting.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
 use wgpu::util::DeviceExt;
 
 use crate::cpu_renderer::LayerGeometry;
@@ -49,6 +52,8 @@ pub struct GpuRenderer {
     pipeline: wgpu::ComputePipeline,
     layout: wgpu::BindGroupLayout,
     adapter_name: String,
+    /// Set when the device is lost, destroyed or reported an uncaptured error.
+    lost: Arc<AtomicBool>,
     max_output_bytes: usize,
     canvas: Option<Canvas>,
     layer_buffers: Vec<LayerBuffers>,
@@ -58,6 +63,17 @@ pub struct GpuRenderer {
 }
 
 impl GpuRenderer {
+    /// True once the GPU device is lost or destroyed; every later render fails.
+    pub fn is_lost(&self) -> bool {
+        self.lost.load(Ordering::Acquire)
+    }
+
+    /// Destroys the device on purpose (shutdown, or simulating a driver reset in tests).
+    pub fn destroy_device(&self) {
+        self.lost.store(true, Ordering::Release);
+        self.device.destroy();
+    }
+
     /// Creates a renderer on the best available adapter. `max_output_bytes` bounds the canvas.
     pub fn new(max_output_bytes: usize) -> Result<Self, GpuError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
@@ -73,6 +89,16 @@ impl GpuRenderer {
             ..Default::default()
         }))
         .map_err(|error| GpuError::Device(error.to_string()))?;
+
+        // Without handlers wgpu panics on an uncaptured error; flag the loss instead so the engine
+        // can fall back to the CPU compositor.
+        let lost = Arc::new(AtomicBool::new(false));
+        {
+            let flag = Arc::clone(&lost);
+            device.set_device_lost_callback(move |_, _| flag.store(true, Ordering::Release));
+            let flag = Arc::clone(&lost);
+            device.on_uncaptured_error(Arc::new(move |_| flag.store(true, Ordering::Release)));
+        }
 
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("bush-composite"),
@@ -137,6 +163,7 @@ impl GpuRenderer {
             pipeline,
             layout,
             adapter_name,
+            lost,
             max_output_bytes,
             canvas: None,
             layer_buffers: Vec::new(),
@@ -361,6 +388,9 @@ impl Renderer for GpuRenderer {
         timestamp_secs: f64,
         layers: &[LayerFrame<'_>],
     ) -> Result<VideoFrame, RenderError> {
+        if self.is_lost() {
+            return Err(RenderError::Gpu("device lost".into()));
+        }
         // Validation is shared with the reference so both renderers reject the same input.
         crate::cpu_renderer::validate_render_input(
             width,
