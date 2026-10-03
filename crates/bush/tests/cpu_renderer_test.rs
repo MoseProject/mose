@@ -169,7 +169,7 @@ fn pixel(output: &VideoFrame, x: usize, y: usize) -> [u8; 4] {
 }
 
 #[test]
-fn blend_modes_follow_the_w3c_formulas() {
+fn blend_modes_use_ffmpeg_integer_arithmetic() {
     let backdrop = solid(1, 1, [200, 100, 50, 255]);
     let source = solid(1, 1, [100, 100, 100, 255]);
     let renderer = CpuRenderer::new(16).unwrap();
@@ -184,8 +184,8 @@ fn blend_modes_follow_the_w3c_formulas() {
     };
 
     assert_eq!(render(BlendMode::Normal), [100, 100, 100, 255]);
-    assert_eq!(render(BlendMode::Multiply), [78, 39, 20, 255]);
-    assert_eq!(render(BlendMode::Screen), [222, 161, 130, 255]);
+    assert_eq!(render(BlendMode::Multiply), [78, 39, 19, 255]);
+    assert_eq!(render(BlendMode::Screen), [222, 161, 131, 255]);
     assert_eq!(render(BlendMode::Darken), [100, 100, 50, 255]);
     assert_eq!(render(BlendMode::Lighten), [200, 100, 100, 255]);
     assert_eq!(render(BlendMode::Add), [255, 200, 150, 255]);
