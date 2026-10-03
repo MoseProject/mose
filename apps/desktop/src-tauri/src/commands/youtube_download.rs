@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use avcore::{Mp3Bitrate, Mp4Quality, YoutubeDownloadTarget};
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
 use crate::state::AppState;
 
@@ -59,8 +59,8 @@ pub fn is_yt_dlp_available() -> bool {
 /// the media library like any other. Errors (already running, blank URL, tool missing) surface
 /// synchronously; progress/result arrive via [`YOUTUBE_DOWNLOAD_EVENT`].
 #[tauri::command]
-pub fn download_youtube(
-    app: AppHandle,
+pub fn download_youtube<R: Runtime>(
+    app: AppHandle<R>,
     url: String,
     format: String,
     quality: String,

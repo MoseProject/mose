@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use avcore::{ClipFormatting, ClipInstance, LayerTemplate, TrackKind};
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, Runtime, State};
 
 use crate::autosave;
 use crate::commands::undoable;
@@ -26,7 +26,7 @@ pub fn get_prefs(state: State<'_, AppState>) -> PrefsView {
 }
 
 #[tauri::command]
-pub fn set_prefs(app: AppHandle, prefs: PrefsView) -> Result<(), String> {
+pub fn set_prefs<R: Runtime>(app: AppHandle<R>, prefs: PrefsView) -> Result<(), String> {
     let state = app.state::<AppState>();
     let telemetry_enabled = prefs.telemetry_enabled;
     {
@@ -70,7 +70,7 @@ pub fn get_recent_projects(state: State<'_, AppState>) -> Vec<RecentProject> {
 }
 
 #[tauri::command]
-pub fn remove_recent_project(app: AppHandle, path: String) -> Result<(), String> {
+pub fn remove_recent_project<R: Runtime>(app: AppHandle<R>, path: String) -> Result<(), String> {
     let state = app.state::<AppState>();
     {
         let mut prefs = state.prefs();
@@ -85,7 +85,10 @@ pub fn remove_recent_project(app: AppHandle, path: String) -> Result<(), String>
     Ok(())
 }
 
-pub fn record_recent_project(app: &AppHandle, path: &std::path::Path) -> Result<(), String> {
+pub fn record_recent_project<R: Runtime>(
+    app: &AppHandle<R>,
+    path: &std::path::Path,
+) -> Result<(), String> {
     let state = app.state::<AppState>();
     let path = path.display().to_string();
     let mut prefs = state.prefs();
@@ -99,7 +102,7 @@ pub fn record_recent_project(app: &AppHandle, path: &std::path::Path) -> Result<
 }
 
 #[tauri::command]
-pub fn restore_autosave(app: AppHandle, path: String) -> Result<(), String> {
+pub fn restore_autosave<R: Runtime>(app: AppHandle<R>, path: String) -> Result<(), String> {
     let project_path = PathBuf::from(path);
     let autosave_path = autosave::is_newer(&project_path)
         .ok_or_else(|| "no newer autosave is available".to_string())?;
@@ -128,8 +131,8 @@ pub fn discard_autosave(path: String) -> Result<(), String> {
 /// Returns the updated list so the caller doesn't need a second `get_prefs` round trip. A no-op
 /// (returning the list unchanged) if `name` is blank or no clip in `clip_ids` is found.
 #[tauri::command]
-pub fn save_layer_template(
-    app: AppHandle,
+pub fn save_layer_template<R: Runtime>(
+    app: AppHandle<R>,
     name: String,
     clip_ids: Vec<u64>,
 ) -> Result<Vec<LayerTemplate>, String> {
@@ -166,7 +169,10 @@ pub fn save_layer_template(
 /// Removes `prefs.saved_layer_templates[index]`. Returns the updated list; unchanged (`index`
 /// out of range) if there was nothing to remove there.
 #[tauri::command]
-pub fn delete_layer_template(app: AppHandle, index: usize) -> Result<Vec<LayerTemplate>, String> {
+pub fn delete_layer_template<R: Runtime>(
+    app: AppHandle<R>,
+    index: usize,
+) -> Result<Vec<LayerTemplate>, String> {
     let state = app.state::<AppState>();
     let mut prefs = state.prefs();
     if index < prefs.view.saved_layer_templates.len() {
@@ -182,8 +188,8 @@ pub fn delete_layer_template(app: AppHandle, index: usize) -> Result<Vec<LayerTe
 /// saved [`ClipFormatting`] onto it -- one undo step for the whole template. A no-op if
 /// `template_index` is out of range or every slot is empty.
 #[tauri::command]
-pub fn apply_layer_template(
-    app: AppHandle,
+pub fn apply_layer_template<R: Runtime>(
+    app: AppHandle<R>,
     template_index: usize,
     asset_ids: Vec<Option<u64>>,
 ) -> Result<(), String> {

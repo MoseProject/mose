@@ -12,7 +12,7 @@
 use std::path::{Path, PathBuf};
 
 use avcore::{MediaKind, PreviewQuality};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, Runtime};
 
 use super::with_session;
 use crate::state::{publish, AppState, Session};
@@ -21,7 +21,7 @@ const AUDIO_EXTENSIONS: &[&str] = &["wav", "mp3", "m4a", "aac", "flac", "ogg", "
 
 /// Shows a multi-select file dialog and imports the chosen files.
 #[tauri::command]
-pub async fn import_media_dialog(app: AppHandle) -> Result<(), String> {
+pub async fn import_media_dialog<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
     let mut extensions: Vec<&str> = avcore::VIDEO_EXTENSIONS.to_vec();
     extensions.extend_from_slice(AUDIO_EXTENSIONS);
     let Some(paths) = rfd::FileDialog::new()
@@ -36,12 +36,12 @@ pub async fn import_media_dialog(app: AppHandle) -> Result<(), String> {
 
 /// Imports files dropped onto the window (paths come from Tauri's drag-drop event).
 #[tauri::command]
-pub fn import_media(app: AppHandle, paths: Vec<String>) {
+pub fn import_media<R: Runtime>(app: AppHandle<R>, paths: Vec<String>) {
     import_paths(&app, paths.into_iter().map(PathBuf::from).collect());
 }
 
 #[tauri::command]
-pub fn toggle_favorite(app: AppHandle, asset_id: u64) -> Result<(), String> {
+pub fn toggle_favorite<R: Runtime>(app: AppHandle<R>, asset_id: u64) -> Result<(), String> {
     with_session(&app, |session| {
         if let Some(asset) = session
             .project
@@ -56,7 +56,7 @@ pub fn toggle_favorite(app: AppHandle, asset_id: u64) -> Result<(), String> {
     })
 }
 
-fn import_paths(app: &AppHandle, paths: Vec<PathBuf>) {
+fn import_paths<R: Runtime>(app: &AppHandle<R>, paths: Vec<PathBuf>) {
     let (epoch, proxy_dir) = {
         let state = app.state::<AppState>();
         let session = state.session();
@@ -72,7 +72,7 @@ fn import_paths(app: &AppHandle, paths: Vec<PathBuf>) {
     }
 }
 
-fn import_one(app: &AppHandle, path: &Path, epoch: u64, proxy_dir: &Path) {
+fn import_one<R: Runtime>(app: &AppHandle<R>, path: &Path, epoch: u64, proxy_dir: &Path) {
     let probed = match avcore::probe_media(path) {
         Ok(probed) => probed,
         Err(error) => {
@@ -133,7 +133,7 @@ fn import_one(app: &AppHandle, path: &Path, epoch: u64, proxy_dir: &Path) {
 
 /// Re-attaches editing proxies after a project load. `ensure_proxy` returns an existing cache
 /// entry without re-encoding, so this is cheap for media proxied before.
-pub fn rehydrate_proxies(app: &AppHandle, epoch: u64) {
+pub fn rehydrate_proxies<R: Runtime>(app: &AppHandle<R>, epoch: u64) {
     let (sources, proxy_dir) = {
         let state = app.state::<AppState>();
         let session = state.session();
@@ -181,8 +181,8 @@ pub fn rehydrate_proxies(app: &AppHandle, epoch: u64) {
 
 /// Applies `change` only if the project open when the background work started is still the
 /// open one, then publishes. `None` when the project was replaced in the meantime.
-fn with_current_project<T>(
-    app: &AppHandle,
+fn with_current_project<R: Runtime, T>(
+    app: &AppHandle<R>,
     epoch: u64,
     change: impl FnOnce(&mut Session) -> T,
 ) -> Option<T> {

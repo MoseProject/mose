@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 
 use avcore::LoudnessMetrics;
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
 use crate::state::AppState;
 
@@ -59,7 +59,7 @@ pub fn pick_watch_folder() -> Option<String> {
 /// screen's "Start watching" button does. Stops any run already in flight against a different
 /// folder first (only one watch runs at a time, same as the egui shell).
 #[tauri::command]
-pub fn start_watching_folder(app: AppHandle, path: String) -> Result<(), String> {
+pub fn start_watching_folder<R: Runtime>(app: AppHandle<R>, path: String) -> Result<(), String> {
     let state = app.state::<AppState>();
     stop_watch_thread(&state);
     let stop = Arc::new(AtomicBool::new(false));
@@ -95,7 +95,11 @@ fn stop_watch_thread(state: &AppState) {
 /// `processed/` path) into the active project's media library, through the existing
 /// `import_media` pipeline -- what the screen's "Add to project" button does on a `Done` row.
 #[tauri::command]
-pub fn add_watched_file_to_project(app: AppHandle, watch_path: String, source_path: String) {
+pub fn add_watched_file_to_project<R: Runtime>(
+    app: AppHandle<R>,
+    watch_path: String,
+    source_path: String,
+) {
     let output = avcore::output_path_for(
         Path::new(&watch_path),
         avcore::DEFAULT_OUTPUT_SUBFOLDER,
@@ -104,7 +108,7 @@ pub fn add_watched_file_to_project(app: AppHandle, watch_path: String, source_pa
     crate::commands::media::import_media(app, vec![output.display().to_string()]);
 }
 
-fn watch_loop(watch_path: PathBuf, stop: Arc<AtomicBool>, app: AppHandle) {
+fn watch_loop<R: Runtime>(watch_path: PathBuf, stop: Arc<AtomicBool>, app: AppHandle<R>) {
     let stable_for = Duration::from_secs(avcore::DEFAULT_STABLE_SECS);
     let mut tracker = avcore::StabilityTracker::new();
     let mut seen: HashSet<PathBuf> = HashSet::new();
@@ -215,6 +219,6 @@ fn display(path: &Path) -> String {
     path.display().to_string()
 }
 
-fn emit(app: &AppHandle, payload: WatchFolderEventPayload) {
+fn emit<R: Runtime>(app: &AppHandle<R>, payload: WatchFolderEventPayload) {
     let _ = app.emit(WATCH_FOLDER_EVENT, payload);
 }
