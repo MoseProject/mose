@@ -109,3 +109,42 @@ fn enforces_output_frame_budget() {
         })
     );
 }
+
+#[test]
+fn a_zero_budget_a_bad_format_and_mismatched_inputs_are_rejected() {
+    assert_eq!(
+        AudioMixer::new(10, 1, 0).unwrap_err(),
+        MixError::ZeroOutputBudget
+    );
+    assert!(matches!(AudioMixer::new(0, 1, 4), Err(MixError::Block(_))));
+
+    let mixer = AudioMixer::new(10, 1, 10).unwrap();
+    let other_rate = AudioBlock::new(20, 1, 0.0, vec![0.0]).unwrap();
+    assert_eq!(
+        mixer
+            .mix(&[MixInput {
+                block: &other_rate,
+                gain: 1.0,
+                muted: false
+            }])
+            .unwrap_err(),
+        MixError::SampleRateMismatch {
+            expected: 10,
+            actual: 20
+        }
+    );
+    let stereo = AudioBlock::new(10, 2, 0.0, vec![0.0, 0.0]).unwrap();
+    assert_eq!(
+        mixer
+            .mix(&[MixInput {
+                block: &stereo,
+                gain: 1.0,
+                muted: false
+            }])
+            .unwrap_err(),
+        MixError::ChannelMismatch {
+            expected: 1,
+            actual: 2
+        }
+    );
+}
