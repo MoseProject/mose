@@ -66,4 +66,58 @@ mod tests {
         let project = std::env::temp_dir().join("oca_desktop_missing_autosave.ocproj");
         assert!(is_newer(&project).is_none());
     }
+
+    fn scratch_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "oca_desktop_autosave_{name}_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn age(path: &Path, seconds: u64) {
+        let file = std::fs::OpenOptions::new().write(true).open(path).unwrap();
+        let when = std::time::SystemTime::now() - std::time::Duration::from_secs(seconds);
+        file.set_modified(when).unwrap();
+    }
+
+    #[test]
+    fn a_snapshot_is_due_when_missing_or_older_than_the_interval() {
+        let dir = scratch_dir("due");
+        let snapshot = dir.join("recovery.ocproj");
+        assert!(snapshot_due(&snapshot, 5), "no snapshot yet");
+
+        std::fs::write(&snapshot, b"x").unwrap();
+        assert!(!snapshot_due(&snapshot, 5), "just written");
+        age(&snapshot, 4 * 60);
+        assert!(!snapshot_due(&snapshot, 5), "four minutes is within five");
+        age(&snapshot, 6 * 60);
+        assert!(snapshot_due(&snapshot, 5), "six minutes is past five");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn an_autosave_is_recoverable_only_when_newer_than_the_saved_project() {
+        let dir = scratch_dir("newer");
+        let project = dir.join("game.ocproj");
+        let autosave = autosave_path(&project);
+        std::fs::write(&autosave, b"recovery").unwrap();
+
+        // The project file is missing, so the autosave is all there is.
+        assert_eq!(is_newer(&project), Some(autosave.clone()));
+
+        std::fs::write(&project, b"saved").unwrap();
+        age(&autosave, 600);
+        assert_eq!(
+            is_newer(&project),
+            None,
+            "the project was saved after the autosave"
+        );
+
+        age(&project, 1200);
+        assert_eq!(is_newer(&project), Some(autosave));
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }
