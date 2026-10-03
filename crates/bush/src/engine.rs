@@ -584,36 +584,30 @@ impl EngineThread {
             if let (Some(smoothing), ContributorContent::Media(_)) =
                 (placement.stabilize, &contributor.content)
             {
-                let stabilizer = match self.stabilizers.entry(contributor.id) {
-                    std::collections::hash_map::Entry::Occupied(entry) => Some(entry.into_mut()),
-                    std::collections::hash_map::Entry::Vacant(entry) => {
-                        crate::Stabilizer::new(smoothing).map(|new| entry.insert(new))
-                    }
-                };
-                if let Some(stabilizer) = stabilizer {
-                    let (dx, dy) = stabilizer.analyze(&frame);
-                    // Counter-translate onto the smooth path and zoom about the layer centre so
-                    // the shifted borders stay outside the picture.
-                    let zoom = crate::STABILIZE_ZOOM;
-                    let scale_x = placement.transform.scale_x;
-                    let scale_y = placement.transform.scale_y;
-                    placement.x += (dx * scale_x).round() as i32
-                        - (frame.width() as f32 * scale_x * (zoom - 1.0) / 2.0).round() as i32;
-                    placement.y += (dy * scale_y).round() as i32
-                        - (frame.height() as f32 * scale_y * (zoom - 1.0) / 2.0).round() as i32;
-                    placement.transform.scale_x *= zoom;
-                    placement.transform.scale_y *= zoom;
-                }
+                // Placement validation bounds the smoothing to (0, 1], which `new` accepts.
+                let stabilizer = self.stabilizers.entry(contributor.id).or_insert_with(|| {
+                    crate::Stabilizer::new(smoothing).expect("validated smoothing weight")
+                });
+                let (dx, dy) = stabilizer.analyze(&frame);
+                // Counter-translate onto the smooth path and zoom about the layer centre so
+                // the shifted borders stay outside the picture.
+                let zoom = crate::STABILIZE_ZOOM;
+                let scale_x = placement.transform.scale_x;
+                let scale_y = placement.transform.scale_y;
+                placement.x += (dx * scale_x).round() as i32
+                    - (frame.width() as f32 * scale_x * (zoom - 1.0) / 2.0).round() as i32;
+                placement.y += (dy * scale_y).round() as i32
+                    - (frame.height() as f32 * scale_y * (zoom - 1.0) / 2.0).round() as i32;
+                placement.transform.scale_x *= zoom;
+                placement.transform.scale_y *= zoom;
             } else {
                 self.stabilizers.remove(&contributor.id);
             }
             let frame = match (placement.deflicker, &contributor.content) {
-                (Some(smoothing), ContributorContent::Media(_)) => {
-                    match self.deflicker_for(contributor.id, smoothing) {
-                        Some(deflicker) => Arc::new(deflicker.process(&frame)),
-                        None => frame,
-                    }
-                }
+                (Some(smoothing), ContributorContent::Media(_)) => Arc::new(
+                    self.deflicker_for(contributor.id, smoothing)
+                        .process(&frame),
+                ),
                 _ => {
                     self.deflickers.remove(&contributor.id);
                     frame
@@ -712,15 +706,11 @@ impl EngineThread {
         }
     }
 
-    fn deflicker_for(
-        &mut self,
-        id: ContributorId,
-        smoothing: f32,
-    ) -> Option<&mut crate::Deflicker> {
-        if let std::collections::hash_map::Entry::Vacant(entry) = self.deflickers.entry(id) {
-            entry.insert(crate::Deflicker::new(smoothing)?);
-        }
-        self.deflickers.get_mut(&id)
+    fn deflicker_for(&mut self, id: ContributorId, smoothing: f32) -> &mut crate::Deflicker {
+        // Placement validation bounds the smoothing to (0, 1], which `new` accepts.
+        self.deflickers.entry(id).or_insert_with(|| {
+            crate::Deflicker::new(smoothing).expect("validated smoothing weight")
+        })
     }
 
     /// Source frames for every need, in order: from the cache where possible, otherwise decoded
