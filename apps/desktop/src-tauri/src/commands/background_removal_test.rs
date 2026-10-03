@@ -139,3 +139,47 @@ fn footage_that_cannot_be_matted_reports_why() {
     .unwrap_err()
     .contains("failed to create matte cache dir"));
 }
+
+fn solid(width: u32, height: u32) -> avcore::SampledFrame {
+    avcore::SampledFrame {
+        width,
+        height,
+        rgba: vec![128; (width * height * 4) as usize],
+    }
+}
+
+#[test]
+fn a_matte_needs_at_least_two_frames_of_the_same_size() {
+    let h = harness();
+    *h.services.person_alpha.lock().unwrap() = Some(1.0);
+    let dir = h.dir.join("mattes");
+    let mask = dir.join("m.mp4");
+    let model = Path::new("model.onnx");
+    let services = h.services.as_ref();
+    assert_eq!(
+        matte_from_frames(services, &[solid(64, 48)], 1.0, model, &dir, &mask),
+        Err("couldn't decode enough frames to generate a matte".to_string())
+    );
+    assert!(matte_from_frames(services, &[], 1.0, model, &dir, &mask).is_err());
+    let mixed = [solid(64, 48), solid(32, 32)];
+    assert!(matte_from_frames(services, &mixed, 1.0, model, &dir, &mask).is_err());
+}
+
+#[test]
+fn frames_of_another_size_are_skipped_when_enough_remain() {
+    let h = harness();
+    *h.services.person_alpha.lock().unwrap() = Some(1.0);
+    let dir = h.dir.join("mattes");
+    let mask = dir.join("m.mp4");
+    let frames = [solid(64, 48), solid(32, 32), solid(64, 48), solid(64, 48)];
+    let path = matte_from_frames(
+        h.services.as_ref(),
+        &frames,
+        1.0,
+        Path::new("m.onnx"),
+        &dir,
+        &mask,
+    )
+    .unwrap();
+    assert!(path.exists());
+}

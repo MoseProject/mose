@@ -144,3 +144,37 @@ fn a_matte_that_cannot_be_written_reports_the_error() {
         .unwrap_err()
         .contains("failed to create matte cache dir"));
 }
+
+fn solid(width: u32, height: u32) -> avcore::SampledFrame {
+    avcore::SampledFrame {
+        width,
+        height,
+        rgba: vec![128; (width * height * 4) as usize],
+    }
+}
+
+#[test]
+fn a_matte_needs_at_least_two_frames_of_the_same_size() {
+    let h = harness();
+    let dir = h.dir.join("mattes");
+    let mask = dir.join("m.mp4");
+    let one = [solid(64, 48)];
+    assert_eq!(
+        matte_from_frames(&one, 1.0, 0.5, 0.5, 0.2, 0.2, &dir, &mask),
+        Err("couldn't decode enough frames to propagate a mask".to_string())
+    );
+    assert!(matte_from_frames(&[], 1.0, 0.5, 0.5, 0.2, 0.2, &dir, &mask).is_err());
+    let mixed = [solid(64, 48), solid(32, 32)];
+    assert!(matte_from_frames(&mixed, 1.0, 0.5, 0.5, 0.2, 0.2, &dir, &mask).is_err());
+}
+
+#[test]
+fn frames_of_another_size_are_skipped_when_enough_remain() {
+    let h = harness();
+    let dir = h.dir.join("mattes");
+    let mask = dir.join("m.mp4");
+    let frames = [solid(64, 48), solid(32, 32), solid(64, 48), solid(64, 48)];
+    let (path, seed) = matte_from_frames(&frames, 1.0, 0.5, 0.5, 0.2, 0.2, &dir, &mask).unwrap();
+    assert!(path.exists());
+    assert_eq!(seed.len(), 4);
+}

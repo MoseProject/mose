@@ -140,3 +140,23 @@ fn applying_cuts_to_a_missing_or_stalled_clip_adds_nothing() {
     apply_detected_scene_cuts(session.project.timeline_mut(), clip, &cuts);
     assert!(session.project.timeline().markers.is_empty());
 }
+
+#[test]
+fn detected_cuts_are_published_as_markers_and_no_cuts_publish_nothing() {
+    let h = harness();
+    let (_, clip) = h.add_fixture_clip();
+    let events = h.count_session_events();
+    publish_cuts(&h.handle(), clip, &[]);
+    assert_eq!(events.load(std::sync::atomic::Ordering::SeqCst), 0);
+    publish_cuts(
+        &h.handle(),
+        clip,
+        &[SceneCut {
+            at_secs: 1.0,
+            score: 0.9,
+        }],
+    );
+    assert_eq!(events.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(h.session().project.timeline().markers.len(), 1);
+    assert!(h.session().dirty);
+}
