@@ -15,6 +15,7 @@ mod engine;
 mod frame_mailbox;
 mod keyframes;
 mod latest_intent;
+mod layer_mods;
 mod player;
 mod preview_worker;
 mod scene;
@@ -43,6 +44,7 @@ pub use engine::{
 pub use frame_mailbox::{FrameMailbox, PublishedFrame};
 pub use keyframes::{Animation, Easing, Fade, Keyframe, KeyframeError, KeyframeTrack};
 pub use latest_intent::{Generation, LatestIntent, PendingIntent};
+pub use layer_mods::{ChromaKey, LayerMask, Lut3D, LutError, MaskShape};
 pub use player::{Player, PlayerError, PlayerEvent};
 pub use preview_worker::{
     PreviewCommand, PreviewWorker, WorkerFailure, WorkerOperation, WorkerSubmitError,

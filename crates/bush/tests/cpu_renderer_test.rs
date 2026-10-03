@@ -35,6 +35,7 @@ fn composites_layers_in_painter_order() {
                     transform: LayerTransform::default(),
                     blend: BlendMode::Normal,
                     effects: LayerEffects::default(),
+                    lut: None,
                 },
                 LayerFrame {
                     frame: &blue,
@@ -44,6 +45,7 @@ fn composites_layers_in_painter_order() {
                     transform: LayerTransform::default(),
                     blend: BlendMode::Normal,
                     effects: LayerEffects::default(),
+                    lut: None,
                 },
             ],
         )
@@ -72,6 +74,7 @@ fn straight_alpha_and_layer_opacity_blend_deterministically() {
                     transform: LayerTransform::default(),
                     blend: BlendMode::Normal,
                     effects: LayerEffects::default(),
+                    lut: None,
                 },
                 LayerFrame {
                     frame: &blue,
@@ -81,6 +84,7 @@ fn straight_alpha_and_layer_opacity_blend_deterministically() {
                     transform: LayerTransform::default(),
                     blend: BlendMode::Normal,
                     effects: LayerEffects::default(),
+                    lut: None,
                 },
             ],
         )
@@ -107,6 +111,7 @@ fn clips_layers_outside_the_canvas() {
                 transform: LayerTransform::default(),
                 blend: BlendMode::Normal,
                 effects: LayerEffects::default(),
+                lut: None,
             }],
         )
         .unwrap();
@@ -140,6 +145,7 @@ fn rejects_invalid_render_input_before_allocating() {
                 transform: LayerTransform::default(),
                 blend: BlendMode::Normal,
                 effects: LayerEffects::default(),
+                lut: None,
             }]
         ),
         Err(RenderError::InvalidOpacity(1.1))
@@ -476,4 +482,202 @@ fn identity_fast_path_equals_the_general_mapping_path() {
     };
 
     assert_eq!(render(false), render(true));
+}
+
+use bush::{ChromaKey, LayerMask, Lut3D, LutError, MaskShape};
+
+#[test]
+fn chroma_key_removes_the_key_colour_and_ramps_with_softness() {
+    // Pure green screen next to a red subject.
+    let source = frame(2, 1, vec![0, 255, 0, 255, 255, 0, 0, 255]);
+    let renderer = CpuRenderer::new(1024).unwrap();
+    let mut layer = LayerFrame::new(&source);
+    layer.effects.chroma_key = Some(ChromaKey {
+        color: [0, 255, 0],
+        tolerance: 0.1,
+        softness: 0.0,
+    });
+    let output = renderer.render(2, 1, 0.0, &[layer]).unwrap();
+    assert_eq!(pixel(&output, 0, 0)[3], 0);
+    assert_eq!(pixel(&output, 1, 0), [255, 0, 0, 255]);
+
+    // A near-green pixel inside the soft ramp is partially transparent.
+    let near = frame(1, 1, vec![0, 200, 0, 255]);
+    let mut soft = LayerFrame::new(&near);
+    soft.effects.chroma_key = Some(ChromaKey {
+        color: [0, 255, 0],
+        tolerance: 0.05,
+        softness: 0.2,
+    });
+    let alpha = renderer.render(1, 1, 0.0, &[soft]).unwrap().pixels()[3];
+    assert!((1..255).contains(&alpha), "alpha {alpha}");
+}
+
+#[test]
+fn ellipse_and_rounded_rectangle_masks_cut_the_corners() {
+    let source = solid(9, 9, [200, 100, 50, 255]);
+    let renderer = CpuRenderer::new(9 * 9 * 4).unwrap();
+    let render = |mask: LayerMask| {
+        let mut layer = LayerFrame::new(&source);
+        layer.effects.mask = Some(mask);
+        renderer.render(9, 9, 0.0, &[layer]).unwrap()
+    };
+
+    let ellipse = render(LayerMask {
+        shape: MaskShape::Ellipse,
+        corner_radius: 0.0,
+        feather: 0.0,
+        invert: false,
+    });
+    assert_eq!(pixel(&ellipse, 4, 4)[3], 255);
+    assert_eq!(pixel(&ellipse, 0, 0)[3], 0);
+    assert_eq!(pixel(&ellipse, 4, 0)[3], 255);
+
+    let plain_rect = render(LayerMask {
+        shape: MaskShape::Rectangle,
+        corner_radius: 0.0,
+        feather: 0.0,
+        invert: false,
+    });
+    assert_eq!(pixel(&plain_rect, 0, 0)[3], 255);
+
+    let rounded = render(LayerMask {
+        shape: MaskShape::Rectangle,
+        corner_radius: 1.0,
+        feather: 0.0,
+        invert: false,
+    });
+    assert_eq!(pixel(&rounded, 0, 0)[3], 0);
+    assert_eq!(pixel(&rounded, 4, 4)[3], 255);
+
+    let inverted = render(LayerMask {
+        shape: MaskShape::Ellipse,
+        corner_radius: 0.0,
+        feather: 0.0,
+        invert: true,
+    });
+    assert_eq!(pixel(&inverted, 4, 4)[3], 0);
+    assert_eq!(pixel(&inverted, 0, 0)[3], 255);
+
+    let feathered = render(LayerMask {
+        shape: MaskShape::Ellipse,
+        corner_radius: 0.0,
+        feather: 0.5,
+        invert: false,
+    });
+    let edge = pixel(&feathered, 8, 4)[3];
+    assert!((1..255).contains(&edge), "feathered edge alpha {edge}");
+}
+
+#[test]
+fn pixelize_samples_each_block_centre() {
+    // 4x1 gradient, block 2: pixels 0,1 share the colour of source pixel 1; 2,3 of pixel 3.
+    let source = frame(
+        4,
+        1,
+        vec![10, 0, 0, 255, 20, 0, 0, 255, 30, 0, 0, 255, 40, 0, 0, 255],
+    );
+    let renderer = CpuRenderer::new(1024).unwrap();
+    let mut layer = LayerFrame::new(&source);
+    layer.effects.pixelize_block = 2;
+    let output = renderer.render(4, 1, 0.0, &[layer]).unwrap();
+    let reds: Vec<u8> = (0..4).map(|x| pixel(&output, x, 0)[0]).collect();
+    assert_eq!(reds, [20, 20, 40, 40]);
+}
+
+#[test]
+fn identity_lut_is_a_no_op_and_an_inverting_lut_inverts() {
+    let source = frame(2, 1, vec![10, 120, 250, 255, 255, 0, 77, 255]);
+    let renderer = CpuRenderer::new(1024).unwrap();
+
+    let identity = Lut3D::identity(17).unwrap();
+    let mut layer = LayerFrame::new(&source);
+    layer.lut = Some(&identity);
+    let output = renderer.render(2, 1, 0.0, &[layer]).unwrap();
+    assert_eq!(output.pixels(), source.pixels());
+
+    let size = 2;
+    let mut entries = Vec::new();
+    for blue in 0..size {
+        for green in 0..size {
+            for red in 0..size {
+                entries.push([1.0 - red as f32, 1.0 - green as f32, 1.0 - blue as f32]);
+            }
+        }
+    }
+    let invert = Lut3D::new(size, entries).unwrap();
+    let mut layer = LayerFrame::new(&source);
+    layer.lut = Some(&invert);
+    let output = renderer.render(2, 1, 0.0, &[layer]).unwrap();
+    // A 2-point trilinear table is exactly 1 - c, so bytes invert (to within rounding).
+    for (inverted, original) in output
+        .pixels()
+        .chunks_exact(4)
+        .zip(source.pixels().chunks_exact(4))
+    {
+        for channel in 0..3 {
+            assert!(
+                (i32::from(inverted[channel]) - (255 - i32::from(original[channel]))).abs() <= 1
+            );
+        }
+        assert_eq!(inverted[3], 255);
+    }
+}
+
+#[test]
+fn lut_construction_validates_size_count_and_values() {
+    assert_eq!(Lut3D::identity(1).unwrap_err(), LutError::InvalidSize(1));
+    assert_eq!(Lut3D::identity(66).unwrap_err(), LutError::InvalidSize(66));
+    assert_eq!(
+        Lut3D::new(2, vec![[0.0; 3]; 7]).unwrap_err(),
+        LutError::WrongEntryCount {
+            expected: 8,
+            actual: 7
+        }
+    );
+    assert_eq!(
+        Lut3D::new(2, vec![[f32::NAN, 0.0, 0.0]; 8]).unwrap_err(),
+        LutError::NonFiniteEntry
+    );
+    assert_eq!(
+        Lut3D::identity(33).unwrap().retained_bytes(),
+        33 * 33 * 33 * 12
+    );
+}
+
+#[test]
+fn invalid_mask_key_and_block_values_are_rejected() {
+    let source = solid(1, 1, [0, 0, 0, 255]);
+    let renderer = CpuRenderer::new(16).unwrap();
+    let bad: [LayerEffects; 3] = [
+        LayerEffects {
+            pixelize_block: 513,
+            ..LayerEffects::default()
+        },
+        LayerEffects {
+            chroma_key: Some(ChromaKey {
+                color: [0, 0, 0],
+                tolerance: 2.0,
+                softness: 0.0,
+            }),
+            ..LayerEffects::default()
+        },
+        LayerEffects {
+            mask: Some(LayerMask {
+                shape: MaskShape::Ellipse,
+                corner_radius: -0.5,
+                feather: 0.0,
+                invert: false,
+            }),
+            ..LayerEffects::default()
+        },
+    ];
+    for effects in bad {
+        let mut layer = LayerFrame::new(&source);
+        layer.effects = effects;
+        assert_eq!(
+            renderer.render(1, 1, 0.0, &[layer]).unwrap_err(),
+            RenderError::InvalidEffects
+        );
+    }
 }

@@ -466,6 +466,7 @@ impl EngineThread {
                 transform: placement.transform,
                 blend: placement.blend,
                 effects: placement.effects,
+                lut: placement.lut.as_deref(),
             })
             .collect();
         match self.renderer.render(

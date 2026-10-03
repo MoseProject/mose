@@ -1,6 +1,6 @@
 //! Deterministic CPU reference compositor for Bush pixel tests.
 
-use crate::{PixelFormat, VideoFrame, VideoFrameError};
+use crate::{ChromaKey, LayerMask, Lut3D, PixelFormat, VideoFrame, VideoFrameError};
 
 /// Separable W3C blend modes supported by the reference compositor.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -108,6 +108,10 @@ pub struct LayerEffects {
     pub saturation: f32,
     /// Darkens towards the layer corners, `0.0..=1.0`.
     pub vignette: f32,
+    /// Mosaic block edge in source pixels; `0` and `1` are off. At most 512.
+    pub pixelize_block: u32,
+    pub chroma_key: Option<ChromaKey>,
+    pub mask: Option<LayerMask>,
 }
 
 impl Default for LayerEffects {
@@ -117,6 +121,9 @@ impl Default for LayerEffects {
             contrast: 1.0,
             saturation: 1.0,
             vignette: 0.0,
+            pixelize_block: 0,
+            chroma_key: None,
+            mask: None,
         }
     }
 }
@@ -126,11 +133,23 @@ impl LayerEffects {
         *self == Self::default()
     }
 
+    /// Whether the brightness/contrast/saturation/vignette pass can be skipped.
+    fn colour_is_neutral(&self) -> bool {
+        let neutral = Self::default();
+        self.brightness == neutral.brightness
+            && self.contrast == neutral.contrast
+            && self.saturation == neutral.saturation
+            && self.vignette == neutral.vignette
+    }
+
     pub(crate) fn is_valid(&self) -> bool {
         (-1.0..=1.0).contains(&self.brightness)
             && (0.0..=4.0).contains(&self.contrast)
             && (0.0..=4.0).contains(&self.saturation)
             && (0.0..=1.0).contains(&self.vignette)
+            && self.pixelize_block <= 512
+            && self.chroma_key.is_none_or(|key| key.is_valid())
+            && self.mask.is_none_or(|mask| mask.is_valid())
     }
 
     /// `radius` is `0.0` at the layer centre and `1.0` at its corners.
@@ -158,6 +177,8 @@ pub struct LayerFrame<'a> {
     pub transform: LayerTransform,
     pub blend: BlendMode,
     pub effects: LayerEffects,
+    /// Optional 3D colour lookup applied before the colour adjustments.
+    pub lut: Option<&'a Lut3D>,
 }
 
 impl<'a> LayerFrame<'a> {
@@ -171,6 +192,7 @@ impl<'a> LayerFrame<'a> {
             transform: LayerTransform::default(),
             blend: BlendMode::Normal,
             effects: LayerEffects::default(),
+            lut: None,
         }
     }
 }
@@ -343,7 +365,7 @@ fn blend_layer(
         return;
     }
 
-    let neutral_effects = layer.effects.is_neutral();
+    let neutral_effects = layer.effects.is_neutral() && layer.lut.is_none();
     let canvas_width = canvas_width as usize;
     let band_rows = (canvas.len() / (canvas_width * 4)) as i64;
     let band_start = first_row as i64;
@@ -386,8 +408,15 @@ fn blend_layer(
             if u < 0.0 || v < 0.0 || u >= crop_w as f32 || v >= crop_h as f32 {
                 continue;
             }
-            let source_x = (crop_x0 + u as i64) as usize;
-            let source_y = (crop_y0 + v as i64) as usize;
+            let (mut local_x, mut local_y) = (u as i64, v as i64);
+            let block = i64::from(layer.effects.pixelize_block);
+            if block > 1 {
+                // Mosaic: every pixel in a block samples the block centre.
+                local_x = ((local_x / block) * block + block / 2).min(crop_w - 1);
+                local_y = ((local_y / block) * block + block / 2).min(crop_h - 1);
+            }
+            let source_x = (crop_x0 + local_x) as usize;
+            let source_y = (crop_y0 + local_y) as usize;
             let source_index = source_y * source.stride_bytes() + source_x * 4;
             let destination_index =
                 ((destination_y - band_start) as usize * canvas_width + destination_x as usize) * 4;
@@ -397,17 +426,30 @@ fn blend_layer(
             if !neutral_effects {
                 let nx = (u / crop_w as f32 - 0.5) * 2.0;
                 let ny = (v / crop_h as f32 - 0.5) * 2.0;
-                let radius = ((nx * nx + ny * ny) / 2.0).sqrt();
-                let rgb = layer.effects.apply(
-                    [
+                if let Some(key) = layer.effects.chroma_key {
+                    let factor = key.alpha_factor([pixel[0], pixel[1], pixel[2]]);
+                    pixel[3] = (f32::from(pixel[3]) * factor).round() as u8;
+                }
+                if layer.lut.is_some() || !layer.effects.colour_is_neutral() {
+                    let mut rgb = [
                         pixel[0] as f32 / 255.0,
                         pixel[1] as f32 / 255.0,
                         pixel[2] as f32 / 255.0,
-                    ],
-                    radius,
-                );
-                for channel in 0..3 {
-                    pixel[channel] = (rgb[channel] * 255.0).round() as u8;
+                    ];
+                    if let Some(lut) = layer.lut {
+                        rgb = lut.apply(rgb);
+                    }
+                    if !layer.effects.colour_is_neutral() {
+                        let radius = ((nx * nx + ny * ny) / 2.0).sqrt();
+                        rgb = layer.effects.apply(rgb, radius);
+                    }
+                    for channel in 0..3 {
+                        pixel[channel] = (rgb[channel] * 255.0).round() as u8;
+                    }
+                }
+                if let Some(mask) = layer.effects.mask {
+                    let factor = mask.alpha_factor(nx, ny);
+                    pixel[3] = (f32::from(pixel[3]) * factor).round() as u8;
                 }
             }
             blend_pixel(

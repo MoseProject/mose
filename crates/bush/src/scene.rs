@@ -7,7 +7,11 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use crate::{Animation, BlendMode, Fade, LayerEffects, LayerTransform, SceneVersions, Version};
+use std::sync::Arc;
+
+use crate::{
+    Animation, BlendMode, Fade, LayerEffects, LayerTransform, Lut3D, SceneVersions, Version,
+};
 
 /// Stable identity of one contributor inside a scene.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -81,6 +85,8 @@ pub struct Placement {
     /// contributor's timeline start.
     pub animation: Animation,
     pub fade: Fade,
+    /// Shared 3D colour lookup; cloning a placement shares the table.
+    pub lut: Option<Arc<Lut3D>>,
 }
 
 impl Default for Placement {
@@ -98,6 +104,7 @@ impl Default for Placement {
             gain: 1.0,
             animation: Animation::default(),
             fade: Fade::default(),
+            lut: None,
         }
     }
 }
