@@ -170,14 +170,20 @@ fn constant_speed_changes_the_window_like_core() {
 }
 
 #[test]
-fn a_speed_ramp_uses_the_average_speed_so_the_window_matches_core() {
+fn a_speed_ramp_matches_core_duration_and_source_time() {
     let mut ramped = clip(0.0, 0.0, 8.0);
     ramped.speed_factor = 1.0;
     ramped.speed_ramp_end_factor = Some(3.0);
     let expected = ramped.duration_secs();
-    let (mapped, contributor) = one_clip(ramped);
-    assert!(mapped.approximations.contains(&Approximation::SpeedRamp));
-    assert!((contributor.timeline_duration_secs().unwrap() - expected).abs() < 1e-6);
+    let at_half = avcore::keyframe::smooth_speed_ramp_source_secs_at(
+        expected / 2.0,
+        ramped.source_out_secs - ramped.source_in_secs,
+        1.0,
+        3.0,
+    );
+    let (_, contributor) = one_clip(ramped);
+    assert!((contributor.timeline_duration_secs().unwrap() - expected).abs() < 1e-9);
+    assert!((contributor.source_offset_at(expected / 2.0) - at_half).abs() < 1e-9);
 }
 
 #[test]
@@ -451,7 +457,7 @@ fn unchanged_overlays_are_not_rasterized_again() {
 }
 
 #[test]
-fn gain_keyframes_use_the_first_value_and_are_reported() {
+fn gain_keyframes_become_a_decibel_track() {
     let mut gained = clip(0.0, 0.0, 4.0);
     gained.gain_keyframes = vec![
         Keyframe {
@@ -463,9 +469,9 @@ fn gain_keyframes_use_the_first_value_and_are_reported() {
             value: 6.0,
         },
     ];
-    let (mapped, contributor) = one_clip(gained);
-    assert!(mapped
-        .approximations
-        .contains(&Approximation::GainKeyframes));
-    assert!((contributor.placement.gain - 10f32.powf(-6.0 / 20.0)).abs() < 1e-6);
+    let (_, contributor) = one_clip(gained);
+    let track = contributor.placement.animation.gain_db.as_ref().unwrap();
+    assert!((track.value_at(0.0) - -6.0).abs() < 1e-6);
+    assert!((track.value_at(2.0) - 0.0).abs() < 1e-5);
+    assert!((track.value_at(4.0) - 6.0).abs() < 1e-5);
 }
