@@ -20,8 +20,14 @@ fn telemetry_path() -> PathBuf {
 /// is checked each sampling tick (not just once), so toggling the Preferences checkbox takes
 /// effect on the next tick without a restart.
 pub fn spawn(enabled: Arc<AtomicBool>) {
+    spawn_to(telemetry_path(), enabled, RESOURCE_TELEMETRY_INTERVAL);
+}
+
+/// Writes a resource (and, when an NVML GPU is present, GPU) sample to `path` every `interval`
+/// while `enabled` is set. Split from [`spawn`] so tests can use a scratch file and a short
+/// interval.
+pub(crate) fn spawn_to(path: PathBuf, enabled: Arc<AtomicBool>, interval: Duration) {
     let (tx, mut rx) = mpsc::unbounded_channel::<avcore::TelemetryEvent>();
-    let path = telemetry_path();
     std::thread::spawn(move || {
         while let Some(event) = rx.blocking_recv() {
             if let Err(e) = avcore::record_event(&path, &event) {
@@ -29,42 +35,36 @@ pub fn spawn(enabled: Arc<AtomicBool>) {
             }
         }
     });
-    spawn_resource_sampler(tx.clone(), Arc::clone(&enabled));
-    spawn_gpu_sampler(tx, enabled);
-}
-
-fn spawn_resource_sampler(tx: UnboundedSender<avcore::TelemetryEvent>, enabled: Arc<AtomicBool>) {
-    std::thread::spawn(move || {
-        let mut sampler = avcore::ResourceSampler::new();
-        loop {
-            std::thread::sleep(RESOURCE_TELEMETRY_INTERVAL);
-            if !enabled.load(Ordering::Relaxed) {
-                continue;
-            }
-            if tx.send(sampler.sample()).is_err() {
-                return;
-            }
-        }
+    let mut resources = avcore::ResourceSampler::new();
+    spawn_sampler(tx.clone(), Arc::clone(&enabled), interval, move || {
+        Some(resources.sample())
     });
+    match avcore::GpuSampler::new() {
+        Some(gpu) => spawn_sampler(tx, enabled, interval, move || gpu.sample()),
+        None => {
+            tracing::info!("no NVML-compatible GPU detected -- GPU usage telemetry disabled");
+        }
+    }
 }
 
-fn spawn_gpu_sampler(tx: UnboundedSender<avcore::TelemetryEvent>, enabled: Arc<AtomicBool>) {
-    std::thread::spawn(move || {
-        let Some(sampler) = avcore::GpuSampler::new() else {
-            tracing::info!("no NVML-compatible GPU detected -- GPU usage telemetry disabled");
-            return;
+/// Calls `sample` every `interval` while `enabled`, forwarding what it returns until the
+/// receiving end goes away.
+pub(crate) fn spawn_sampler(
+    tx: UnboundedSender<avcore::TelemetryEvent>,
+    enabled: Arc<AtomicBool>,
+    interval: Duration,
+    mut sample: impl FnMut() -> Option<avcore::TelemetryEvent> + Send + 'static,
+) {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(interval);
+        if !enabled.load(Ordering::Relaxed) {
+            continue;
+        }
+        let Some(event) = sample() else {
+            continue;
         };
-        loop {
-            std::thread::sleep(RESOURCE_TELEMETRY_INTERVAL);
-            if !enabled.load(Ordering::Relaxed) {
-                continue;
-            }
-            let Some(event) = sampler.sample() else {
-                continue;
-            };
-            if tx.send(event).is_err() {
-                return;
-            }
+        if tx.send(event).is_err() {
+            return;
         }
     });
 }

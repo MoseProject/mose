@@ -33,15 +33,24 @@ pub struct ThumbnailCache {
 }
 
 pub fn handle<R: Runtime>(app: &AppHandle<R>, path: &str, responder: UriSchemeResponder) {
+    handle_with(app, path, move |response| responder.respond(response));
+}
+
+/// [`handle`] with the answer delivered through `respond`, so tests can read it back.
+pub(crate) fn handle_with<R: Runtime>(
+    app: &AppHandle<R>,
+    path: &str,
+    respond: impl FnOnce(Response<Vec<u8>>) + Send + 'static,
+) {
     let mut parts = path.trim_start_matches('/').splitn(2, '/');
     match (parts.next(), parts.next()) {
         (Some("frame"), _) => {
             let frame = app.state::<AppState>().preview.latest_frame();
-            responder.respond(jpeg_or_not_found(frame));
+            respond(jpeg_or_not_found(frame));
         }
         (Some("thumb"), Some(id)) => {
             let Ok(asset_id) = id.parse::<u64>() else {
-                responder.respond(not_found());
+                respond(not_found());
                 return;
             };
             let source = app
@@ -59,17 +68,17 @@ pub fn handle<R: Runtime>(app: &AppHandle<R>, path: &str, responder: UriSchemeRe
                         .unwrap_or_else(|| asset.source_path.clone())
                 });
             let Some(source) = source else {
-                responder.respond(not_found());
+                respond(not_found());
                 return;
             };
             let app = app.clone();
             // Frame sampling decodes video; keep it off the webview's IPC thread.
             std::thread::spawn(move || {
                 let cache = app.state::<ThumbnailCache>();
-                responder.respond(jpeg_or_not_found(cache.get_or_extract(&source)));
+                respond(jpeg_or_not_found(cache.get_or_extract(&source)));
             });
         }
-        _ => responder.respond(not_found()),
+        _ => respond(not_found()),
     }
 }
 

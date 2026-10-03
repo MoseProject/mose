@@ -27,8 +27,13 @@ fn snapshot_due(recovery: &Path, minutes: u8) -> bool {
 }
 
 pub fn spawn<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
+    spawn_every(app, std::time::Duration::from_secs(1));
+}
+
+/// [`spawn`] checking every `tick` instead of every second, for tests.
+pub(crate) fn spawn_every<R: tauri::Runtime>(app: tauri::AppHandle<R>, tick: std::time::Duration) {
     std::thread::spawn(move || loop {
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        std::thread::sleep(tick);
         let state = app.state::<AppState>();
         let minutes = state.prefs().view.autosave_minutes.max(1);
         let session = state.session();
