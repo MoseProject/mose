@@ -9,7 +9,16 @@
 //!
 //! This is the only code that knows both `avcore` types and Bush's scene model; `core` never
 //! imports Bush. See `spec/architecture/bush-adapter-rfc.md` for the design, rollout and rollback.
+//!
+//! The engine is chosen at startup: `OCA_PREVIEW_ENGINE=bush` selects Bush, anything else keeps
+//! GStreamer. `OCA_BUSH_RENDERER=gpu` lets Bush composite on the GPU (CPU otherwise).
 
-// The backend that consumes the mapper lands in the next slice.
-#[allow(dead_code)]
+mod backend;
 mod mapper;
+
+pub use backend::run;
+
+/// Whether this process was asked to preview through Bush.
+pub fn selected() -> bool {
+    std::env::var("OCA_PREVIEW_ENGINE").is_ok_and(|value| value.eq_ignore_ascii_case("bush"))
+}

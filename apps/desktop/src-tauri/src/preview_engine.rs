@@ -42,17 +42,17 @@ pub const PREVIEW_TICK: &str = "preview-tick";
 
 /// Upper bound on tick events per second while playing -- enough for a smooth playhead
 /// without flooding the IPC bridge.
-const TICK_INTERVAL: Duration = Duration::from_millis(16);
+pub(crate) const TICK_INTERVAL: Duration = Duration::from_millis(16);
 /// How long the engine parks waiting for a command before polling the worker again. Matches
 /// the worker's own poll cadence.
-const POLL_INTERVAL: Duration = Duration::from_millis(8);
+pub(crate) const POLL_INTERVAL: Duration = Duration::from_millis(8);
 /// Fallback fps for frame stepping when the clip's asset has none (same guess as `avcore::render`).
-const FALLBACK_FPS: f64 = 30.0;
+pub(crate) const FALLBACK_FPS: f64 = 30.0;
 
 /// The most recent encoded preview frame, shared with the `oca://` protocol handler.
 pub type LatestFrame = Arc<Mutex<Option<Arc<Vec<u8>>>>>;
 
-enum Command {
+pub(crate) enum Command {
     Content { project: Box<Project> },
     Seek(f64),
     Step(i64),
@@ -92,7 +92,14 @@ impl PreviewEngine {
         let engine_playhead = Arc::clone(&playhead_bits);
         std::thread::Builder::new()
             .name("oca-preview-engine".into())
-            .spawn(move || run(rx, app, engine_latest, engine_playhead))
+            .spawn(move || {
+                #[cfg(feature = "bush-preview")]
+                if crate::bush_adapter::selected() {
+                    tracing::info!("preview engine: bush");
+                    return crate::bush_adapter::run(rx, app, engine_latest, engine_playhead);
+                }
+                run(rx, app, engine_latest, engine_playhead)
+            })
             .expect("spawning the preview engine thread");
         Self {
             tx,
@@ -202,7 +209,7 @@ fn live_updates_between(
 
 /// The source a preview pipeline should decode for `asset`: its editing proxy when one
 /// exists, else the original -- `None` if neither is on disk (moved/deleted media).
-fn preview_source_path(asset: &MediaAsset) -> Option<PathBuf> {
+pub(crate) fn preview_source_path(asset: &MediaAsset) -> Option<PathBuf> {
     let path = asset
         .proxy_path
         .clone()
