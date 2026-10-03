@@ -460,6 +460,57 @@ fn bench_blur(c: &mut Criterion) {
     group.finish();
 }
 
+/// Layer blur and sharpen inside the compositor, CPU versus GPU (GPU includes upload/readback).
+#[cfg(feature = "gpu")]
+fn bench_gpu_blur(c: &mut Criterion) {
+    use bush::{GpuRenderer, Renderer};
+
+    let Ok(mut gpu) = GpuRenderer::new(3840 * 2160 * 4) else {
+        return;
+    };
+    let mut cpu = CpuRenderer::new(3840 * 2160 * 4).unwrap();
+    let mut group = c.benchmark_group("gpu_blur");
+    group.sample_size(10);
+    for (label, width, height) in [("1080p", 1920, 1080), ("4k", 3840, 2160)] {
+        let mut pixels = Vec::with_capacity((width * height * 4) as usize);
+        for index in 0..width * height {
+            pixels.extend_from_slice(&[
+                (index % 251) as u8,
+                (index % 241) as u8,
+                (index % 239) as u8,
+                255,
+            ]);
+        }
+        let frame = VideoFrame::new(
+            PixelFormat::Rgba8,
+            width,
+            height,
+            width as usize * 4,
+            0.0,
+            pixels,
+        )
+        .unwrap();
+        for (name, sigma, sharpen) in [("blur_8", 8.0_f32, 0.0_f32), ("blur_8_sharpen", 8.0, 1.0)] {
+            let mut layer = LayerFrame::new(&frame);
+            layer.effects.blur_sigma = sigma;
+            layer.effects.sharpen = sharpen;
+            let layers = [layer];
+            group.bench_function(format!("{label}/{name}/cpu"), |b| {
+                b.iter(|| {
+                    black_box(Renderer::render(&mut cpu, width, height, 0.0, &layers).unwrap())
+                });
+            });
+            group.bench_function(format!("{label}/{name}/gpu"), |b| {
+                b.iter(|| black_box(gpu.render(width, height, 0.0, &layers).unwrap()));
+            });
+        }
+    }
+    group.finish();
+}
+
+#[cfg(not(feature = "gpu"))]
+fn bench_gpu_blur(_: &mut Criterion) {}
+
 criterion_group!(
     engine_workloads,
     bench_composite_1080p,
@@ -471,6 +522,7 @@ criterion_group!(
     bench_multicam,
     bench_gpu_vs_cpu,
     bench_time_stretch,
-    bench_blur
+    bench_blur,
+    bench_gpu_blur
 );
 criterion_main!(engine_workloads);

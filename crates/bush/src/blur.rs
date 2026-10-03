@@ -95,7 +95,7 @@ pub fn sharpen(frame: &VideoFrame, amount: f32, sigma: f32) -> VideoFrame {
 }
 
 /// Box radii whose three successive blurs approximate a Gaussian of `sigma` (Kutskir).
-fn box_radii(sigma: f32) -> [usize; 3] {
+pub(crate) fn box_radii(sigma: f32) -> [usize; 3] {
     let passes = 3.0_f32;
     let ideal = (12.0 * sigma * sigma / passes + 1.0).sqrt();
     let mut lower = ideal.floor() as i32;

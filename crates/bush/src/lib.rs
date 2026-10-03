@@ -20,6 +20,8 @@ mod engine;
 mod frame_mailbox;
 mod glitch;
 #[cfg(feature = "gpu")]
+mod gpu_blur;
+#[cfg(feature = "gpu")]
 mod gpu_renderer;
 mod keyframes;
 mod latest_intent;

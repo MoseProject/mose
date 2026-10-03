@@ -61,10 +61,13 @@ the real default device.
       Limits: frames are uploaded and the canvas read back every render (the engine API returns
       CPU frames), so the win is largest with effects and many layers (table below).
 - [x] Gaussian blur (three box passes, cost independent of sigma, premultiplied alpha) and
-      unsharp-mask sharpen (`blur.rs`, `Placement::blur_sigma` / `sharpen`), applied to the layer
-      frame before compositing so CPU and GPU renderers share them. Measured: blur 18 ms at
-      1080p and 77 ms at 4K, sharpen 34 ms / 148 ms on the CPU (a GPU blur is future work).
-      Tests: `blur_test`, `engine_test` (blur and sharpen through the engine, cache reuse).
+      unsharp-mask sharpen as compositor layer effects (`LayerEffects::blur_sigma` / `sharpen`,
+      `blur.rs`). CPU: blur 18 ms at 1080p and 77 ms at 4K, sharpen on top 34 / 148 ms. GPU
+      (`gpu_blur.rs`, `gpu_blur.wgsl`): the same integer arithmetic on compute shaders, bit-exact
+      against the CPU in every tested case (sigma 0.8 to 64, translucent frames, tiny frames,
+      several layers per frame); end to end including upload and readback blur 8 takes 7.9 ms
+      versus 24 ms on the CPU at 1080p, blur + sharpen 9.2 versus 55 ms, and at 4K 30 versus
+      215 ms. Tests: `blur_test`, `engine_test`, `gpu_parity_test`.
 - [x] Glitch (`Placement::glitch`: channel split plus displaced bands, 12 steps per second) and
       shake (`Placement::shake`: smooth value-noise jitter in canvas pixels). Both are pure
       functions of clip time, so paused frames never flicker. Tests: `glitch_test`.

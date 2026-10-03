@@ -8,6 +8,7 @@
 use wgpu::util::DeviceExt;
 
 use crate::cpu_renderer::LayerGeometry;
+use crate::gpu_blur::GpuBlur;
 use crate::{BlendMode, LayerFrame, MaskShape, PixelFormat, RenderError, Renderer, VideoFrame};
 
 const SHADER: &str = include_str!("gpu_renderer.wgsl");
@@ -53,6 +54,7 @@ pub struct GpuRenderer {
     layer_buffers: Vec<LayerBuffers>,
     empty_lut: wgpu::Buffer,
     softlight: wgpu::Buffer,
+    blur: GpuBlur,
 }
 
 impl GpuRenderer {
@@ -128,6 +130,7 @@ impl GpuRenderer {
             contents: crate::blend8::softlight_table(),
             usage: wgpu::BufferUsages::STORAGE,
         });
+        let blur = GpuBlur::new(&device);
         Ok(Self {
             device,
             queue,
@@ -139,6 +142,7 @@ impl GpuRenderer {
             layer_buffers: Vec::new(),
             empty_lut,
             softlight,
+            blur,
         })
     }
 
@@ -390,13 +394,19 @@ impl Renderer for GpuRenderer {
             let buffers = &self.layer_buffers[index];
             self.queue.write_buffer(&buffers.source, 0, &tight);
             self.queue.write_buffer(&buffers.params, 0, &params);
-            plans.push((index, geometry, layer.lut));
+            let blur = (layer.effects.blur_sigma > 0.0 || layer.effects.sharpen > 0.0).then_some((
+                layer.effects.blur_sigma,
+                layer.effects.sharpen,
+                frame.width(),
+                frame.height(),
+            ));
+            plans.push((index, geometry, layer.lut, blur));
         }
 
         // LUT tables are uploaded per layer that needs one (padded to vec4 for storage layout).
         let luts: Vec<Option<wgpu::Buffer>> = plans
             .iter()
-            .map(|(_, _, lut)| {
+            .map(|(_, _, lut, _)| {
                 lut.map(|lut| {
                     let mut data = Vec::with_capacity(lut.size().pow(3) * 16);
                     for entry in lut.entries() {
@@ -423,8 +433,24 @@ impl Renderer for GpuRenderer {
                 label: Some("bush-composite"),
             });
         encoder.clear_buffer(&canvas.storage, 0, None);
-        for ((index, geometry, _), lut) in plans.iter().zip(&luts) {
+        for ((index, geometry, _, blur), lut) in plans.iter().zip(&luts) {
             let buffers = &self.layer_buffers[*index];
+            let processed = blur.map(|(sigma, amount, width, height)| {
+                self.blur.encode(
+                    &self.device,
+                    &mut encoder,
+                    *index,
+                    &buffers.source,
+                    width,
+                    height,
+                    sigma,
+                    amount,
+                )
+            });
+            let source_buffer = match processed {
+                Some(result) => self.blur.buffer(*index, result),
+                None => &buffers.source,
+            };
             let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("bush-composite-bind-group"),
                 layout: &self.layout,
@@ -435,7 +461,7 @@ impl Renderer for GpuRenderer {
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: buffers.source.as_entire_binding(),
+                        resource: source_buffer.as_entire_binding(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,

@@ -297,6 +297,8 @@ fn colour_effects_chroma_mask_pixelize_and_lut_match_the_reference() {
                 saturation: 1.4,
                 vignette: 0.3,
                 sepia: 0.4,
+                blur_sigma: 2.5,
+                sharpen: 0.8,
                 pixelize_block: 4,
                 chroma_key: Some(ChromaKey {
                     color: [10, 200, 30],
@@ -533,4 +535,64 @@ fn gpu_reproduces_every_blend_mode_table() {
             max_fraction,
         );
     }
+}
+
+#[test]
+fn gpu_blur_and_sharpen_match_the_cpu_reference() {
+    let Some(mut gpu) = gpu(1 << 26) else { return };
+    let base = noise(300, 220, 81, false);
+    let opaque = noise(300, 220, 82, false);
+    let translucent = noise(300, 220, 83, true);
+    let tiny = noise(9, 7, 84, true);
+
+    for (label, source, sigma, sharpen) in [
+        ("blur 0.8", &opaque, 0.8_f32, 0.0_f32),
+        ("blur 3", &opaque, 3.0, 0.0),
+        ("blur 12", &opaque, 12.0, 0.0),
+        ("blur 64", &opaque, 64.0, 0.0),
+        ("blur translucent", &translucent, 5.0, 0.0),
+        ("sharpen", &opaque, 0.0, 1.2),
+        ("blur + sharpen", &opaque, 4.0, 0.9),
+        ("sharpen translucent", &translucent, 0.0, 2.0),
+        ("tiny frame", &tiny, 6.0, 1.0),
+    ] {
+        let mut layer = LayerFrame::new(source);
+        layer.effects.blur_sigma = sigma;
+        layer.effects.sharpen = sharpen;
+        let comparison = compare(&mut gpu, 300, 220, &[LayerFrame::new(&base), layer]);
+        // The blur is integer arithmetic end to end (exact); the unsharp blend is float.
+        let allowed = if sharpen > 0.0 { 1 } else { 0 };
+        assert_parity(
+            label,
+            &comparison,
+            allowed,
+            if sharpen > 0.0 { 0.01 } else { 0.0 },
+        );
+    }
+}
+
+#[test]
+fn gpu_blur_handles_several_layers_with_different_sizes_in_one_frame() {
+    let Some(mut gpu) = gpu(1 << 26) else { return };
+    let base = noise(256, 192, 91, false);
+    let first = noise(200, 120, 92, true);
+    let second = noise(64, 64, 93, false);
+    let mut blurred = LayerFrame::new(&first);
+    blurred.x = 20;
+    blurred.effects.blur_sigma = 7.0;
+    let mut plain = LayerFrame::new(&second);
+    plain.x = 120;
+    plain.y = 100;
+    let mut sharpened = LayerFrame::new(&second);
+    sharpened.x = 10;
+    sharpened.y = 120;
+    sharpened.effects.sharpen = 1.5;
+    sharpened.effects.blur_sigma = 1.0;
+    let comparison = compare(
+        &mut gpu,
+        256,
+        192,
+        &[LayerFrame::new(&base), blurred, plain, sharpened],
+    );
+    assert_parity("mixed layers", &comparison, 1, 0.01);
 }
