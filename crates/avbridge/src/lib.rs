@@ -279,6 +279,7 @@ unsafe extern "C" {
     ) -> c_int;
     fn avbridge_decode_free_frame(frame: *mut RawDecodedRgbaFrame);
     fn avbridge_decode_close(session: *mut RawDecodeSession);
+    fn avbridge_hw_device_cache_clear();
 }
 
 /// Trampoline handed to the C side as `progress_cb`; `user_data` is a `*mut F` for whatever
@@ -429,6 +430,14 @@ pub enum DecodePolicy {
     Software,
     /// Try the first hardware device the codec supports; any failure falls back to software.
     HardwareWithFallback,
+}
+
+/// Releases the process-wide hardware decode devices kept alive between sessions (creating one
+/// costs hundreds of milliseconds, so [`DecodePolicy::HardwareWithFallback`] shares them).
+/// Sessions still open keep their own reference; call this after closing them to free the device.
+pub fn release_cached_hardware_devices() {
+    // SAFETY: the C side guards its table with a lock and only unreferences buffers it owns.
+    unsafe { avbridge_hw_device_cache_clear() };
 }
 
 /// One packed RGBA frame copied out of the native decode session.

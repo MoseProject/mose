@@ -10,6 +10,7 @@
 #include <libavformat/avformat.h>
 #include <libavutil/hwcontext.h>
 #include <libavutil/imgutils.h>
+#include <libavutil/opt.h>
 #include <libavutil/pixdesc.h>
 #include <libavutil/mem.h>
 #include <libswscale/swscale.h>
@@ -26,6 +27,9 @@ struct AvbridgeDecodeSession {
     enum AVPixelFormat hw_pix_fmt;
     AVPacket *packet;
     struct SwsContext *sws;
+    int sws_width;
+    int sws_height;
+    int sws_format;
     int stream_index;
     int draining;
 };
@@ -40,6 +44,69 @@ static void close_session(AvbridgeDecodeSession *session) {
     av_buffer_unref(&session->hw_device);
     avformat_close_input(&session->format);
     av_free(session);
+}
+
+/* Creating a hardware device costs hundreds of milliseconds, so one device per type is created
+   lazily and shared (reference counted) by every session in the process. The lock is a plain
+   spin lock: it is only held while looking up or creating a device. */
+#ifdef _WIN32
+#include <windows.h>
+static volatile LONG device_lock;
+#define LOCK_DEVICES() while (InterlockedExchange(&device_lock, 1)) Sleep(0)
+#define UNLOCK_DEVICES() InterlockedExchange(&device_lock, 0)
+#else
+static volatile int device_lock;
+#define LOCK_DEVICES() while (__sync_lock_test_and_set(&device_lock, 1)) {}
+#define UNLOCK_DEVICES() __sync_lock_release(&device_lock)
+#endif
+
+enum { MAX_CACHED_DEVICE_TYPES = 32 };
+static AVBufferRef *cached_devices[MAX_CACHED_DEVICE_TYPES];
+
+/* A new reference to the shared device of `type`, creating it on first use; NULL on failure. */
+static AVBufferRef *acquire_device(enum AVHWDeviceType type) {
+    if ((int)type < 0 || (int)type >= MAX_CACHED_DEVICE_TYPES) return NULL;
+    LOCK_DEVICES();
+    if (!cached_devices[type]) {
+        AVBufferRef *created = NULL;
+        if (av_hwdevice_ctx_create(&created, type, NULL, NULL, 0) >= 0) cached_devices[type] = created;
+    }
+    AVBufferRef *reference = cached_devices[type] ? av_buffer_ref(cached_devices[type]) : NULL;
+    UNLOCK_DEVICES();
+    return reference;
+}
+
+void avbridge_hw_device_cache_clear(void) {
+    LOCK_DEVICES();
+    for (int type = 0; type < MAX_CACHED_DEVICE_TYPES; type++) av_buffer_unref(&cached_devices[type]);
+    UNLOCK_DEVICES();
+}
+
+/* Software decode uses every core: frame threads for throughput, slice threads where the codec
+   supports them. Output order is unchanged, so seek-and-decode-forward stays exact. */
+static void enable_decoder_threads(AVCodecContext *decoder) {
+    decoder->thread_count = 0;
+    decoder->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
+}
+
+/* Colour conversion is a full-frame pass; slice-threaded swscale keeps it off the critical path
+   for 1080p and larger frames. */
+static struct SwsContext *threaded_sws(int width, int height, enum AVPixelFormat format) {
+    struct SwsContext *context = sws_alloc_context();
+    if (!context) return NULL;
+    av_opt_set_int(context, "srcw", width, 0);
+    av_opt_set_int(context, "srch", height, 0);
+    av_opt_set_int(context, "src_format", format, 0);
+    av_opt_set_int(context, "dstw", width, 0);
+    av_opt_set_int(context, "dsth", height, 0);
+    av_opt_set_int(context, "dst_format", AV_PIX_FMT_RGBA, 0);
+    av_opt_set_int(context, "sws_flags", SWS_BILINEAR, 0);
+    av_opt_set_int(context, "threads", 0, 0);
+    if (sws_init_context(context, NULL, NULL) < 0) {
+        sws_freeContext(context);
+        return NULL;
+    }
+    return context;
 }
 
 /* Picks the negotiated hardware surface format when the driver offers it, otherwise the first
@@ -64,8 +131,8 @@ static int try_hardware(AvbridgeDecodeSession *session, const AVCodec *codec) {
         const AVCodecHWConfig *config = avcodec_get_hw_config(codec, index);
         if (!config) return 0;
         if (!(config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX)) continue;
-        AVBufferRef *device = NULL;
-        if (av_hwdevice_ctx_create(&device, config->device_type, NULL, NULL, 0) < 0) continue;
+        AVBufferRef *device = acquire_device(config->device_type);
+        if (!device) continue;
         session->hw_device = device;
         session->hw_pix_fmt = config->pix_fmt;
         session->decoder->hw_device_ctx = av_buffer_ref(device);
@@ -112,6 +179,7 @@ DecodeStatus avbridge_decode_open_ex(const char *path, int hardware,
         return DECODE_ERR_DECODER;
     }
     int using_hardware = hardware ? try_hardware(session, codec) : 0;
+    if (!using_hardware) enable_decoder_threads(session->decoder);
     if (avcodec_open2(session->decoder, codec, NULL) < 0) {
         if (!using_hardware) {
             close_session(session);
@@ -124,8 +192,12 @@ DecodeStatus avbridge_decode_open_ex(const char *path, int hardware,
         using_hardware = 0;
         session->decoder = avcodec_alloc_context3(codec);
         if (!session->decoder ||
-            avcodec_parameters_to_context(session->decoder, stream->codecpar) < 0 ||
-            avcodec_open2(session->decoder, codec, NULL) < 0) {
+            avcodec_parameters_to_context(session->decoder, stream->codecpar) < 0) {
+            close_session(session);
+            return DECODE_ERR_DECODER;
+        }
+        enable_decoder_threads(session->decoder);
+        if (avcodec_open2(session->decoder, codec, NULL) < 0) {
             close_session(session);
             return DECODE_ERR_DECODER;
         }
@@ -190,8 +262,14 @@ static DecodeStatus copy_rgba(AvbridgeDecodeSession *session, AVFrame *frame,
         av_free(pixels);
         return DECODE_ERR_FRAME_SIZE;
     }
-    session->sws = sws_getCachedContext(session->sws, width, height, (enum AVPixelFormat)frame->format,
-                                         width, height, AV_PIX_FMT_RGBA, SWS_BILINEAR, NULL, NULL, NULL);
+    if (!session->sws || session->sws_width != width || session->sws_height != height ||
+        session->sws_format != frame->format) {
+        sws_freeContext(session->sws);
+        session->sws = threaded_sws(width, height, (enum AVPixelFormat)frame->format);
+        session->sws_width = width;
+        session->sws_height = height;
+        session->sws_format = frame->format;
+    }
     if (!session->sws) {
         av_free(pixels);
         return DECODE_ERR_PIPELINE;

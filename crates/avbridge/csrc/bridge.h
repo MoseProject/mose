@@ -729,6 +729,10 @@ DecodeStatus avbridge_decode_next_rgba(AvbridgeDecodeSession *session, const uin
 void avbridge_decode_free_frame(DecodedRgbaFrame *frame);
 void avbridge_decode_close(AvbridgeDecodeSession *session);
 
+/* Releases the process-wide hardware devices shared by hardware decode sessions. Sessions that
+   are still open keep their own reference; call after closing them to free the device. */
+void avbridge_hw_device_cache_clear(void);
+
 /* Opaque one-audio-stream demux/decode session used by Bush preview. Output is always packed
    32-bit float at the requested rate and channel count (1 or 2). */
 typedef struct AvbridgeAudioSession AvbridgeAudioSession;
