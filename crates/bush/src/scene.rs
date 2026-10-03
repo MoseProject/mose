@@ -7,7 +7,7 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use crate::{BlendMode, LayerTransform, SceneVersions, Version};
+use crate::{BlendMode, LayerEffects, LayerTransform, SceneVersions, Version};
 
 /// Stable identity of one contributor inside a scene.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -74,6 +74,7 @@ pub struct Placement {
     pub opacity: f32,
     pub transform: LayerTransform,
     pub blend: BlendMode,
+    pub effects: LayerEffects,
 }
 
 impl Default for Placement {
@@ -87,6 +88,7 @@ impl Default for Placement {
             opacity: 1.0,
             transform: LayerTransform::default(),
             blend: BlendMode::Normal,
+            effects: LayerEffects::default(),
         }
     }
 }
@@ -103,6 +105,8 @@ impl Placement {
             || !window_ok
             || !self.opacity.is_finite()
             || !(0.0..=1.0).contains(&self.opacity)
+            || !self.transform.is_valid()
+            || !self.effects.is_valid()
         {
             return Err(SceneError::InvalidPlacement);
         }

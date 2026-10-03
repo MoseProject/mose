@@ -1,6 +1,6 @@
 use bush::{
-    BlendMode, CpuRenderer, CropRect, LayerFrame, LayerTransform, PixelFormat, RenderError,
-    VideoFrame,
+    BlendMode, CpuRenderer, CropRect, LayerEffects, LayerFrame, LayerTransform, PixelFormat,
+    RenderError, VideoFrame,
 };
 
 fn frame(width: u32, height: u32, pixels: Vec<u8>) -> VideoFrame {
@@ -34,6 +34,7 @@ fn composites_layers_in_painter_order() {
                     opacity: 1.0,
                     transform: LayerTransform::default(),
                     blend: BlendMode::Normal,
+                    effects: LayerEffects::default(),
                 },
                 LayerFrame {
                     frame: &blue,
@@ -42,6 +43,7 @@ fn composites_layers_in_painter_order() {
                     opacity: 1.0,
                     transform: LayerTransform::default(),
                     blend: BlendMode::Normal,
+                    effects: LayerEffects::default(),
                 },
             ],
         )
@@ -69,6 +71,7 @@ fn straight_alpha_and_layer_opacity_blend_deterministically() {
                     opacity: 1.0,
                     transform: LayerTransform::default(),
                     blend: BlendMode::Normal,
+                    effects: LayerEffects::default(),
                 },
                 LayerFrame {
                     frame: &blue,
@@ -77,6 +80,7 @@ fn straight_alpha_and_layer_opacity_blend_deterministically() {
                     opacity: 0.5,
                     transform: LayerTransform::default(),
                     blend: BlendMode::Normal,
+                    effects: LayerEffects::default(),
                 },
             ],
         )
@@ -102,6 +106,7 @@ fn clips_layers_outside_the_canvas() {
                 opacity: 1.0,
                 transform: LayerTransform::default(),
                 blend: BlendMode::Normal,
+                effects: LayerEffects::default(),
             }],
         )
         .unwrap();
@@ -134,6 +139,7 @@ fn rejects_invalid_render_input_before_allocating() {
                 opacity: 1.1,
                 transform: LayerTransform::default(),
                 blend: BlendMode::Normal,
+                effects: LayerEffects::default(),
             }]
         ),
         Err(RenderError::InvalidOpacity(1.1))
@@ -258,6 +264,95 @@ fn invalid_transforms_are_rejected() {
         assert_eq!(
             renderer.render(1, 1, 0.0, &[top]).unwrap_err(),
             RenderError::InvalidTransform
+        );
+    }
+}
+
+#[test]
+fn colour_effects_follow_their_formulas() {
+    let source = solid(1, 1, [100, 150, 200, 255]);
+    let renderer = CpuRenderer::new(16).unwrap();
+    let render = |effects: LayerEffects| {
+        let mut layer = LayerFrame::new(&source);
+        layer.effects = effects;
+        renderer
+            .render(1, 1, 0.0, &[layer])
+            .unwrap()
+            .pixels()
+            .to_vec()
+    };
+
+    assert_eq!(render(LayerEffects::default()), [100, 150, 200, 255]);
+    // +0.2 brightness adds exactly 51 per channel.
+    assert_eq!(
+        render(LayerEffects {
+            brightness: 0.2,
+            ..LayerEffects::default()
+        }),
+        [151, 201, 251, 255]
+    );
+    // Contrast 1.5: (c - 0.5) * 1.5 + 0.5.
+    assert_eq!(
+        render(LayerEffects {
+            contrast: 1.5,
+            ..LayerEffects::default()
+        }),
+        [86, 161, 236, 255]
+    );
+    // Zero saturation collapses to Rec.709 luma.
+    let grey = render(LayerEffects {
+        saturation: 0.0,
+        ..LayerEffects::default()
+    });
+    assert_eq!(grey[0], grey[1]);
+    assert_eq!(grey[1], grey[2]);
+    assert_eq!(grey[0], 143);
+}
+
+#[test]
+fn vignette_darkens_corners_but_not_the_centre() {
+    let source = solid(9, 9, [200, 200, 200, 255]);
+    let renderer = CpuRenderer::new(9 * 9 * 4).unwrap();
+    let mut layer = LayerFrame::new(&source);
+    layer.effects.vignette = 1.0;
+    let output = renderer.render(9, 9, 0.0, &[layer]).unwrap();
+
+    assert_eq!(pixel(&output, 4, 4)[0], 200);
+    assert!(
+        pixel(&output, 0, 0)[0] < 60,
+        "corner is {:?}",
+        pixel(&output, 0, 0)
+    );
+    assert!(pixel(&output, 4, 0)[0] < pixel(&output, 4, 4)[0]);
+}
+
+#[test]
+fn out_of_range_effects_are_rejected() {
+    let source = solid(1, 1, [0, 0, 0, 255]);
+    let renderer = CpuRenderer::new(16).unwrap();
+    for effects in [
+        LayerEffects {
+            brightness: 2.0,
+            ..LayerEffects::default()
+        },
+        LayerEffects {
+            contrast: -1.0,
+            ..LayerEffects::default()
+        },
+        LayerEffects {
+            saturation: f32::NAN,
+            ..LayerEffects::default()
+        },
+        LayerEffects {
+            vignette: 1.5,
+            ..LayerEffects::default()
+        },
+    ] {
+        let mut layer = LayerFrame::new(&source);
+        layer.effects = effects;
+        assert_eq!(
+            renderer.render(1, 1, 0.0, &[layer]).unwrap_err(),
+            RenderError::InvalidEffects
         );
     }
 }

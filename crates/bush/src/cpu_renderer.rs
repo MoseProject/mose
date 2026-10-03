@@ -77,7 +77,7 @@ impl Default for LayerTransform {
 }
 
 impl LayerTransform {
-    fn is_valid(&self) -> bool {
+    pub(crate) fn is_valid(&self) -> bool {
         let crop = self.crop;
         self.scale_x.is_finite()
             && self.scale_y.is_finite()
@@ -96,6 +96,57 @@ impl LayerTransform {
     }
 }
 
+/// Per-layer colour effects applied to each sampled source pixel before blending. Neutral
+/// values (`0.0`, `1.0`, `1.0`, `0.0`) skip the pass entirely.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LayerEffects {
+    /// Added to every channel, `-1.0..=1.0`.
+    pub brightness: f32,
+    /// Scales distance from mid-grey, `0.0..=4.0`.
+    pub contrast: f32,
+    /// Scales distance from luma, `0.0..=4.0` (`0.0` is greyscale).
+    pub saturation: f32,
+    /// Darkens towards the layer corners, `0.0..=1.0`.
+    pub vignette: f32,
+}
+
+impl Default for LayerEffects {
+    fn default() -> Self {
+        Self {
+            brightness: 0.0,
+            contrast: 1.0,
+            saturation: 1.0,
+            vignette: 0.0,
+        }
+    }
+}
+
+impl LayerEffects {
+    fn is_neutral(&self) -> bool {
+        *self == Self::default()
+    }
+
+    pub(crate) fn is_valid(&self) -> bool {
+        (-1.0..=1.0).contains(&self.brightness)
+            && (0.0..=4.0).contains(&self.contrast)
+            && (0.0..=4.0).contains(&self.saturation)
+            && (0.0..=1.0).contains(&self.vignette)
+    }
+
+    /// `radius` is `0.0` at the layer centre and `1.0` at its corners.
+    fn apply(&self, rgb: [f32; 3], radius: f32) -> [f32; 3] {
+        let falloff = 1.0 - self.vignette * radius * radius;
+        let mut out = rgb.map(|channel| {
+            (((channel - 0.5) * self.contrast + 0.5) + self.brightness).clamp(0.0, 1.0)
+        });
+        let luma = 0.2126 * out[0] + 0.7152 * out[1] + 0.0722 * out[2];
+        for channel in &mut out {
+            *channel = ((luma + (*channel - luma) * self.saturation) * falloff).clamp(0.0, 1.0);
+        }
+        out
+    }
+}
+
 /// One composited layer. `x`/`y` place the top-left corner of the cropped, scaled, unrotated
 /// layer on the canvas.
 #[derive(Clone, Copy, Debug)]
@@ -106,6 +157,7 @@ pub struct LayerFrame<'a> {
     pub opacity: f32,
     pub transform: LayerTransform,
     pub blend: BlendMode,
+    pub effects: LayerEffects,
 }
 
 impl<'a> LayerFrame<'a> {
@@ -118,6 +170,7 @@ impl<'a> LayerFrame<'a> {
             opacity: 1.0,
             transform: LayerTransform::default(),
             blend: BlendMode::Normal,
+            effects: LayerEffects::default(),
         }
     }
 }
@@ -135,6 +188,7 @@ pub enum RenderError {
     NonFiniteTimestamp(f64),
     InvalidOpacity(f32),
     InvalidTransform,
+    InvalidEffects,
     OutputExceedsBudget {
         requested_bytes: usize,
         budget_bytes: usize,
@@ -179,6 +233,9 @@ impl CpuRenderer {
             }
             if !layer.transform.is_valid() {
                 return Err(RenderError::InvalidTransform);
+            }
+            if !layer.effects.is_valid() {
+                return Err(RenderError::InvalidEffects);
             }
         }
 
@@ -245,6 +302,7 @@ fn blend_layer(canvas: &mut [u8], canvas_width: u32, canvas_height: u32, layer: 
         return;
     }
 
+    let neutral_effects = layer.effects.is_neutral();
     let canvas_width = canvas_width as usize;
     for destination_y in start_y..end_y {
         for destination_x in start_x..end_x {
@@ -263,9 +321,28 @@ fn blend_layer(canvas: &mut [u8], canvas_width: u32, canvas_height: u32, layer: 
             let source_index = source_y * source.stride_bytes() + source_x * 4;
             let destination_index =
                 (destination_y as usize * canvas_width + destination_x as usize) * 4;
+            let mut pixel: [u8; 4] = source.pixels()[source_index..source_index + 4]
+                .try_into()
+                .expect("slice of four bytes");
+            if !neutral_effects {
+                let nx = (u / crop_w as f32 - 0.5) * 2.0;
+                let ny = (v / crop_h as f32 - 0.5) * 2.0;
+                let radius = ((nx * nx + ny * ny) / 2.0).sqrt();
+                let rgb = layer.effects.apply(
+                    [
+                        pixel[0] as f32 / 255.0,
+                        pixel[1] as f32 / 255.0,
+                        pixel[2] as f32 / 255.0,
+                    ],
+                    radius,
+                );
+                for channel in 0..3 {
+                    pixel[channel] = (rgb[channel] * 255.0).round() as u8;
+                }
+            }
             blend_pixel(
                 &mut canvas[destination_index..destination_index + 4],
-                &source.pixels()[source_index..source_index + 4],
+                &pixel,
                 layer.opacity,
                 layer.blend,
             );

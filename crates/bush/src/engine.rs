@@ -395,6 +395,7 @@ impl EngineThread {
                 opacity: placement.opacity,
                 transform: placement.transform,
                 blend: placement.blend,
+                effects: placement.effects,
             })
             .collect();
         match self.renderer.render(
