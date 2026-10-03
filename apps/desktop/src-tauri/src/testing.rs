@@ -48,6 +48,8 @@ pub(crate) struct FakeServices {
     pub restarts: AtomicUsize,
     pub exits: Mutex<Vec<i32>>,
     pub speech: Mutex<Option<Result<Vec<f32>, avcore::TtsError>>>,
+    pub whisper_model: Mutex<Option<PathBuf>>,
+    pub transcript: Mutex<Option<Result<avcore::TranscribeOutcome, avcore::TranscribeError>>>,
 }
 
 impl Services for FakeServices {
@@ -73,6 +75,23 @@ impl Services for FakeServices {
     fn restart_application(&self) -> Result<(), avcore::ApplyUpdateError> {
         self.restarts.fetch_add(1, Ordering::SeqCst);
         self.restart.lock().unwrap().take().unwrap_or(Ok(()))
+    }
+
+    fn bundled_whisper_model(&self) -> Option<PathBuf> {
+        self.whisper_model.lock().unwrap().clone()
+    }
+
+    fn transcribe(
+        &self,
+        _source: &Path,
+        _model: &Path,
+        _cancel: &Arc<AtomicBool>,
+    ) -> Result<avcore::TranscribeOutcome, avcore::TranscribeError> {
+        self.transcript
+            .lock()
+            .unwrap()
+            .take()
+            .unwrap_or(Err(avcore::TranscribeError::NoAudio))
     }
 
     fn exit(&self, code: i32) {

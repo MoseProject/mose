@@ -5,11 +5,13 @@
 //! update or a model. [`SystemServices`] only forwards, and is excluded from coverage with the
 //! other process-boundary code (see `spec/architecture/test-coverage-plan.md`).
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
 use avcore::{
-    ApplyUpdateError, ApplyUpdateOutcome, LatestRelease, PiperVoiceConfig, TtsError,
-    UpdateCheckError,
+    ApplyUpdateError, ApplyUpdateOutcome, LatestRelease, PiperVoiceConfig, TranscribeError,
+    TranscribeOutcome, TtsError, UpdateCheckError,
 };
 
 pub trait Services: Send + Sync {
@@ -24,6 +26,14 @@ pub trait Services: Send + Sync {
         config: &PiperVoiceConfig,
         text: &str,
     ) -> Result<Vec<f32>, TtsError>;
+    /// The Whisper model shipped with the app, when this install has one.
+    fn bundled_whisper_model(&self) -> Option<PathBuf>;
+    fn transcribe(
+        &self,
+        source: &Path,
+        model: &Path,
+        cancel: &Arc<AtomicBool>,
+    ) -> Result<TranscribeOutcome, TranscribeError>;
 }
 
 /// The real implementations.
@@ -61,5 +71,18 @@ impl Services for SystemServices {
         text: &str,
     ) -> Result<Vec<f32>, TtsError> {
         avcore::synthesize(model_path, config, text)
+    }
+
+    fn bundled_whisper_model(&self) -> Option<PathBuf> {
+        avcore::bundled_resource_path(avcore::BundledResource::WhisperBase)
+    }
+
+    fn transcribe(
+        &self,
+        source: &Path,
+        model: &Path,
+        cancel: &Arc<AtomicBool>,
+    ) -> Result<TranscribeOutcome, TranscribeError> {
+        avcore::transcribe(source, model, None, cancel, |_percent| {})
     }
 }

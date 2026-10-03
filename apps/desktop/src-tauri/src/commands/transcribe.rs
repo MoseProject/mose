@@ -14,6 +14,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
 use super::with_session;
+use crate::services::Services;
 use crate::state::AppState;
 
 pub const TRANSCRIBE_EVENT: &str = "transcribe-event";
@@ -75,7 +76,10 @@ pub fn transcribe_asset<R: Runtime>(app: AppHandle<R>, asset_id: u64) -> Result<
         return Err("no Whisper model configured".to_string());
     };
     let worker_app = app.clone();
-    std::thread::spawn(move || run_transcription(worker_app, asset_id, source_path, model_path));
+    let services = state.services.clone();
+    std::thread::spawn(move || {
+        run_transcription(worker_app, services, asset_id, source_path, model_path)
+    });
     let _ = app.emit(
         TRANSCRIBE_EVENT,
         TranscribeEventPayload::Started { asset_id },
@@ -91,17 +95,18 @@ fn resolve_whisper_model_path(state: &AppState) -> Option<PathBuf> {
     if !configured.trim().is_empty() && Path::new(&configured).is_file() {
         return Some(PathBuf::from(configured));
     }
-    avcore::bundled_resource_path(avcore::BundledResource::WhisperBase)
+    state.services.bundled_whisper_model()
 }
 
 fn run_transcription<R: Runtime>(
     app: AppHandle<R>,
+    services: Arc<dyn Services>,
     asset_id: u64,
     source_path: PathBuf,
     model_path: PathBuf,
 ) {
     let cancel = Arc::new(AtomicBool::new(false));
-    let outcome = avcore::transcribe(&source_path, &model_path, None, &cancel, |_percent| {});
+    let outcome = services.transcribe(&source_path, &model_path, &cancel);
     {
         let state = app.state::<AppState>();
         *state
