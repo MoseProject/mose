@@ -97,7 +97,7 @@ describe("api wrappers", () => {
 
 describe("event subscriptions", () => {
   it("listen on the named event and hand the payload to the handler", async () => {
-    const subscriptions: [string, (handler: (payload: never) => void) => Promise<unknown>][] = [
+    const subscriptions: [string, (handler: never) => Promise<unknown>][] = [
       [ipc.events.session, ipc.onSession],
       [ipc.events.preview, ipc.onPreview],
       [ipc.events.exports, ipc.onExports],
@@ -114,7 +114,7 @@ describe("event subscriptions", () => {
     ];
     for (const [eventName, subscribe] of subscriptions) {
       const handler = vi.fn();
-      await expect(subscribe(handler)).resolves.toBe(unlisten);
+      await expect(subscribe(handler as never)).resolves.toBe(unlisten);
       listeners.get(eventName)!({ payload: { sample: eventName } });
       expect(handler, eventName).toHaveBeenCalledWith({ sample: eventName });
     }
