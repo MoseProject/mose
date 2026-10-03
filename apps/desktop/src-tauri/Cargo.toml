@@ -25,6 +25,9 @@ rfd = "0.17.2"
 # Preview frames and media thumbnails cross the IPC boundary as JPEG: a 1080p RGBA frame is
 # ~8 MB raw, which the webview cannot ingest at playback rate over a custom protocol.
 image = { version = "0.25.10", default-features = false, features = ["jpeg"] }
+# Preview frames are encoded 30+ times a second; this encoder subsamples chroma and has an AVX2
+# path, several times faster than `image`'s 4:4:4 JPEG encoder on a 1280x720 frame.
+jpeg-encoder = { version = "0.7", features = ["simd"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"

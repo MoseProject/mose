@@ -10,8 +10,6 @@
 //! pixels over IPC.
 
 use avcore::preview::VideoFrame;
-use image::codecs::jpeg::JpegEncoder;
-use image::ExtendedColorType;
 
 /// Longest side of a preview frame sent to the webview. Matches a typical program monitor on a
 /// 1440p display; the source keeps full resolution for export.
@@ -30,11 +28,34 @@ pub fn encode_jpeg(frame: &VideoFrame, max_dim: u32) -> Option<Vec<u8>> {
 /// [`encode_jpeg`] over a borrowed tightly packed RGBA buffer, so a caller that already owns the
 /// pixels (Bush) does not copy them into a `VideoFrame` first.
 pub fn encode_jpeg_rgba(width: u32, height: u32, rgba: &[u8], max_dim: u32) -> Option<Vec<u8>> {
+    if width == 0 || height == 0 || rgba.len() < width as usize * height as usize * 4 {
+        return None;
+    }
+    // Already at or under the target size: encode the RGBA buffer directly (the encoder skips
+    // alpha), no intermediate RGB copy.
+    if width.max(height) <= max_dim {
+        return encode_with(
+            &rgba[..width as usize * height as usize * 4],
+            width,
+            height,
+            true,
+        );
+    }
     let (width, height, rgb) = downscale_to_rgb(width, height, rgba, max_dim)?;
-    let mut out = Vec::with_capacity(rgb.len() / 8);
-    JpegEncoder::new_with_quality(&mut out, PREVIEW_JPEG_QUALITY)
-        .encode(&rgb, width, height, ExtendedColorType::Rgb8)
-        .ok()?;
+    encode_with(&rgb, width, height, false)
+}
+
+fn encode_with(data: &[u8], width: u32, height: u32, has_alpha: bool) -> Option<Vec<u8>> {
+    let (width, height) = (u16::try_from(width).ok()?, u16::try_from(height).ok()?);
+    let mut out = Vec::with_capacity(data.len() / 10);
+    let mut encoder = jpeg_encoder::Encoder::new(&mut out, PREVIEW_JPEG_QUALITY);
+    encoder.set_sampling_factor(jpeg_encoder::SamplingFactor::F_2_2);
+    let color = if has_alpha {
+        jpeg_encoder::ColorType::Rgba
+    } else {
+        jpeg_encoder::ColorType::Rgb
+    };
+    encoder.encode(data, width, height, color).ok()?;
     Some(out)
 }
 
@@ -54,6 +75,13 @@ fn downscale_to_rgb(
     let width = ((src_width as f32 * scale) as u32).max(1);
     let height = ((src_height as f32 * scale) as u32).max(1);
     let mut rgb = vec![0u8; (width * height * 3) as usize];
+    if (width, height) == (src_width, src_height) {
+        // No resampling: a straight alpha-dropping copy, much cheaper than per-pixel indexing.
+        for (dst, src) in rgb.chunks_exact_mut(3).zip(rgba.chunks_exact(4)) {
+            dst.copy_from_slice(&src[..3]);
+        }
+        return Some((width, height, rgb));
+    }
     for y in 0..height {
         let src_y = (y as u64 * src_height as u64 / height as u64) as u32;
         let src_row = (src_y as usize * src_width as usize) * 4;
@@ -101,6 +129,28 @@ mod tests {
         let mut frame = solid(4, 4);
         frame.rgba.truncate(10);
         assert!(encode_jpeg(&frame, 1280).is_none());
+    }
+
+    #[test]
+    fn encoded_jpeg_decodes_to_the_expected_size_and_colour() {
+        // At target size the RGBA buffer is encoded directly.
+        let direct = encode_jpeg_rgba(64, 36, &solid(64, 36).rgba, 1280).unwrap();
+        let decoded = image::load_from_memory(&direct).unwrap().to_rgb8();
+        assert_eq!(decoded.dimensions(), (64, 36));
+        let pixel = decoded.get_pixel(32, 18).0;
+        assert!(
+            pixel
+                .iter()
+                .zip([10u8, 20, 30])
+                .all(|(got, want)| got.abs_diff(want) <= 6),
+            "decoded {pixel:?}"
+        );
+
+        // Over the target size it is downscaled first.
+        let big = solid(2000, 1000);
+        let shrunk = encode_jpeg_rgba(big.width, big.height, &big.rgba, 1280).unwrap();
+        let decoded = image::load_from_memory(&shrunk).unwrap();
+        assert_eq!((decoded.width(), decoded.height()), (1280, 640));
     }
 
     #[test]
