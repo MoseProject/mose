@@ -177,3 +177,7 @@ fn motion_track_one(
     );
     avcore::tracked_positions_to_keyframes(&tracked, &time_fractions, base_position)
 }
+
+#[cfg(test)]
+#[path = "motion_tracking_test.rs"]
+mod tests;
