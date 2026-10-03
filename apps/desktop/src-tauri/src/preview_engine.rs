@@ -84,7 +84,13 @@ pub struct PreviewEngine {
 }
 
 impl PreviewEngine {
-    pub fn spawn(app: AppHandle) -> Self {
+    /// `engine_preference` is the saved `preview_engine` preference; builds without the
+    /// `bush-preview` feature always use GStreamer.
+    pub fn spawn(app: AppHandle, engine_preference: &str) -> Self {
+        #[cfg(feature = "bush-preview")]
+        let use_bush = crate::bush_adapter::selected(engine_preference);
+        #[cfg(not(feature = "bush-preview"))]
+        let _ = engine_preference;
         let (tx, rx) = mpsc::channel();
         let latest: LatestFrame = Arc::new(Mutex::new(None));
         let playhead_bits = Arc::new(AtomicU64::new(0f64.to_bits()));
@@ -94,7 +100,7 @@ impl PreviewEngine {
             .name("oca-preview-engine".into())
             .spawn(move || {
                 #[cfg(feature = "bush-preview")]
-                if crate::bush_adapter::selected() {
+                if use_bush {
                     tracing::info!("preview engine: bush");
                     return crate::bush_adapter::run(rx, app, engine_latest, engine_playhead);
                 }

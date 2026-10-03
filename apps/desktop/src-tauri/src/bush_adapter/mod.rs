@@ -18,7 +18,11 @@ mod mapper;
 
 pub use backend::run;
 
-/// Whether this process was asked to preview through Bush.
-pub fn selected() -> bool {
-    std::env::var("OCA_PREVIEW_ENGINE").is_ok_and(|value| value.eq_ignore_ascii_case("bush"))
+/// Whether to preview through Bush: `OCA_PREVIEW_ENGINE` (`bush` or `gstreamer`) wins when set,
+/// otherwise the saved `preview_engine` preference decides.
+pub fn selected(preference: &str) -> bool {
+    match std::env::var("OCA_PREVIEW_ENGINE") {
+        Ok(value) => value.eq_ignore_ascii_case("bush"),
+        Err(_) => preference.eq_ignore_ascii_case("bush"),
+    }
 }

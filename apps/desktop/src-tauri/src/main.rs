@@ -58,7 +58,7 @@ fn main() {
             let handle = app.handle().clone();
             app.manage(ThumbnailCache::default());
             let prefs = prefs::PrefsDocument::load();
-            let preview = PreviewEngine::spawn(handle.clone());
+            let preview = PreviewEngine::spawn(handle.clone(), &prefs.view.preview_engine);
             preview.set_hardware_decode(prefs.view.preview_hardware_decode);
 
             let locale_code = if prefs.view.locale == "en" {
@@ -119,6 +119,7 @@ fn main() {
             commands::preview_step,
             commands::preview_set_playing,
             commands::preview_set_hardware_decode,
+            commands::preview_engines,
             commands::set_export_settings,
             commands::export::pick_export_path,
             commands::export::start_export,

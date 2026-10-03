@@ -17,6 +17,9 @@ pub struct PrefsView {
     pub output_folder: String,
     pub autosave_minutes: u8,
     pub preview_hardware_decode: bool,
+    /// Which engine plays the preview: `"gstreamer"` (also the empty default) or `"bush"`, the
+    /// latter only in builds with the `bush-preview` feature. Read at startup.
+    pub preview_engine: String,
     pub recent_project_paths: Vec<String>,
     /// Saved layer-group templates -- app-wide, shared with the egui shell's
     /// `PrefsState.saved_layer_templates` under the same `prefs.oc` key.
@@ -76,6 +79,8 @@ struct DiskPrefs {
     #[serde(default = "default_hardware_decode")]
     preview_hardware_decode: bool,
     #[serde(default)]
+    preview_engine: String,
+    #[serde(default)]
     recent_project_paths: Vec<String>,
     #[serde(default)]
     saved_layer_templates: Vec<LayerTemplate>,
@@ -118,6 +123,7 @@ impl From<DiskPrefs> for PrefsView {
                 value.autosave_minutes
             },
             preview_hardware_decode: value.preview_hardware_decode,
+            preview_engine: value.preview_engine,
             recent_project_paths: value.recent_project_paths,
             saved_layer_templates: value.saved_layer_templates,
             whisper_model_path: value.whisper_model_path,
@@ -140,6 +146,7 @@ impl From<&PrefsView> for DiskPrefs {
             output_folder: value.output_folder.clone(),
             autosave_minutes: value.autosave_minutes,
             preview_hardware_decode: value.preview_hardware_decode,
+            preview_engine: value.preview_engine.clone(),
             recent_project_paths: value.recent_project_paths.clone(),
             saved_layer_templates: value.saved_layer_templates.clone(),
             whisper_model_path: value.whisper_model_path.clone(),
@@ -162,6 +169,7 @@ impl Default for PrefsView {
             output_folder: String::new(),
             autosave_minutes: 5,
             preview_hardware_decode: true,
+            preview_engine: String::new(),
             recent_project_paths: Vec::new(),
             saved_layer_templates: Vec::new(),
             whisper_model_path: String::new(),
