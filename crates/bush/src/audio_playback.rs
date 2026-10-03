@@ -200,7 +200,7 @@ impl AudioRenderer {
             let ContributorContent::Media(source) = &contributor.content else {
                 continue;
             };
-            let placement = contributor.placement;
+            let placement = &contributor.placement;
             if (placement.speed - 1.0).abs() > f64::EPSILON {
                 return Err(AudioRenderError::UnsupportedSpeed(contributor.id));
             }

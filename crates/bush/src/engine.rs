@@ -450,7 +450,7 @@ impl EngineThread {
                     }
                 }
             };
-            layers.push((frame, contributor.placement));
+            layers.push((frame, contributor.placement_at(playhead)));
         }
         if cancel.load(Ordering::Acquire) {
             return RenderOutcome::Cancelled;

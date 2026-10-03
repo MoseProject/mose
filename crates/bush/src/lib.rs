@@ -13,6 +13,7 @@ mod cpu_renderer;
 mod decode_source;
 mod engine;
 mod frame_mailbox;
+mod keyframes;
 mod latest_intent;
 mod player;
 mod preview_worker;
@@ -40,6 +41,7 @@ pub use engine::{
     MAX_CANVAS_PIXELS,
 };
 pub use frame_mailbox::{FrameMailbox, PublishedFrame};
+pub use keyframes::{Animation, Easing, Fade, Keyframe, KeyframeError, KeyframeTrack};
 pub use latest_intent::{Generation, LatestIntent, PendingIntent};
 pub use player::{Player, PlayerError, PlayerEvent};
 pub use preview_worker::{

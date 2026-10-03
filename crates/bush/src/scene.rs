@@ -7,7 +7,7 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use crate::{BlendMode, LayerEffects, LayerTransform, SceneVersions, Version};
+use crate::{Animation, BlendMode, Fade, LayerEffects, LayerTransform, SceneVersions, Version};
 
 /// Stable identity of one contributor inside a scene.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -63,7 +63,7 @@ pub enum ContributorContent {
 /// For media, the timeline window is derived from the source range and `speed`
 /// (`(out - in) / speed` seconds); `duration_secs` is the explicit window for raster overlays,
 /// where `None` means visible for the whole scene.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Placement {
     pub timeline_start_secs: f64,
     pub duration_secs: Option<f64>,
@@ -77,6 +77,10 @@ pub struct Placement {
     pub effects: LayerEffects,
     /// Linear audio gain for audible contributors, `0.0..=4.0`.
     pub gain: f32,
+    /// Keyframed overrides of opacity, position, scale and rotation, relative to the
+    /// contributor's timeline start.
+    pub animation: Animation,
+    pub fade: Fade,
 }
 
 impl Default for Placement {
@@ -92,6 +96,8 @@ impl Default for Placement {
             blend: BlendMode::Normal,
             effects: LayerEffects::default(),
             gain: 1.0,
+            animation: Animation::default(),
+            fade: Fade::default(),
         }
     }
 }
@@ -111,6 +117,8 @@ impl Placement {
             || !self.transform.is_valid()
             || !self.effects.is_valid()
             || !(0.0..=4.0).contains(&self.gain)
+            || !self.animation.is_valid()
+            || !self.fade.is_valid()
         {
             return Err(SceneError::InvalidPlacement);
         }
@@ -188,6 +196,38 @@ impl Contributor {
             }
             ContributorContent::RasterOverlay(_) => self.placement.duration_secs,
         }
+    }
+
+    /// The placement with keyframes and fades evaluated at `playhead_secs`. Static values are
+    /// used for any property without a track; the result is always a valid, unanimated layer
+    /// description for the compositor.
+    pub fn placement_at(&self, playhead_secs: f64) -> Placement {
+        let local = playhead_secs - self.placement.timeline_start_secs;
+        let mut resolved = self.placement.clone();
+        let animation = &self.placement.animation;
+        if let Some(track) = &animation.opacity {
+            resolved.opacity = track.value_at(local);
+        }
+        if let Some(track) = &animation.x {
+            resolved.x = track.value_at(local).round() as i32;
+        }
+        if let Some(track) = &animation.y {
+            resolved.y = track.value_at(local).round() as i32;
+        }
+        if let Some(track) = &animation.scale_x {
+            resolved.transform.scale_x = track.value_at(local);
+        }
+        if let Some(track) = &animation.scale_y {
+            resolved.transform.scale_y = track.value_at(local);
+        }
+        if let Some(track) = &animation.rotation_deg {
+            resolved.transform.rotation_deg = track.value_at(local);
+        }
+        resolved.opacity *= self
+            .placement
+            .fade
+            .factor_at(local, self.timeline_duration_secs());
+        resolved
     }
 
     /// Whether the contributor is on the timeline at `playhead_secs` (end exclusive).

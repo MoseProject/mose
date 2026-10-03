@@ -349,3 +349,51 @@ fn hardware_decode_policy_renders_the_same_picture_as_software() {
         );
     }
 }
+
+#[test]
+fn fade_in_and_keyframed_position_are_applied_per_frame() {
+    let engine = Engine::new(config(1)).unwrap();
+    let (width, _) = dimensions();
+    let placement = Placement {
+        fade: bush::Fade {
+            in_secs: 1.0,
+            out_secs: 0.0,
+        },
+        animation: bush::Animation {
+            x: Some(
+                bush::KeyframeTrack::new(vec![
+                    bush::Keyframe {
+                        time_secs: 0.0,
+                        value: 0.0,
+                        easing: bush::Easing::Linear,
+                    },
+                    bush::Keyframe {
+                        time_secs: 1.0,
+                        value: width as f32,
+                        easing: bush::Easing::Linear,
+                    },
+                ])
+                .unwrap(),
+            ),
+            ..bush::Animation::default()
+        },
+        ..Placement::default()
+    };
+    let timeline = scene(vec![clip(1, 0, fixture(), placement)]);
+
+    // At the clip start: fully faded out, so the canvas is empty.
+    engine.submit(request(timeline.clone(), 0.0)).unwrap();
+    let (_, start) = expect_frame(&engine);
+    assert!(start.pixels().chunks_exact(4).all(|p| p[3] == 0));
+
+    // Halfway: half opacity and shifted right by half the width, so the left half is empty.
+    engine.submit(request(timeline, 0.5)).unwrap();
+    let (_, middle) = expect_frame(&engine);
+    let row = width as usize * 4;
+    let left_empty = middle.pixels()[..row / 2 - 8]
+        .chunks_exact(4)
+        .all(|p| p[3] == 0);
+    let right_alpha = middle.pixels()[row - 8 + 3];
+    assert!(left_empty, "left half should be uncovered");
+    assert!((110..=145).contains(&right_alpha), "alpha {right_alpha}");
+}
