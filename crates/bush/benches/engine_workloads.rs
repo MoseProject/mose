@@ -195,12 +195,60 @@ fn bench_decode_policy(c: &mut Criterion) {
     group.finish();
 }
 
+/// Large-media workloads. Set `BUSH_BENCH_MEDIA_DIR` to a directory holding `h264_1080p.mp4`
+/// and/or `hevc_2160p.mp4` (any clip of at least one second); missing files are skipped, so
+/// the benchmark never depends on checked-in multi-megabyte media.
+fn bench_large_media(c: &mut Criterion) {
+    let Some(dir) = std::env::var_os("BUSH_BENCH_MEDIA_DIR").map(PathBuf::from) else {
+        return;
+    };
+    let mut group = c.benchmark_group("large_media");
+    group.sample_size(10);
+    for (name, width, height) in [
+        ("h264_1080p.mp4", 1920, 1080),
+        ("hevc_2160p.mp4", 3840, 2160),
+    ] {
+        let path = dir.join(name);
+        if !path.exists() {
+            continue;
+        }
+        for (label, policy) in [
+            ("software", DecodePolicy::Software),
+            ("hardware_fallback", DecodePolicy::HardwareWithFallback),
+        ] {
+            group.bench_function(format!("decode_24_frames/{name}/{label}"), |b| {
+                let cancel = AtomicBool::new(false);
+                b.iter(|| {
+                    let mut source = DecodeSource::open_with_policy(&path, policy).unwrap();
+                    for _ in 0..24 {
+                        black_box(source.next_frame(&cancel).unwrap().unwrap());
+                    }
+                });
+            });
+        }
+        let scene = scene(path.clone(), Placement::default());
+        group.bench_function(format!("engine_sequential_24_frames/{name}"), |b| {
+            b.iter_batched(
+                || engine(width, height, DecodePolicy::Software),
+                |engine| {
+                    for frame in 0..24 {
+                        black_box(present(&engine, &scene, f64::from(frame) / 30.0));
+                    }
+                },
+                BatchSize::PerIteration,
+            );
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     engine_workloads,
     bench_composite_1080p,
     bench_scrub,
     bench_live_edit,
     bench_playback,
-    bench_decode_policy
+    bench_decode_policy,
+    bench_large_media
 );
 criterion_main!(engine_workloads);
