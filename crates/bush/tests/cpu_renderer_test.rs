@@ -356,3 +356,124 @@ fn out_of_range_effects_are_rejected() {
         );
     }
 }
+
+fn noise(width: u32, height: u32, seed: u64, translucent: bool) -> VideoFrame {
+    let mut state = seed;
+    let mut pixels = Vec::with_capacity((width * height * 4) as usize);
+    for _ in 0..width * height {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        let bytes = state.to_le_bytes();
+        let alpha = match (translucent, bytes[3] % 4) {
+            (false, _) => 255,
+            (true, 0) => 0,
+            (true, 1) => 255,
+            (true, _) => bytes[4],
+        };
+        pixels.extend_from_slice(&[bytes[0], bytes[1], bytes[2], alpha]);
+    }
+    frame(width, height, pixels)
+}
+
+/// Independent per-pixel W3C normal-blend compositor used as an oracle for the optimized,
+/// parallel renderer.
+fn naive_normal_composite(
+    width: u32,
+    height: u32,
+    layers: &[(&VideoFrame, i32, i32, f32)],
+) -> Vec<u8> {
+    let mut canvas = vec![0u8; (width * height * 4) as usize];
+    for (source, ox, oy, opacity) in layers {
+        for y in 0..height as i32 {
+            for x in 0..width as i32 {
+                let (sx, sy) = (x - ox, y - oy);
+                if sx < 0 || sy < 0 || sx >= source.width() as i32 || sy >= source.height() as i32 {
+                    continue;
+                }
+                let s = (sy as usize * source.stride_bytes()) + sx as usize * 4;
+                let d = (y as usize * width as usize + x as usize) * 4;
+                let src = &source.pixels()[s..s + 4];
+                let alpha_s = src[3] as f32 / 255.0 * opacity;
+                if alpha_s == 0.0 {
+                    continue;
+                }
+                let alpha_b = canvas[d + 3] as f32 / 255.0;
+                let alpha_o = alpha_s + alpha_b * (1.0 - alpha_s);
+                for c in 0..3 {
+                    let cs = src[c] as f32 / 255.0;
+                    let cb = canvas[d + c] as f32 / 255.0;
+                    let premultiplied = alpha_s * (1.0 - alpha_b) * cs
+                        + alpha_s * alpha_b * cs
+                        + (1.0 - alpha_s) * alpha_b * cb;
+                    canvas[d + c] = ((premultiplied / alpha_o) * 255.0).round() as u8;
+                }
+                canvas[d + 3] = (alpha_o * 255.0).round() as u8;
+            }
+        }
+    }
+    canvas
+}
+
+#[test]
+fn parallel_fast_path_matches_an_independent_oracle() {
+    // 320x300 = 96k pixels: above the parallel threshold, rows do not divide evenly.
+    let (width, height) = (320, 300);
+    let background = noise(width, height, 0x1234_5678_9ABC_DEF1, false);
+    let translucent = noise(200, 180, 0x0FED_CBA9_8765_4321, true);
+    let faded = noise(150, 150, 0x1357_9BDF_2468_ACE1, true);
+    let oracle = naive_normal_composite(
+        width,
+        height,
+        &[
+            (&background, 0, 0, 1.0),
+            (&translucent, 40, 25, 1.0),
+            (&faded, -30, 160, 0.6),
+        ],
+    );
+
+    let renderer = CpuRenderer::new((width * height * 4) as usize).unwrap();
+    let mut second = LayerFrame::new(&translucent);
+    second.x = 40;
+    second.y = 25;
+    let mut third = LayerFrame::new(&faded);
+    third.x = -30;
+    third.y = 160;
+    third.opacity = 0.6;
+    let output = renderer
+        .render(
+            width,
+            height,
+            0.0,
+            &[LayerFrame::new(&background), second, third],
+        )
+        .unwrap();
+
+    assert_eq!(output.pixels(), &oracle[..]);
+}
+
+#[test]
+fn identity_fast_path_equals_the_general_mapping_path() {
+    let (width, height) = (300, 300);
+    let background = noise(width, height, 0xDEAD_BEEF_CAFE_F00D, true);
+    let overlay = noise(120, 90, 0xABAD_1DEA_5EED_0001, true);
+    let renderer = CpuRenderer::new((width * height * 4) as usize).unwrap();
+
+    let render = |forced_general: bool| {
+        let mut top = LayerFrame::new(&overlay);
+        top.x = 33;
+        top.y = 47;
+        top.opacity = 0.75;
+        // A contrast that rounds back to the same bytes defeats the identity shortcut only.
+        if forced_general {
+            top.effects.contrast = 1.000_000_1;
+        }
+        renderer
+            .render(width, height, 0.0, &[LayerFrame::new(&background), top])
+            .unwrap()
+            .pixels()
+            .to_vec()
+    };
+
+    assert_eq!(render(false), render(true));
+}

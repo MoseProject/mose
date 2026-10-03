@@ -261,8 +261,26 @@ impl CpuRenderer {
         }
 
         let mut pixels = vec![0; bytes];
-        for layer in layers {
-            blend_layer(&mut pixels, width, height, layer);
+        let row_bytes = width as usize * 4;
+        let workers = worker_count(width, height, layers.len());
+        if workers <= 1 {
+            for layer in layers {
+                blend_layer(&mut pixels, 0, width, height, layer);
+            }
+        } else {
+            // Destination pixels are independent, so horizontal bands composite in parallel
+            // with output identical to the sequential order.
+            let rows_per_band = (height as usize).div_ceil(workers);
+            std::thread::scope(|scope| {
+                for (index, band) in pixels.chunks_mut(rows_per_band * row_bytes).enumerate() {
+                    let first_row = index * rows_per_band;
+                    scope.spawn(move || {
+                        for layer in layers {
+                            blend_layer(band, first_row, width, height, layer);
+                        }
+                    });
+                }
+            });
         }
         VideoFrame::new(
             PixelFormat::Rgba8,
@@ -276,9 +294,32 @@ impl CpuRenderer {
     }
 }
 
+/// Frames below this many pixels composite on the calling thread: spawning costs more.
+const PARALLEL_MIN_PIXELS: usize = 256 * 256;
+
+/// Upper bound on compositing threads for one frame.
+const MAX_WORKERS: usize = 8;
+
+fn worker_count(width: u32, height: u32, layer_count: usize) -> usize {
+    if layer_count == 0 || (width as usize) * (height as usize) < PARALLEL_MIN_PIXELS {
+        return 1;
+    }
+    std::thread::available_parallelism()
+        .map_or(1, std::num::NonZero::get)
+        .min(MAX_WORKERS)
+        .min(height as usize)
+}
+
 /// Inverse-maps each destination pixel centre into the source (nearest sample), so scale,
 /// rotation and crop share one deterministic path. Only the transformed bounding box is visited.
-fn blend_layer(canvas: &mut [u8], canvas_width: u32, canvas_height: u32, layer: &LayerFrame<'_>) {
+/// `canvas` holds whole rows starting at canvas row `first_row`; rows outside it are skipped.
+fn blend_layer(
+    canvas: &mut [u8],
+    first_row: usize,
+    canvas_width: u32,
+    canvas_height: u32,
+    layer: &LayerFrame<'_>,
+) {
     let source = layer.frame;
     let transform = layer.transform;
     let crop_x0 = (transform.crop.x * source.width() as f32).round() as i64;
@@ -304,7 +345,36 @@ fn blend_layer(canvas: &mut [u8], canvas_width: u32, canvas_height: u32, layer: 
 
     let neutral_effects = layer.effects.is_neutral();
     let canvas_width = canvas_width as usize;
+    let band_rows = (canvas.len() / (canvas_width * 4)) as i64;
+    let band_start = first_row as i64;
+    let start_y = start_y.max(band_start);
+    let end_y = end_y.min(band_start + band_rows);
+    let identity = transform.scale_x == 1.0 && transform.scale_y == 1.0 && sin == 0.0 && cos == 1.0;
     for destination_y in start_y..end_y {
+        if identity && neutral_effects {
+            // Unscaled, unrotated, uncoloured: the source maps 1:1 onto destination pixels, so
+            // skip the per-pixel float mapping (exactly equal to the general path below).
+            let source_y = (crop_y0 + destination_y - layer.y as i64) as usize;
+            if destination_y < layer.y as i64 || source_y >= (crop_y0 + crop_h) as usize {
+                continue;
+            }
+            let row_start = ((destination_y - band_start) as usize) * canvas_width * 4;
+            for destination_x in start_x..end_x {
+                let source_x = crop_x0 + destination_x - layer.x as i64;
+                if source_x < crop_x0 || source_x >= crop_x0 + crop_w {
+                    continue;
+                }
+                let source_index = source_y * source.stride_bytes() + source_x as usize * 4;
+                let destination_index = row_start + destination_x as usize * 4;
+                blend_pixel(
+                    &mut canvas[destination_index..destination_index + 4],
+                    &source.pixels()[source_index..source_index + 4],
+                    layer.opacity,
+                    layer.blend,
+                );
+            }
+            continue;
+        }
         for destination_x in start_x..end_x {
             let dx = destination_x as f32 + 0.5 - center_x;
             let dy = destination_y as f32 + 0.5 - center_y;
@@ -320,7 +390,7 @@ fn blend_layer(canvas: &mut [u8], canvas_width: u32, canvas_height: u32, layer: 
             let source_y = (crop_y0 + v as i64) as usize;
             let source_index = source_y * source.stride_bytes() + source_x * 4;
             let destination_index =
-                (destination_y as usize * canvas_width + destination_x as usize) * 4;
+                ((destination_y - band_start) as usize * canvas_width + destination_x as usize) * 4;
             let mut pixel: [u8; 4] = source.pixels()[source_index..source_index + 4]
                 .try_into()
                 .expect("slice of four bytes");
@@ -352,8 +422,19 @@ fn blend_layer(canvas: &mut [u8], canvas_width: u32, canvas_height: u32, layer: 
 
 /// W3C compositing: `co = as*(1-ab)*cs + as*ab*B(cb,cs) + (1-as)*ab*cb`, `ao = as + ab*(1-as)`.
 fn blend_pixel(destination: &mut [u8], source: &[u8], opacity: f32, mode: BlendMode) {
+    // Exact fast paths: an opaque normal-blend source replaces the backdrop, and over a
+    // transparent backdrop the blend function cancels out, leaving the source colour.
+    if mode == BlendMode::Normal && source[3] == 255 && opacity >= 1.0 {
+        destination.copy_from_slice(&source[..4]);
+        return;
+    }
     let source_alpha = (source[3] as f32 / 255.0) * opacity;
     if source_alpha == 0.0 {
+        return;
+    }
+    if destination[3] == 0 {
+        destination[..3].copy_from_slice(&source[..3]);
+        destination[3] = (source_alpha * 255.0).round() as u8;
         return;
     }
     let destination_alpha = destination[3] as f32 / 255.0;

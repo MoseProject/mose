@@ -13,3 +13,7 @@ criterion = "0.8.2"
 [[bench]]
 name = "editor_workloads"
 harness = false
+
+[[bench]]
+name = "engine_workloads"
+harness = false
