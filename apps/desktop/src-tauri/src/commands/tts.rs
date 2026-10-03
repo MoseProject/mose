@@ -106,3 +106,7 @@ fn generate_tts_one(
     avcore::write_wav(&out_path, config.audio.sample_rate, &samples).map_err(|e| e.to_string())?;
     Ok(out_path)
 }
+
+#[cfg(test)]
+#[path = "tts_test.rs"]
+mod tests;
