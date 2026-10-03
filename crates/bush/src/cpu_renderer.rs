@@ -654,16 +654,15 @@ fn blend_layer(
         if identity && neutral_effects {
             // Unscaled, unrotated, uncoloured: the source maps 1:1 onto destination pixels, so
             // skip the per-pixel float mapping (exactly equal to the general path below).
+            // The geometry already clipped the rows to the layer, so the source row exists.
             let source_y = (crop_y0 + destination_y - layer.y as i64) as usize;
-            if destination_y < layer.y as i64 || source_y >= (crop_y0 + crop_h) as usize {
-                continue;
-            }
+            debug_assert!(
+                destination_y >= layer.y as i64 && source_y < (crop_y0 + crop_h) as usize
+            );
             let row_start = ((destination_y - band_start) as usize) * canvas_width * 4;
             for destination_x in start_x..end_x {
                 let source_x = crop_x0 + destination_x - layer.x as i64;
-                if source_x < crop_x0 || source_x >= crop_x0 + crop_w {
-                    continue;
-                }
+                debug_assert!(source_x >= crop_x0 && source_x < crop_x0 + crop_w);
                 let source_index = source_y * source.stride_bytes() + source_x as usize * 4;
                 let destination_index = row_start + destination_x as usize * 4;
                 blend_pixel(
