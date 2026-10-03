@@ -21,7 +21,8 @@ use std::sync::atomic::AtomicBool;
 
 use avcore::project::Sequence;
 use avcore::render::{
-    render_export_job, resolve_timeline_segments, PrivacyBlurSegment, RenderError, RenderOutcome,
+    render_export_job, render_export_job_multi_with_audio, resolve_timeline_segments,
+    PrivacyBlurSegment, RenderError, RenderOutcome,
 };
 use avcore::timeline::{AudioRole, ClipInstance, Timeline, Track, TrackKind};
 use avcore::{probe_media, MediaAsset};
@@ -254,4 +255,90 @@ fn a_matte_with_the_wrong_resolution_is_skipped() {
     assert_eq!(outcome, RenderOutcome::Completed);
     let _ = std::fs::remove_file(&out);
     let _ = std::fs::remove_file(&matte);
+}
+
+fn audio_segment(path: PathBuf) -> avbridge::AudioSegment {
+    avbridge::AudioSegment {
+        source_path: path,
+        source_in_secs: 0.0,
+        source_out_secs: 0.4,
+        timeline_start_secs: 0.0,
+        gain_db: 0.0,
+        speed_factor: 1.0,
+        gain_keyframe_expr: String::new(),
+        duck_role: 0,
+        voice_cleanup_enabled: false,
+        voice_cleanup_noise_floor_db: -30.0,
+        voice_cleanup_compressor_threshold_db: -18.0,
+        voice_cleanup_compressor_ratio: 3.0,
+        voice_cleanup_ceiling_linear: 0.95,
+    }
+}
+
+fn export_with_audio(
+    out: &Path,
+    audio: &[avbridge::AudioSegment],
+    cancel: &AtomicBool,
+    mut on_progress: impl FnMut(u8),
+) -> Result<RenderOutcome, RenderError> {
+    render_export_job_multi_with_audio(
+        &[vec![segment()]],
+        audio,
+        canvas(),
+        out,
+        -14.0,
+        avbridge::GpuEncoderPreference::Cpu,
+        &[],
+        &[],
+        &[],
+        cancel,
+        &mut on_progress,
+    )
+}
+
+#[test]
+fn an_audio_mix_pass_replaces_the_soundtrack_of_a_single_track_export() {
+    let out = temp("with-audio.mp4");
+    let _ = std::fs::remove_file(&out);
+    let outcome = export_with_audio(
+        &out,
+        &[audio_segment(fixture("audio.m4a"))],
+        &AtomicBool::new(false),
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, RenderOutcome::Completed);
+    assert!(probe_media(&out).unwrap().resolution.is_some());
+    let _ = std::fs::remove_file(&out);
+}
+
+#[test]
+fn a_missing_audio_source_and_a_cancel_during_the_mix_are_reported() {
+    let out = temp("audio-failure.mp4");
+    let _ = std::fs::remove_file(&out);
+    let error = export_with_audio(
+        &out,
+        &[audio_segment(PathBuf::from("missing.m4a"))],
+        &AtomicBool::new(false),
+        |_| {},
+    )
+    .unwrap_err();
+    assert!(matches!(error, RenderError::AudioMix(_)));
+    let _ = std::fs::remove_file(&out);
+
+    // Cancelling once the video is complete stops the mix and removes the export.
+    let cancel = AtomicBool::new(false);
+    let outcome = export_with_audio(
+        &out,
+        &[audio_segment(fixture("audio.m4a"))],
+        &cancel,
+        |percent| {
+            if percent == 100 {
+                cancel.store(true, std::sync::atomic::Ordering::Release);
+            }
+        },
+    )
+    .unwrap();
+    assert_eq!(outcome, RenderOutcome::Cancelled);
+    assert!(!out.exists());
 }
