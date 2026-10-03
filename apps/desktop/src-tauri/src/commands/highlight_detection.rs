@@ -65,3 +65,7 @@ pub fn detect_highlights<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<
         true
     })
 }
+
+#[cfg(test)]
+#[path = "highlight_detection_test.rs"]
+mod tests;
