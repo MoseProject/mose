@@ -242,6 +242,30 @@ fn collect_segments(state: &whisper_rs::WhisperState) -> Vec<TranscribeSegment> 
 /// one. Special/control tokens (`[_BEG_]`, `[_TT_50]`, etc. — bracketed, not real transcribed
 /// text) are dropped rather than becoming garbage "words".
 fn collect_words(segment: &whisper_rs::WhisperSegment) -> Vec<TranscribeWord> {
+    let tokens = (0..segment.n_tokens()).filter_map(|t| {
+        let token = segment.get_token(t)?;
+        let raw_text = token.to_str().ok()?.to_string();
+        let data = token.token_data();
+        Some(RawToken {
+            text: raw_text,
+            start_secs: data.t0 as f64 * 0.01,
+            end_secs: data.t1 as f64 * 0.01,
+            probability: data.p,
+        })
+    });
+    group_tokens(tokens)
+}
+
+/// One whisper token with its time range and probability, before words are formed.
+struct RawToken {
+    text: String,
+    start_secs: f64,
+    end_secs: f64,
+    probability: f32,
+}
+
+/// The word grouping of [`collect_words`], on plain tokens so it needs no whisper state.
+fn group_tokens(tokens: impl IntoIterator<Item = RawToken>) -> Vec<TranscribeWord> {
     // Parallel to `current`: the running (sum, count) of token probabilities merged into the
     // word being built, so its final confidence is their mean — tracked alongside rather than
     // inside `TranscribeWord` itself, which only ever stores the finished per-word average.
@@ -250,20 +274,11 @@ fn collect_words(segment: &whisper_rs::WhisperSegment) -> Vec<TranscribeWord> {
     let mut current_prob_sum = 0.0_f32;
     let mut current_prob_count = 0u32;
 
-    for t in 0..segment.n_tokens() {
-        let Some(token) = segment.get_token(t) else {
-            continue;
-        };
-        let Ok(raw_text) = token.to_str() else {
-            continue;
-        };
+    for token in tokens {
+        let raw_text = token.text.as_str();
         if raw_text.trim().starts_with('[') {
             continue;
         }
-        let data = token.token_data();
-        let start_secs = data.t0 as f64 * 0.01;
-        let end_secs = data.t1 as f64 * 0.01;
-
         if raw_text.starts_with(' ') || current.is_none() {
             if let Some(mut word) = current.take() {
                 if !word.text.is_empty() {
@@ -273,16 +288,16 @@ fn collect_words(segment: &whisper_rs::WhisperSegment) -> Vec<TranscribeWord> {
             }
             current = Some(TranscribeWord {
                 text: raw_text.trim_start().to_string(),
-                start_secs,
-                end_secs,
+                start_secs: token.start_secs,
+                end_secs: token.end_secs,
                 confidence: 0.0,
             });
-            current_prob_sum = data.p;
+            current_prob_sum = token.probability;
             current_prob_count = 1;
         } else if let Some(word) = current.as_mut() {
             word.text.push_str(raw_text);
-            word.end_secs = end_secs;
-            current_prob_sum += data.p;
+            word.end_secs = token.end_secs;
+            current_prob_sum += token.probability;
             current_prob_count += 1;
         }
     }
