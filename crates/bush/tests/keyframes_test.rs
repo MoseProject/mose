@@ -217,3 +217,30 @@ fn scenes_reject_animation_values_outside_property_ranges() {
         );
     }
 }
+
+#[test]
+fn slide_and_zoom_builders_make_transitions() {
+    let slide = Animation::slide(-200.0, 0.0, 1.0, Easing::EaseOut).unwrap();
+    let contributor = clip(Placement {
+        animation: slide,
+        ..Placement::default()
+    });
+    assert_eq!(contributor.placement_at(0.0).x, -200);
+    assert_eq!(contributor.placement_at(0.5).x, -50);
+    assert_eq!(contributor.placement_at(1.0).x, 0);
+    assert_eq!(contributor.placement_at(9.0).x, 0);
+
+    let zoom = Animation::zoom(0.5, 1.0, 2.0, Easing::Linear).unwrap();
+    let contributor = clip(Placement {
+        animation: zoom,
+        ..Placement::default()
+    });
+    let halfway = contributor.placement_at(1.0);
+    assert_eq!(halfway.transform.scale_x, 0.75);
+    assert_eq!(halfway.transform.scale_y, 0.75);
+
+    assert!(Animation::slide(0.0, 1.0, 0.0, Easing::Linear).is_none());
+    assert!(Animation::slide(0.0, 1.0, f64::NAN, Easing::Linear).is_none());
+    assert!(Animation::zoom(0.0, 1.0, 1.0, Easing::Linear).is_none());
+    assert!(Animation::zoom(1.0, -1.0, 1.0, Easing::Linear).is_none());
+}

@@ -67,7 +67,8 @@ the real default device.
       a steady pan followed with the expected EMA lag) and through the engine. Limits: translation
       only (no rotation or rolling-shutter correction), motion above 16 px per frame at 1080p is
       not tracked.
-- [ ] Dedicated slide/zoom transition effects
+- [x] Slide and zoom transitions as `Animation::slide` / `Animation::zoom` builders over the keyframe
+      system (easing included); fades are `Placement::fade`.
       (expressible today with keyframes, no dedicated effect), background-removal matte inputs.
       None of these exist in the scene model, so none can be silently ignored.
 - [ ] Text/shape rasterization is the caller job by design: Bush composites caller-supplied

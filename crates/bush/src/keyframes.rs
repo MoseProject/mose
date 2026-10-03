@@ -125,6 +125,34 @@ impl Animation {
             && self.rotation_deg.is_none()
     }
 
+    /// Slides the layer horizontally from `from_x` to `to_x` over `duration_secs`, then holds.
+    /// `None` for a non-positive or non-finite duration.
+    pub fn slide(from_x: f32, to_x: f32, duration_secs: f64, easing: Easing) -> Option<Self> {
+        let track = ramp(from_x, to_x, duration_secs, easing)?;
+        Some(Self {
+            x: Some(track),
+            ..Self::default()
+        })
+    }
+
+    /// Scales the layer uniformly from `from_scale` to `to_scale` over `duration_secs`, then
+    /// holds. `None` for a non-positive duration or non-positive scales.
+    pub fn zoom(
+        from_scale: f32,
+        to_scale: f32,
+        duration_secs: f64,
+        easing: Easing,
+    ) -> Option<Self> {
+        if from_scale <= 0.0 || to_scale <= 0.0 {
+            return None;
+        }
+        Some(Self {
+            scale_x: Some(ramp(from_scale, to_scale, duration_secs, easing)?),
+            scale_y: Some(ramp(from_scale, to_scale, duration_secs, easing)?),
+            ..Self::default()
+        })
+    }
+
     /// Whether every track's values are legal for the property it animates.
     pub(crate) fn is_valid(&self) -> bool {
         let opacity_ok = self
@@ -172,4 +200,23 @@ impl Fade {
         }
         factor as f32
     }
+}
+
+fn ramp(from: f32, to: f32, duration_secs: f64, easing: Easing) -> Option<KeyframeTrack> {
+    if !duration_secs.is_finite() || duration_secs <= 0.0 {
+        return None;
+    }
+    KeyframeTrack::new(vec![
+        Keyframe {
+            time_secs: 0.0,
+            value: from,
+            easing,
+        },
+        Keyframe {
+            time_secs: duration_secs,
+            value: to,
+            easing: Easing::Linear,
+        },
+    ])
+    .ok()
 }
