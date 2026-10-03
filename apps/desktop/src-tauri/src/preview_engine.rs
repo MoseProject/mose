@@ -151,3 +151,7 @@ pub(crate) fn preview_source_path(asset: &MediaAsset) -> Option<PathBuf> {
         .unwrap_or_else(|| asset.source_path.clone());
     path.exists().then_some(path)
 }
+
+#[cfg(test)]
+#[path = "preview_engine_test.rs"]
+mod tests;
