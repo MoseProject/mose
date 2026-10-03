@@ -189,6 +189,28 @@ and render p50 4.3-4.8 ms, hardware (D3D11VA) 406 ms and 6.1-6.7 ms, with identi
 rate and seek time. The app's hardware-decode preference defaults to on for GStreamer, so the
 Bush backend ignores it; `OCA_BUSH_DECODE=hardware` opts in.
 
+### Decode policy, sequential playback
+
+`cargo run --release -p bush --example playback_probe -- <video> 1280 720 240`, CPU renderer, 720p
+canvas, 240 frames, `PROBE_DECODE=hardware` for D3D11VA with a CPU download (2026-10-03, this machine):
+
+| Clip | Software p50 / sustained | Hardware p50 / sustained |
+|---|---|---|
+| 1080p H.264 | 7.4 ms / 130 fps | 15.0 ms / 52 fps |
+| 4K H.264 | 23.8 ms / 36 fps | 44.7 ms / 21 fps |
+| 4K HEVC | 21.2 ms / 46 fps | 42.2 ms / 23 fps |
+
+Hardware decode with a download is about twice as slow as software at every size, and its first
+frame takes 350-500 ms against 60-200 ms. A zero-copy path (decoder surface straight into a wgpu
+texture) would remove the download, but it is DX12-only, needs NV12 plane sampling in the shader,
+and cannot serve the CPU renderer, the CPU-side effects (blur, glitch, deflicker, stabilizer) or the
+JPEG readback the webview needs anyway, so the saving is small for the complexity. Decision: not
+built; the hardware-decode preference stays ignored (`OCA_BUSH_DECODE=hardware` still opts in).
+
+The real 4K cost is converting full-size frames to RGBA before the compositor shrinks them to the
+canvas (software 4K H.264 sustains only 36 fps with a 47 ms p95). Cheaper wins to try first:
+decode proxies (the app already prefers one when it exists) or scaling inside the conversion.
+
 What moved the numbers: encoding off the playback thread, requesting the next frame the moment
 one lands (the engine cancels a render when it is superseded, so polling every 8 ms starved it),
 pacing to the source rate (the engine had been re-rendering the same picture at 47 fps), and a
