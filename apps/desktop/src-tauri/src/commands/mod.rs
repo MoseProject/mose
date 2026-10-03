@@ -127,10 +127,7 @@ pub fn new_project<R: Runtime>(
 /// Shows an open dialog; `Ok(false)` when the user cancels.
 #[tauri::command]
 pub async fn open_project<R: Runtime>(app: AppHandle<R>) -> Result<bool, String> {
-    let Some(path) = rfd::FileDialog::new()
-        .add_filter("oca", &["ocproj"])
-        .pick_file()
-    else {
+    let Some(path) = crate::dialogs::pick_file("oca", &["ocproj"]) else {
         return Ok(false);
     };
     open_project_path(app, path.display().to_string()).await?;
@@ -167,11 +164,7 @@ pub async fn save_project<R: Runtime>(app: AppHandle<R>, save_as: bool) -> Resul
     };
     let path = match existing.filter(|_| !save_as) {
         Some(path) => path,
-        None => match rfd::FileDialog::new()
-            .add_filter("oca", &["ocproj"])
-            .set_file_name(format!("{name}.ocproj"))
-            .save_file()
-        {
+        None => match crate::dialogs::save_file("oca", &["ocproj"], &format!("{name}.ocproj")) {
             Some(path) => path,
             None => return Ok(false),
         },

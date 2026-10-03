@@ -50,9 +50,7 @@ pub enum WatchFolderEventPayload {
 /// `None` if the dialog is cancelled.
 #[tauri::command]
 pub fn pick_watch_folder() -> Option<String> {
-    rfd::FileDialog::new()
-        .pick_folder()
-        .map(|folder| folder.display().to_string())
+    crate::dialogs::pick_folder().map(|folder| folder.display().to_string())
 }
 
 /// Starts the watch loop against `path` on a background thread -- what the watch-folder

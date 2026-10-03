@@ -25,14 +25,14 @@ pub async fn pick_export_path<R: Runtime>(
         let session = state.session();
         session.project.active_sequence().name.clone()
     };
-    Ok(rfd::FileDialog::new()
-        .add_filter("MP4", &["mp4"])
-        .set_file_name(format!("{title}_export.mp4"))
-        .save_file()
-        .map(|path| ExportTarget {
-            exists: path.exists(),
-            path: path.display().to_string(),
-        }))
+    Ok(
+        crate::dialogs::save_file("MP4", &["mp4"], &format!("{title}_export.mp4")).map(|path| {
+            ExportTarget {
+                exists: path.exists(),
+                path: path.display().to_string(),
+            }
+        }),
+    )
 }
 
 /// Queues the active sequence for export to `path`. With `rename`, an existing file is kept and
@@ -132,11 +132,7 @@ pub async fn export_active_sequence_srt<R: Runtime>(app: AppHandle<R>) -> Result
             session.project.active_sequence().name.clone(),
         )
     };
-    let Some(path) = rfd::FileDialog::new()
-        .add_filter("SubRip", &["srt"])
-        .set_file_name(format!("{title}.srt"))
-        .save_file()
-    else {
+    let Some(path) = crate::dialogs::save_file("SubRip", &["srt"], &format!("{title}.srt")) else {
         return Ok(false);
     };
     std::fs::write(path, srt).map_err(|error| error.to_string())?;

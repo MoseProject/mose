@@ -23,6 +23,7 @@
 mod autosave;
 mod bush_adapter;
 mod commands;
+mod dialogs;
 mod error_reporting;
 mod export;
 mod frames;

@@ -24,10 +24,7 @@ const AUDIO_EXTENSIONS: &[&str] = &["wav", "mp3", "m4a", "aac", "flac", "ogg", "
 pub async fn import_media_dialog<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
     let mut extensions: Vec<&str> = avcore::VIDEO_EXTENSIONS.to_vec();
     extensions.extend_from_slice(AUDIO_EXTENSIONS);
-    let Some(paths) = rfd::FileDialog::new()
-        .add_filter("Media", &extensions)
-        .pick_files()
-    else {
+    let Some(paths) = crate::dialogs::pick_files("Media", &extensions) else {
         return Ok(());
     };
     import_paths(&app, paths);
