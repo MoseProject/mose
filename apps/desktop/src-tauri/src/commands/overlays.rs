@@ -15,7 +15,7 @@ use avcore::timeline::{
     Timeline, Track, TrackKind,
 };
 use serde::{Deserialize, Serialize};
-use tauri::AppHandle;
+use tauri::{AppHandle, Runtime};
 
 use super::timeline::TrimEdge;
 use super::undoable;
@@ -126,8 +126,8 @@ pub fn overlay_catalog() -> OverlayCatalog {
 /// Returns the new clip's id so the webview can select it, `None` when the target track is
 /// locked.
 #[tauri::command]
-pub fn add_text_clip(
-    app: AppHandle,
+pub fn add_text_clip<R: Runtime>(
+    app: AppHandle<R>,
     text: String,
     pos_x: Option<f32>,
     pos_y: Option<f32>,
@@ -142,7 +142,7 @@ pub fn add_text_clip(
 
 /// Adds the default rectangle at the playhead on the first Shape track (created when missing).
 #[tauri::command]
-pub fn add_shape_clip(app: AppHandle) -> Result<Option<u64>, String> {
+pub fn add_shape_clip<R: Runtime>(app: AppHandle<R>) -> Result<Option<u64>, String> {
     let mut created = None;
     undoable(&app, |project| {
         created = insert_shape(project.timeline_mut());
@@ -160,8 +160,8 @@ pub fn add_shape_clip(app: AppHandle) -> Result<Option<u64>, String> {
 /// re-expresses each point as an offset from that box's center divided by its width/height.
 /// `None` if fewer than 3 points were placed or the target track is locked.
 #[tauri::command]
-pub fn add_custom_shape_clip(
-    app: AppHandle,
+pub fn add_custom_shape_clip<R: Runtime>(
+    app: AppHandle<R>,
     points: Vec<(f32, f32)>,
 ) -> Result<Option<u64>, String> {
     let mut created = None;
@@ -173,8 +173,8 @@ pub fn add_custom_shape_clip(
 }
 
 #[tauri::command]
-pub fn move_overlay_clip(
-    app: AppHandle,
+pub fn move_overlay_clip<R: Runtime>(
+    app: AppHandle<R>,
     clip_id: u64,
     track_id: u64,
     start_secs: f64,
@@ -185,8 +185,8 @@ pub fn move_overlay_clip(
 }
 
 #[tauri::command]
-pub fn trim_overlay_clip(
-    app: AppHandle,
+pub fn trim_overlay_clip<R: Runtime>(
+    app: AppHandle<R>,
     clip_id: u64,
     edge: TrimEdge,
     position_secs: f64,
@@ -197,15 +197,19 @@ pub fn trim_overlay_clip(
 }
 
 #[tauri::command]
-pub fn update_text_clip(app: AppHandle, clip_id: u64, patch: TextClipPatch) -> Result<(), String> {
+pub fn update_text_clip<R: Runtime>(
+    app: AppHandle<R>,
+    clip_id: u64,
+    patch: TextClipPatch,
+) -> Result<(), String> {
     undoable(&app, |project| {
         patch_text(project.timeline_mut(), clip_id, patch)
     })
 }
 
 #[tauri::command]
-pub fn update_shape_clip(
-    app: AppHandle,
+pub fn update_shape_clip<R: Runtime>(
+    app: AppHandle<R>,
     clip_id: u64,
     patch: ShapeClipPatch,
 ) -> Result<(), String> {

@@ -1,12 +1,12 @@
 //! Marker commands. Each accepted edit is one active-sequence undo snapshot.
 
 use avcore::{MarkerKind, Project};
-use tauri::AppHandle;
+use tauri::{AppHandle, Runtime};
 
 use super::undoable;
 
 #[tauri::command]
-pub fn add_marker(app: AppHandle, kind: MarkerKind) -> Result<(), String> {
+pub fn add_marker<R: Runtime>(app: AppHandle<R>, kind: MarkerKind) -> Result<(), String> {
     undoable(&app, |project| {
         let playhead = project.timeline().playhead_secs;
         project.timeline_mut().add_marker(playhead, kind);
@@ -15,15 +15,15 @@ pub fn add_marker(app: AppHandle, kind: MarkerKind) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn remove_marker(app: AppHandle, marker_id: u64) -> Result<(), String> {
+pub fn remove_marker<R: Runtime>(app: AppHandle<R>, marker_id: u64) -> Result<(), String> {
     undoable(&app, |project| {
         project.timeline_mut().remove_marker(marker_id)
     })
 }
 
 #[tauri::command]
-pub fn update_marker(
-    app: AppHandle,
+pub fn update_marker<R: Runtime>(
+    app: AppHandle<R>,
     marker_id: u64,
     label: Option<String>,
     kind: Option<MarkerKind>,

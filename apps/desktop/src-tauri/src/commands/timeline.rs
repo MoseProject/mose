@@ -16,7 +16,7 @@ use avcore::timeline::{
 };
 use avcore::{Keyframe, MediaKind, Position, Project};
 use serde::Deserialize;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, Runtime};
 
 use crate::state::AppState;
 
@@ -78,8 +78,8 @@ const MASK_CORNER_RADIUS_RANGE: std::ops::RangeInclusive<f32> = 0.0..=1.0;
 const TRANSITION_DURATION_RANGE: std::ops::RangeInclusive<f32> = 0.1..=3.0;
 
 #[tauri::command]
-pub fn add_asset_to_timeline(
-    app: AppHandle,
+pub fn add_asset_to_timeline<R: Runtime>(
+    app: AppHandle<R>,
     asset_id: u64,
     track_id: Option<u64>,
     start_secs: Option<f64>,
@@ -90,8 +90,8 @@ pub fn add_asset_to_timeline(
 }
 
 #[tauri::command]
-pub fn move_clip(
-    app: AppHandle,
+pub fn move_clip<R: Runtime>(
+    app: AppHandle<R>,
     clip_id: u64,
     track_id: u64,
     start_secs: f64,
@@ -102,8 +102,8 @@ pub fn move_clip(
 }
 
 #[tauri::command]
-pub fn trim_clip(
-    app: AppHandle,
+pub fn trim_clip<R: Runtime>(
+    app: AppHandle<R>,
     clip_id: u64,
     edge: TrimEdge,
     position_secs: f64,
@@ -114,7 +114,11 @@ pub fn trim_clip(
 /// Rolls the shared boundary between `clip_id` (must be the *earlier* clip of the pair) and its
 /// next neighbor to `boundary_secs` -- the "Roll" tool.
 #[tauri::command]
-pub fn roll_edit_clip(app: AppHandle, clip_id: u64, boundary_secs: f64) -> Result<(), String> {
+pub fn roll_edit_clip<R: Runtime>(
+    app: AppHandle<R>,
+    clip_id: u64,
+    boundary_secs: f64,
+) -> Result<(), String> {
     undoable(&app, |project| roll_edit(project, clip_id, boundary_secs))
 }
 
@@ -122,8 +126,8 @@ pub fn roll_edit_clip(app: AppHandle, clip_id: u64, boundary_secs: f64) -> Resul
 /// its end -- resolves the earlier clip in the pair (`edited_clip_id`'s previous neighbor) and
 /// delegates. A no-op if `edited_clip_id` has no previous neighbor.
 #[tauri::command]
-pub fn roll_edit_from_start_edge(
-    app: AppHandle,
+pub fn roll_edit_from_start_edge<R: Runtime>(
+    app: AppHandle<R>,
     edited_clip_id: u64,
     boundary_secs: f64,
 ) -> Result<(), String> {
@@ -142,7 +146,11 @@ pub fn roll_edit_from_start_edge(
 /// Slips `clip_id`'s source in/out points by `delta_secs` without moving it on the timeline or
 /// changing its duration -- the "Slip" tool.
 #[tauri::command]
-pub fn slip_clip(app: AppHandle, clip_id: u64, delta_secs: f64) -> Result<(), String> {
+pub fn slip_clip<R: Runtime>(
+    app: AppHandle<R>,
+    clip_id: u64,
+    delta_secs: f64,
+) -> Result<(), String> {
     undoable(&app, |project| {
         let max_source_out_secs = clip_asset_max_source_out_secs(project, clip_id);
         let Some(index) = track_of(project.timeline(), clip_id) else {
@@ -158,7 +166,11 @@ pub fn slip_clip(app: AppHandle, clip_id: u64, delta_secs: f64) -> Result<(), St
 /// Slides `clip_id` to `start_secs`, keeping its own duration/source range unchanged -- its
 /// immediate neighbors' in/out points adjust to absorb the move. The "Slide" tool.
 #[tauri::command]
-pub fn slide_clip(app: AppHandle, clip_id: u64, start_secs: f64) -> Result<(), String> {
+pub fn slide_clip<R: Runtime>(
+    app: AppHandle<R>,
+    clip_id: u64,
+    start_secs: f64,
+) -> Result<(), String> {
     undoable(&app, |project| {
         let Some(index) = track_of(project.timeline(), clip_id) else {
             return false;
@@ -179,7 +191,11 @@ pub fn slide_clip(app: AppHandle, clip_id: u64, start_secs: f64) -> Result<(), S
 /// `composite_id` along with it -- what dragging a composite block's body does. Falls back to a
 /// plain same-track move if `clip_id` isn't a composite member.
 #[tauri::command]
-pub fn move_clip_group(app: AppHandle, clip_id: u64, start_secs: f64) -> Result<(), String> {
+pub fn move_clip_group<R: Runtime>(
+    app: AppHandle<R>,
+    clip_id: u64,
+    start_secs: f64,
+) -> Result<(), String> {
     undoable(&app, |project| {
         project
             .timeline_mut()
@@ -190,7 +206,10 @@ pub fn move_clip_group(app: AppHandle, clip_id: u64, start_secs: f64) -> Result<
 /// Merges every clip in `clip_ids` into one composite block. A no-op unless there are at least
 /// two and they're all on the same track.
 #[tauri::command]
-pub fn merge_clips_into_composite(app: AppHandle, clip_ids: Vec<u64>) -> Result<(), String> {
+pub fn merge_clips_into_composite<R: Runtime>(
+    app: AppHandle<R>,
+    clip_ids: Vec<u64>,
+) -> Result<(), String> {
     undoable(&app, |project| {
         project
             .timeline_mut()
@@ -204,8 +223,8 @@ pub fn merge_clips_into_composite(app: AppHandle, clip_ids: Vec<u64>) -> Result<
 /// (`uiStore.selectedClipIds`), passed through since the backend has no selection state of its
 /// own. Returns the new nested `Sequence`'s id, or `None` if `clip_id` isn't on a `Video` track.
 #[tauri::command]
-pub fn create_compound_clip(
-    app: AppHandle,
+pub fn create_compound_clip<R: Runtime>(
+    app: AppHandle<R>,
     clip_id: u64,
     selected_clip_ids: Vec<u64>,
 ) -> Result<Option<u64>, String> {
@@ -221,7 +240,10 @@ pub fn create_compound_clip(
 /// the active sequence's timeline -- see `avcore::Project::insert_sequence_as_compound_clip`'s
 /// own doc comment for the no-op cases.
 #[tauri::command]
-pub fn insert_sequence_as_compound_clip(app: AppHandle, sequence_id: u64) -> Result<bool, String> {
+pub fn insert_sequence_as_compound_clip<R: Runtime>(
+    app: AppHandle<R>,
+    sequence_id: u64,
+) -> Result<bool, String> {
     let mut inserted = false;
     undoable(&app, |project| {
         inserted = project.insert_sequence_as_compound_clip(sequence_id);
@@ -233,7 +255,7 @@ pub fn insert_sequence_as_compound_clip(app: AppHandle, sequence_id: u64) -> Res
 /// Captures `clip_id` (and its composite group, if any) into the clip clipboard -- `Ctrl+C`.
 /// Not undoable: it doesn't touch the project.
 #[tauri::command]
-pub fn copy_clip(app: AppHandle, clip_id: u64) -> Result<(), String> {
+pub fn copy_clip<R: Runtime>(app: AppHandle<R>, clip_id: u64) -> Result<(), String> {
     let state = app.state::<AppState>();
     let copied = state.session().project.timeline().copy_clip_group(clip_id);
     if copied.is_some() {
@@ -247,7 +269,7 @@ pub fn copy_clip(app: AppHandle, clip_id: u64) -> Result<(), String> {
 
 /// [`copy_clip`] followed by deleting every clip it captured -- `Ctrl+X`.
 #[tauri::command]
-pub fn cut_clip(app: AppHandle, clip_id: u64) -> Result<(), String> {
+pub fn cut_clip<R: Runtime>(app: AppHandle<R>, clip_id: u64) -> Result<(), String> {
     copy_clip(app.clone(), clip_id)?;
     let state = app.state::<AppState>();
     let ids: Vec<u64> = state
@@ -263,7 +285,7 @@ pub fn cut_clip(app: AppHandle, clip_id: u64) -> Result<(), String> {
 /// Pastes the clip clipboard as fresh clip(s) at the playhead -- `Ctrl+V`. A no-op if the
 /// clipboard is empty.
 #[tauri::command]
-pub fn paste_clip(app: AppHandle) -> Result<Vec<u64>, String> {
+pub fn paste_clip<R: Runtime>(app: AppHandle<R>) -> Result<Vec<u64>, String> {
     let state = app.state::<AppState>();
     let Some((copied, kind)) = state
         .clip_clipboard
@@ -289,7 +311,7 @@ pub fn paste_clip(app: AppHandle) -> Result<Vec<u64>, String> {
 /// Captures `clip_id`'s gain/freeze/speed/crop/mask/flip/color-adjustment settings into the
 /// formatting clipboard -- `Ctrl+Shift+C`.
 #[tauri::command]
-pub fn copy_clip_formatting(app: AppHandle, clip_id: u64) -> Result<(), String> {
+pub fn copy_clip_formatting<R: Runtime>(app: AppHandle<R>, clip_id: u64) -> Result<(), String> {
     let state = app.state::<AppState>();
     let formatting = state
         .session()
@@ -312,7 +334,7 @@ pub fn copy_clip_formatting(app: AppHandle, clip_id: u64) -> Result<(), String> 
 /// Applies the formatting clipboard onto `clip_id`, without touching its position/trim/
 /// composite membership -- `Ctrl+Shift+V`.
 #[tauri::command]
-pub fn paste_clip_formatting(app: AppHandle, clip_id: u64) -> Result<(), String> {
+pub fn paste_clip_formatting<R: Runtime>(app: AppHandle<R>, clip_id: u64) -> Result<(), String> {
     let state = app.state::<AppState>();
     let formatting = state
         .formatting_clipboard
@@ -337,12 +359,16 @@ pub fn paste_clip_formatting(app: AppHandle, clip_id: u64) -> Result<(), String>
 /// Splits `clip_ids` at the playhead, or every unlocked track's clip under the playhead when
 /// `clip_ids` is empty.
 #[tauri::command]
-pub fn split_at_playhead(app: AppHandle, clip_ids: Vec<u64>) -> Result<(), String> {
+pub fn split_at_playhead<R: Runtime>(app: AppHandle<R>, clip_ids: Vec<u64>) -> Result<(), String> {
     undoable(&app, |project| split(project.timeline_mut(), &clip_ids))
 }
 
 #[tauri::command]
-pub fn delete_clips(app: AppHandle, clip_ids: Vec<u64>, ripple: bool) -> Result<(), String> {
+pub fn delete_clips<R: Runtime>(
+    app: AppHandle<R>,
+    clip_ids: Vec<u64>,
+    ripple: bool,
+) -> Result<(), String> {
     undoable(&app, |project| {
         delete(project.timeline_mut(), &clip_ids, ripple)
     })
@@ -353,8 +379,8 @@ pub fn delete_clips(app: AppHandle, clip_ids: Vec<u64>, ripple: bool) -> Result<
 /// `ui::App::apply_speed_ramp_to_selected_clip` exactly (the Clip menu's "Rampa de velocidade"
 /// presets: Slow -> Fast 0.5x->2x, Fast -> Slow 2x->0.5x, both 4 steps).
 #[tauri::command]
-pub fn apply_speed_ramp_to_clip(
-    app: AppHandle,
+pub fn apply_speed_ramp_to_clip<R: Runtime>(
+    app: AppHandle<R>,
     clip_id: u64,
     start_speed: f32,
     end_speed: f32,
@@ -443,7 +469,11 @@ fn apply_speed_ramp(
 }
 
 #[tauri::command]
-pub fn update_clip(app: AppHandle, clip_id: u64, patch: ClipPatch) -> Result<(), String> {
+pub fn update_clip<R: Runtime>(
+    app: AppHandle<R>,
+    clip_id: u64,
+    patch: ClipPatch,
+) -> Result<(), String> {
     undoable(&app, |project| {
         let timeline = project.timeline_mut();
         if track_of(timeline, clip_id).is_none_or(|index| timeline.tracks[index].locked) {
@@ -456,7 +486,7 @@ pub fn update_clip(app: AppHandle, clip_id: u64, patch: ClipPatch) -> Result<(),
 }
 
 #[tauri::command]
-pub fn add_track(app: AppHandle, kind: TrackKind) -> Result<(), String> {
+pub fn add_track<R: Runtime>(app: AppHandle<R>, kind: TrackKind) -> Result<(), String> {
     undoable(&app, |project| {
         project.timeline_mut().create_track(kind);
         true
@@ -464,8 +494,8 @@ pub fn add_track(app: AppHandle, kind: TrackKind) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn set_track_flags(
-    app: AppHandle,
+pub fn set_track_flags<R: Runtime>(
+    app: AppHandle<R>,
     track_id: u64,
     visible: Option<bool>,
     locked: Option<bool>,
