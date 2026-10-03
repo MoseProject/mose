@@ -9,13 +9,13 @@ orbs:
 parameters:
   ffmpeg-release-tag:
     type: string
-    default: "autobuild-2026-08-17-13-05"
+    default: "autobuild-2026-10-01-13-06"
   ffmpeg-build-id:
     type: string
-    default: "n8.1.2-44-g7c533d0f86"
+    default: "n8.1.3-14-g330caae0c1"
   ffmpeg-linux64-sha256:
     type: string
-    default: "194dc8d525ac8cea5a5ff2e6fd44754747e69af5a766e7a6727cce363bd65de6"
+    default: "53c73537be6421f793bb5c0ffbeef2d13498100691adab91a9e5fa9245b31cb9"
   # Prebuilt binaries (not `cargo install`, which compiles from source and was taking ~3min
   # per run on its own). SHA256s computed locally from the pinned release assets below —
   # neither project publishes its own checksum file — same verify-before-use posture as the
