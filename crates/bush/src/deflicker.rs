@@ -83,7 +83,7 @@ fn mean_luma(frame: &VideoFrame) -> f32 {
     let mut sum = 0.0_f64;
     for row in 0..frame.height() as usize {
         let start = row * frame.stride_bytes();
-        for pixel in frame.pixels()[start..start + width * 4].chunks_exact(4) {
+        for pixel in frame.pixels()[start..start + width * 4].as_chunks::<4>().0 {
             sum += f64::from(pixel[0]) * 0.2126
                 + f64::from(pixel[1]) * 0.7152
                 + f64::from(pixel[2]) * 0.0722;
@@ -97,7 +97,7 @@ fn scaled(frame: &VideoFrame, gain: f32) -> VideoFrame {
     let width = frame.width() as usize;
     for row in 0..frame.height() as usize {
         let start = row * frame.stride_bytes();
-        for pixel in pixels[start..start + width * 4].chunks_exact_mut(4) {
+        for pixel in pixels[start..start + width * 4].as_chunks_mut::<4>().0 {
             for channel in &mut pixel[..3] {
                 *channel = (f32::from(*channel) * gain).round().min(255.0) as u8;
             }
