@@ -258,3 +258,7 @@ fn map_asset_source_to_timeline(
     }
     None
 }
+
+#[cfg(test)]
+#[path = "transcribe_test.rs"]
+mod tests;
