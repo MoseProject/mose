@@ -18,8 +18,8 @@
 //! Holds the project/timeline/media data model (see [`project`], [`timeline`], [`media`],
 //! [`export`]), the general keyframe-animation system ([`keyframe`]), the `ffprobe`/`ffmpeg`
 //! wrappers that populate that model from real files ([`probe`], [`loudness`]), lightweight
-//! editing proxies ([`proxy`]), the normalized-export renderer ([`render`]), a GStreamer-based
-//! playback pipeline ([`preview`]), a local music/SFX catalog ([`sound_library`]), and
+//! editing proxies ([`proxy`]), the normalized-export renderer ([`render`]), a frame sampler
+//! for the analysis features ([`frame_sampler`]), a local music/SFX catalog ([`sound_library`]), and
 //! `.ocproj`/`.ocqueue` save/load — gzip-compressed MessagePack ([`persistence`]).
 //!
 //! Nothing in this crate depends on `egui` or any GUI toolkit — `ui` is the only
@@ -43,6 +43,7 @@ pub mod highlight_detection;
 pub mod interchange;
 pub mod keyframe;
 pub mod loudness;
+pub mod lut;
 pub mod mask_propagation;
 pub mod media;
 pub mod motion_template;
@@ -51,10 +52,6 @@ pub mod multicam_sync;
 pub mod nested_sequence;
 pub mod overlay_render;
 pub mod persistence;
-pub mod preview;
-pub mod preview_effects;
-pub mod preview_live_updates;
-pub mod preview_worker;
 pub mod privacy_blur;
 pub mod probe;
 pub mod project;
@@ -126,6 +123,7 @@ pub use highlight_detection::{
 };
 pub use keyframe::{Keyframe, Position};
 pub use loudness::{measure_loudness, LoudnessError};
+pub use lut::{Lut3D, LutParseError};
 pub use media::{LoudnessMetrics, MediaAsset, MediaKind};
 pub use motion_tracking::{
     rgba_to_gray, track_region, track_region_with_scores, tracked_positions_to_keyframes,
@@ -138,14 +136,6 @@ pub use multicam_sync::{
 pub use persistence::{
     from_ocproj_bytes, from_ocqueue_bytes, from_octr_bytes, load_project_from_file,
     save_project_to_file, to_ocproj_bytes, to_ocqueue_bytes, to_octr_bytes, PersistError,
-};
-pub use preview::{AudioLevel, Preview, PreviewError};
-pub use preview_effects::{
-    apply_deflicker_to_rgba, apply_glitch_to_rgba, apply_lut_to_rgba, apply_vignette_to_rgba,
-    DeflickerHistory, Lut3D, LutParseError,
-};
-pub use preview_live_updates::{
-    live_preview_updates, live_shape_update, live_text_update, LivePreviewUpdate, PreviewCpuEffects,
 };
 pub use probe::{probe_media, ProbeError, ProbedMedia};
 pub use project::{PanelLayout, Project, Recency, Sequence, SequenceExportSettings};

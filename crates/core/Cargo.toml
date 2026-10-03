@@ -13,9 +13,6 @@ license.workspace = true
 name = "avcore"
 
 [dependencies]
-gstreamer = "0.25.3"
-gstreamer-app = "0.25.2"
-gstreamer-video = "0.25.3"
 avbridge = { path = "../avbridge" }
 # Bush's decode-only `DecodeSource` (default features: no GPU, no audio device) is the frame
 # sampler's decoder; it replaced the GStreamer pipeline `FrameSampler` used to open.
