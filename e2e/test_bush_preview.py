@@ -73,6 +73,22 @@ def test_bush_plays_a_clip_and_reacts_to_seeks(oca_driver):
     assert changed, "seeking did not change the preview frame"
     screenshot(oca_driver, "bush_02_after_seek.png")
 
+    # Text and shape overlays go through Bush as raster contributors: adding them must change
+    # the picture at a time they cover.
+    invoke(oca_driver, "preview_seek", {"positionSecs": 0.2})
+    time.sleep(0.4)
+    plain = latest_frame(oca_driver)
+    invoke(oca_driver, "add_text_clip", {"text": "Bush overlay", "posX": 0.2, "posY": 0.4})
+    invoke(oca_driver, "add_shape_clip")
+    with_overlays = poll_until(
+        lambda: (lambda f: f and f[1] != plain[1])(latest_frame(oca_driver)),
+        timeout_secs=5.0,
+        interval_secs=0.05,
+    )
+    time.sleep(0.4)
+    screenshot(oca_driver, "bush_04_overlays.png")
+    assert with_overlays, "adding a text clip and a shape did not change the preview frame"
+
     # Playback must keep producing distinct frames.
     invoke(oca_driver, "preview_seek", {"positionSecs": 0.0})
     time.sleep(0.3)

@@ -3,13 +3,13 @@ use std::sync::Arc;
 
 use avcore::keyframe::{Keyframe, Position};
 use avcore::timeline::{
-    AudioRole, BlendMode as CoreBlend, ClipInstance, ColorFilter, MaskShape as CoreMask, Timeline,
-    Track, TrackKind, TransitionType,
+    AudioRole, BlendMode as CoreBlend, ClipInstance, ColorFilter, MaskShape as CoreMask, ShapeClip,
+    TextClip, Timeline, Track, TrackKind, TransitionType,
 };
 use avcore::{MediaAsset, MediaKind};
 use bush::{BlendMode, Contributor, ContributorContent, Lut3D, MaskShape, SceneVersions};
 
-use super::{map_timeline, Approximation, Mapped, SourceResolver};
+use super::{map_timeline, Approximation, Mapped, OverlayCache, SourceResolver};
 
 const CANVAS: (u32, u32) = (1280, 720);
 
@@ -79,6 +79,7 @@ fn map_with(tracks: Vec<Track>, missing: Vec<u64>) -> Mapped {
         &media,
         CANVAS,
         &mut Resolver { missing },
+        &mut OverlayCache::default(),
         SceneVersions::default(),
     )
     .unwrap()
@@ -362,6 +363,91 @@ fn filter_intensities_stay_inside_bush_limits_for_extreme_values() {
     let (_, contributor) = one_clip(extreme);
     assert!(contributor.placement.blur_sigma <= bush::MAX_BLUR_SIGMA);
     assert!(contributor.placement.gain <= 4.0);
+}
+
+fn overlay_track(kind: TrackKind, text: Vec<TextClip>, shapes: Vec<ShapeClip>) -> Track {
+    let mut overlay = track(9, kind, Vec::new());
+    overlay.text_clips = text;
+    overlay.shape_clips = shapes;
+    overlay
+}
+
+#[test]
+fn text_and_shape_clips_become_timed_full_canvas_raster_overlays() {
+    let mut shape = ShapeClip::new(5, 1.0);
+    shape.duration_secs = 2.0;
+    let mut caption = TextClip::new(6, 0.5, "hello".into());
+    caption.duration_secs = 1.5;
+    let mapped = map_with(
+        vec![
+            track(1, TrackKind::Video, vec![clip(0.0, 0.0, 4.0)]),
+            overlay_track(TrackKind::Shape, Vec::new(), vec![shape]),
+            overlay_track(TrackKind::Text, vec![caption], Vec::new()),
+        ],
+        Vec::new(),
+    );
+    let overlays: Vec<&Contributor> = mapped
+        .scene
+        .contributors()
+        .iter()
+        .filter(|c| matches!(c.content, ContributorContent::RasterOverlay(_)))
+        .collect();
+    assert_eq!(overlays.len(), 2);
+    assert_eq!(mapped.overlays.len(), 2);
+    for (id, frame) in &mapped.overlays {
+        assert!(overlays.iter().any(|c| c.id == *id));
+        assert_eq!((frame.width(), frame.height()), CANVAS);
+    }
+    let by_start = |start: f64| {
+        overlays
+            .iter()
+            .find(|c| c.placement.timeline_start_secs == start)
+            .unwrap()
+    };
+    assert_eq!(by_start(1.0).placement.duration_secs, Some(2.0));
+    assert_eq!(by_start(0.5).placement.duration_secs, Some(1.5));
+    // Overlays paint above every video layer, text above shapes.
+    let video_layer = mapped
+        .scene
+        .contributors()
+        .iter()
+        .find(|c| matches!(c.content, ContributorContent::Media(_)))
+        .unwrap()
+        .layer;
+    assert!(by_start(1.0).layer > video_layer);
+    assert!(by_start(0.5).layer > by_start(1.0).layer);
+}
+
+#[test]
+fn unchanged_overlays_are_not_rasterized_again() {
+    let tracks = || {
+        vec![
+            track(1, TrackKind::Video, vec![clip(0.0, 0.0, 4.0)]),
+            overlay_track(TrackKind::Shape, Vec::new(), vec![ShapeClip::new(5, 0.0)]),
+        ]
+    };
+    let media = vec![asset(1, MediaKind::Video)];
+    let mut cache = OverlayCache::default();
+    let map = |cache: &mut OverlayCache| {
+        map_timeline(
+            &timeline(tracks()),
+            &media,
+            CANVAS,
+            &mut Resolver {
+                missing: Vec::new(),
+            },
+            cache,
+            SceneVersions::default(),
+        )
+        .unwrap()
+    };
+    let first = map(&mut cache);
+    let second = map(&mut cache);
+    // The cache hands back the very same frame, not an equal copy.
+    assert!(std::sync::Arc::ptr_eq(
+        &first.overlays[0].1,
+        &second.overlays[0].1
+    ));
 }
 
 #[test]
