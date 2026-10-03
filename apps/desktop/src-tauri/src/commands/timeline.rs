@@ -156,9 +156,9 @@ pub fn slip_clip<R: Runtime>(
         let Some(index) = track_of(project.timeline(), clip_id) else {
             return false;
         };
-        let Some(clip) = project.timeline_mut().tracks[index].clip_mut(clip_id) else {
-            return false;
-        };
+        let clip = project.timeline_mut().tracks[index]
+            .clip_mut(clip_id)
+            .expect("track_of found the clip on this track");
         clip.slip(delta_secs, max_source_out_secs)
     })
 }
@@ -418,9 +418,9 @@ fn apply_speed_ramp(
     if timeline.tracks[index].locked {
         return false;
     }
-    let Some(clip) = timeline.clip_mut(clip_id) else {
-        return false;
-    };
+    let clip = timeline
+        .clip_mut(clip_id)
+        .expect("track_of found the clip on a track");
     let (start_secs, original_duration_secs) = (clip.start_secs, clip.duration_secs());
     if original_duration_secs <= 0.0 {
         return false;
@@ -622,9 +622,9 @@ fn trim(project: &mut Project, clip_id: u64, edge: TrimEdge, position_secs: f64)
         .find(|c| c.id == clip_id)
         .and_then(|clip| project.media_library.iter().find(|a| a.id == clip.asset_id))
         .map(|asset| asset.duration_secs);
-    let Some(clip) = project.timeline_mut().tracks[index].clip_mut(clip_id) else {
-        return false;
-    };
+    let clip = project.timeline_mut().tracks[index]
+        .clip_mut(clip_id)
+        .expect("track_of found the clip on this track");
     match edge {
         TrimEdge::Start => clip.trim_start(position_secs, MIN_CLIP_SECS),
         TrimEdge::End => clip.trim_end(position_secs, MIN_CLIP_SECS, max_source_out),
@@ -667,14 +667,12 @@ pub(crate) fn delete(timeline: &mut Timeline, clip_ids: &[u64], ripple: bool) ->
             continue;
         }
         if ripple {
-            let Some((start, end)) = track
+            let (start, end) = track
                 .clips
                 .iter()
                 .find(|c| c.id == clip_id)
                 .map(|c| (c.start_secs, c.start_secs + c.duration_secs()))
-            else {
-                continue;
-            };
+                .expect("track_of found the clip on this track");
             changed |= track.ripple_delete_range(start, end, &mut next_id);
         } else {
             let before = track.clips.len();

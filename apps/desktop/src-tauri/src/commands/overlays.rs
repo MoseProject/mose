@@ -376,9 +376,8 @@ pub(crate) fn move_overlay(
     }
     let start_secs = start_secs.max(0.0);
     if source == target {
-        let Some((start, _)) = overlay_span(&mut timeline.tracks[source], clip_id) else {
-            return false;
-        };
+        let (start, _) = overlay_span(&mut timeline.tracks[source], clip_id)
+            .expect("overlay_track found the clip on this track");
         let changed = *start != start_secs;
         *start = start_secs;
         return changed;
@@ -388,16 +387,15 @@ pub(crate) fn move_overlay(
         let mut clip = source_track.text_clips.remove(position);
         clip.start_secs = start_secs;
         timeline.tracks[target].text_clips.push(clip);
-    } else if let Some(position) = source_track
-        .shape_clips
-        .iter()
-        .position(|c| c.id == clip_id)
-    {
+    } else {
+        let position = source_track
+            .shape_clips
+            .iter()
+            .position(|c| c.id == clip_id)
+            .expect("overlay_track found a text or shape clip on the source track");
         let mut clip = source_track.shape_clips.remove(position);
         clip.start_secs = start_secs;
         timeline.tracks[target].shape_clips.push(clip);
-    } else {
-        return false;
     }
     true
 }
@@ -416,9 +414,8 @@ pub(crate) fn trim_overlay(
     if timeline.tracks[index].locked {
         return false;
     }
-    let Some((start, duration)) = overlay_span(&mut timeline.tracks[index], clip_id) else {
-        return false;
-    };
+    let (start, duration) = overlay_span(&mut timeline.tracks[index], clip_id)
+        .expect("overlay_track found the clip on this track");
     let end = *start + *duration;
     let (new_start, new_end) = match edge {
         TrimEdge::Start => (position_secs.max(0.0).min(end - MIN_OVERLAY_SECS), end),
