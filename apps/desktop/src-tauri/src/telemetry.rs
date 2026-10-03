@@ -68,3 +68,7 @@ pub(crate) fn spawn_sampler(
         }
     });
 }
+
+#[cfg(test)]
+#[path = "telemetry_test.rs"]
+mod tests;
