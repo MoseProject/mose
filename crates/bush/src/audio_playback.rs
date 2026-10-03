@@ -5,7 +5,7 @@
 //! [`AudioSink`] topped up to a bounded buffer. A device sink implements [`AudioSink`]; tests use
 //! [`FakeSink`], whose underflow and overrun accounting is deterministic.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
@@ -265,6 +265,19 @@ pub struct AudioPlayer {
     position_frame: u64,
     block_frames: usize,
     target_buffer_frames: usize,
+    /// Peak level of each rendered block, oldest first, for a level meter that follows the
+    /// device rather than the render position.
+    peaks: VecDeque<BlockPeak>,
+}
+
+/// Blocks whose peaks are remembered; far more than the sink buffers ahead of the device.
+const PEAK_HISTORY_BLOCKS: usize = 512;
+
+#[derive(Clone, Copy, Debug)]
+struct BlockPeak {
+    start_frame: u64,
+    left: f32,
+    right: f32,
 }
 
 impl AudioPlayer {
@@ -280,7 +293,19 @@ impl AudioPlayer {
             position_frame: 0,
             block_frames,
             target_buffer_frames,
+            peaks: VecDeque::new(),
         }
+    }
+
+    /// Linear peak `(left, right)` of the rendered block that covers timeline `frame`, `(0, 0)`
+    /// when nothing was rendered there (mono audio reports the same value on both sides).
+    pub fn peaks_at(&self, frame: u64) -> (f32, f32) {
+        self.peaks
+            .iter()
+            .rev()
+            .find(|block| block.start_frame <= frame)
+            .filter(|block| frame < block.start_frame + self.block_frames as u64)
+            .map_or((0.0, 0.0), |block| (block.left, block.right))
     }
 
     /// Timeline frame of the next block to be rendered.
@@ -291,6 +316,7 @@ impl AudioPlayer {
     /// Jumps to `frame`, discarding queued audio so the next sound is from the new position.
     pub fn seek(&mut self, frame: u64, sink: &mut dyn AudioSink) {
         self.position_frame = frame;
+        self.peaks.clear();
         sink.clear();
     }
 
@@ -300,6 +326,7 @@ impl AudioPlayer {
         let queued = sink.buffered_frames() as u64;
         self.position_frame = self.position_frame.saturating_sub(queued);
         self.scene = scene;
+        self.peaks.clear();
         sink.clear();
     }
 
@@ -321,10 +348,28 @@ impl AudioPlayer {
             else {
                 break;
             };
+            self.record_peaks(&block);
             sink.write(&block)?;
             self.position_frame += self.block_frames as u64;
             written += self.block_frames;
         }
         Ok(written)
+    }
+
+    fn record_peaks(&mut self, block: &AudioBlock) {
+        let channels = usize::from(block.channels()).max(1);
+        let (mut left, mut right) = (0.0_f32, 0.0_f32);
+        for frame in block.samples().chunks_exact(channels) {
+            left = left.max(frame[0].abs());
+            right = right.max(frame[channels.min(2) - 1].abs());
+        }
+        if self.peaks.len() == PEAK_HISTORY_BLOCKS {
+            self.peaks.pop_front();
+        }
+        self.peaks.push_back(BlockPeak {
+            start_frame: self.position_frame,
+            left,
+            right,
+        });
     }
 }
