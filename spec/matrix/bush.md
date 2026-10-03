@@ -152,9 +152,10 @@ selects it and `OCA_BUSH_RENDERER=gpu` lets it composite on the GPU. Design and 
       size. Playback stats are logged every 2 s as `bush_stats` in `oca.log`.
 - [x] Verified end to end on the real app (`e2e/test_bush_preview.py`, screenshots in
       `e2e/out/`): clip loads, seeks, plays with audio, text and shape overlays composite.
-- [ ] Audio level meter (peaks are 0), `compare` tool, persisted preference, GStreamer baseline
-      run (the GStreamer preview produced no frame in this machine's e2e environment, so no
-      side-by-side numbers yet).
+- [x] Audio level meter: `AudioPlayer::peaks_at` keeps each rendered block's peak and the
+      backend reads the block the device is playing (e2e checks the bars move while playing).
+- [ ] `compare` tool, persisted preference, GStreamer baseline run (the GStreamer preview
+      produced no frame in this machine's e2e environment, so no side-by-side numbers yet).
 
 Measured in the app, 1080p H.264 with AAC audio, 20 s clip, Bush CPU renderer (GPU renderer
 identical on this single-layer scene):
@@ -167,6 +168,11 @@ identical on this single-layer scene):
 | Render p50 (decode + composite) | 17.7 ms | 5.4 ms |
 | Audio/video drift | up to 50 ms | 0-20 ms, 1 underflow at start |
 | Add to timeline to first frame | | 500 ms |
+
+Decode policy in the app (same clip, CPU renderer): software decode gives first frame in 93 ms
+and render p50 4.3-4.8 ms, hardware (D3D11VA) 406 ms and 6.1-6.7 ms, with identical delivery
+rate and seek time. The app's hardware-decode preference defaults to on for GStreamer, so the
+Bush backend ignores it; `OCA_BUSH_DECODE=hardware` opts in.
 
 What moved the numbers: encoding off the playback thread, requesting the next frame the moment
 one lands (the engine cancels a render when it is superseded, so polling every 8 ms starved it),
