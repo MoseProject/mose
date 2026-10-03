@@ -13,8 +13,10 @@
 //! so a parity run can say which look differences are expected rather than bugs.
 //!
 //! Intensity-to-parameter curves (blur, sharpen, pixelize, shake, chroma softness, deflicker,
-//! stabilization) are provisional constants until side-by-side frames against the exported
-//! video fix them (RFC gap 9).
+//! vignette) are derived from the FFmpeg filter parameters the exporter uses (see the constants
+//! below). Glitch (noise in the export, channel split and bands here) and stabilization (deshake
+//! search radius in the export, smoothing weight here) are different algorithms with matching
+//! intent, so they only share the 0..1 strength.
 
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -41,14 +43,26 @@ use bush::{
 /// Source span a frozen clip advances over its whole window; the decoder keeps serving the same
 /// frame while the (near zero) speed walks through it.
 const FROZEN_SOURCE_SPAN_SECS: f64 = 1e-3;
-const BLUR_SIGMA_AT_FULL: f32 = 20.0;
-const SHARPEN_AMOUNT_AT_FULL: f32 = 2.0;
-const SHAKE_PIXELS_AT_FULL: f32 = 40.0;
+/// Export blur is `boxblur=<10 * intensity>` (radius truncated to whole pixels).
+const BLUR_RADIUS_AT_FULL: f32 = 10.0;
+/// Export sharpen is `unsharp=5:5:<3 * sharpen>`; the 5x5 box matches `bush::SHARPEN_SIGMA`.
+const SHARPEN_AMOUNT_AT_FULL: f32 = 3.0;
+/// Export shake crops a margin of `0.08 * intensity` of each dimension and swings the crop
+/// window by it, so the offset at full intensity is 8% of the canvas (averaged over both axes).
+const SHAKE_FRACTION_AT_FULL: f32 = 0.08;
 const MAX_SHAKE_PIXELS: f32 = 200.0;
-const CHROMA_SOFTNESS: f32 = 0.05;
-const DEFLICKER_WEIGHT: f32 = 0.15;
+/// Export chroma key is `colorkey=<tolerance>:0.1`.
+const CHROMA_SOFTNESS: f32 = 0.1;
+/// Export deflicker is a 5-frame mean, the equivalent exponential weight is `2 / (5 + 1)`.
+const DEFLICKER_WEIGHT: f32 = 1.0 / 3.0;
+/// Export pixelize block is `2 + 48 * intensity` pixels.
 const PIXELIZE_MIN_BLOCK: f32 = 2.0;
-const PIXELIZE_BLOCK_RANGE: f32 = 46.0;
+const PIXELIZE_BLOCK_RANGE: f32 = 48.0;
+/// Export vignette is `vignette=PI/4*<intensity>`; measured against FFmpeg on a flat grey frame,
+/// the corner stays at 13% of the centre at intensity 1 and 68% at 0.5, which `0.87 * i^1.45`
+/// of Bush's `1 - v * r^2` falloff reproduces at the corner.
+const VIGNETTE_AT_FULL: f32 = 0.87;
+const VIGNETTE_EXPONENT: f32 = 1.45;
 /// Ken-Burns zoom is sampled densely because crop width is `1 / zoom`, not linear in zoom.
 const ZOOM_SAMPLES_PER_SEC: f64 = 15.0;
 const MAX_ZOOM_SAMPLES: usize = 300;
@@ -376,7 +390,11 @@ fn map_clip(
         brightness: clip.brightness.clamp(-1.0, 1.0),
         contrast: clip.contrast.clamp(0.0, 4.0),
         saturation: clip.saturation.clamp(0.0, 4.0),
-        vignette: clip.vignette_intensity.clamp(0.0, 1.0),
+        vignette: VIGNETTE_AT_FULL
+            * clip
+                .vignette_intensity
+                .clamp(0.0, 1.0)
+                .powf(VIGNETTE_EXPONENT),
         ..LayerEffects::default()
     };
     animation.brightness = track_of(&clip.brightness_keyframes, duration, |v: f32| {
@@ -429,12 +447,14 @@ fn map_clip(
     }
 
     // Filters that live on the placement itself.
-    placement.blur_sigma =
-        (clip.blur_intensity.clamp(0.0, 1.0) * BLUR_SIGMA_AT_FULL).min(MAX_BLUR_SIGMA);
+    placement.blur_sigma = box_blur_sigma(clip.blur_intensity).min(MAX_BLUR_SIGMA);
     placement.sharpen = clip.sharpen.clamp(0.0, 1.0) * SHARPEN_AMOUNT_AT_FULL;
     placement.glitch = clip.glitch_intensity.clamp(0.0, 1.0);
-    placement.shake =
-        (clip.shake_intensity.clamp(0.0, 1.0) * SHAKE_PIXELS_AT_FULL).min(MAX_SHAKE_PIXELS);
+    placement.shake = (clip.shake_intensity.clamp(0.0, 1.0)
+        * SHAKE_FRACTION_AT_FULL
+        * (canvas_width + canvas_height)
+        / 2.0)
+        .min(MAX_SHAKE_PIXELS);
     if clip.deflicker_enabled {
         placement.deflicker = Some(DEFLICKER_WEIGHT);
     }
@@ -573,6 +593,13 @@ fn apply_transition(
         }
         TransitionType::None | TransitionType::HardCut => {}
     }
+}
+
+/// Gaussian sigma with the variance of the exporter's box blur: a box of radius `R` (whole
+/// pixels, `R = trunc(10 * intensity)`) spans `2R + 1` pixels, variance `R * (R + 1) / 3`.
+fn box_blur_sigma(intensity: f32) -> f32 {
+    let radius = (intensity.clamp(0.0, 1.0) * BLUR_RADIUS_AT_FULL).trunc();
+    (radius * (radius + 1.0) / 3.0).sqrt()
 }
 
 fn pixelize_block(intensity: f32) -> u32 {
