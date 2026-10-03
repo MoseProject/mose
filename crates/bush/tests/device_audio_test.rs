@@ -193,3 +193,95 @@ fn video_follows_the_device_audio_clock_without_drifting_ahead() {
     assert!(worst_drift < 0.001, "video led audio by {worst_drift} s");
     assert!(audio_position > wall * 0.7 && audio_position < wall * 1.05);
 }
+
+/// Long-run A/V sync soak against the real device. Ignored by default (it runs for
+/// `BUSH_SOAK_SECS`, default 60): `cargo test -p bush --features cpal --test device_audio_test
+/// long_run -- --ignored --nocapture`.
+#[test]
+#[ignore = "long-running device soak"]
+fn long_run_audio_clock_tracks_wall_time_and_video_never_leads() {
+    use bush::{DecodePolicy, DecodeSource, Engine, EngineConfig, Player, RendererChoice};
+
+    let Some(mut sink) = open(48_000 * 2) else {
+        return;
+    };
+    let seconds: u64 = std::env::var("BUSH_SOAK_SECS")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(60);
+    let video =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../avbridge/tests/fixtures/video.mp4");
+    let info = DecodeSource::open(&video).unwrap().info();
+    let scene = SceneSnapshot::new(
+        SceneVersions::default(),
+        vec![Contributor {
+            id: ContributorId(1),
+            layer: 0,
+            visible: true,
+            audible: false,
+            content: ContributorContent::Media(MediaSource {
+                path: video,
+                range: SourceRange::new(0.0, 0.9).unwrap(),
+                version: Version(1),
+            }),
+            placement: Placement::default(),
+        }],
+    )
+    .unwrap();
+    let engine = Engine::new(EngineConfig {
+        canvas_width: info.width,
+        canvas_height: info.height,
+        max_open_sources: 1,
+        frame_cache_bytes: 64 * 1024 * 1024,
+        decode_policy: DecodePolicy::Software,
+        renderer: RendererChoice::Cpu,
+    })
+    .unwrap();
+    let mut player = Player::new(engine, scene.clone(), seconds as f64 + 10.0).unwrap();
+    let renderer = AudioRenderer::new(sink.sample_rate(), sink.channels(), 4096, 1).unwrap();
+    let mut audio = AudioPlayer::new(renderer, scene, 1024, sink.sample_rate() as usize / 4);
+
+    let cancel = AtomicBool::new(false);
+    let started = Instant::now();
+    player.play(started.elapsed()).unwrap();
+    let mut worst_lead: f64 = 0.0;
+    let mut next_report = 10.0;
+    while started.elapsed() < Duration::from_secs(seconds) {
+        audio.pump(&mut sink, &cancel).unwrap();
+        let audio_position = sink.consumed_frames() as f64 / f64::from(sink.sample_rate());
+        let _ = player
+            .tick_synced(started.elapsed(), audio_position)
+            .unwrap();
+        worst_lead = worst_lead.max(player.drift_against(audio_position));
+        let wall = started.elapsed().as_secs_f64();
+        if wall >= next_report {
+            eprintln!(
+                "t={wall:6.1}s audio {audio_position:8.3}s offset {:+6.1} ms underflows {}",
+                (audio_position - wall) * 1000.0,
+                sink.underflow_callbacks()
+            );
+            next_report += 10.0;
+        }
+        std::thread::sleep(Duration::from_millis(8));
+    }
+    let wall = started.elapsed().as_secs_f64();
+    let audio_position = sink.consumed_frames() as f64 / f64::from(sink.sample_rate());
+    let ppm = (audio_position - wall) / wall * 1.0e6;
+    eprintln!(
+        "soak {wall:.1}s: audio clock {audio_position:.3}s, relative rate error {ppm:+.0} ppm, \
+         worst video lead {:.2} ms, underflow callbacks {}",
+        worst_lead * 1000.0,
+        sink.underflow_callbacks()
+    );
+    assert!(
+        worst_lead < 0.001,
+        "video led the audio clock by {worst_lead} s"
+    );
+    // The audio clock may sit slightly behind wall time (startup latency) but must not run
+    // away: within 0.5 s absolute over the soak.
+    assert!(
+        (audio_position - wall).abs() < 0.5,
+        "audio clock offset {} s",
+        audio_position - wall
+    );
+}

@@ -103,8 +103,11 @@ the real default device.
       unit speed transparent, chunking-invariant), `audio_playback_test`.
 - [x] Audio-master playback clock (`Player::tick_synced`), verified against the real device:
       video follows the audio clock with zero drift in a 1.5 s run.
-- [ ] Long-run A/V drift measurement and device-loss recovery on real hardware (the fake sink
-      covers the contract; only the short clock test ran on a device).
+- [x] Long-run A/V soak on the real device (`long_run_*`, ignored by default, `BUSH_SOAK_SECS`):
+      60 s run, audio clock within 7 ms of wall time at every 10 s report (relative rate error
+      -42 ppm), video never led the audio clock, one underflow callback (startup).
+- [ ] Device-loss recovery on real hardware (the fake sink covers the contract; a real unplug
+      was not exercised).
 
 ## Hardware decode
 
