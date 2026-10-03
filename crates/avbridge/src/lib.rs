@@ -386,13 +386,7 @@ pub fn probe(path: &Path) -> Result<ProbeInfo, ProbeError> {
     // code). `bridge.c` closes the `AVFormatContext` on every exit path.
     let status = unsafe { avbridge_probe(c_path.as_ptr(), &mut raw) };
 
-    match status {
-        0 => {}
-        1 => return Err(ProbeError::Open),
-        2 => return Err(ProbeError::StreamInfo),
-        3 => return Err(ProbeError::NoMediaStream),
-        other => return Err(ProbeError::Unknown(other)),
-    }
+    probe_status(status)?;
 
     // SAFETY: on success the C side NUL-terminates codec_name within the 32-byte buffer.
     let codec_name = unsafe { CStr::from_ptr(raw.codec_name.as_ptr()) }
@@ -557,11 +551,7 @@ impl DecodeSession {
             return Err(DecodeError::InvalidSeekTimestamp);
         }
         // SAFETY: self.raw is owned by this live session and C does not retain the call inputs.
-        match unsafe { avbridge_decode_seek(self.raw, timestamp_secs) } {
-            0 => Ok(()),
-            7 => Err(DecodeError::Seek),
-            other => Err(DecodeError::Unknown(other)),
-        }
+        decode_seek_status(unsafe { avbridge_decode_seek(self.raw, timestamp_secs) })
     }
 
     /// Decodes the next packed RGBA frame, or `None` at end of stream.
@@ -587,9 +577,7 @@ impl DecodeSession {
             0 => copy_out_frame(&mut raw_frame).map(Some),
             1 => Ok(None),
             2 => Ok(None),
-            8 => Err(DecodeError::Pipeline),
-            9 => Err(DecodeError::FrameSize),
-            other => Err(DecodeError::Unknown(other)),
+            other => Err(decode_frame_failure(other)),
         }
     }
 
@@ -606,14 +594,7 @@ impl DecodeSession {
         let status = unsafe {
             avbridge_decode_advance(self.raw, cancel.as_ptr() as *const u8, &mut timestamp_secs)
         };
-        match status {
-            0 if timestamp_secs.is_finite() => Ok(Advance::Frame(timestamp_secs)),
-            0 => Err(DecodeError::Pipeline),
-            1 => Ok(Advance::EndOfStream),
-            2 => Ok(Advance::Cancelled),
-            8 => Err(DecodeError::Pipeline),
-            other => Err(DecodeError::Unknown(other)),
-        }
+        decode_advance_status(status, timestamp_secs)
     }
 
     /// Whether [`Self::advance`] has kept a frame before the newest one.
@@ -645,9 +626,7 @@ impl DecodeSession {
         match status {
             0 => copy_out_frame(&mut raw_frame).map(Some),
             1 => Ok(None),
-            8 => Err(DecodeError::Pipeline),
-            9 => Err(DecodeError::FrameSize),
-            other => Err(DecodeError::Unknown(other)),
+            other => Err(decode_frame_failure(other)),
         }
     }
 }
@@ -765,17 +744,7 @@ pub fn remux_copy(in_path: &Path, out_path: &Path) -> Result<(), RemuxError> {
     // exit path.
     let status = unsafe { avbridge_remux_copy(c_in.as_ptr(), c_out.as_ptr()) };
 
-    match status {
-        0 => Ok(()),
-        1 => Err(RemuxError::OpenInput),
-        2 => Err(RemuxError::StreamInfo),
-        3 => Err(RemuxError::AllocOutput),
-        4 => Err(RemuxError::NewStream),
-        5 => Err(RemuxError::OpenOutput),
-        6 => Err(RemuxError::WriteHeader),
-        7 => Err(RemuxError::WriteFrame),
-        other => Err(RemuxError::Unknown(other)),
-    }
+    remux_copy_status(status)
 }
 
 /// What [`encode_export`] failed on.
@@ -873,23 +842,7 @@ pub fn encode_export<F: FnMut(f64)>(
         )
     };
 
-    match status {
-        0 => Ok(EncodeOutcome::Completed),
-        1 => Err(EncodeError::OpenInput),
-        2 => Err(EncodeError::StreamInfo),
-        3 => Err(EncodeError::AllocOutput),
-        4 => Err(EncodeError::NewStream),
-        5 => Err(EncodeError::OpenOutput),
-        6 => Err(EncodeError::WriteHeader),
-        7 => Err(EncodeError::WriteFrame),
-        8 => Err(EncodeError::NoAudioStream),
-        9 => Err(EncodeError::Decoder),
-        10 => Err(EncodeError::FilterGraph),
-        11 => Err(EncodeError::Encoder),
-        12 => Err(EncodeError::Pipeline),
-        13 => Ok(EncodeOutcome::Cancelled),
-        other => Err(EncodeError::Unknown(other)),
-    }
+    encode_export_status(status)
 }
 
 /// One trimmed clip in an [`encode_timeline_export`] timeline: a source file, the range of it
@@ -1216,26 +1169,7 @@ pub fn encode_timeline_export<F: FnMut(f64)>(
         )
     };
 
-    match status {
-        0 => Ok(EncodeOutcome::Completed),
-        1 => Err(EncodeError::OpenInput),
-        2 => Err(EncodeError::StreamInfo),
-        3 => Err(EncodeError::AllocOutput),
-        4 => Err(EncodeError::NewStream),
-        5 => Err(EncodeError::OpenOutput),
-        6 => Err(EncodeError::WriteHeader),
-        7 => Err(EncodeError::WriteFrame),
-        8 => Err(EncodeError::NoAudioStream),
-        9 => Err(EncodeError::Decoder),
-        10 => Err(EncodeError::FilterGraph),
-        11 => Err(EncodeError::Encoder),
-        12 => Err(EncodeError::Pipeline),
-        13 => Ok(EncodeOutcome::Cancelled),
-        14 => Err(EncodeError::NoVideoStream),
-        15 => Err(EncodeError::AudioFormatMismatch),
-        16 => Err(EncodeError::EmptyTimeline),
-        other => Err(EncodeError::Unknown(other)),
-    }
+    encode_timeline_export_status(status)
 }
 
 /// Multi-track variant of [`encode_timeline_export`]: composites N tracks of segments via an
@@ -1381,26 +1315,7 @@ pub fn encode_timeline_export_multi<F: FnMut(f64)>(
         )
     };
 
-    match status {
-        0 => Ok(EncodeOutcome::Completed),
-        1 => Err(EncodeError::OpenInput),
-        2 => Err(EncodeError::StreamInfo),
-        3 => Err(EncodeError::AllocOutput),
-        4 => Err(EncodeError::NewStream),
-        5 => Err(EncodeError::OpenOutput),
-        6 => Err(EncodeError::WriteHeader),
-        7 => Err(EncodeError::WriteFrame),
-        8 => Err(EncodeError::NoAudioStream),
-        9 => Err(EncodeError::Decoder),
-        10 => Err(EncodeError::FilterGraph),
-        11 => Err(EncodeError::Encoder),
-        12 => Err(EncodeError::Pipeline),
-        13 => Ok(EncodeOutcome::Cancelled),
-        14 => Err(EncodeError::NoVideoStream),
-        15 => Err(EncodeError::AudioFormatMismatch),
-        16 => Err(EncodeError::EmptyTimeline),
-        other => Err(EncodeError::Unknown(other)),
-    }
+    encode_timeline_export_multi_status(status)
 }
 
 /// Result of rendering a standalone multi-track audio mix.
@@ -1495,19 +1410,7 @@ pub fn mix_audio_timeline(
             cancel.as_ptr() as *const u8,
         )
     };
-    match status {
-        0 => Ok(AudioMixOutcome::Completed),
-        1 => Err(AudioMixError::OpenInput),
-        2 => Err(AudioMixError::AllocOutput),
-        3 => Err(AudioMixError::NoAudio),
-        4 => Err(AudioMixError::FilterGraph),
-        5 => Err(AudioMixError::Encoder),
-        6 => Err(AudioMixError::OpenOutput),
-        7 => Err(AudioMixError::WriteHeader),
-        8 => Err(AudioMixError::Pipeline),
-        9 => Ok(AudioMixOutcome::Cancelled),
-        other => Err(AudioMixError::Unknown(other)),
-    }
+    mix_audio_timeline_status(status)
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -1548,17 +1451,7 @@ pub fn mux_video_audio(
     // SAFETY: all three CStrings stay alive for the duration of the synchronous call.
     let status =
         unsafe { avbridge_mux_video_audio(c_video.as_ptr(), c_audio.as_ptr(), c_out.as_ptr()) };
-    match status {
-        0 => Ok(()),
-        1 => Err(MediaMuxError::OpenInput),
-        2 => Err(MediaMuxError::AllocOutput),
-        3 => Err(MediaMuxError::MissingStream),
-        4 => Err(MediaMuxError::NewStream),
-        5 => Err(MediaMuxError::OpenOutput),
-        6 => Err(MediaMuxError::WriteHeader),
-        7 => Err(MediaMuxError::WriteFrame),
-        other => Err(MediaMuxError::Unknown(other)),
-    }
+    mux_video_audio_status(status)
 }
 
 /// What [`measure_loudness_json`] failed on.
@@ -1633,17 +1526,7 @@ pub fn measure_loudness_json(path: &Path) -> Result<String, LoudnessError> {
         avbridge_measure_loudness(c_path.as_ptr(), buf.as_mut_ptr() as *mut c_char, buf.len())
     };
 
-    match status {
-        0 => {}
-        1 => return Err(LoudnessError::OpenInput),
-        2 => return Err(LoudnessError::StreamInfo),
-        3 => return Err(LoudnessError::NoAudioStream),
-        4 => return Err(LoudnessError::Decoder),
-        5 => return Err(LoudnessError::FilterGraph),
-        6 => return Err(LoudnessError::Pipeline),
-        7 => return Err(LoudnessError::NoReport),
-        other => return Err(LoudnessError::Unknown(other)),
-    }
+    loudness_status(status)?;
 
     // SAFETY: on success the C side NUL-terminates the report within `buf`.
     let json = unsafe { CStr::from_ptr(buf.as_ptr() as *const c_char) };
@@ -1716,23 +1599,7 @@ pub fn generate_proxy(
     let status =
         unsafe { avbridge_generate_proxy(c_in.as_ptr(), c_out.as_ptr(), target_height as c_int) };
 
-    match status {
-        0 => Ok(()),
-        1 => Err(ProxyError::OpenInput),
-        2 => Err(ProxyError::StreamInfo),
-        3 => Err(ProxyError::NoVideoStream),
-        4 => Err(ProxyError::AllocOutput),
-        5 => Err(ProxyError::NewStream),
-        6 => Err(ProxyError::OpenOutput),
-        7 => Err(ProxyError::WriteHeader),
-        8 => Err(ProxyError::WriteFrame),
-        9 => Err(ProxyError::Decoder),
-        10 => Err(ProxyError::Encoder),
-        11 => Err(ProxyError::Scaler),
-        12 => Err(ProxyError::FilterGraph),
-        13 => Err(ProxyError::Pipeline),
-        other => Err(ProxyError::Unknown(other)),
-    }
+    generate_proxy_status(status)
 }
 
 /// What [`encode_matte_video`] failed on.
@@ -1812,18 +1679,7 @@ pub fn encode_matte_video(
         )
     };
 
-    match status {
-        0 => Ok(()),
-        1 => Err(MatteError::AllocOutput),
-        2 => Err(MatteError::Encoder),
-        3 => Err(MatteError::NewStream),
-        4 => Err(MatteError::OpenOutput),
-        5 => Err(MatteError::WriteHeader),
-        6 => Err(MatteError::Pipeline),
-        7 => Err(MatteError::Empty),
-        8 => Err(MatteError::OddDimensions),
-        other => Err(MatteError::Unknown(other)),
-    }
+    encode_matte_video_status(status)
 }
 
 /// What [`generate_waveform`] failed on.
@@ -1880,16 +1736,7 @@ pub fn generate_waveform(
         )
     };
 
-    match status {
-        0 => {}
-        1 => return Err(WaveformError::OpenInput),
-        2 => return Err(WaveformError::StreamInfo),
-        3 => return Err(WaveformError::NoAudioStream),
-        4 => return Err(WaveformError::Decoder),
-        5 => return Err(WaveformError::FilterGraph),
-        6 => return Err(WaveformError::Pipeline),
-        other => return Err(WaveformError::Unknown(other)),
-    }
+    waveform_status(status)?;
 
     Ok(mins.into_iter().zip(maxs).collect())
 }
@@ -2065,14 +1912,7 @@ pub fn apply_text_overlays(
         )
     };
 
-    match status {
-        0 => Ok(()),
-        1 => Err(TextOverlayError::OpenInput),
-        2 => Err(TextOverlayError::AllocOutput),
-        3 => Err(TextOverlayError::FilterGraph),
-        4 => Err(TextOverlayError::Pipeline),
-        other => Err(TextOverlayError::Unknown(other)),
-    }
+    apply_text_overlays_status(status)
 }
 
 /// One geometric shape to composite over an exported video via `avbridge_apply_shape_overlays`.
@@ -2134,14 +1974,7 @@ pub fn apply_shape_overlays(
         )
     };
 
-    match status {
-        0 => Ok(()),
-        1 => Err(TextOverlayError::OpenInput),
-        2 => Err(TextOverlayError::AllocOutput),
-        3 => Err(TextOverlayError::FilterGraph),
-        4 => Err(TextOverlayError::Pipeline),
-        other => Err(TextOverlayError::Unknown(other)),
-    }
+    apply_shape_overlays_status(status)
 }
 
 /// What [`apply_privacy_blur`] failed on.
@@ -2218,14 +2051,7 @@ pub fn apply_privacy_blur(
         )
     };
 
-    match status {
-        0 => Ok(()),
-        1 => Err(PrivacyBlurError::OpenInput),
-        2 => Err(PrivacyBlurError::AllocOutput),
-        3 => Err(PrivacyBlurError::FilterGraph),
-        4 => Err(PrivacyBlurError::Pipeline),
-        other => Err(PrivacyBlurError::Unknown(other)),
-    }
+    apply_privacy_blur_status(status)
 }
 
 /// What [`extract_pcm_16k_mono`] failed on.
@@ -2275,21 +2101,212 @@ pub fn extract_pcm_16k_mono(path: &Path) -> Result<Vec<f32>, PcmError> {
         avbridge_extract_pcm_16k_mono(c_path.as_ptr(), &mut out_samples, &mut out_sample_count)
     };
 
+    extract_pcm_16k_mono_status(status)?;
+    // SAFETY: on OK, out_samples points to a malloc'd buffer of out_sample_count valid
+    // f32s (or is null with out_sample_count == 0 for a zero-length result) — copied
+    // into a Vec, then the C-owned buffer is freed via the paired allocator.
+    let samples = if out_sample_count > 0 {
+        unsafe { std::slice::from_raw_parts(out_samples, out_sample_count as usize).to_vec() }
+    } else {
+        Vec::new()
+    };
+    unsafe { avbridge_free_pcm_buffer(out_samples) };
+    Ok(samples)
+}
+
+/// Maps the status code the C side returned from `remux_copy` to its result.
+fn remux_copy_status(status: c_int) -> Result<(), RemuxError> {
     match status {
-        0 => {
-            // SAFETY: on OK, out_samples points to a malloc'd buffer of out_sample_count valid
-            // f32s (or is null with out_sample_count == 0 for a zero-length result) — copied
-            // into a Vec, then the C-owned buffer is freed via the paired allocator.
-            let samples = if out_sample_count > 0 {
-                unsafe {
-                    std::slice::from_raw_parts(out_samples, out_sample_count as usize).to_vec()
-                }
-            } else {
-                Vec::new()
-            };
-            unsafe { avbridge_free_pcm_buffer(out_samples) };
-            Ok(samples)
-        }
+        0 => Ok(()),
+        1 => Err(RemuxError::OpenInput),
+        2 => Err(RemuxError::StreamInfo),
+        3 => Err(RemuxError::AllocOutput),
+        4 => Err(RemuxError::NewStream),
+        5 => Err(RemuxError::OpenOutput),
+        6 => Err(RemuxError::WriteHeader),
+        7 => Err(RemuxError::WriteFrame),
+        other => Err(RemuxError::Unknown(other)),
+    }
+}
+
+/// Maps the status code the C side returned from `encode_export` to its result.
+fn encode_export_status(status: c_int) -> Result<EncodeOutcome, EncodeError> {
+    match status {
+        0 => Ok(EncodeOutcome::Completed),
+        1 => Err(EncodeError::OpenInput),
+        2 => Err(EncodeError::StreamInfo),
+        3 => Err(EncodeError::AllocOutput),
+        4 => Err(EncodeError::NewStream),
+        5 => Err(EncodeError::OpenOutput),
+        6 => Err(EncodeError::WriteHeader),
+        7 => Err(EncodeError::WriteFrame),
+        8 => Err(EncodeError::NoAudioStream),
+        9 => Err(EncodeError::Decoder),
+        10 => Err(EncodeError::FilterGraph),
+        11 => Err(EncodeError::Encoder),
+        12 => Err(EncodeError::Pipeline),
+        13 => Ok(EncodeOutcome::Cancelled),
+        other => Err(EncodeError::Unknown(other)),
+    }
+}
+
+/// Maps the status code the C side returned from `encode_timeline_export` to its result.
+fn encode_timeline_export_status(status: c_int) -> Result<EncodeOutcome, EncodeError> {
+    match status {
+        0 => Ok(EncodeOutcome::Completed),
+        1 => Err(EncodeError::OpenInput),
+        2 => Err(EncodeError::StreamInfo),
+        3 => Err(EncodeError::AllocOutput),
+        4 => Err(EncodeError::NewStream),
+        5 => Err(EncodeError::OpenOutput),
+        6 => Err(EncodeError::WriteHeader),
+        7 => Err(EncodeError::WriteFrame),
+        8 => Err(EncodeError::NoAudioStream),
+        9 => Err(EncodeError::Decoder),
+        10 => Err(EncodeError::FilterGraph),
+        11 => Err(EncodeError::Encoder),
+        12 => Err(EncodeError::Pipeline),
+        13 => Ok(EncodeOutcome::Cancelled),
+        14 => Err(EncodeError::NoVideoStream),
+        15 => Err(EncodeError::AudioFormatMismatch),
+        16 => Err(EncodeError::EmptyTimeline),
+        other => Err(EncodeError::Unknown(other)),
+    }
+}
+
+/// Maps the status code the C side returned from `encode_timeline_export_multi` to its result.
+fn encode_timeline_export_multi_status(status: c_int) -> Result<EncodeOutcome, EncodeError> {
+    match status {
+        0 => Ok(EncodeOutcome::Completed),
+        1 => Err(EncodeError::OpenInput),
+        2 => Err(EncodeError::StreamInfo),
+        3 => Err(EncodeError::AllocOutput),
+        4 => Err(EncodeError::NewStream),
+        5 => Err(EncodeError::OpenOutput),
+        6 => Err(EncodeError::WriteHeader),
+        7 => Err(EncodeError::WriteFrame),
+        8 => Err(EncodeError::NoAudioStream),
+        9 => Err(EncodeError::Decoder),
+        10 => Err(EncodeError::FilterGraph),
+        11 => Err(EncodeError::Encoder),
+        12 => Err(EncodeError::Pipeline),
+        13 => Ok(EncodeOutcome::Cancelled),
+        14 => Err(EncodeError::NoVideoStream),
+        15 => Err(EncodeError::AudioFormatMismatch),
+        16 => Err(EncodeError::EmptyTimeline),
+        other => Err(EncodeError::Unknown(other)),
+    }
+}
+
+/// Maps the status code the C side returned from `mix_audio_timeline` to its result.
+fn mix_audio_timeline_status(status: c_int) -> Result<AudioMixOutcome, AudioMixError> {
+    match status {
+        0 => Ok(AudioMixOutcome::Completed),
+        1 => Err(AudioMixError::OpenInput),
+        2 => Err(AudioMixError::AllocOutput),
+        3 => Err(AudioMixError::NoAudio),
+        4 => Err(AudioMixError::FilterGraph),
+        5 => Err(AudioMixError::Encoder),
+        6 => Err(AudioMixError::OpenOutput),
+        7 => Err(AudioMixError::WriteHeader),
+        8 => Err(AudioMixError::Pipeline),
+        9 => Ok(AudioMixOutcome::Cancelled),
+        other => Err(AudioMixError::Unknown(other)),
+    }
+}
+
+/// Maps the status code the C side returned from `mux_video_audio` to its result.
+fn mux_video_audio_status(status: c_int) -> Result<(), MediaMuxError> {
+    match status {
+        0 => Ok(()),
+        1 => Err(MediaMuxError::OpenInput),
+        2 => Err(MediaMuxError::AllocOutput),
+        3 => Err(MediaMuxError::MissingStream),
+        4 => Err(MediaMuxError::NewStream),
+        5 => Err(MediaMuxError::OpenOutput),
+        6 => Err(MediaMuxError::WriteHeader),
+        7 => Err(MediaMuxError::WriteFrame),
+        other => Err(MediaMuxError::Unknown(other)),
+    }
+}
+
+/// Maps the status code the C side returned from `generate_proxy` to its result.
+fn generate_proxy_status(status: c_int) -> Result<(), ProxyError> {
+    match status {
+        0 => Ok(()),
+        1 => Err(ProxyError::OpenInput),
+        2 => Err(ProxyError::StreamInfo),
+        3 => Err(ProxyError::NoVideoStream),
+        4 => Err(ProxyError::AllocOutput),
+        5 => Err(ProxyError::NewStream),
+        6 => Err(ProxyError::OpenOutput),
+        7 => Err(ProxyError::WriteHeader),
+        8 => Err(ProxyError::WriteFrame),
+        9 => Err(ProxyError::Decoder),
+        10 => Err(ProxyError::Encoder),
+        11 => Err(ProxyError::Scaler),
+        12 => Err(ProxyError::FilterGraph),
+        13 => Err(ProxyError::Pipeline),
+        other => Err(ProxyError::Unknown(other)),
+    }
+}
+
+/// Maps the status code the C side returned from `encode_matte_video` to its result.
+fn encode_matte_video_status(status: c_int) -> Result<(), MatteError> {
+    match status {
+        0 => Ok(()),
+        1 => Err(MatteError::AllocOutput),
+        2 => Err(MatteError::Encoder),
+        3 => Err(MatteError::NewStream),
+        4 => Err(MatteError::OpenOutput),
+        5 => Err(MatteError::WriteHeader),
+        6 => Err(MatteError::Pipeline),
+        7 => Err(MatteError::Empty),
+        8 => Err(MatteError::OddDimensions),
+        other => Err(MatteError::Unknown(other)),
+    }
+}
+
+/// Maps the status code the C side returned from `apply_text_overlays` to its result.
+fn apply_text_overlays_status(status: c_int) -> Result<(), TextOverlayError> {
+    match status {
+        0 => Ok(()),
+        1 => Err(TextOverlayError::OpenInput),
+        2 => Err(TextOverlayError::AllocOutput),
+        3 => Err(TextOverlayError::FilterGraph),
+        4 => Err(TextOverlayError::Pipeline),
+        other => Err(TextOverlayError::Unknown(other)),
+    }
+}
+
+/// Maps the status code the C side returned from `apply_shape_overlays` to its result.
+fn apply_shape_overlays_status(status: c_int) -> Result<(), TextOverlayError> {
+    match status {
+        0 => Ok(()),
+        1 => Err(TextOverlayError::OpenInput),
+        2 => Err(TextOverlayError::AllocOutput),
+        3 => Err(TextOverlayError::FilterGraph),
+        4 => Err(TextOverlayError::Pipeline),
+        other => Err(TextOverlayError::Unknown(other)),
+    }
+}
+
+/// Maps the status code the C side returned from `apply_privacy_blur` to its result.
+fn apply_privacy_blur_status(status: c_int) -> Result<(), PrivacyBlurError> {
+    match status {
+        0 => Ok(()),
+        1 => Err(PrivacyBlurError::OpenInput),
+        2 => Err(PrivacyBlurError::AllocOutput),
+        3 => Err(PrivacyBlurError::FilterGraph),
+        4 => Err(PrivacyBlurError::Pipeline),
+        other => Err(PrivacyBlurError::Unknown(other)),
+    }
+}
+
+/// Maps the status code the C side returned from `extract_pcm_16k_mono`; success carries no data.
+fn extract_pcm_16k_mono_status(status: c_int) -> Result<(), PcmError> {
+    match status {
+        0 => Ok(()),
         1 => Err(PcmError::OpenInput),
         2 => Err(PcmError::StreamInfo),
         3 => Err(PcmError::NoAudioStream),
@@ -2297,5 +2314,75 @@ pub fn extract_pcm_16k_mono(path: &Path) -> Result<Vec<f32>, PcmError> {
         5 => Err(PcmError::FilterGraph),
         6 => Err(PcmError::Pipeline),
         other => Err(PcmError::Unknown(other)),
+    }
+}
+
+/// Maps the status code the C side returned from the probe call; success carries no data.
+fn probe_status(status: c_int) -> Result<(), ProbeError> {
+    match status {
+        0 => Ok(()),
+        1 => Err(ProbeError::Open),
+        2 => Err(ProbeError::StreamInfo),
+        3 => Err(ProbeError::NoMediaStream),
+        other => Err(ProbeError::Unknown(other)),
+    }
+}
+
+/// Maps the status code the C side returned from the loudness call; success carries no data.
+fn loudness_status(status: c_int) -> Result<(), LoudnessError> {
+    match status {
+        0 => Ok(()),
+        1 => Err(LoudnessError::OpenInput),
+        2 => Err(LoudnessError::StreamInfo),
+        3 => Err(LoudnessError::NoAudioStream),
+        4 => Err(LoudnessError::Decoder),
+        5 => Err(LoudnessError::FilterGraph),
+        6 => Err(LoudnessError::Pipeline),
+        7 => Err(LoudnessError::NoReport),
+        other => Err(LoudnessError::Unknown(other)),
+    }
+}
+
+/// Maps the status code the C side returned from the waveform call; success carries no data.
+fn waveform_status(status: c_int) -> Result<(), WaveformError> {
+    match status {
+        0 => Ok(()),
+        1 => Err(WaveformError::OpenInput),
+        2 => Err(WaveformError::StreamInfo),
+        3 => Err(WaveformError::NoAudioStream),
+        4 => Err(WaveformError::Decoder),
+        5 => Err(WaveformError::FilterGraph),
+        6 => Err(WaveformError::Pipeline),
+        other => Err(WaveformError::Unknown(other)),
+    }
+}
+
+/// Maps the status of a native seek.
+fn decode_seek_status(status: c_int) -> Result<(), DecodeError> {
+    match status {
+        0 => Ok(()),
+        7 => Err(DecodeError::Seek),
+        other => Err(DecodeError::Unknown(other)),
+    }
+}
+
+/// The error for a frame-conversion status other than success, end of stream or cancellation.
+fn decode_frame_failure(status: c_int) -> DecodeError {
+    match status {
+        8 => DecodeError::Pipeline,
+        9 => DecodeError::FrameSize,
+        other => DecodeError::Unknown(other),
+    }
+}
+
+/// Maps the status of a native advance, with the timestamp the C side wrote on success.
+fn decode_advance_status(status: c_int, timestamp_secs: f64) -> Result<Advance, DecodeError> {
+    match status {
+        0 if timestamp_secs.is_finite() => Ok(Advance::Frame(timestamp_secs)),
+        0 => Err(DecodeError::Pipeline),
+        1 => Ok(Advance::EndOfStream),
+        2 => Ok(Advance::Cancelled),
+        8 => Err(DecodeError::Pipeline),
+        other => Err(DecodeError::Unknown(other)),
     }
 }
