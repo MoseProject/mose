@@ -2,10 +2,10 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 
 use bush::{
-    Animation, AudioPlayer, AudioPlayerError, AudioRenderError, AudioRenderer, AudioSink,
-    AudioSource, Contributor, ContributorContent, ContributorId, Easing, FakeSink, Keyframe,
-    KeyframeTrack, MediaSource, Placement, SceneSnapshot, SceneVersions, SinkError, SourceRange,
-    Version,
+    Animation, AudioBlock, AudioPlayer, AudioPlayerError, AudioRenderError, AudioRenderer,
+    AudioSink, AudioSource, Contributor, ContributorContent, ContributorId, Easing, FakeSink,
+    Keyframe, KeyframeTrack, MediaSource, Placement, SceneSnapshot, SceneVersions, SinkError,
+    SourceRange, Version,
 };
 
 const RATE: u32 = 44_100;
@@ -517,4 +517,122 @@ fn animated_gain_follows_the_decibel_track_and_overrides_the_static_gain() {
         .unwrap()
         .unwrap();
     assert!(peak(late.samples()) > peak(late_plain.samples()) * 0.5);
+}
+
+#[test]
+fn invalid_renderer_and_block_sizes_are_rejected() {
+    assert!(matches!(
+        AudioRenderer::new(RATE, 1, 0, 2),
+        Err(AudioRenderError::InvalidConfig)
+    ));
+    assert!(matches!(
+        AudioRenderer::new(RATE, 1, 8192, 0),
+        Err(AudioRenderError::InvalidConfig)
+    ));
+    let cancel = AtomicBool::new(false);
+    let scene = scene(vec![clip(1, true, Placement::default())]);
+    let mut renderer = renderer();
+    for frames in [0, 8193] {
+        assert!(matches!(
+            renderer.render(&scene, 0, frames, &cancel),
+            Err(AudioRenderError::InvalidConfig)
+        ));
+    }
+}
+
+#[test]
+fn a_cancelled_render_returns_nothing_and_a_cancelled_pump_writes_nothing() {
+    let cancelled = AtomicBool::new(true);
+    let scene = scene(vec![clip(1, true, Placement::default())]);
+    assert!(renderer()
+        .render(&scene, 0, 1024, &cancelled)
+        .unwrap()
+        .is_none());
+
+    let mut player = AudioPlayer::new(renderer(), scene, 1024, 4096);
+    let mut sink = FakeSink::new(8192, 1);
+    assert_eq!(player.pump(&mut sink, &cancelled).unwrap(), 0);
+    assert_eq!(sink.buffered_frames(), 0);
+}
+
+#[test]
+fn a_missing_source_is_a_source_error_and_overlays_are_skipped() {
+    let cancel = AtomicBool::new(false);
+    let mut missing = clip(1, true, Placement::default());
+    missing.content = ContributorContent::Media(MediaSource {
+        path: PathBuf::from("does-not-exist.m4a"),
+        range: SourceRange::new(0.0, 0.9).unwrap(),
+        version: Version(1),
+    });
+    let broken = scene(vec![missing]);
+    assert!(matches!(
+        renderer().render(&broken, 0, 1024, &cancel),
+        Err(AudioRenderError::Source(_))
+    ));
+
+    let mut overlay = clip(2, true, Placement::default());
+    overlay.content = ContributorContent::RasterOverlay(bush::RasterOverlay {
+        width: 1,
+        height: 1,
+        version: Version(1),
+    });
+    let silent = renderer()
+        .render(&scene(vec![overlay]), 0, 1024, &cancel)
+        .unwrap()
+        .unwrap();
+    assert!(silent.samples().iter().all(|sample| *sample == 0.0));
+}
+
+#[test]
+fn more_sources_than_slots_evict_the_least_recently_used() {
+    let cancel = AtomicBool::new(false);
+    // Three versions of the same file need three decoders; the renderer keeps two.
+    let contributors = (1..=3)
+        .map(|id| {
+            let mut contributor = clip(id, true, Placement::default());
+            if let ContributorContent::Media(source) = &mut contributor.content {
+                source.version = Version(id);
+            }
+            contributor
+        })
+        .collect();
+    let scene = scene(contributors);
+    let mut renderer = renderer();
+    let first = renderer.render(&scene, 0, 1024, &cancel).unwrap().unwrap();
+    // Reusing the cached decoders (and reopening the evicted one) renders the same audio.
+    let again = renderer.render(&scene, 0, 1024, &cancel).unwrap().unwrap();
+    assert_eq!(first.samples(), again.samples());
+}
+
+#[test]
+fn the_peak_history_is_bounded() {
+    let cancel = AtomicBool::new(false);
+    let scene = scene(vec![clip(1, true, Placement::default())]);
+    let mut player = AudioPlayer::new(renderer(), scene, 64, 64 * 600);
+    let mut sink = FakeSink::new(64 * 700, 1);
+    assert_eq!(player.pump(&mut sink, &cancel).unwrap(), 64 * 600);
+    // Far more blocks than the history keeps: the oldest peak was dropped, the newest is kept.
+    assert_eq!(player.peaks_at(0), (0.0, 0.0));
+    let (left, right) = player.peaks_at(64 * 599);
+    assert!(left > 0.0 || right > 0.0);
+}
+
+#[test]
+fn render_and_sink_failures_convert_into_player_errors() {
+    use bush::{AudioBlockError, MixError};
+    let render = AudioRenderError::from(MixError::ZeroOutputBudget);
+    assert!(matches!(render, AudioRenderError::Mix(_)));
+    let block = AudioBlock::new(0, 1, 0.0, Vec::new()).unwrap_err();
+    assert!(matches!(
+        AudioRenderError::from(block),
+        AudioRenderError::Block(AudioBlockError::ZeroSampleRate)
+    ));
+    assert!(matches!(
+        AudioPlayerError::from(AudioRenderError::InvalidConfig),
+        AudioPlayerError::Render(_)
+    ));
+    assert!(matches!(
+        AudioPlayerError::from(SinkError::Closed),
+        AudioPlayerError::Sink(_)
+    ));
 }
