@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use avcore::GpuEncoderPreference;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, Runtime, State};
 
 use crate::export::prepare_export;
 use crate::state::AppState;
@@ -17,7 +17,9 @@ pub struct ExportTarget {
 
 /// Shows the save dialog for the active sequence's export. `Ok(None)` when the user cancels.
 #[tauri::command]
-pub async fn pick_export_path(app: AppHandle) -> Result<Option<ExportTarget>, String> {
+pub async fn pick_export_path<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<Option<ExportTarget>, String> {
     let title = {
         let state = app.state::<AppState>();
         let session = state.session();
@@ -36,7 +38,11 @@ pub async fn pick_export_path(app: AppHandle) -> Result<Option<ExportTarget>, St
 /// Queues the active sequence for export to `path`. With `rename`, an existing file is kept and
 /// the output goes to the next free `<stem> (n)` sibling instead of overwriting it.
 #[tauri::command]
-pub fn start_export(app: AppHandle, path: String, rename: bool) -> Result<u64, String> {
+pub fn start_export<R: Runtime>(
+    app: AppHandle<R>,
+    path: String,
+    rename: bool,
+) -> Result<u64, String> {
     let (prepared, title) = {
         let state = app.state::<AppState>();
         let session = state.session();
@@ -73,27 +79,27 @@ pub fn start_export(app: AppHandle, path: String, rename: bool) -> Result<u64, S
 }
 
 #[tauri::command]
-pub fn pause_export(app: AppHandle, job_id: u64) {
+pub fn pause_export<R: Runtime>(app: AppHandle<R>, job_id: u64) {
     let exports = app.state::<AppState>().exports.clone();
     exports.pause(app, job_id);
 }
 #[tauri::command]
-pub fn resume_export(app: AppHandle, job_id: u64) {
+pub fn resume_export<R: Runtime>(app: AppHandle<R>, job_id: u64) {
     let exports = app.state::<AppState>().exports.clone();
     exports.resume(app, job_id);
 }
 #[tauri::command]
-pub fn cancel_export(app: AppHandle, job_id: u64) {
+pub fn cancel_export<R: Runtime>(app: AppHandle<R>, job_id: u64) {
     let exports = app.state::<AppState>().exports.clone();
     exports.cancel(app, job_id);
 }
 #[tauri::command]
-pub fn remove_export(app: AppHandle, job_id: u64) {
+pub fn remove_export<R: Runtime>(app: AppHandle<R>, job_id: u64) {
     let exports = app.state::<AppState>().exports.clone();
     exports.remove(app, job_id);
 }
 #[tauri::command]
-pub fn match_export_loudness(app: AppHandle, target_lufs: f32) {
+pub fn match_export_loudness<R: Runtime>(app: AppHandle<R>, target_lufs: f32) {
     app.state::<AppState>()
         .exports
         .match_loudness(&app, target_lufs);
@@ -117,7 +123,7 @@ pub fn get_gpu_encoder_preference(state: State<'_, AppState>) -> GpuEncoderPrefe
     state.exports.gpu_encoder_preference()
 }
 #[tauri::command]
-pub async fn export_active_sequence_srt(app: AppHandle) -> Result<bool, String> {
+pub async fn export_active_sequence_srt<R: Runtime>(app: AppHandle<R>) -> Result<bool, String> {
     let (srt, title) = {
         let state = app.state::<AppState>();
         let session = state.session();
