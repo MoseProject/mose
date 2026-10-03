@@ -7,7 +7,7 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use crate::{SceneVersions, Version};
+use crate::{BlendMode, LayerTransform, SceneVersions, Version};
 
 /// Stable identity of one contributor inside a scene.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -58,6 +58,58 @@ pub enum ContributorContent {
     RasterOverlay(RasterOverlay),
 }
 
+/// Where and when a contributor appears, and how it is composited.
+///
+/// For media, the timeline window is derived from the source range and `speed`
+/// (`(out - in) / speed` seconds); `duration_secs` is the explicit window for raster overlays,
+/// where `None` means visible for the whole scene.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Placement {
+    pub timeline_start_secs: f64,
+    pub duration_secs: Option<f64>,
+    /// Source seconds consumed per timeline second; `1.0` is normal speed.
+    pub speed: f64,
+    pub x: i32,
+    pub y: i32,
+    pub opacity: f32,
+    pub transform: LayerTransform,
+    pub blend: BlendMode,
+}
+
+impl Default for Placement {
+    fn default() -> Self {
+        Self {
+            timeline_start_secs: 0.0,
+            duration_secs: None,
+            speed: 1.0,
+            x: 0,
+            y: 0,
+            opacity: 1.0,
+            transform: LayerTransform::default(),
+            blend: BlendMode::Normal,
+        }
+    }
+}
+
+impl Placement {
+    fn validate(&self) -> Result<(), SceneError> {
+        let finite = self.timeline_start_secs.is_finite() && self.speed.is_finite();
+        let window_ok = self
+            .duration_secs
+            .is_none_or(|duration| duration.is_finite() && duration > 0.0);
+        if !finite
+            || self.timeline_start_secs < 0.0
+            || self.speed <= 0.0
+            || !window_ok
+            || !self.opacity.is_finite()
+            || !(0.0..=1.0).contains(&self.opacity)
+        {
+            return Err(SceneError::InvalidPlacement);
+        }
+        Ok(())
+    }
+}
+
 /// One video, audio, or overlay contributor at a scene layer.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Contributor {
@@ -67,6 +119,7 @@ pub struct Contributor {
     pub visible: bool,
     pub audible: bool,
     pub content: ContributorContent,
+    pub placement: Placement,
 }
 
 /// A validated, layer-sorted snapshot submitted to Bush.
@@ -88,6 +141,7 @@ impl SceneSnapshot {
                 return Err(SceneError::DuplicateContributor(contributor.id));
             }
             validate_content(&contributor.content)?;
+            contributor.placement.validate()?;
         }
 
         contributors.sort_unstable_by_key(|contributor| (contributor.layer, contributor.id));
@@ -117,6 +171,42 @@ impl SceneSnapshot {
     }
 }
 
+impl Contributor {
+    /// Timeline length of this contributor; `None` for an overlay visible for the whole scene.
+    pub fn timeline_duration_secs(&self) -> Option<f64> {
+        match &self.content {
+            ContributorContent::Media(source) => {
+                Some((source.range.out_secs - source.range.in_secs) / self.placement.speed)
+            }
+            ContributorContent::RasterOverlay(_) => self.placement.duration_secs,
+        }
+    }
+
+    /// Whether the contributor is on the timeline at `playhead_secs` (end exclusive).
+    pub fn is_active_at(&self, playhead_secs: f64) -> bool {
+        let start = self.placement.timeline_start_secs;
+        if playhead_secs < start {
+            return false;
+        }
+        match self.timeline_duration_secs() {
+            Some(duration) => playhead_secs < start + duration,
+            None => true,
+        }
+    }
+
+    /// Source time presented at `playhead_secs` for a media contributor active then.
+    pub fn source_time_at(&self, playhead_secs: f64) -> Option<f64> {
+        let ContributorContent::Media(source) = &self.content else {
+            return None;
+        };
+        if !self.is_active_at(playhead_secs) {
+            return None;
+        }
+        let local = (playhead_secs - self.placement.timeline_start_secs) * self.placement.speed;
+        Some((source.range.in_secs + local).min(source.range.out_secs))
+    }
+}
+
 fn validate_content(content: &ContributorContent) -> Result<(), SceneError> {
     match content {
         ContributorContent::Media(source) => {
@@ -142,4 +232,5 @@ pub enum SceneError {
     EmptyMediaPath,
     EmptyRasterOverlay,
     DuplicateContributor(ContributorId),
+    InvalidPlacement,
 }

@@ -30,8 +30,8 @@ pub use preview_worker::{
     PreviewCommand, PreviewWorker, WorkerFailure, WorkerOperation, WorkerSubmitError,
 };
 pub use scene::{
-    Contributor, ContributorContent, ContributorId, MediaSource, RasterOverlay, SceneError,
-    SceneSnapshot, SourceRange,
+    Contributor, ContributorContent, ContributorId, MediaSource, Placement, RasterOverlay,
+    SceneError, SceneSnapshot, SourceRange,
 };
 pub use scene_scheduler::{SceneScheduler, ScheduleError, ScheduledScene, Submission};
 pub use scene_versions::{invalidation_scope, InvalidationScope, SceneVersions, Version};

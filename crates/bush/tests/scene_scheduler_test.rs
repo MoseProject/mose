@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use bush::{
     Contributor, ContributorContent, ContributorId, Generation, InvalidationScope, MediaSource,
-    SceneScheduler, SceneSnapshot, SceneVersions, SourceRange, Version,
+    Placement, SceneScheduler, SceneSnapshot, SceneVersions, SourceRange, Version,
 };
 
 fn scene(versions: SceneVersions) -> SceneSnapshot {
@@ -18,6 +18,7 @@ fn scene(versions: SceneVersions) -> SceneSnapshot {
                 range: SourceRange::new(0.0, 1.0).unwrap(),
                 version: versions.source,
             }),
+            placement: Placement::default(),
         }],
     )
     .unwrap()

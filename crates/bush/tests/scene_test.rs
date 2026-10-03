@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
 use bush::{
-    Contributor, ContributorContent, ContributorId, MediaSource, RasterOverlay, SceneError,
-    SceneSnapshot, SceneVersions, SourceRange, Version,
+    Contributor, ContributorContent, ContributorId, MediaSource, Placement, RasterOverlay,
+    SceneError, SceneSnapshot, SceneVersions, SourceRange, Version,
 };
 
 fn media(id: u64, layer: i32, visible: bool, audible: bool) -> Contributor {
@@ -16,6 +16,7 @@ fn media(id: u64, layer: i32, visible: bool, audible: bool) -> Contributor {
             range: SourceRange::new(0.0, 2.0).unwrap(),
             version: Version(1),
         }),
+        placement: Placement::default(),
     }
 }
 
@@ -81,6 +82,7 @@ fn scene_rejects_invalid_content_before_runtime_work() {
                 height: 10,
                 version: Version(1),
             }),
+            placement: Placement::default(),
         }],
     )
     .unwrap_err();
@@ -119,4 +121,74 @@ fn source_range_rejects_nan_negative_and_empty_ranges() {
             out_secs: 1.0,
         })
     );
+}
+
+fn placed(start: f64, speed: f64) -> Contributor {
+    let mut contributor = media(1, 0, true, true);
+    contributor.placement = Placement {
+        timeline_start_secs: start,
+        speed,
+        ..Placement::default()
+    };
+    contributor
+}
+
+#[test]
+fn media_window_and_source_time_follow_start_and_speed() {
+    // Source range 0..2s at 2x speed, starting at timeline 10s: occupies 10..11s.
+    let contributor = placed(10.0, 2.0);
+
+    assert_eq!(contributor.timeline_duration_secs(), Some(1.0));
+    assert!(!contributor.is_active_at(9.99));
+    assert!(contributor.is_active_at(10.0));
+    assert!(!contributor.is_active_at(11.0));
+    assert_eq!(contributor.source_time_at(10.5), Some(1.0));
+    assert_eq!(contributor.source_time_at(11.5), None);
+}
+
+#[test]
+fn overlay_without_duration_is_always_active() {
+    let overlay = Contributor {
+        id: ContributorId(9),
+        layer: 5,
+        visible: true,
+        audible: false,
+        content: ContributorContent::RasterOverlay(RasterOverlay {
+            width: 4,
+            height: 4,
+            version: Version(1),
+        }),
+        placement: Placement::default(),
+    };
+    assert!(overlay.is_active_at(1_000.0));
+    assert_eq!(overlay.source_time_at(1.0), None);
+}
+
+#[test]
+fn invalid_placement_is_rejected() {
+    for placement in [
+        Placement {
+            speed: 0.0,
+            ..Placement::default()
+        },
+        Placement {
+            opacity: 1.5,
+            ..Placement::default()
+        },
+        Placement {
+            timeline_start_secs: -1.0,
+            ..Placement::default()
+        },
+        Placement {
+            duration_secs: Some(0.0),
+            ..Placement::default()
+        },
+    ] {
+        let mut contributor = media(1, 0, true, true);
+        contributor.placement = placement;
+        assert_eq!(
+            SceneSnapshot::new(SceneVersions::default(), vec![contributor]).unwrap_err(),
+            SceneError::InvalidPlacement
+        );
+    }
 }
