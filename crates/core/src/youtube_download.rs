@@ -206,14 +206,26 @@ pub fn download_youtube(
     target: YoutubeDownloadTarget,
     dest_dir: &Path,
     cancel: &AtomicBool,
-    mut on_progress: impl FnMut(f32),
+    on_progress: impl FnMut(f32),
 ) -> Result<PathBuf, YoutubeDownloadError> {
     let bridge = ytbridge_path().ok_or(YoutubeDownloadError::ToolNotFound)?;
+    download_with_bridge(&bridge, url, target, dest_dir, cancel, on_progress)
+}
+
+/// [`download_youtube`] against an explicit `ytbridge` executable.
+fn download_with_bridge(
+    bridge: &Path,
+    url: &str,
+    target: YoutubeDownloadTarget,
+    dest_dir: &Path,
+    cancel: &AtomicBool,
+    mut on_progress: impl FnMut(f32),
+) -> Result<PathBuf, YoutubeDownloadError> {
     if !bridge.is_file() {
         return Err(YoutubeDownloadError::ToolNotFound);
     }
 
-    let mut cmd = Command::new(&bridge);
+    let mut cmd = Command::new(bridge);
     cmd.arg(target.target_arg()).arg(url).arg(dest_dir);
     // Points the bundled interpreter at its own vendored stdlib/site-packages next to the
     // binary (Windows: python310.dll, DLLs/, Lib/; Linux: lib/) or the conventional macOS
@@ -221,7 +233,7 @@ pub fn download_youtube(
     // CPython's own DLL-directory auto-detection, which isn't a
     // documented/verified behavior for an embedding host like this (as opposed to running
     // python.exe/python3 itself).
-    if let (Some(dir), Some(python_home)) = (bridge.parent(), python_home_for_bridge(&bridge)) {
+    if let (Some(dir), Some(python_home)) = (bridge.parent(), python_home_for_bridge(bridge)) {
         cmd.env("PYTHONHOME", python_home);
         cmd.env("PYTHONNOUSERSITE", "1");
         cmd.env("PYTHONDONTWRITEBYTECODE", "1");
