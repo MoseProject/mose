@@ -62,7 +62,9 @@ pub use frame_mailbox::{FrameMailbox, PublishedFrame};
 pub use glitch::{glitch, shake_offset};
 #[cfg(feature = "gpu")]
 pub use gpu_renderer::{GpuError, GpuRenderer};
-pub use keyframes::{Animation, Easing, Fade, Keyframe, KeyframeError, KeyframeTrack};
+pub use keyframes::{
+    Animation, Easing, Fade, Keyframe, KeyframeError, KeyframeTrack, MAX_GAIN_DB, MIN_GAIN_DB,
+};
 pub use latest_intent::{Generation, LatestIntent, PendingIntent};
 pub use layer_mods::{ChromaKey, LayerMask, Lut3D, LutError, MaskShape};
 pub use player::{Player, PlayerError, PlayerEvent};

@@ -104,6 +104,10 @@ impl KeyframeTrack {
     }
 }
 
+/// Legal range of an animated gain track; the top matches the linear `4.0` gain ceiling.
+pub const MIN_GAIN_DB: f32 = -120.0;
+pub const MAX_GAIN_DB: f32 = 12.0;
+
 /// Per-property animation overrides. A property with no track keeps its static value.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Animation {
@@ -121,6 +125,9 @@ pub struct Animation {
     pub crop_y: Option<KeyframeTrack>,
     pub crop_width: Option<KeyframeTrack>,
     pub crop_height: Option<KeyframeTrack>,
+    /// Audio gain in decibels, interpolated linearly in dB like the exporter's gain expression;
+    /// overrides the static `Placement::gain` for audible contributors.
+    pub gain_db: Option<KeyframeTrack>,
 }
 
 impl Animation {
@@ -138,6 +145,7 @@ impl Animation {
             && self.crop_y.is_none()
             && self.crop_width.is_none()
             && self.crop_height.is_none()
+            && self.gain_db.is_none()
     }
 
     /// Slides the layer horizontally from `from_x` to `to_x` over `duration_secs`, then holds.
@@ -196,6 +204,7 @@ impl Animation {
             && within(&self.crop_y, 0.0..=1.0)
             && within(&self.crop_width, 0.0..=1.0)
             && within(&self.crop_height, 0.0..=1.0)
+            && within(&self.gain_db, MIN_GAIN_DB..=MAX_GAIN_DB)
     }
 }
 

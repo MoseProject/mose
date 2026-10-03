@@ -268,8 +268,7 @@ impl Contributor {
             ContributorContent::Media(source) => {
                 let length = source.range.out_secs - source.range.in_secs;
                 Some(match self.placement.speed_ramp_end {
-                    // Linear speed s0 -> s1 over T covers (s0 + s1) / 2 * T source seconds.
-                    Some(end) => 2.0 * length / (self.placement.speed + end),
+                    Some(end) => ramp_duration_secs(length, self.placement.speed, end),
                     None => length / self.placement.speed,
                 })
             }
@@ -355,21 +354,25 @@ impl Contributor {
     /// Source seconds consumed `local_secs` after the contributor starts (speed ramp included).
     pub fn source_offset_at(&self, local_secs: f64) -> f64 {
         let start_speed = self.placement.speed;
-        match (self.placement.speed_ramp_end, self.timeline_duration_secs()) {
-            (Some(end), Some(duration)) if duration > 0.0 => {
-                start_speed * local_secs
-                    + (end - start_speed) * local_secs * local_secs / (2.0 * duration)
-            }
+        match (self.placement.speed_ramp_end, self.source_length_secs()) {
+            (Some(end), Some(length)) => ramp_source_offset(local_secs, length, start_speed, end),
             _ => start_speed * local_secs,
+        }
+    }
+
+    /// Trimmed source length of a media contributor.
+    fn source_length_secs(&self) -> Option<f64> {
+        match &self.content {
+            ContributorContent::Media(source) => Some(source.range.out_secs - source.range.in_secs),
+            ContributorContent::RasterOverlay(_) => None,
         }
     }
 
     /// Instantaneous playback speed `local_secs` after the contributor starts.
     pub fn speed_at(&self, local_secs: f64) -> f64 {
-        match (self.placement.speed_ramp_end, self.timeline_duration_secs()) {
-            (Some(end), Some(duration)) if duration > 0.0 => {
-                self.placement.speed
-                    + (end - self.placement.speed) * (local_secs / duration).clamp(0.0, 1.0)
+        match (self.placement.speed_ramp_end, self.source_length_secs()) {
+            (Some(end), Some(length)) => {
+                ramp_speed_at(local_secs, length, self.placement.speed, end)
             }
             _ => self.placement.speed,
         }
@@ -386,6 +389,37 @@ impl Contributor {
         let local = self.source_offset_at(playhead_secs - self.placement.timeline_start_secs);
         Some((source.range.in_secs + local).min(source.range.out_secs))
     }
+}
+
+/// Speed ramps are linear in *source* time (speed `v0` at the first source second, `v1` at the
+/// last), the same definition the exporter uses, so a clip's timeline duration is
+/// `length / (v1 - v0) * ln(v1 / v0)` and its speed grows exponentially in timeline time.
+const RAMP_EQUAL_SPEEDS: f64 = 1e-9;
+
+fn ramp_duration_secs(length: f64, v0: f64, v1: f64) -> f64 {
+    if (v1 - v0).abs() < RAMP_EQUAL_SPEEDS {
+        length / v0
+    } else {
+        length / (v1 - v0) * (v1 / v0).ln()
+    }
+}
+
+/// Instantaneous speed `local` timeline seconds into a ramp over `length` source seconds.
+fn ramp_speed_at(local: f64, length: f64, v0: f64, v1: f64) -> f64 {
+    if (v1 - v0).abs() < RAMP_EQUAL_SPEEDS {
+        return v0;
+    }
+    let local = local.clamp(0.0, ramp_duration_secs(length, v0, v1));
+    v0 * ((v1 - v0) * local / length).exp()
+}
+
+/// Source seconds consumed `local` timeline seconds into the ramp.
+fn ramp_source_offset(local: f64, length: f64, v0: f64, v1: f64) -> f64 {
+    if (v1 - v0).abs() < RAMP_EQUAL_SPEEDS {
+        return v0 * local;
+    }
+    let local = local.clamp(0.0, ramp_duration_secs(length, v0, v1));
+    length * v0 * (((v1 - v0) * local / length).exp() - 1.0) / (v1 - v0)
 }
 
 fn validate_content(content: &ContributorContent) -> Result<(), SceneError> {

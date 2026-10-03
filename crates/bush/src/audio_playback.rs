@@ -136,7 +136,7 @@ impl AudioRenderer {
             let source_start = (source.range.in_secs * rate).round() as u64;
 
             let slot = self.open_source(&source.path, source.version.0)?;
-            let samples = if unit_speed {
+            let mut samples = if unit_speed {
                 self.stretchers.remove(&contributor.id);
                 let source_frame = source_start + (overlap_start - clip_start);
                 let Some(block) = self.sources[slot].1.read(source_frame, length, cancel)? else {
@@ -193,6 +193,21 @@ impl AudioRenderer {
                 self.stretchers.insert(contributor.id, state);
                 samples
             };
+            // An animated gain replaces the static one; it is evaluated in dB per block of frames.
+            let static_gain = match &placement.animation.gain_db {
+                Some(track) => {
+                    let first_local = overlap_start as f64 / rate - placement.timeline_start_secs;
+                    apply_gain_curve(
+                        &mut samples,
+                        usize::from(self.channels),
+                        track,
+                        first_local,
+                        rate,
+                    );
+                    1.0
+                }
+                None => placement.gain,
+            };
             // Re-time from source time to timeline time so the mixer aligns it.
             let aligned = AudioBlock::new(
                 self.sample_rate,
@@ -200,7 +215,7 @@ impl AudioRenderer {
                 overlap_start as f64 / rate,
                 samples,
             )?;
-            parts.push((aligned, placement.gain));
+            parts.push((aligned, static_gain));
         }
 
         let mut inputs = vec![MixInput {
@@ -242,6 +257,41 @@ impl AudioRenderer {
 pub enum AudioPlayerError {
     Render(AudioRenderError),
     Sink(SinkError),
+}
+
+/// Frames between two evaluations of an animated gain; the gain is linear in between.
+const GAIN_STEP_FRAMES: usize = 64;
+
+/// Multiplies interleaved `samples` by the gain track (dB, clip-local time) starting at
+/// `first_local_secs`. Linear gain is interpolated between sparse evaluations so a ramp is
+/// click-free without evaluating the track for every sample.
+fn apply_gain_curve(
+    samples: &mut [f32],
+    channels: usize,
+    track: &crate::KeyframeTrack,
+    first_local_secs: f64,
+    rate: f64,
+) {
+    let frames = samples.len() / channels.max(1);
+    let linear_at = |frame: usize| {
+        let db = track.value_at(first_local_secs + frame as f64 / rate);
+        10f32.powf(db / 20.0).clamp(0.0, 4.0)
+    };
+    let mut from = 0;
+    let mut gain_from = linear_at(0);
+    while from < frames {
+        let to = (from + GAIN_STEP_FRAMES).min(frames);
+        let gain_to = linear_at(to);
+        for frame in from..to {
+            let t = (frame - from) as f32 / (to - from) as f32;
+            let gain = gain_from + (gain_to - gain_from) * t;
+            for sample in &mut samples[frame * channels..(frame + 1) * channels] {
+                *sample *= gain;
+            }
+        }
+        from = to;
+        gain_from = gain_to;
+    }
 }
 
 impl From<AudioRenderError> for AudioPlayerError {
