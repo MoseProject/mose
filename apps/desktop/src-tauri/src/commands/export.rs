@@ -142,3 +142,7 @@ pub async fn export_active_sequence_srt<R: Runtime>(app: AppHandle<R>) -> Result
 pub fn list_exports(state: State<'_, AppState>) -> Vec<crate::export::ExportJobView> {
     state.exports.snapshot()
 }
+
+#[cfg(test)]
+#[path = "export_test.rs"]
+mod tests;
