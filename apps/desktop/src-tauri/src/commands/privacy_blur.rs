@@ -209,3 +209,7 @@ fn apply_privacy_blur_one(
 
     Ok((mask_path.to_path_buf(), seed_vertices))
 }
+
+#[cfg(test)]
+#[path = "privacy_blur_test.rs"]
+mod tests;
