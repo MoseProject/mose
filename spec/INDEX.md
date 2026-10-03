@@ -37,6 +37,9 @@ Read **[architecture/complex-text-shaping.md](architecture/complex-text-shaping.
 working on bidi, ligatures, Unicode line breaking, timed highlight clusters, or international
 fallback.
 
+For the plan to reach 100% test coverage (baseline numbers, exclusion policy, phases), read
+[`architecture/test-coverage-plan.md`](architecture/test-coverage-plan.md).
+
 For the standalone replacement of GStreamer preview playback (done, GStreamer removed; plan in
 [`architecture/gstreamer-removal-plan.md`](architecture/gstreamer-removal-plan.md)), read
 **[architecture/preview-engine-replacement.md](architecture/preview-engine-replacement.md)**.
