@@ -161,16 +161,28 @@ pub fn detect_faces(
     // (`1x4420x4`, xmin/ymin/xmax/ymax in 0..1 fractions) — told apart here by each tensor's
     // last dimension rather than trusted output order, since ONNX doesn't guarantee that order
     // survives export/re-export.
-    let mut scores_flat: Option<(Vec<i64>, Vec<f32>)> = None;
-    let mut boxes_flat: Option<(Vec<i64>, Vec<f32>)> = None;
+    let mut tensors = Vec::new();
     for (_name, value) in outputs.iter() {
         let (shape, data) = value
             .try_extract_tensor::<f32>()
             .map_err(|e| ReframeError::Onnx(e.to_string()))?;
-        let dims: Vec<i64> = shape.iter().copied().collect();
+        tensors.push((shape.iter().copied().collect::<Vec<i64>>(), data.to_vec()));
+    }
+    let (num_anchors, scores, boxes) = select_outputs(tensors)?;
+    Ok(decode_faces(num_anchors, &scores, &boxes))
+}
+
+/// Tells the model's two outputs apart by each tensor's last dimension (2 for scores, 4 for
+/// boxes), returning the anchor count with the scores and boxes.
+fn select_outputs(
+    tensors: Vec<(Vec<i64>, Vec<f32>)>,
+) -> Result<(usize, Vec<f32>, Vec<f32>), ReframeError> {
+    let mut scores_flat: Option<(Vec<i64>, Vec<f32>)> = None;
+    let mut boxes_flat: Option<(Vec<i64>, Vec<f32>)> = None;
+    for (dims, data) in tensors {
         match dims.last() {
-            Some(2) => scores_flat = Some((dims, data.to_vec())),
-            Some(4) => boxes_flat = Some((dims, data.to_vec())),
+            Some(2) => scores_flat = Some((dims, data)),
+            Some(4) => boxes_flat = Some((dims, data)),
             _ => {}
         }
     }
@@ -179,7 +191,12 @@ pub fn detect_faces(
     let (_, boxes) = boxes_flat
         .ok_or_else(|| ReframeError::Onnx("no boxes output (last dim 4) found".into()))?;
     let num_anchors = *score_dims.get(1).unwrap_or(&0) as usize;
+    Ok((num_anchors, scores, boxes))
+}
 
+/// Turns the raw model outputs into face boxes: keeps anchors scoring above the threshold,
+/// clamps their corners to the frame, drops empty boxes and suppresses overlaps.
+fn decode_faces(num_anchors: usize, scores: &[f32], boxes: &[f32]) -> Vec<FaceBox> {
     let mut candidates = Vec::new();
     for i in 0..num_anchors {
         let face_score = scores[i * 2 + 1];
@@ -201,8 +218,7 @@ pub fn detect_faces(
             score: face_score,
         });
     }
-
-    Ok(non_max_suppress(candidates))
+    non_max_suppress(candidates)
 }
 
 fn non_max_suppress(mut candidates: Vec<FaceBox>) -> Vec<FaceBox> {
