@@ -277,6 +277,17 @@ unsafe extern "C" {
         cancel: *const u8,
         out_frame: *mut RawDecodedRgbaFrame,
     ) -> c_int;
+    fn avbridge_decode_advance(
+        session: *mut RawDecodeSession,
+        cancel: *const u8,
+        out_timestamp_secs: *mut f64,
+    ) -> c_int;
+    fn avbridge_decode_has_held(session: *mut RawDecodeSession) -> c_int;
+    fn avbridge_decode_take_rgba(
+        session: *mut RawDecodeSession,
+        newest: c_int,
+        out_frame: *mut RawDecodedRgbaFrame,
+    ) -> c_int;
     fn avbridge_decode_free_frame(frame: *mut RawDecodedRgbaFrame);
     fn avbridge_decode_close(session: *mut RawDecodeSession);
     fn avbridge_hw_device_cache_clear();
@@ -573,36 +584,7 @@ impl DecodeSession {
             avbridge_decode_next_rgba(self.raw, cancel.as_ptr() as *const u8, &mut raw_frame)
         };
         match status {
-            0 => {
-                let width = u32::try_from(raw_frame.width).map_err(|_| DecodeError::FrameSize)?;
-                let height = u32::try_from(raw_frame.height).map_err(|_| DecodeError::FrameSize)?;
-                let stride_bytes =
-                    usize::try_from(raw_frame.stride_bytes).map_err(|_| DecodeError::FrameSize)?;
-                if raw_frame.pixels.is_null()
-                    || width == 0
-                    || height == 0
-                    || stride_bytes == 0
-                    || !raw_frame.timestamp_secs.is_finite()
-                {
-                    // SAFETY: safe with null or a successful C allocation; clears raw_frame.
-                    unsafe { avbridge_decode_free_frame(&mut raw_frame) };
-                    return Err(DecodeError::FrameSize);
-                }
-                // SAFETY: DECODE_OK guarantees `pixel_len` initialized bytes at `pixels`.
-                let pixels = unsafe {
-                    std::slice::from_raw_parts(raw_frame.pixels, raw_frame.pixel_len).to_vec()
-                };
-                let timestamp_secs = raw_frame.timestamp_secs;
-                // SAFETY: releases only the C allocation copied above.
-                unsafe { avbridge_decode_free_frame(&mut raw_frame) };
-                Ok(Some(DecodedRgbaFrame {
-                    width,
-                    height,
-                    stride_bytes,
-                    timestamp_secs,
-                    pixels,
-                }))
-            }
+            0 => copy_out_frame(&mut raw_frame).map(Some),
             1 => Ok(None),
             2 => Ok(None),
             8 => Err(DecodeError::Pipeline),
@@ -610,6 +592,113 @@ impl DecodeSession {
             other => Err(DecodeError::Unknown(other)),
         }
     }
+
+    /// Decodes the next frame **without** converting it to RGBA and returns its timestamp.
+    ///
+    /// The previously advanced-to frame is kept as the held frame. This is the cheap way to seek
+    /// to an exact frame: advance until the timestamp passes the target, then convert only the
+    /// frame you present with [`Self::take_rgba`]. A frame left unconverted is returned by the
+    /// next [`Self::next_rgba`].
+    pub fn advance(&mut self, cancel: &AtomicBool) -> Result<Advance, DecodeError> {
+        let mut timestamp_secs = 0.0_f64;
+        // SAFETY: self.raw is live, `cancel.as_ptr()` has bool-compatible layout, and
+        // timestamp_secs is writable for this call.
+        let status = unsafe {
+            avbridge_decode_advance(self.raw, cancel.as_ptr() as *const u8, &mut timestamp_secs)
+        };
+        match status {
+            0 if timestamp_secs.is_finite() => Ok(Advance::Frame(timestamp_secs)),
+            0 => Err(DecodeError::Pipeline),
+            1 => Ok(Advance::EndOfStream),
+            2 => Ok(Advance::Cancelled),
+            8 => Err(DecodeError::Pipeline),
+            other => Err(DecodeError::Unknown(other)),
+        }
+    }
+
+    /// Whether [`Self::advance`] has kept a frame before the newest one.
+    pub fn has_held_frame(&self) -> bool {
+        // SAFETY: self.raw is a live session.
+        unsafe { avbridge_decode_has_held(self.raw) != 0 }
+    }
+
+    /// Converts and removes an advanced-to frame: the newest one, or the one held before it.
+    /// `Ok(None)` if that slot is empty.
+    pub fn take_rgba(&mut self, slot: FrameSlot) -> Result<Option<DecodedRgbaFrame>, DecodeError> {
+        let mut raw_frame = RawDecodedRgbaFrame {
+            pixels: std::ptr::null_mut(),
+            pixel_len: 0,
+            width: 0,
+            height: 0,
+            stride_bytes: 0,
+            timestamp_secs: 0.0,
+        };
+        // SAFETY: self.raw is live and raw_frame is writable; a successful frame is copied and
+        // released with the paired C allocator in `copy_out_frame`.
+        let status = unsafe {
+            avbridge_decode_take_rgba(
+                self.raw,
+                c_int::from(slot == FrameSlot::Newest),
+                &mut raw_frame,
+            )
+        };
+        match status {
+            0 => copy_out_frame(&mut raw_frame).map(Some),
+            1 => Ok(None),
+            8 => Err(DecodeError::Pipeline),
+            9 => Err(DecodeError::FrameSize),
+            other => Err(DecodeError::Unknown(other)),
+        }
+    }
+}
+
+/// Outcome of [`DecodeSession::advance`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Advance {
+    /// A frame was decoded (not converted); its presentation time in seconds.
+    Frame(f64),
+    EndOfStream,
+    Cancelled,
+}
+
+/// Which advanced-to frame [`DecodeSession::take_rgba`] converts.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FrameSlot {
+    /// The frame most recently advanced to.
+    Newest,
+    /// The frame advanced to before the newest one.
+    Held,
+}
+
+/// Copies a successful native frame into owned memory and releases the native allocation.
+fn copy_out_frame(raw_frame: &mut RawDecodedRgbaFrame) -> Result<DecodedRgbaFrame, DecodeError> {
+    let width = u32::try_from(raw_frame.width).map_err(|_| DecodeError::FrameSize)?;
+    let height = u32::try_from(raw_frame.height).map_err(|_| DecodeError::FrameSize)?;
+    let stride_bytes =
+        usize::try_from(raw_frame.stride_bytes).map_err(|_| DecodeError::FrameSize)?;
+    if raw_frame.pixels.is_null()
+        || width == 0
+        || height == 0
+        || stride_bytes == 0
+        || !raw_frame.timestamp_secs.is_finite()
+    {
+        // SAFETY: safe with null or a successful C allocation; clears raw_frame.
+        unsafe { avbridge_decode_free_frame(raw_frame) };
+        return Err(DecodeError::FrameSize);
+    }
+    // SAFETY: DECODE_OK guarantees `pixel_len` initialized bytes at `pixels`.
+    let pixels =
+        unsafe { std::slice::from_raw_parts(raw_frame.pixels, raw_frame.pixel_len).to_vec() };
+    let timestamp_secs = raw_frame.timestamp_secs;
+    // SAFETY: releases only the C allocation copied above.
+    unsafe { avbridge_decode_free_frame(raw_frame) };
+    Ok(DecodedRgbaFrame {
+        width,
+        height,
+        stride_bytes,
+        timestamp_secs,
+        pixels,
+    })
 }
 
 impl Drop for DecodeSession {

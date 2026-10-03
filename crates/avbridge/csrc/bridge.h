@@ -726,6 +726,16 @@ DecodeStatus avbridge_decode_seek(AvbridgeDecodeSession *session, double timesta
    with avbridge_decode_free_frame. Every loop checks cancel when it is non-NULL. */
 DecodeStatus avbridge_decode_next_rgba(AvbridgeDecodeSession *session, const uint8_t *cancel,
                                        DecodedRgbaFrame *out_frame);
+/* Cheap frame-accurate seeking: decodes the next frame WITHOUT converting it to RGBA and
+   reports its timestamp. The previously decoded frame is kept as the "held" frame. Convert only
+   the frame you present with avbridge_decode_take_rgba (newest != 0: the frame just advanced to;
+   newest == 0: the held frame before it). A frame left unconverted is returned by the next
+   avbridge_decode_next_rgba. DECODE_EOF leaves the newest frame untouched. */
+DecodeStatus avbridge_decode_advance(AvbridgeDecodeSession *session, const uint8_t *cancel,
+                                     double *out_timestamp_secs);
+int avbridge_decode_has_held(AvbridgeDecodeSession *session);
+DecodeStatus avbridge_decode_take_rgba(AvbridgeDecodeSession *session, int newest,
+                                       DecodedRgbaFrame *out_frame);
 void avbridge_decode_free_frame(DecodedRgbaFrame *frame);
 void avbridge_decode_close(AvbridgeDecodeSession *session);
 
