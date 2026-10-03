@@ -17,6 +17,15 @@ pub fn is_newer(project_path: &Path) -> Option<PathBuf> {
 }
 
 /// Runs outside Tauri's UI thread and writes the same recovery file as the egui shell.
+/// Whether the recovery snapshot at `recovery` is missing or at least `minutes` old.
+fn snapshot_due(recovery: &Path, minutes: u8) -> bool {
+    std::fs::metadata(recovery)
+        .and_then(|metadata| metadata.modified())
+        .ok()
+        .and_then(|time| time.elapsed().ok())
+        .is_none_or(|elapsed| elapsed >= std::time::Duration::from_secs(u64::from(minutes) * 60))
+}
+
 pub fn spawn(app: tauri::AppHandle) {
     std::thread::spawn(move || loop {
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -33,14 +42,7 @@ pub fn spawn(app: tauri::AppHandle) {
         // recovery snapshot every configured number of minutes until it is explicitly saved.
         // `modified` provides the rotation marker without adding a second persistence format.
         let recovery = autosave_path(&path);
-        let due = std::fs::metadata(&recovery)
-            .and_then(|metadata| metadata.modified())
-            .ok()
-            .and_then(|time| time.elapsed().ok())
-            .is_none_or(|elapsed| {
-                elapsed >= std::time::Duration::from_secs(u64::from(minutes) * 60)
-            });
-        if !due {
+        if !snapshot_due(&recovery, minutes) {
             continue;
         }
         // Serialize and write outside the session lock so editing commands never wait on disk.
