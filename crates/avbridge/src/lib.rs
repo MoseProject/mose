@@ -523,16 +523,11 @@ impl DecodeSession {
             unsafe { avbridge_decode_open_ex(c_path.as_ptr(), hardware, &mut raw, &mut info) };
         decode_open_status(status)?;
         debug_assert!(!raw.is_null());
-        let width = u32::try_from(info.width).map_err(|_| DecodeError::FrameSize)?;
-        let height = u32::try_from(info.height).map_err(|_| DecodeError::FrameSize)?;
-        if width == 0 || height == 0 {
-            // SAFETY: successful open transfers ownership of raw to this call; release it before
-            // rejecting an invalid native metadata result.
-            unsafe { avbridge_decode_close(raw) };
-            return Err(DecodeError::FrameSize);
-        }
+        // From here the session owns `raw`, so every early return below closes it via `Drop`.
+        let session = Self { raw };
+        let (width, height) = decode_dimensions(info.width, info.height)?;
         Ok((
-            Self { raw },
+            session,
             DecodeInfo {
                 width,
                 height,
@@ -573,11 +568,10 @@ impl DecodeSession {
         let status = unsafe {
             avbridge_decode_next_rgba(self.raw, cancel.as_ptr() as *const u8, &mut raw_frame)
         };
-        match status {
-            0 => copy_out_frame(&mut raw_frame).map(Some),
-            1 => Ok(None),
-            2 => Ok(None),
-            other => Err(decode_frame_failure(other)),
+        if next_frame_status(status)? {
+            copy_out_frame(&mut raw_frame).map(Some)
+        } else {
+            Ok(None)
         }
     }
 
@@ -623,10 +617,10 @@ impl DecodeSession {
                 &mut raw_frame,
             )
         };
-        match status {
-            0 => copy_out_frame(&mut raw_frame).map(Some),
-            1 => Ok(None),
-            other => Err(decode_frame_failure(other)),
+        if take_frame_status(status)? {
+            copy_out_frame(&mut raw_frame).map(Some)
+        } else {
+            Ok(None)
         }
     }
 }
@@ -2105,11 +2099,7 @@ pub fn extract_pcm_16k_mono(path: &Path) -> Result<Vec<f32>, PcmError> {
     // SAFETY: on OK, out_samples points to a malloc'd buffer of out_sample_count valid
     // f32s (or is null with out_sample_count == 0 for a zero-length result) — copied
     // into a Vec, then the C-owned buffer is freed via the paired allocator.
-    let samples = if out_sample_count > 0 {
-        unsafe { std::slice::from_raw_parts(out_samples, out_sample_count as usize).to_vec() }
-    } else {
-        Vec::new()
-    };
+    let samples = unsafe { copy_samples(out_samples, out_sample_count as usize) };
     unsafe { avbridge_free_pcm_buffer(out_samples) };
     Ok(samples)
 }
@@ -3026,6 +3016,53 @@ mod status_tests {
     }
 
     #[test]
+    fn frame_dimensions_and_statuses_are_validated() {
+        assert_eq!(decode_dimensions(640, 360).unwrap(), (640, 360));
+        for (width, height) in [(0, 360), (640, 0), (-1, 360), (640, -1)] {
+            assert!(matches!(
+                decode_dimensions(width, height),
+                Err(DecodeError::FrameSize)
+            ));
+        }
+        assert!(next_frame_status(0).unwrap());
+        assert!(!next_frame_status(1).unwrap());
+        assert!(!next_frame_status(2).unwrap());
+        assert!(matches!(next_frame_status(8), Err(DecodeError::Pipeline)));
+        assert!(take_frame_status(0).unwrap());
+        assert!(!take_frame_status(1).unwrap());
+        assert!(matches!(take_frame_status(2), Err(DecodeError::Unknown(2))));
+        assert!(matches!(take_frame_status(9), Err(DecodeError::FrameSize)));
+    }
+
+    #[test]
+    fn a_native_frame_without_pixels_or_a_valid_size_is_rejected() {
+        let mut empty = RawDecodedRgbaFrame {
+            pixels: std::ptr::null_mut(),
+            pixel_len: 0,
+            width: 2,
+            height: 2,
+            stride_bytes: 8,
+            timestamp_secs: 0.0,
+        };
+        assert!(matches!(
+            copy_out_frame(&mut empty),
+            Err(DecodeError::FrameSize)
+        ));
+        let mut negative = RawDecodedRgbaFrame { width: -1, ..empty };
+        assert!(matches!(
+            copy_out_frame(&mut negative),
+            Err(DecodeError::FrameSize)
+        ));
+    }
+
+    #[test]
+    fn copied_samples_follow_the_count() {
+        let source = [0.25_f32, -0.5, 1.0];
+        assert_eq!(unsafe { copy_samples(source.as_ptr(), 3) }, source.to_vec());
+        assert!(unsafe { copy_samples(std::ptr::null(), 0) }.is_empty());
+    }
+
+    #[test]
     fn serde_defaults_and_the_encoder_preference_codes() {
         assert_eq!(default_anchor(), 0.5);
         assert_eq!(default_voice_cleanup_noise_floor_db(), -30.0);
@@ -3034,5 +3071,46 @@ mod status_tests {
         assert_eq!(default_voice_cleanup_ceiling_linear(), 0.95);
         assert_eq!(GpuEncoderPreference::VideoToolbox.as_c_int(), 6);
         assert_eq!(version(), version());
+    }
+}
+
+/// Validates the native frame size reported when a decode session opens.
+fn decode_dimensions(width: c_int, height: c_int) -> Result<(u32, u32), DecodeError> {
+    let width = u32::try_from(width).map_err(|_| DecodeError::FrameSize)?;
+    let height = u32::try_from(height).map_err(|_| DecodeError::FrameSize)?;
+    if width == 0 || height == 0 {
+        return Err(DecodeError::FrameSize);
+    }
+    Ok((width, height))
+}
+
+/// Status of a native `next_rgba`: `true` when a frame is ready to copy out, `false` at the end
+/// of the stream or on cancellation.
+fn next_frame_status(status: c_int) -> Result<bool, DecodeError> {
+    match status {
+        0 => Ok(true),
+        1 | 2 => Ok(false),
+        other => Err(decode_frame_failure(other)),
+    }
+}
+
+/// Status of a native `take_rgba`: `true` when a frame is ready, `false` when the slot is empty.
+fn take_frame_status(status: c_int) -> Result<bool, DecodeError> {
+    match status {
+        0 => Ok(true),
+        1 => Ok(false),
+        other => Err(decode_frame_failure(other)),
+    }
+}
+
+/// Copies `count` samples out of a native buffer; a null or empty buffer is an empty result.
+///
+/// # Safety
+/// When `count > 0`, `samples` must point to `count` initialized `f32`s.
+unsafe fn copy_samples(samples: *const f32, count: usize) -> Vec<f32> {
+    if count > 0 {
+        unsafe { std::slice::from_raw_parts(samples, count) }.to_vec()
+    } else {
+        Vec::new()
     }
 }
