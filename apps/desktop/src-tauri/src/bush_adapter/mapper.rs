@@ -33,8 +33,9 @@ use avcore::{MediaAsset, MediaKind};
 use bush::{
     Animation, BlendMode, ChromaKey, Contributor, ContributorContent, ContributorId, CropRect,
     Easing, Fade, Keyframe, KeyframeTrack, LayerEffects, LayerMask, LayerTransform, Lut3D,
-    MaskShape, MediaSource, PixelFormat, Placement, RasterOverlay, SceneError, SceneSnapshot,
-    SceneVersions, SourceRange, Version, VideoFrame, MAX_BLUR_SIGMA,
+    MaskShape, MatteSource, MediaSource, PixelFormat, Placement, PrivacyBlur, RasterOverlay,
+    SceneError, SceneSnapshot, SceneVersions, SourceRange, Version, VideoFrame, MAX_BLUR_SIGMA,
+    MAX_GAIN_DB, MIN_GAIN_DB,
 };
 
 /// Source span a frozen clip advances over its whole window; the decoder keeps serving the same
@@ -64,11 +65,6 @@ pub trait SourceResolver {
 /// A property whose Bush rendering differs from the export.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Approximation {
-    /// Core ramps speed linearly in source time, Bush in timeline time: the clip plays at its
-    /// average speed so it still occupies the same timeline window.
-    SpeedRamp,
-    /// Bush applies one static gain; the first gain keyframe is used.
-    GainKeyframes,
     /// A frozen clip is silent in Bush.
     FrozenAudioMuted,
     /// Ken-Burns zoom is a crop, so zooming out below 1x is held at 1x.
@@ -308,13 +304,7 @@ fn map_clip(
         )
     } else {
         let range = SourceRange::new(clip.source_in_secs, clip.source_out_secs).ok()?;
-        let speed = if clip.speed_ramp_end_factor.is_some() {
-            approximations.insert(Approximation::SpeedRamp);
-            (clip.source_out_secs - clip.source_in_secs) / duration
-        } else {
-            f64::from(clip.speed_factor.max(0.01))
-        };
-        (range, speed)
+        (range, f64::from(clip.speed_factor.max(0.01)))
     };
 
     let (canvas_width, canvas_height) = (canvas.0 as f32, canvas.1 as f32);
@@ -322,6 +312,11 @@ fn map_clip(
     let mut placement = Placement {
         timeline_start_secs: clip.start_secs,
         speed,
+        // Both sides ramp linearly in source time, so the window matches `duration_secs()`.
+        speed_ramp_end: clip
+            .speed_ramp_end_factor
+            .filter(|_| !clip.frozen)
+            .map(|end| f64::from(end.max(0.01))),
         fit_canvas: true,
         ..Placement::default()
     };
@@ -448,14 +443,11 @@ fn map_clip(
     }
 
     // Audio gain.
-    placement.gain = match clip.gain_keyframes.first() {
-        Some(first) => {
-            approximations.insert(Approximation::GainKeyframes);
-            10f32.powf(first.value / 20.0)
-        }
-        None => clip.gain_linear(),
-    }
-    .clamp(0.0, 4.0);
+    // Keyframes win over the static gain, like the exporter's gain expression.
+    animation.gain_db = track_of(&clip.gain_keyframes, duration, |v: f32| {
+        v.clamp(MIN_GAIN_DB, MAX_GAIN_DB)
+    });
+    placement.gain = clip.gain_linear().clamp(0.0, 4.0);
 
     apply_transition(
         clip,
