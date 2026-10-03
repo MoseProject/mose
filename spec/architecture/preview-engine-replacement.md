@@ -341,7 +341,7 @@ GStreamer remains untouched until a controlled migration begins.
 
 Phases 0-6 are implemented in `crates/bush` (plus the audio/hardware decode surface in
 `crates/avbridge`) and verified against real media; phase 7 (the `core` adapter) is deliberately
-not started and needs its own approval. The per-capability checklist, what is intentionally
+not started and needs its own approval; the proposal is in [bush-adapter-rfc.md](bush-adapter-rfc.md). The per-capability checklist, what is intentionally
 missing (zero-copy GPU presentation, non-Windows hardware decode),
 the measured performance numbers and how to reproduce them live in
 [../matrix/bush.md](../matrix/bush.md). Two measured results changed the plan: hardware decode
