@@ -2,8 +2,7 @@
 
 Bush is the standalone Rust preview engine described in
 [../architecture/preview-engine-replacement.md](../architecture/preview-engine-replacement.md).
-It has **no caller yet**: `core`, `desktop` and the GStreamer path are untouched. The adapter that
-would connect it is a separate approval point (plan phase 7) and is not part of this matrix.
+It is the only preview engine: `apps/desktop` drives it through `bush_adapter/` and `core`'s frame sampler decodes through it. GStreamer was removed (see [../architecture/gstreamer-removal-plan.md](../architecture/gstreamer-removal-plan.md)).
 
 Legend: `[x]` done and verified against real media, `[~]` partial, `[ ]` not started.
 Everything below runs in `cargo test -p bush` (and `cargo test -p avbridge` for the native side)

@@ -58,12 +58,6 @@
       "bundle": "macOS Frameworks as a transitive FFmpeg dependency; verified through the required libopenh264 encoder contract"
     },
     {
-      "name": "GStreamer",
-      "version": "1.26.11 on Windows; Ubuntu 24.04 repository build on Linux; Homebrew runner build on macOS",
-      "license": "LGPL-2.1-or-later core; plugin-specific licenses in the complete runtime",
-      "bundle": "runtime/gstreamer including the plugin scanner and the explicit minimal plugin allowlist"
-    },
-    {
       "name": "ONNX Runtime",
       "version": "1.28.0",
       "license": "MIT",

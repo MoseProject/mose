@@ -85,22 +85,15 @@ def main() -> None:
     ffmpeg = "ffmpeg.exe" if args.platform == "windows" else "ffmpeg"
     if not (runtime / "bin" / ffmpeg).is_file():
         missing.append(f"resources/runtime/bin/{ffmpeg}")
-    gst = runtime / "gstreamer"
-    if not any_file(gst, ("lib/gstreamer-1.0/*",)):
-        missing.append("resources/runtime/gstreamer/lib/gstreamer-1.0/*")
     if args.platform == "windows":
         if not any_file(root, ("avcodec-*.dll", "libavcodec-*.dll")):
             missing.append("FFmpeg avcodec DLL")
-        if not any_file(root, ("gstreamer-1.0-0.dll", "libgstreamer-1.0-0.dll")):
-            missing.append("GStreamer core DLL")
         if not (root / "python310.dll").is_file() or not (root / "Lib").is_dir():
             missing.append("private CPython runtime")
         site_packages = root / "Lib" / "site-packages"
     elif args.platform == "linux":
         if not any_file(runtime, ("lib/libavcodec.so*",)):
             missing.append("resources/runtime/lib/libavcodec.so*")
-        if not any_file(gst, ("lib/libgstreamer-1.0.so*",)):
-            missing.append("resources/runtime/gstreamer/lib/libgstreamer-1.0.so*")
         if not any_file(root, ("lib/libpython3.10.so*",)):
             missing.append("private CPython runtime")
         site_packages = root / "lib" / "python3.10" / "site-packages"
@@ -108,8 +101,6 @@ def main() -> None:
         frameworks = root / "Contents" / "Frameworks"
         if not any_file(frameworks, ("libavcodec*.dylib",)):
             missing.append("Contents/Frameworks/libavcodec*.dylib")
-        if not any_file(frameworks, ("libgstreamer-1.0*.dylib",)):
-            missing.append("Contents/Frameworks/libgstreamer-1.0*.dylib")
         site_packages = resources / "python" / "lib" / "python3.10" / "site-packages"
         for relative in ("Contents/Info.plist", "Contents/Resources/oca.icns"):
             if not (root / relative).is_file():
@@ -132,10 +123,8 @@ def main() -> None:
         ]
         if args.platform != "macos":
             expected_versions.append(dependencies["FFmpeg"]["version"])
-        elif "ffmpeg version" not in versions or "GStreamer" not in versions:
-            missing.append("RUNTIME_VERSIONS.txt macOS FFmpeg/GStreamer entries")
-        if args.platform == "windows":
-            expected_versions.append("1.26.11")
+        elif "ffmpeg version" not in versions:
+            missing.append("RUNTIME_VERSIONS.txt macOS FFmpeg entry")
         for version in expected_versions:
             if version not in versions:
                 missing.append(f"RUNTIME_VERSIONS.txt entry for {version}")

@@ -149,7 +149,7 @@ fn motion_track_one(
         2,
         MAX_SAMPLES,
     );
-    let Ok(sampler) = avcore::FrameSampler::open(source_path, Duration::from_millis(10)) else {
+    let Ok(sampler) = avcore::FrameSampler::open(source_path) else {
         return Vec::new();
     };
     let mut decoded = Vec::with_capacity(sample_times.len());

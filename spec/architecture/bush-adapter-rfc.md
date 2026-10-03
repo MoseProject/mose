@@ -1,5 +1,7 @@
 # RFC: Bush preview adapter (plan phase 7)
 
+> **Status: done.** Bush is the only preview engine and GStreamer is removed (see [gstreamer-removal-plan.md](gstreamer-removal-plan.md)). The runtime selector, the `preview_engine` preference and the rollback path described below no longer exist; the removal criteria in the last section were waived by the owner. Kept as design history.
+
 Status: **approved 2026-10-03, first slices implemented behind the `bush-preview` feature**
 (off by default; GStreamer stays the default engine). Per
 [preview-engine-replacement.md](preview-engine-replacement.md) the adapter was a separate

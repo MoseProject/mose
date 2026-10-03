@@ -5,24 +5,16 @@
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-//! Bush preview backend (feature `bush-preview`), the second engine behind `PreviewEngine`.
+//! The preview backend: the playback loop behind `PreviewEngine` and the mapper from the session
+//! timeline to a Bush scene. It is the only preview engine of the app (GStreamer was removed).
 //!
-//! This is the only code that knows both `avcore` types and Bush's scene model; `core` never
-//! imports Bush. See `spec/architecture/bush-adapter-rfc.md` for the design, rollout and rollback.
+//! This is where `avcore` types meet Bush's scene model. See
+//! `spec/architecture/bush-adapter-rfc.md` for the design.
 //!
-//! The engine is chosen at startup: `OCA_PREVIEW_ENGINE=bush` selects Bush, anything else keeps
-//! GStreamer. `OCA_BUSH_RENDERER=gpu` lets Bush composite on the GPU (CPU otherwise).
+//! Developer switches (environment): `OCA_BUSH_RENDERER=gpu` composites on the GPU (CPU
+//! otherwise) and `OCA_BUSH_DECODE=hardware` opts into hardware decode (software otherwise).
 
 mod backend;
 mod mapper;
 
 pub use backend::run;
-
-/// Whether to preview through Bush: `OCA_PREVIEW_ENGINE` (`bush` or `gstreamer`) wins when set,
-/// otherwise the saved `preview_engine` preference decides.
-pub fn selected(preference: &str) -> bool {
-    match std::env::var("OCA_PREVIEW_ENGINE") {
-        Ok(value) => value.eq_ignore_ascii_case("bush"),
-        Err(_) => preference.eq_ignore_ascii_case("bush"),
-    }
-}

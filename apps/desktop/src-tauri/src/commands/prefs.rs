@@ -28,14 +28,12 @@ pub fn get_prefs(state: State<'_, AppState>) -> PrefsView {
 #[tauri::command]
 pub fn set_prefs(app: AppHandle, prefs: PrefsView) -> Result<(), String> {
     let state = app.state::<AppState>();
-    let hardware_decode = prefs.preview_hardware_decode;
     let telemetry_enabled = prefs.telemetry_enabled;
     {
         let mut document = state.prefs();
         document.view = prefs;
         document.save()?;
     }
-    state.preview.set_hardware_decode(hardware_decode);
     state
         .telemetry_enabled
         .store(telemetry_enabled, std::sync::atomic::Ordering::Relaxed);

@@ -253,9 +253,8 @@ pub enum TextAlign {
 /// `avbridge::apply_text_overlays`.
 ///
 /// Previewed via [`crate::overlay_render::render_text_clip_rgba`] and
-/// [`crate::preview::Preview::open_composited`]'s replaceable overlay branches. During playback,
-/// the UI asks the preview to replace its frozen RGBA buffer only when `words`/
-/// `highlight_enabled` resolve to another active word. Preview and export filter the same
+/// the preview's timed raster overlays (one per caption segment, so a highlighted word is its
+/// own segment and nothing is re-rasterized during playback). Preview and export filter the same
 /// complete-caption `fontdue` layout by UTF-8 byte range, so automatic wrapping, explicit
 /// newlines, font geometry, and background geometry remain identical.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

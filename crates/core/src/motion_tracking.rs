@@ -22,7 +22,7 @@
 //! frame) — no ML model, no new dependency, deliberately simple. [`track_region`] is pure and
 //! frame-source-agnostic (fed pre-decoded [`GrayFrame`]s), so it's fully unit testable against
 //! synthetic frames; the caller (`ui`'s `App::spawn_motion_track_selected_clip`) is what
-//! actually decodes real video frames via `crate::preview::Preview`.
+//! actually decodes real video frames via [`crate::FrameSampler`].
 //!
 //! **Output convention:** [`tracked_positions_to_keyframes`] converts each frame's tracked
 //! center into a *delta* from the first frame's tracked center, added to a fixed
@@ -51,7 +51,7 @@ impl GrayFrame {
     }
 }
 
-/// Converts a decoded RGBA frame (e.g. [`crate::preview::VideoFrame::rgba`]) to a [`GrayFrame`]
+/// Converts a decoded RGBA frame (e.g. [`crate::SampledFrame::rgba`]) to a [`GrayFrame`]
 /// via the standard luma weights.
 pub fn rgba_to_gray(rgba: &[u8], width: u32, height: u32) -> GrayFrame {
     let Some(pixel_count) = (width as usize).checked_mul(height as usize) else {

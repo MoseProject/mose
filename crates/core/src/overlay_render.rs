@@ -17,9 +17,8 @@
 //! full-canvas RGBA buffer — text export now writes this exact buffer to a temporary PNG while
 //! shape export still uses a `geq` avfilter pass ([`crate::render`], [`crate::shape_render`]),
 //! only ever run against an already-encoded file and have no live GStreamer element equivalent
-//! ([`crate::preview`]'s doc comment previously listed this as a known gap — see
-//! `Preview::open_composited`, which now feeds each buffer this module builds into the
-//! compositor as its own static overlay branch).
+//! (the Bush preview, `bush_adapter` in the desktop crate, feeds each buffer this module
+//! builds into its scene as a timed raster overlay).
 //!
 //! Both clip kinds have static geometry for their whole visible span (no keyframes on either
 //! type). Shape preview therefore needs one RGBA buffer only. Text preview also starts with one,
@@ -507,7 +506,7 @@ pub fn render_shape_clip_rgba(clip: &ShapeClip, canvas_width: u32, canvas_height
 
 /// Renders a [`crate::timeline::ClipInstance::mask_shape`] into a `canvas_width`×`canvas_height`
 /// single-channel `GRAY8` buffer — `255` inside the shape (visible), `0` outside (masked out) —
-/// for [`crate::preview::build_composite_branch`]'s `alphacombine` mask stage, the preview-side
+/// for the old GStreamer preview's `alphacombine` mask stage, the preview-side
 /// counterpart to export's `geq`-based alpha-clipping stage
 /// (`ClipInstance::video_filter_chain`'s `mask_shape` block). Mirrors that block's math
 /// term-for-term: [`MaskShape::Circle`] is a plain circle inscribed in `min(width, height)`;

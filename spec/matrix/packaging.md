@@ -6,7 +6,7 @@ ad-hoc entries.
 - [x] Windows/Linux/macOS release bundles — Windows Inno Setup installer (bilingual EN/pt-BR)
       + portable ZIP, Linux AppImage + root-owned `.deb`, macOS Apple Silicon + Intel DMGs
       (Developer ID signing/notarization when CI credentials configured).
-- [x] Everything embedded: FFmpeg (LGPL, static), full installed GStreamer plugin set, Whisper
+- [x] Everything embedded: FFmpeg (LGPL, static), Whisper
       Base, UltraFace, MODNet, Piper pt-BR, eSpeak data, private CPython/yt-dlp/yt-dlp-ejs/Deno,
       Linux AppImage runtime — no runtime model downloader anywhere, `packaging/
       validate_bundle.py` blocks publication if anything required is missing or a hash drifts.

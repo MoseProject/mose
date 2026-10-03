@@ -24,29 +24,18 @@ LD_LIBRARY_PATH="$OUTPUT_DIR/resources/runtime/lib" \
     python3 "$SCRIPT_DIR/verify_ffmpeg_runtime.py" \
         "$OUTPUT_DIR/resources/runtime/bin/ffmpeg" --platform linux
 
-GST_ROOT="$OUTPUT_DIR/resources/runtime/gstreamer"
-GST_PLUGINS="$GST_ROOT/lib/gstreamer-1.0"
-mkdir -p "$GST_ROOT/lib" "$GST_ROOT/libexec/gstreamer-1.0"
-python3 "$SCRIPT_DIR/collect_gstreamer_plugins.py" \
-    /usr/lib/x86_64-linux-gnu/gstreamer-1.0 "$GST_PLUGINS" --platform linux
-scanner="$(command -v gst-plugin-scanner || true)"
-if [ -z "$scanner" ]; then
-    scanner="$(find /usr/lib -path '*/gstreamer1.0/gstreamer-1.0/gst-plugin-scanner' -print -quit)"
-fi
-test -n "$scanner"
-cp "$scanner" "$GST_ROOT/libexec/gstreamer-1.0/"
-
-# Collect every non-glibc ELF dependency used by the app, helper, scanner and GStreamer
-# plugins. A launcher sets LD_LIBRARY_PATH before starting the real binary.
+# Collect every non-glibc ELF dependency used by the app, helper and bundled tools into
+# runtime/lib. A launcher sets LD_LIBRARY_PATH before starting the real binary. ALSA stays a
+# system library: its plugins and configuration belong to the user's sound setup.
 while IFS= read -r library; do
-    cp -Ln "$library" "$GST_ROOT/lib/" 2>/dev/null || true
+    cp -Ln "$library" "$OUTPUT_DIR/resources/runtime/lib/" 2>/dev/null || true
 done < <(
-    find "$OUTPUT_DIR/oca-desktop" "$OUTPUT_DIR/ytbridge" "$OUTPUT_DIR/deno" "$scanner" \
+    find "$OUTPUT_DIR/oca-desktop" "$OUTPUT_DIR/ytbridge" "$OUTPUT_DIR/deno" \
         "$OUTPUT_DIR/resources/runtime/bin" "$OUTPUT_DIR/resources/runtime/lib" \
-        "$GST_PLUGINS" -type f -print0 \
+        -type f -print0 \
         | xargs -0 -r ldd 2>/dev/null \
         | awk '/=> \/|^\// { for (i=1;i<=NF;i++) if ($i ~ /^\//) print $i }' \
-        | grep -Ev '/(ld-linux|libc\.so|libm\.so|libpthread\.so|libdl\.so|librt\.so)' \
+        | grep -Ev '/(ld-linux|libc\.so|libm\.so|libpthread\.so|libdl\.so|librt\.so|libasound\.so)' \
         | sort -u
 )
 
@@ -64,7 +53,6 @@ find "$SCRIPT_DIR/../crates/core/assets/fonts" -name OFL.txt -print0 | while IFS
 done
 {
     "$FFMPEG_DIR/bin/ffmpeg" -version | head -1
-    gst-launch-1.0 --version | head -2
     PYTHONDONTWRITEBYTECODE=1 "$BUILD_DIR/../../vendor/python-runtime/bin/python3.10" --version
     "$OUTPUT_DIR/deno" --version | head -1
     PYTHONDONTWRITEBYTECODE=1 "$BUILD_DIR/../../vendor/python-runtime/bin/python3.10" -c \

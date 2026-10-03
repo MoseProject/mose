@@ -1,5 +1,7 @@
 # Bush — Preview Engine Replacement Plan
 
+> **Status: done.** Bush replaced the GStreamer preview and GStreamer is removed from the workspace (see [gstreamer-removal-plan.md](gstreamer-removal-plan.md)). Kept as design history.
+
 ## Objective and boundary
 
 Create **Bush**, a native, Rust-owned preview engine that can eventually replace the GStreamer

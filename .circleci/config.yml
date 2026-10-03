@@ -67,17 +67,12 @@ commands:
       # had to set LIBCLANG_PATH there); cimg/base doesn't, hence installing + pointing at it
       # explicitly here.
       - run:
-          name: Install GStreamer, Python, clang and cmake
+          name: Install ALSA headers, Python, clang and cmake
           command: |
             sudo apt-get update
             sudo apt-get install -y \
               pkg-config \
-              libgstreamer1.0-dev \
-              libgstreamer-plugins-base1.0-dev \
-              libgstreamer-plugins-bad1.0-dev \
-              gstreamer1.0-plugins-good \
-              gstreamer1.0-plugins-bad \
-              gstreamer1.0-libav \
+              libasound2-dev \
               python3-dev \
               clang \
               libclang-dev \

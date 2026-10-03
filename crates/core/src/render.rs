@@ -1001,9 +1001,8 @@ fn build_padded_matte(
         1,
         natural_count.min(MAX_PRIVACY_BLUR_MATTE_FRAMES),
     );
-    let sampler =
-        crate::frame_sampler::FrameSampler::open(matte_path, std::time::Duration::from_millis(20))
-            .map_err(|e| format!("failed to open matte for decoding: {e}"))?;
+    let sampler = crate::frame_sampler::FrameSampler::open(matte_path)
+        .map_err(|e| format!("failed to open matte for decoding: {e}"))?;
 
     let mut clip_frames: Vec<Vec<u8>> = Vec::with_capacity(sample_times.len());
     for &t in &sample_times {

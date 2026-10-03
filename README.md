@@ -18,8 +18,7 @@ crates/
                  Needs FFMPEG_DIR set to build (see Prerequisites).
   core/          UI-agnostic engine: project/timeline/media data model, media wrappers
                  (probe/render/loudness/proxy — all via avbridge FFI, no subprocess left),
-                 a minimal GStreamer preview pipeline (open/play/pause/seek, pulls RGBA
-                 frames — not yet wired into the Editor screen), mock sample data. No egui
+                 a frame sampler over the `bush` decoder, mock sample data. No egui
                  dependency.
   ui/            Native GUI (eframe/egui, glow backend): the five screens, theme, i18n.
 docs/
@@ -53,13 +52,9 @@ string).
   (e.g. a [BtbN shared build](https://github.com/BtbN/FFmpeg-Builds)) — required to build at
   all, `avbridge` links against it. At runtime, the FFmpeg DLLs (`FFMPEG_DIR/bin`) need to
   be next to the built binary or on `PATH`.
-- **GStreamer** dev build (MSVC or mingw, matching your Rust target) with `pkg-config` —
-  required to build at all, `core` depends on the `gstreamer` crate. Set
-  `PKG_CONFIG_PATH` to `<gstreamer_root>/lib/pkgconfig` and put `<gstreamer_root>/bin` on
-  `PATH`. **Do not** delete/bypass `avbridge/build.rs`'s import-lib-renaming step — without
-  it, GStreamer's bundled FFmpeg build (`gst-libav`) silently wins the linker's bare-name
-  search over the intended `FFMPEG_DIR` one (same filenames, different/incompatible version),
-  breaking `avbridge` at runtime with no build-time error.
+- **ALSA development headers on Linux** (`libasound2-dev`) — the preview plays audio through
+  `cpal`. Windows and macOS need nothing extra: the preview engine (`crates/bush`) uses the
+  FFmpeg libraries above plus the operating system's own audio API.
 - **GNU Make** to use the `Makefile` — on Windows without `make` on `PATH`, MinGW-w64
   distributions typically bundle it as `mingw32-make` instead; run that or call the
   underlying `cargo`/`rustup` commands directly (see the Makefile for what each target runs).
@@ -108,7 +103,7 @@ is a manual, per-shell opt-in — not wired into `make build` or CI, and not wor
 
 ## Status
 
-The original Fase 1-8 plan is effectively complete. Oca now has a wired GStreamer preview,
+The original Fase 1-8 plan is effectively complete. Oca now has a native preview engine (Bush),
 multi-track timeline editing, broad effects and keyframes, multicam editing, loudness and ducking,
 Whisper subtitles, background removal, auto-reframe, motion tracking, silence/highlight/chapter
 automation, Shorts packs, proxies, and a persistent background export queue. Packaging and

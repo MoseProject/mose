@@ -1,4 +1,6 @@
-# Preview Pipeline (GStreamer)
+# Preview Pipeline (GStreamer, removed)
+
+> **Historical:** the items below were proven against the GStreamer pipeline, which was removed. The live preview is Bush; its checklist is [bush.md](bush.md).
 
 `core/src/preview.rs` — the real-time playback/scrub pipeline, separate from the avbridge
 export path. Detail: `matrix/changelog.md` Fase 4's compositing/hardware-decode entries.

@@ -14,14 +14,13 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! `desktop` -- the Tauri shell for oca. The webview (React/TypeScript in `../src`) renders;
-//! this crate owns the editing session, GStreamer preview, import and export, all through
+//! this crate owns the editing session, the Bush preview, import and export, all through
 //! `avcore`. Runs alongside the egui shell (`crates/ui`) while screens migrate; see
 //! `spec/architecture/tauri-migration.md`.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod autosave;
-#[cfg(feature = "bush-preview")]
 mod bush_adapter;
 mod commands;
 mod error_reporting;
@@ -45,7 +44,7 @@ use crate::protocol::ThumbnailCache;
 use crate::state::{blank_project, AppState, Session};
 
 fn main() {
-    // Must run before GStreamer initializes so packaged runtimes win over system installs.
+    // Must run before any helper process starts so packaged tools win over system installs.
     avcore::configure_bundled_runtime();
     init_logging();
     install_panic_hook();
@@ -58,8 +57,7 @@ fn main() {
             let handle = app.handle().clone();
             app.manage(ThumbnailCache::default());
             let prefs = prefs::PrefsDocument::load();
-            let preview = PreviewEngine::spawn(handle.clone(), &prefs.view.preview_engine);
-            preview.set_hardware_decode(prefs.view.preview_hardware_decode);
+            let preview = PreviewEngine::spawn(handle.clone());
 
             let locale_code = if prefs.view.locale == "en" {
                 "en"
@@ -118,8 +116,6 @@ fn main() {
             commands::preview_seek,
             commands::preview_step,
             commands::preview_set_playing,
-            commands::preview_set_hardware_decode,
-            commands::preview_engines,
             commands::set_export_settings,
             commands::export::pick_export_path,
             commands::export::start_export,

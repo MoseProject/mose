@@ -13,58 +13,101 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-//! A shared seek-and-poll frame sampling primitive against an already-open [`Preview`]
-//! pipeline — the shape `ui`'s auto-reframe, motion tracking, and background-removal matte
-//! generation background-thread functions each independently reimplemented before this existed
-//! (open a decode-only `Preview`, seek to a timestamp, poll `current_frame()` until it decodes
-//! or a deadline passes, skip the sample on timeout rather than failing the whole run). See
-//! `spec/architecture/performance-and-caching.md` §5.
+//! A shared frame sampling primitive: open a media file decode-only, then ask for the frame at a
+//! timestamp. Auto-reframe, motion tracking, scene detection, background removal, privacy blur
+//! and the thumbnail protocol each need "the picture at T", skipping a sample that cannot be
+//! decoded rather than failing the whole run. See `spec/architecture/performance-and-caching.md`
+//! §5.
+//!
+//! Decoding is Bush's [`bush::DecodeSource`] (software decode through `avbridge`, the same seek
+//! and "frame at or before T" logic the preview uses), not a playback pipeline.
 //!
 //! Deliberately doesn't know what a sampled frame is *for* — face detection, block matching,
-//! and person segmentation all stay exactly where they were, in each `ui` feature's own
-//! background-thread function; this only owns the open/seek/poll mechanics and the "N evenly
+//! and person segmentation all stay exactly where they were, in each feature's own
+//! background-thread function; this only owns the open/seek mechanics and the "N evenly
 //! spaced sample times across a duration, clamped" bookkeeping every multi-sample caller needed
 //! on top of it.
 
 use std::path::Path;
+use std::sync::atomic::AtomicBool;
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use crate::preview::{Preview, PreviewError, VideoFrame};
+use bush::DecodeSource;
 
-/// A decode-only [`Preview`] (no display, no effects — opened with `clip: None`) plus the
-/// polling cadence [`Self::sample`] waits on. Cheap to construct once per background-thread run
-/// and reused across every sample, same as every caller already did by hand.
+/// One decoded frame as tightly packed RGBA8 (`width * height * 4` bytes).
+#[derive(Clone, Debug, PartialEq)]
+pub struct SampledFrame {
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,
+}
+
+/// Why a file could not be opened for sampling.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SamplerError(pub String);
+
+impl std::fmt::Display for SamplerError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "frame sampler: {}", self.0)
+    }
+}
+
+impl std::error::Error for SamplerError {}
+
+/// A decode-only source for one file. Cheap to construct once per background-thread run and
+/// reused across every sample; the decoder keeps its position, so samples in increasing time
+/// order are cheaper than random ones.
 pub struct FrameSampler {
-    preview: Preview,
-    poll_interval: Duration,
+    source: Mutex<DecodeSource>,
 }
 
 impl FrameSampler {
-    /// Opens `path` for sampling. `poll_interval` is how often [`Self::sample`] re-checks
-    /// `Preview::current_frame` after a seek while waiting for a frame to actually decode.
-    pub fn open(path: &Path, poll_interval: Duration) -> Result<Self, PreviewError> {
+    /// Opens `path` for sampling.
+    pub fn open(path: &Path) -> Result<Self, SamplerError> {
+        let source =
+            DecodeSource::open(path).map_err(|error| SamplerError(format!("{error:?}")))?;
         Ok(Self {
-            preview: Preview::open(path, None)?,
-            poll_interval,
+            source: Mutex::new(source),
         })
     }
 
-    /// Seeks to `at_secs` (clamped to `0.0`) and waits up to `deadline` for a frame to decode.
-    /// `None` on timeout — every caller already tolerated a slow/missing sample by just
-    /// shrinking its result rather than failing the whole run over one frame, so this makes
-    /// that the primitive's own contract instead of three independent copies of it.
-    pub fn sample(&self, at_secs: f64, deadline: Duration) -> Option<VideoFrame> {
-        let _ = self.preview.seek(at_secs.max(0.0));
-        let deadline_at = Instant::now() + deadline;
-        loop {
-            if let Some(frame) = self.preview.current_frame() {
-                return Some(frame);
-            }
-            if Instant::now() >= deadline_at {
-                return None;
-            }
-            std::thread::sleep(self.poll_interval);
+    /// The frame at (or just before) `at_secs`, clamped to `0.0`. `None` when the sample cannot
+    /// be produced: the decoder failed, the stream has no frame, or it took longer than
+    /// `deadline` (checked once the decode returns; decoding itself is bounded by the
+    /// decoder's seek search limit, so a bad file cannot hang). Every caller already tolerated
+    /// a slow or missing sample by shrinking its result rather than failing the whole run over
+    /// one frame, so that is this primitive's own contract.
+    pub fn sample(&self, at_secs: f64, deadline: Duration) -> Option<SampledFrame> {
+        let started = Instant::now();
+        let never_cancelled = AtomicBool::new(false);
+        let frame = self
+            .source
+            .lock()
+            .ok()?
+            .frame_at(at_secs.max(0.0), &never_cancelled)
+            .ok()??;
+        if started.elapsed() > deadline {
+            return None;
         }
+        let (width, height) = (frame.width(), frame.height());
+        let row_bytes = width as usize * 4;
+        let stride = frame.stride_bytes();
+        let pixels = frame.pixels();
+        let rgba = if stride == row_bytes {
+            pixels.get(..row_bytes * height as usize)?.to_vec()
+        } else {
+            let mut packed = Vec::with_capacity(row_bytes * height as usize);
+            for row in 0..height as usize {
+                packed.extend_from_slice(pixels.get(row * stride..row * stride + row_bytes)?);
+            }
+            packed
+        };
+        Some(SampledFrame {
+            width,
+            height,
+            rgba,
+        })
     }
 
     /// `sample_count` timestamps evenly spaced across `[start_secs, end_secs]`, where

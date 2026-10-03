@@ -13,8 +13,8 @@
 //! so a parity run can say which look differences are expected rather than bugs.
 //!
 //! Intensity-to-parameter curves (blur, sharpen, pixelize, shake, chroma softness, deflicker,
-//! stabilization) are provisional constants until side-by-side frames against the GStreamer
-//! preview fix them (RFC gap 9).
+//! stabilization) are provisional constants until side-by-side frames against the exported
+//! video fix them (RFC gap 9).
 
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -61,7 +61,7 @@ pub trait SourceResolver {
     fn lut(&mut self, path: &str) -> Option<Arc<Lut3D>>;
 }
 
-/// A property whose Bush rendering differs from the GStreamer preview or export.
+/// A property whose Bush rendering differs from the export.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Approximation {
     /// Core ramps speed linearly in source time, Bush in timeline time: the clip plays at its

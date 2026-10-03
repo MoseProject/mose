@@ -16,7 +16,7 @@
 //! Waveform/vectorscope monitors for calibrated color grading — per `request.md`'s Fase 4 color
 //! tools and `spec/matrix/effects-and-color.md`'s "Known gaps" entry (LUTs/filters exist, no way
 //! to calibrate exposure/saturation precisely). Pure pixel-crunching against an already-decoded
-//! RGBA frame ([`crate::preview::VideoFrame::rgba`]) — no new avfilter/GStreamer element
+//! RGBA frame ([`crate::SampledFrame::rgba`]) — no new avfilter/GStreamer element
 //! involved, so this works against exactly the same frame the preview already shows.
 //!
 //! **Simplification, not a hard wall**: a professional scope draws a green-phosphor trace with a

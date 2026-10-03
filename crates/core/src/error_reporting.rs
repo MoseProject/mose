@@ -308,8 +308,9 @@ pub struct MediaContext {
 }
 
 /// Build/dependency identifiers already available at runtime without touching user data: the
-/// linked FFmpeg (libavformat) version, the linked GStreamer version, and — only where the app
-/// already knows them — GPU vendor/driver and the export encoder actually selected. Verbatim
+/// linked FFmpeg (libavformat) version and — only where the app already knows them — GPU
+/// vendor/driver and the export encoder actually selected. `gstreamer_version` is a legacy
+/// field kept for schema compatibility and always `None` now. Verbatim
 /// `nvidia-smi`-style probing is explicitly out of scope; `None` means "not known here", never
 /// "probe harder".
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -916,10 +917,9 @@ fn format_ffmpeg_version(packed: u32) -> String {
 fn default_environment() -> RuntimeEnvironment {
     RuntimeEnvironment {
         ffmpeg_version: Some(format_ffmpeg_version(avbridge::version())),
-        gstreamer_version: {
-            let (maj, min, mic, _nano) = gstreamer::version();
-            Some(format!("{maj}.{min}.{mic}"))
-        },
+        // GStreamer is no longer part of the app; the field stays in the (strict) report schema
+        // so queued and stored reports keep parsing, and is simply never filled in.
+        gstreamer_version: None,
         gpu_vendor: None,
         gpu_driver: None,
         encoder: None,

@@ -153,7 +153,7 @@ fn apply_privacy_blur_one(
         2,
         MAX_SAMPLES,
     );
-    let sampler = avcore::FrameSampler::open(source_path, Duration::from_millis(20))
+    let sampler = avcore::FrameSampler::open(source_path)
         .map_err(|e| format!("failed to open source for decoding: {e}"))?;
 
     let mut gray_frames: Vec<avcore::GrayFrame> = Vec::with_capacity(sample_times.len());

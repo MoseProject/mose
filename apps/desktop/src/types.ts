@@ -274,9 +274,8 @@ export interface PrefsView {
   lufsProfile: number;
   outputFolder: string;
   autosaveMinutes: number;
+  /** Kept for older prefs files; the Bush preview ignores it. */
   previewHardwareDecode: boolean;
-  /** "gstreamer" (or empty) or "bush"; read at startup. */
-  previewEngine: string;
   recentProjectPaths: string[];
   savedLayerTemplates: LayerTemplate[];
   whisperModelPath: string;

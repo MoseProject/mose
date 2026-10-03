@@ -49,8 +49,6 @@ def main() -> None:
         )
         write(bundle / "resources/licenses/fonts/test-OFL.txt")
         write(bundle / "resources/runtime/lib/libavcodec.so.1")
-        write(bundle / "resources/runtime/gstreamer/lib/libgstreamer-1.0.so.0")
-        write(bundle / "resources/runtime/gstreamer/lib/gstreamer-1.0/plugin.so")
         write(bundle / "lib/libpython3.10.so.1.0")
         write(bundle / "lib/python3.10/site-packages/yt_dlp/__init__.py")
         write(bundle / "lib/python3.10/site-packages/yt_dlp_ejs/__init__.py")

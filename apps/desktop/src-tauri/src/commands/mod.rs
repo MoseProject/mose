@@ -216,22 +216,6 @@ pub fn preview_set_playing(state: State<'_, AppState>, playing: bool) {
 }
 
 #[tauri::command]
-pub fn preview_set_hardware_decode(state: State<'_, AppState>, enabled: bool) {
-    state.preview.set_hardware_decode(enabled);
-}
-
-/// The preview engines this build can run, for the preferences screen. The choice is read at
-/// startup, so changing it takes effect after a restart.
-#[tauri::command]
-pub fn preview_engines() -> Vec<&'static str> {
-    if cfg!(feature = "bush-preview") {
-        vec!["gstreamer", "bush"]
-    } else {
-        vec!["gstreamer"]
-    }
-}
-
-#[tauri::command]
 pub fn set_export_settings(
     app: AppHandle,
     target_lufs: f32,

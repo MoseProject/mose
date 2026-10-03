@@ -32,21 +32,6 @@ jobs:
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
 
-      # `core` links gstreamer/gstreamer-app/gstreamer-video (the `preview` module) via
-      # gstreamer-sys crates, which locate GStreamer at build time through pkg-config — neither
-      # is present on the windows-latest image by default, so both are set up explicitly here.
-      # windows-latest's own pkg-config (MSYS2's) is known to choke on GStreamer's .pc files,
-      # hence pkgconfiglite specifically (same guidance the setup-gstreamer action's README
-      # gives) rather than whatever pkg-config the image already carries.
-      - name: Install pkg-config
-        run: choco install pkgconfiglite -y --no-progress
-
-      - name: Setup GStreamer
-        uses: blinemedical/setup-gstreamer@v1.4.0
-        with:
-          version: '1.26.11'
-          arch: 'x86_64'
-
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
@@ -140,14 +125,11 @@ jobs:
         with:
           components: clippy
 
-      - name: Install GStreamer
+      # ALSA headers are needed by `cpal`, the audio output backend of the Bush preview.
+      - name: Install system libraries
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            pkg-config \
-            libgstreamer1.0-dev \
-            libgstreamer-plugins-base1.0-dev \
-            libgstreamer-plugins-bad1.0-dev
+          sudo apt-get install -y pkg-config libasound2-dev
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -242,21 +224,17 @@ jobs:
           components: clippy
 
       # Homebrew FFmpeg gives us include/ and lib/ under $(brew --prefix)/opt/ffmpeg, which
-      # is exactly the layout avbridge/build.rs expects from FFMPEG_DIR. Homebrew GStreamer
-      # puts pkg-config files under $(brew --prefix)/lib/pkgconfig, which gstreamer-sys
-      # finds through PKG_CONFIG_PATH. gst-plugins-base provides gstreamer-app and
-      # gstreamer-video (the two extra crates core depends on).
+      # is exactly the layout avbridge/build.rs expects from FFMPEG_DIR.
       - name: Install dependencies
-        run: brew install ffmpeg gstreamer gst-plugins-base gst-plugins-bad
+        run: brew install ffmpeg
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Export FFMPEG_DIR and PKG_CONFIG_PATH
+      - name: Export FFMPEG_DIR
         run: |
           brew_prefix=$(brew --prefix)
           echo "FFMPEG_DIR=${brew_prefix}/opt/ffmpeg" >> "$GITHUB_ENV"
-          echo "PKG_CONFIG_PATH=${brew_prefix}/lib/pkgconfig" >> "$GITHUB_ENV"
 
       - name: Clippy
         run: cargo clippy --workspace --all-targets

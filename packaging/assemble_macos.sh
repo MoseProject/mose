@@ -1,19 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ "$#" -ne 8 ]; then
-    echo "usage: $0 BUILD_DIR FFMPEG_DIR GSTREAMER_DIR PYTHON_RUNTIME OUTPUT_APP INVENTORY VERSION ARCH" >&2
+if [ "$#" -ne 7 ]; then
+    echo "usage: $0 BUILD_DIR FFMPEG_DIR PYTHON_RUNTIME OUTPUT_APP INVENTORY VERSION ARCH" >&2
     exit 2
 fi
 
 BUILD_DIR="$(cd "$1" && pwd)"
 FFMPEG_DIR="$(cd "$2" && pwd)"
-GSTREAMER_DIR="$(cd "$3" && pwd)"
-PYTHON_RUNTIME="$(cd "$4" && pwd)"
-OUTPUT_APP="$5"
-INVENTORY="$6"
-VERSION="$7"
-ARCH="$8"
+PYTHON_RUNTIME="$(cd "$3" && pwd)"
+OUTPUT_APP="$4"
+INVENTORY="$5"
+VERSION="$6"
+ARCH="$7"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
@@ -27,9 +26,7 @@ CONTENTS="$OUTPUT_APP/Contents"
 MACOS="$CONTENTS/MacOS"
 RESOURCES="$CONTENTS/Resources"
 RUNTIME="$RESOURCES/runtime"
-GST_ROOT="$RUNTIME/gstreamer"
-mkdir -p "$MACOS" "$RESOURCES" "$RUNTIME/bin" \
-    "$GST_ROOT/lib" "$GST_ROOT/libexec/gstreamer-1.0" "$RESOURCES/python"
+mkdir -p "$MACOS" "$RESOURCES" "$RUNTIME/bin" "$RESOURCES/python"
 
 install -m 0755 "$BUILD_DIR/oca-desktop" "$MACOS/oca"
 install -m 0755 "$BUILD_DIR/ytbridge" "$MACOS/ytbridge"
@@ -38,10 +35,6 @@ cp -a "$BUILD_DIR/espeak-ng-data" "$RESOURCES/"
 cp -a "$PYTHON_RUNTIME/lib" "$RESOURCES/python/"
 install -m 0755 "$FFMPEG_DIR/bin/ffmpeg" "$RUNTIME/bin/ffmpeg"
 python3 "$SCRIPT_DIR/verify_ffmpeg_runtime.py" "$FFMPEG_DIR/bin/ffmpeg" --platform macos
-python3 "$SCRIPT_DIR/collect_gstreamer_plugins.py" \
-    "$GSTREAMER_DIR/lib/gstreamer-1.0" "$GST_ROOT/lib/gstreamer-1.0" --platform macos
-install -m 0755 "$GSTREAMER_DIR/libexec/gstreamer-1.0/gst-plugin-scanner" \
-    "$GST_ROOT/libexec/gstreamer-1.0/gst-plugin-scanner"
 
 sed "s/__OCA_VERSION__/$VERSION/g" "$SCRIPT_DIR/macos-Info.plist" > "$CONTENTS/Info.plist"
 ICONSET="$(mktemp -d)/oca.iconset"
@@ -69,7 +62,6 @@ find "$REPO_ROOT/crates/core/assets/fonts" -name OFL.txt -print0 \
 
 {
     "$FFMPEG_DIR/bin/ffmpeg" -version | head -1
-    "$GSTREAMER_DIR/bin/gst-launch-1.0" --version | head -2
     "$PYTHON_RUNTIME/bin/python3.10" --version
     "$MACOS/deno" --version | head -1
     PYTHONDONTWRITEBYTECODE=1 "$PYTHON_RUNTIME/bin/python3.10" -c \
@@ -86,7 +78,6 @@ python3 "$SCRIPT_DIR/bundle_macos_dylibs.py" "$OUTPUT_APP" \
     --architecture "$ARCH" \
     --search-root "$BUILD_DIR" \
     --search-root "$FFMPEG_DIR/lib" \
-    --search-root "$GSTREAMER_DIR/lib" \
     --search-root "$PYTHON_RUNTIME/lib" \
     --search-root "$BREW_PREFIX/lib" \
     --search-root "$OPENH264_DIR/lib"

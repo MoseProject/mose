@@ -350,7 +350,7 @@ fn builder_sanitizes_metadata_defensively() {
 }
 
 #[test]
-fn builder_fills_real_ffmpeg_and_gstreamer_versions() {
+fn builder_fills_the_real_ffmpeg_version_and_no_longer_reports_gstreamer() {
     let builder = clean_builder();
     let report = builder.build_report(
         ErrorCode::Preview,
@@ -365,21 +365,15 @@ fn builder_fills_real_ffmpeg_and_gstreamer_versions() {
         .ffmpeg_version
         .as_deref()
         .expect("linked FFmpeg version expected");
-    let gstreamer = env
-        .gstreamer_version
-        .as_deref()
-        .expect("linked GStreamer version expected");
     assert!(
         ffmpeg
             .split('.')
             .all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit())),
         "malformed ffmpeg version: {ffmpeg}"
     );
-    assert!(
-        gstreamer
-            .split('.')
-            .all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit())),
-        "malformed gstreamer version: {gstreamer}"
+    assert_eq!(
+        env.gstreamer_version, None,
+        "GStreamer is gone; the legacy field stays empty"
     );
     assert_eq!(validate_report(&report), Ok(()));
 }

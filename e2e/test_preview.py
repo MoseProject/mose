@@ -1,18 +1,17 @@
-# End-to-end check of the Bush preview backend (build with `--features bush-preview`).
+# End-to-end check of the preview (Bush, the app's only preview engine): the first frame shows,
+# seeks and plays through a cut produce new frames, text and shape overlays composite, and the
+# audio meter moves. Besides asserting that frames flow, it measures how many distinct frames
+# reach the webview per second while playing and how long a seek takes to produce a new frame,
+# and saves screenshots next to the test (`e2e/out/`) for a visual check.
 #
-# Run it on its own so the app launches with the engine switch in its environment:
-#   OCA_PREVIEW_ENGINE=bush python -m pytest e2e/test_bush_preview.py -s
-# Skipped when the variable is absent, so the normal GStreamer e2e run is unaffected. Besides
-# asserting that frames flow, it measures how many distinct frames reach the webview per second
-# while playing and how long a seek takes to produce a new frame, and saves screenshots next to
-# the test (`e2e/out/`) for a visual check.
+#   python -m pytest e2e/test_preview.py -s
+# `OCA_BUSH_E2E_VIDEO` points it at another video (for example a 1080p clip) and
+# `OCA_BUSH_E2E_PLAY_SECS` sets how long it plays.
 from __future__ import annotations
 
 import os
 import time
 from pathlib import Path
-
-import pytest
 
 from conftest import poll_until
 from helpers import (
@@ -22,12 +21,6 @@ from helpers import (
     goto_editor,
     import_and_add_to_timeline,
     invoke,
-)
-
-# `gstreamer` runs the same measurements against the existing engine, as a baseline to compare.
-pytestmark = pytest.mark.skipif(
-    os.environ.get("OCA_PREVIEW_ENGINE", "").lower() not in ("bush", "gstreamer"),
-    reason="set OCA_PREVIEW_ENGINE=bush (build with --features bush-preview) or gstreamer",
 )
 
 OUT_DIR = Path(__file__).resolve().parent / "out"
@@ -63,7 +56,7 @@ def screenshot(driver, name):
     driver.save_screenshot(str(OUT_DIR / name))
 
 
-def test_bush_plays_across_a_cut_between_two_clips(oca_driver):
+def test_preview_plays_across_a_cut_between_two_clips(oca_driver):
     goto_editor(oca_driver)
     clip_id = import_and_add_to_timeline(oca_driver)
     poll_until(lambda: latest_frame(oca_driver), timeout_secs=15.0, interval_secs=0.05)
@@ -93,7 +86,7 @@ def test_bush_plays_across_a_cut_between_two_clips(oca_driver):
     assert len(seen) >= 8, f"playback stalled around the cut ({len(seen)} distinct frames)"
 
 
-def test_bush_plays_a_clip_and_reacts_to_seeks(oca_driver):
+def test_preview_plays_a_clip_and_reacts_to_seeks(oca_driver):
     goto_editor(oca_driver)
     video = Path(os.environ.get("OCA_BUSH_E2E_VIDEO", FIXTURE_VIDEO))
     import_and_add_to_timeline(oca_driver, video)

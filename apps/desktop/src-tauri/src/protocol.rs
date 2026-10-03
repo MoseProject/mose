@@ -63,7 +63,7 @@ pub fn handle(app: &AppHandle, path: &str, responder: UriSchemeResponder) {
                 return;
             };
             let app = app.clone();
-            // Frame sampling blocks on GStreamer preroll; keep it off the webview's IPC thread.
+            // Frame sampling decodes video; keep it off the webview's IPC thread.
             std::thread::spawn(move || {
                 let cache = app.state::<ThumbnailCache>();
                 responder.respond(jpeg_or_not_found(cache.get_or_extract(&source)));
@@ -90,7 +90,7 @@ fn extract_thumbnail(path: &Path) -> Option<Vec<u8>> {
     if !path.exists() {
         return None;
     }
-    let sampler = avcore::FrameSampler::open(path, Duration::from_millis(20)).ok()?;
+    let sampler = avcore::FrameSampler::open(path).ok()?;
     let frame = sampler.sample(THUMBNAIL_AT_SECS, Duration::from_millis(800))?;
     encode_jpeg(&frame, THUMBNAIL_MAX_DIM)
 }

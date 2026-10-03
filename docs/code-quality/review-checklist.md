@@ -57,6 +57,6 @@ could not run.
 ## Completion evidence
 
 Record commands actually executed, their outcomes, and environmental gaps. "Compiled" is not
-equivalent to "verified." For UI/media work, distinguish unit validation from real GStreamer/FFmpeg
+equivalent to "verified." For UI/media work, distinguish unit validation from real Bush/FFmpeg
 or end-to-end validation. For performance, include baseline and after measurements or explicitly say
 that no performance claim was made.

@@ -20,12 +20,7 @@ ifeq ($(_OS),Darwin)
   # macOS — Homebrew (Apple Silicon: /opt/homebrew, Intel: /usr/local)
   _BREW_PREFIX := $(shell brew --prefix 2>/dev/null || echo /opt/homebrew)
   FFMPEG_DIR    ?= $(_BREW_PREFIX)/opt/ffmpeg
-  # GStreamer via Homebrew puts .pc files in <brew_prefix>/lib/pkgconfig.
-  # The older macOS SDK installer used /Library/Frameworks/GStreamer.framework/...
-  # Accept either; prefer the Homebrew location when both are present.
-  PKG_CONFIG_PATH ?= $(_BREW_PREFIX)/lib/pkgconfig:/Library/Frameworks/GStreamer.framework/Versions/1.0/lib/pkgconfig
   export FFMPEG_DIR
-  export PKG_CONFIG_PATH
   export PATH := $(FFMPEG_DIR)/lib:$(_BREW_PREFIX)/bin:$(PATH)
   ifneq ($(wildcard $(CURDIR)/vendor/python-runtime/bin/python3.10),)
     PYO3_PYTHON ?= $(CURDIR)/vendor/python-runtime/bin/python3.10
@@ -43,10 +38,6 @@ else ifeq ($(_OS),Linux)
 else
   # Windows — avbridge automatically discovers a shared FFmpeg development installation when
   # its bin/ directory is on PATH. FFMPEG_DIR remains an optional explicit override.
-  ifndef PKG_CONFIG_PATH
-    $(warning PKG_CONFIG_PATH is not set; GStreamer headers may not be found.)
-  endif
-  export PKG_CONFIG_PATH
   ifneq ($(wildcard $(CURDIR)/vendor/python-runtime/python.exe),)
     PYO3_PYTHON ?= $(CURDIR)/vendor/python-runtime/python.exe
     export PYO3_PYTHON
@@ -114,7 +105,7 @@ bench:
 bench-bush:
 	cargo bench -p bush
 
-# Bush test suite (needs FFMPEG_DIR, no GStreamer). Add --features cpal for the device tests.
+# Bush test suite (needs FFMPEG_DIR). Add --features cpal for the device tests.
 test-bush:
 	cargo test -p bush
 

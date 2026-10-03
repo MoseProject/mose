@@ -26,8 +26,8 @@
 //! this one feature. Spawning this as a subprocess instead — only when the user actually clicks
 //! "Baixar do YouTube" — means `ui.exe` never touches Python at all; only this small helper
 //! does, and only while it's running. `avcore::youtube_download` spawns it, reads its stdout,
-//! and kills it to cancel — the exact "external tool the app shells out to" shape FFmpeg/
-//! GStreamer already have elsewhere in this codebase, except this external tool is one oca
+//! and kills it to cancel — the exact "external tool the app shells out to" shape FFmpeg
+//! already has elsewhere in this codebase, except this external tool is one oca
 //! builds and ships itself (`target/.../ytbridge(.exe)`, found next to the running `ui.exe`)
 //! rather than something the user installs separately.
 //!

@@ -33,21 +33,15 @@ shared build, with `avfilter`/`swscale`/`libopenh264` among the linked libs/enab
 to compile at all — the workspace won't build without it. At runtime the FFmpeg DLLs
 (`FFMPEG_DIR/bin`) need to be next to the built binary or on `PATH`.
 
-`core` also depends on the `gstreamer` crate (`preview` module, see Architecture below),
-needing `pkg-config` plus GStreamer's dev build (MSVC or mingw,
-matching whichever Rust target you're using) discoverable via
-`PKG_CONFIG_PATH=<gstreamer_root>/lib/pkgconfig`, with `<gstreamer_root>/bin` on `PATH` too
-(build-time lookup and runtime DLL resolution both need it).
+There is no GStreamer dependency anymore: the preview is the `bush` crate. On Linux the desktop
+crate also needs the ALSA development package (`libasound2-dev`) for `cpal`'s audio output.
 
-**Do not remove `avbridge/build.rs`'s import-lib-renaming step.** GStreamer's SDK bundles
-its own FFmpeg build (`gst-libav`) whose import libs share filenames with (but are a different,
-incompatible version from) the ones under `FFMPEG_DIR` — confirmed on both MSVC and GNU/mingw,
-and confirmed to be a filename collision, not a toolchain-ABI issue (ruled out by testing both).
-Left as bare `-l<name>` + `-L<path>`, a bare-name search can silently resolve to GStreamer's
-bundled copy instead, compiling fine but corrupting `avbridge`'s FFmpeg calls at runtime
-(`avformat_open_input` starts failing on every call, no error at build time). `build.rs` copies
-its FFmpeg import libs into its own `OUT_DIR` under unique names before linking specifically to
-make that impossible — full diagnosis in `features/fase1/commit_plan.md` (chore-002).
+`avbridge/build.rs` copies FFmpeg's Windows import libs into its own `OUT_DIR` under unique
+names before linking. The step was added because GStreamer's SDK bundled its own FFmpeg build
+(`gst-libav`) whose import libs shared filenames with a different, incompatible FFmpeg version;
+a bare-name search could silently resolve to the wrong copy and corrupt `avbridge`'s FFmpeg calls
+at runtime (full diagnosis in `features/fase1/commit_plan.md`, chore-002). GStreamer is gone;
+the step is kept because it is harmless and keeps the link independent of the linker search path.
 
 ```bash
 make build     # debug build, whole workspace
@@ -80,9 +74,9 @@ don't get this automatically — `nav_rail.rs`'s `rail_button` was patched to ca
 custom-painted controls (media library items, timeline clips) aren't yet, so e2e coverage for
 those still needs coordinate-based pywinauto calls, or the same `widget_info` treatment first.
 One-time setup: `python -m pip install -r e2e/requirements.txt`. Needs a debug build first
-(`make build`) and the FFmpeg/GStreamer runtime DLL dirs on `PATH` for the *launched process*
-(same requirement as running `ui.exe` by hand) — `make test-e2e` exports both automatically,
-running `pytest` directly under `e2e/` needs them exported first. The `oca_window` fixture
+(`make build`) and the FFmpeg runtime DLL dir on `PATH` for the *launched process*
+(same requirement as running `ui.exe` by hand) — running `pytest` directly under `e2e/` needs
+it exported first. The `oca_window` fixture
 (`e2e/conftest.py`) launches its own `ui.exe`, waits for the main window, and calls
 `set_focus()` on it before yielding — without that, synthetic clicks land on whatever window
 actually has focus (often the terminal `pytest` ran from) and silently do nothing, no
@@ -111,8 +105,8 @@ and `ui` is its only consumer.
   of sample-index buckets, nothing written or re-encoded).
 - **`core`** — project/timeline/media data model plus the media wrappers that populate
   it (`probe`, `render`, `loudness`, `proxy`, and `waveform` — all via `avbridge` FFI, no
-  subprocess left in any of them), a `playbin`-based GStreamer playback pipeline (`preview`: open/play/pause/seek/
-  query, `current_frame()` pulls packed RGBA via an appsink), `.ocproj` save/load (`persistence`),
+  subprocess left in any of them), a frame sampler over the `bush` decoder (`frame_sampler`:
+  the frame at a time, for the analysis features), `.ocproj` save/load (`persistence`),
   and mock sample data (`sample`) used to exercise the UI before real files
   are wired in. Locale-neutral by design: it stores data like `Recency` (an enum), never
   pre-formatted display strings — formatting is `ui`'s job.

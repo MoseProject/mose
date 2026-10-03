@@ -19,7 +19,7 @@
 - Use UI unit tests for `OcaApp` state transitions and command handling.
 - Use end-to-end UI automation for accessibility names, focus, real navigation, and interactions that
   unit tests cannot prove.
-- Use real FFmpeg/GStreamer pipeline tests where mocks would hide format, timing, ownership, or ABI
+- Use real FFmpeg/Bush pipeline tests where mocks would hide format, timing, ownership, or ABI
   failures. State clearly when the environment prevents that validation.
 
 Follow the repository's test placement rules in `AGENTS.md`; do not create a new test layout for one
