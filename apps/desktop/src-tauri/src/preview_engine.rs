@@ -98,6 +98,12 @@ impl PreviewEngine {
         (engine, rx)
     }
 
+    /// Pretends the engine produced `bytes` as its latest preview frame.
+    #[cfg(test)]
+    pub(crate) fn set_latest_frame(&self, bytes: Vec<u8>) {
+        *self.latest.lock().unwrap() = Some(Arc::new(bytes));
+    }
+
     /// Pretends playback reached `secs`, which is what edits read as the live playhead.
     #[cfg(test)]
     pub(crate) fn set_playhead(&self, secs: f64) {

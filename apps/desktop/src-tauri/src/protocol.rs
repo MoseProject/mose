@@ -183,3 +183,7 @@ mod tests {
         assert!(extract_thumbnail(Path::new("missing.mp4")).is_none());
     }
 }
+
+#[cfg(test)]
+#[path = "protocol_test.rs"]
+mod handler_tests;
