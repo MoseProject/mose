@@ -156,6 +156,13 @@ describe("asset dragging", () => {
     move(100, 100);
     expect(assetDragStore.get()).toBeNull();
   });
+
+  it("does not start a drag from the transcribe button", () => {
+    render(<MediaLibrary session={sessionWith([asset()])} />);
+    press(screen.getByTitle(t("transcribe")), 10, 10);
+    move(100, 100);
+    expect(assetDragStore.get()).toBeNull();
+  });
 });
 
 describe("text to speech", () => {
