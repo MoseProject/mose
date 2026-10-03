@@ -554,3 +554,89 @@ mod commands {
         assert_eq!(events.load(Ordering::SeqCst), 0);
     }
 }
+
+mod edge_cases {
+    use std::sync::atomic::Ordering;
+
+    use avcore::timeline::TrackKind;
+
+    use crate::commands::timeline::*;
+    use crate::testing::{harness, video_asset, Harness};
+
+    fn with_asset(duration_secs: f64) -> Harness {
+        let h = harness();
+        h.session()
+            .project
+            .media_library
+            .push(video_asset(1, duration_secs));
+        h
+    }
+
+    #[test]
+    fn adding_to_a_locked_track_is_refused() {
+        let h = with_asset(5.0);
+        add_asset_to_timeline(h.handle(), 1, None, None).unwrap();
+        let track = h.session().project.timeline().tracks[0].id;
+        set_track_flags(h.handle(), track, None, Some(true)).unwrap();
+        let events = h.count_session_events();
+        add_asset_to_timeline(h.handle(), 1, Some(track), Some(1.0)).unwrap();
+        assert_eq!(events.load(Ordering::SeqCst), 0);
+        assert_eq!(h.session().project.timeline().tracks[0].clips.len(), 1);
+    }
+
+    #[test]
+    fn moving_needs_an_existing_clip_and_target_track() {
+        let h = with_asset(5.0);
+        add_asset_to_timeline(h.handle(), 1, None, None).unwrap();
+        let (clip, track) = {
+            let s = h.session();
+            let t = &s.project.timeline().tracks[0];
+            (t.clips[0].id, t.id)
+        };
+        let events = h.count_session_events();
+        move_clip(h.handle(), 999, track, 1.0).unwrap();
+        move_clip(h.handle(), clip, 999, 1.0).unwrap();
+        assert_eq!(events.load(Ordering::SeqCst), 0);
+        move_clip(h.handle(), clip, track, 2.0).unwrap();
+        assert_eq!(events.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            h.session().project.timeline().tracks[0].clips[0].start_secs,
+            2.0
+        );
+    }
+
+    #[test]
+    fn a_zero_length_clip_cannot_be_ramped() {
+        let h = with_asset(0.0);
+        add_asset_to_timeline(h.handle(), 1, None, None).unwrap();
+        let clip = h.session().project.timeline().tracks[0].clips[0].id;
+        let events = h.count_session_events();
+        apply_speed_ramp_to_clip(h.handle(), clip, 0.5, 2.0, 4).unwrap();
+        assert_eq!(events.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn a_clip_too_short_to_split_takes_the_start_speed_whole() {
+        let h = with_asset(0.15);
+        add_asset_to_timeline(h.handle(), 1, None, None).unwrap();
+        let clip = h.session().project.timeline().tracks[0].clips[0].id;
+        apply_speed_ramp_to_clip(h.handle(), clip, 0.5, 2.0, 4).unwrap();
+        let session = h.session();
+        let clips = &session.project.timeline().tracks[0].clips;
+        assert!(clips.iter().any(|c| c.id == clip && c.speed_factor == 0.5));
+    }
+
+    #[test]
+    fn tracks_of_every_kind_can_be_added() {
+        let h = harness();
+        for kind in [
+            TrackKind::Video,
+            TrackKind::Audio,
+            TrackKind::Text,
+            TrackKind::Shape,
+        ] {
+            add_track(h.handle(), kind).unwrap();
+        }
+        assert_eq!(h.session().project.timeline().tracks.len(), 4);
+    }
+}
