@@ -42,8 +42,16 @@ the real default device.
 - [x] Temporal deflicker with constant per-stream state; repeats do not drift; seeks reset it.
 - [x] Parallel banded compositing plus exact fast paths, verified against an independent
       per-pixel oracle (`parallel_fast_path_matches_an_independent_oracle`).
-- [ ] GPU compositor. The CPU path meets the 1080p budget (below); a GPU renderer would only pay
-      off for 4K / many layers and needs a zero-copy path to the UI to matter. Not started.
+- [x] GPU compositor (`gpu_renderer.rs` + `gpu_renderer.wgsl`, `--features gpu`, wgpu compute
+      shader, one dispatch per layer, same geometry code as the CPU path). Selected per engine
+      with `EngineConfig::renderer = RendererChoice::GpuWithCpuFallback`; without the feature or
+      an adapter the engine silently uses the CPU compositor (`Engine::renderer_name` says which).
+      Parity against the CPU reference on an RTX 4070 (`gpu_parity_test`): byte-exact for alpha
+      layers, rotation, crop, upscale, padded strides, off-canvas layers and empty scenes; at most
+      one level off on a fraction of a percent of pixels for blends, colour effects, chroma key,
+      masks, pixelize and LUT; a thin fringe of nearest-neighbour ties when downscaling.
+      Limits: frames are uploaded and the canvas read back every render (the engine API returns
+      CPU frames), so the win is largest with effects and many layers (table below).
 - [ ] Stabilization (needs motion history), blur/sharpen, glitch, shake, slide/zoom transitions
       (expressible today with keyframes, no dedicated effect), background-removal matte inputs.
       None of these exist in the scene model, so none can be silently ignored.
@@ -95,6 +103,17 @@ release profile, Criterion unless noted. Media: 640x360 H.264 fixture (checked i
 | Engine, 4K sequential, 24 frames | n/a | 883 ms (37 ms/frame) |
 | Engine, 3 x 1080p angles, 24 frames | n/a | 600 ms (25 ms/frame) |
 
+GPU versus CPU compositing, same inputs (scaled, rotated, multiply-blended layers; "effects" adds
+contrast, saturation, vignette, chroma key, ellipse mask and a 33-point LUT; GPU time includes
+upload of every layer and readback of the canvas):
+
+| Scenario | CPU | GPU (RTX 4070) |
+| --- | --- | --- |
+| 1080p, 2 layers | 12.4 ms | 7.2 ms |
+| 1080p, 4 layers with effects | 85 ms | 10.9 ms |
+| 4K, 2 layers | 56 ms | 24 ms |
+| 4K, 6 layers with effects | 594 ms | 65 ms |
+
 Per-request engine latency (`cargo run --release -p bush --example latency_probe`, 200 requests):
 
 | Path | p50 | p95 | p99 |
@@ -104,7 +123,7 @@ Per-request engine latency (`cargo run --release -p bush --example latency_probe
 | 1080p random scrub | 12.3 ms | 38 ms | 46 ms |
 | 1080p live edit (cached source frame) | 4.6 ms | 5.7 ms | 6.3 ms |
 
-Reading them: 1080p playback and a 1080p live edit are inside a 33 ms budget. A 1080p scrub
+Reading them: the GPU path removes the compositing bottleneck for effect-heavy and 4K scenes. 1080p playback and a 1080p live edit are inside a 33 ms budget. A 1080p scrub
 tail (p95 38 ms) is the seek-to-key-unit plus decode-forward cost of a 30-frame GOP; 4K software
 decode sits just under 30 fps and is the first thing a GPU/zero-copy path would fix.
 
@@ -114,4 +133,6 @@ decode sits just under 30 fps and is the first thing a GPU/zero-copy path would 
 make test-bush            # cargo test -p bush
 make bench-bush           # all Bush benches; set BUSH_BENCH_MEDIA_DIR for the large-media ones
 cargo test -p bush --features cpal --test device_audio_test -- --nocapture   # real device
+cargo test -p bush --features gpu --test gpu_parity_test -- --nocapture      # GPU vs CPU parity
+cargo bench -p bush --features gpu --bench engine_workloads -- gpu_vs_cpu    # GPU vs CPU speed
 ```

@@ -306,6 +306,94 @@ fn bench_multicam(c: &mut Criterion) {
     group.finish();
 }
 
+/// CPU versus GPU compositing at the same inputs. The GPU figures include the upload of every
+/// layer and the readback of the canvas, because the engine returns CPU frames. Needs the `gpu`
+/// feature and an adapter; otherwise this group is skipped.
+#[cfg(feature = "gpu")]
+fn bench_gpu_vs_cpu(c: &mut Criterion) {
+    use bush::{ChromaKey, GpuRenderer, LayerMask, Lut3D, MaskShape, Renderer};
+
+    let Ok(mut gpu) = GpuRenderer::new(3840 * 2160 * 4) else {
+        eprintln!("skipping gpu_vs_cpu: no usable GPU adapter");
+        return;
+    };
+    eprintln!("gpu adapter: {}", gpu.adapter_name());
+    let mut cpu = CpuRenderer::new(3840 * 2160 * 4).unwrap();
+    let mut group = c.benchmark_group("gpu_vs_cpu");
+    group.sample_size(20);
+
+    let lut = Lut3D::identity(33).unwrap();
+    let scenarios: [(&str, u32, u32, usize, bool); 4] = [
+        ("1080p_2_layers", 1920, 1080, 2, false),
+        ("1080p_4_layers_effects", 1920, 1080, 4, true),
+        ("4k_2_layers", 3840, 2160, 2, false),
+        ("4k_6_layers_effects", 3840, 2160, 6, true),
+    ];
+    for (label, width, height, layer_count, effects) in scenarios {
+        let frames: Vec<VideoFrame> = (0..layer_count)
+            .map(|index| {
+                solid(
+                    width,
+                    height,
+                    [
+                        40 + index as u8 * 30,
+                        90,
+                        160,
+                        if index == 0 { 255 } else { 200 },
+                    ],
+                )
+            })
+            .collect();
+        let build_layers = || -> Vec<LayerFrame<'_>> {
+            frames
+                .iter()
+                .enumerate()
+                .map(|(index, frame)| {
+                    let mut layer = LayerFrame::new(frame);
+                    if index > 0 {
+                        layer.x = 40 * index as i32;
+                        layer.y = 20 * index as i32;
+                        layer.opacity = 0.8;
+                        layer.blend = BlendMode::Multiply;
+                        layer.transform.scale_x = 0.9;
+                        layer.transform.scale_y = 0.9;
+                        layer.transform.rotation_deg = 4.0 * index as f32;
+                        if effects {
+                            layer.effects.contrast = 1.1;
+                            layer.effects.saturation = 1.2;
+                            layer.effects.vignette = 0.3;
+                            layer.effects.chroma_key = Some(ChromaKey {
+                                color: [0, 255, 0],
+                                tolerance: 0.1,
+                                softness: 0.1,
+                            });
+                            layer.effects.mask = Some(LayerMask {
+                                shape: MaskShape::Ellipse,
+                                corner_radius: 0.0,
+                                feather: 0.1,
+                                invert: false,
+                            });
+                            layer.lut = Some(&lut);
+                        }
+                    }
+                    layer
+                })
+                .collect()
+        };
+        let layers = build_layers();
+        group.bench_function(format!("{label}/cpu"), |b| {
+            b.iter(|| black_box(Renderer::render(&mut cpu, width, height, 0.0, &layers).unwrap()));
+        });
+        group.bench_function(format!("{label}/gpu"), |b| {
+            b.iter(|| black_box(gpu.render(width, height, 0.0, &layers).unwrap()));
+        });
+    }
+    group.finish();
+}
+
+#[cfg(not(feature = "gpu"))]
+fn bench_gpu_vs_cpu(_: &mut Criterion) {}
+
 criterion_group!(
     engine_workloads,
     bench_composite_1080p,
@@ -314,6 +402,7 @@ criterion_group!(
     bench_playback,
     bench_decode_policy,
     bench_large_media,
-    bench_multicam
+    bench_multicam,
+    bench_gpu_vs_cpu
 );
 criterion_main!(engine_workloads);
