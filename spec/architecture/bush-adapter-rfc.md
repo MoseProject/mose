@@ -1,10 +1,15 @@
 # RFC: Bush preview adapter (plan phase 7)
 
-Status: **proposal, not approved.** Nothing in this RFC is implemented. Per
-[preview-engine-replacement.md](preview-engine-replacement.md) the adapter is a separate approval
-point: the engine (`crates/bush`, see [../matrix/bush.md](../matrix/bush.md)) is complete to
-phase 6 and still has no caller. This document says what the adapter would be, what must be
-added to Bush first, how it would be rolled out, and how GStreamer would eventually be removed.
+Status: **approved 2026-10-03, first slices implemented behind the `bush-preview` feature**
+(off by default; GStreamer stays the default engine). Per
+[preview-engine-replacement.md](preview-engine-replacement.md) the adapter was a separate
+approval point. Implemented: the timeline-to-scene mapper, the playback backend (seek, step,
+play with audio-master clock, device recovery, text and shape overlays, LUT), runtime selection
+with `OCA_PREVIEW_ENGINE=bush`, and an e2e test that drives the real app. Still open: the audio
+level meter, the `compare` tool, a persisted preference instead of the environment variable, the
+intensity curves (gap 9, provisional constants) and removal of GStreamer. Measured results are in
+[../matrix/bush.md](../matrix/bush.md). The rest of this document is the original proposal and
+is still the plan for what remains.
 
 ## Goal and non-goals
 

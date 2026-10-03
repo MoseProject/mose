@@ -133,6 +133,46 @@ the real default device.
       It stays opt-in; a win needs a zero-copy GPU path.
 - [ ] Hardware paths other than D3D11VA (VAAPI, VideoToolbox) are unverified: no such machine.
 
+## Desktop adapter (plan phase 7, `apps/desktop/src-tauri/src/bush_adapter/`)
+
+Behind the `bush-preview` cargo feature (off by default); at runtime `OCA_PREVIEW_ENGINE=bush`
+selects it and `OCA_BUSH_RENDERER=gpu` lets it composite on the GPU. Design and rollout:
+[../architecture/bush-adapter-rfc.md](../architecture/bush-adapter-rfc.md).
+
+- [x] Mapper (`mapper.rs`, 17 tests): every clip of every visible track becomes a contributor
+      with its timeline window; keyframes (opacity, position, rotation, crop, colour), Ken-Burns
+      zoom as an animated crop, flip, colour filters, masks, chroma key, 40 blend modes, LUT,
+      fade/slide/zoom transitions, freeze (near-zero speed), gain, text and shape overlays.
+      Known approximations are reported per scene (speed ramp as average speed, gain keyframes,
+      frozen audio, zoom-out, mattes) and the intensity curves are provisional (gap 9).
+- [x] Backend (`backend.rs`): same command channel, latest-frame slot, playhead and tick as the
+      GStreamer loop. Audio is the master clock (device sink, recovery on failure), JPEG
+      encoding runs on its own thread, the next frame is requested when the previous one lands
+      and paced to the source frame rate, canvas is the clip resolution capped at the preview
+      size. Playback stats are logged every 2 s as `bush_stats` in `oca.log`.
+- [x] Verified end to end on the real app (`e2e/test_bush_preview.py`, screenshots in
+      `e2e/out/`): clip loads, seeks, plays with audio, text and shape overlays composite.
+- [ ] Audio level meter (peaks are 0), `compare` tool, persisted preference, GStreamer baseline
+      run (the GStreamer preview produced no frame in this machine's e2e environment, so no
+      side-by-side numbers yet).
+
+Measured in the app, 1080p H.264 with AAC audio, 20 s clip, Bush CPU renderer (GPU renderer
+identical on this single-layer scene):
+
+| Metric | First version | After tuning |
+| --- | --- | --- |
+| Distinct frames delivered while playing | 16.3/s | 28-30/s (source is 30 fps) |
+| Seek to a new frame | 94 ms | 47-62 ms |
+| JPEG encode per frame (1280x720) | 20.5 ms | 6.7 ms |
+| Render p50 (decode + composite) | 17.7 ms | 5.4 ms |
+| Audio/video drift | up to 50 ms | 0-20 ms, 1 underflow at start |
+| Add to timeline to first frame | | 500 ms |
+
+What moved the numbers: encoding off the playback thread, requesting the next frame the moment
+one lands (the engine cancels a render when it is superseded, so polling every 8 ms starved it),
+pacing to the source rate (the engine had been re-rendering the same picture at 47 fps), and a
+4:2:0 AVX2 JPEG encoder in place of the 4:4:4 one.
+
 ## Measured numbers
 
 Machine: AMD Ryzen 9 5950X (32 threads), RTX 4070, Windows 11, FFmpeg 8.1 LGPL shared build,
