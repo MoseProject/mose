@@ -27,6 +27,7 @@ mod gpu_renderer;
 mod keyframes;
 mod latest_intent;
 mod layer_mods;
+mod matte;
 mod player;
 mod preview_worker;
 mod scene;
@@ -62,7 +63,9 @@ pub use frame_mailbox::{FrameMailbox, PublishedFrame};
 pub use glitch::{glitch, shake_offset};
 #[cfg(feature = "gpu")]
 pub use gpu_renderer::{GpuError, GpuRenderer};
-pub use keyframes::{Animation, Easing, Fade, Keyframe, KeyframeError, KeyframeTrack};
+pub use keyframes::{
+    Animation, Easing, Fade, Keyframe, KeyframeError, KeyframeTrack, MAX_GAIN_DB, MIN_GAIN_DB,
+};
 pub use latest_intent::{Generation, LatestIntent, PendingIntent};
 pub use layer_mods::{ChromaKey, LayerMask, Lut3D, LutError, MaskShape};
 pub use player::{Player, PlayerError, PlayerEvent};
@@ -70,8 +73,8 @@ pub use preview_worker::{
     PreviewCommand, PreviewWorker, WorkerFailure, WorkerOperation, WorkerSubmitError,
 };
 pub use scene::{
-    Contributor, ContributorContent, ContributorId, MediaSource, Placement, RasterOverlay,
-    SceneError, SceneSnapshot, SourceRange,
+    Contributor, ContributorContent, ContributorId, MatteSource, MediaSource, Placement,
+    PrivacyBlur, RasterOverlay, SceneError, SceneSnapshot, SourceRange,
 };
 pub use scene_scheduler::{SceneScheduler, ScheduleError, ScheduledScene, Submission};
 pub use scene_versions::{invalidation_scope, InvalidationScope, SceneVersions, Version};

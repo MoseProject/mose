@@ -122,9 +122,9 @@ effect: `core` now depends on `bush` (default features, no GPU or audio device).
 
 ## Phase 7: follow-ups (not part of the removal)
 
-- [ ] Calibrate blur, sharpen, pixelize and shake intensity curves against export
-- [ ] Speed ramp linear in source time (core) instead of the average-speed approximation
-- [ ] Gain keyframes in the audio renderer
-- [ ] Render background-removal and privacy-blur mattes in the preview
-- [ ] Verify audio and decode on macOS and Linux
-- [ ] Zero-copy hardware decode path, then revisit the hardware-decode preference
+- [x] Calibrate blur, sharpen, pixelize and shake intensity curves against export (derived from the export filter parameters; vignette measured against FFmpeg; glitch and stabilization are different algorithms)
+- [x] Speed ramp linear in source time (core) instead of the average-speed approximation
+- [x] Gain keyframes in the audio renderer
+- [x] Render background-removal and privacy-blur mattes in the preview (unit-tested, not yet checked visually in the app)
+- [ ] Verify audio and decode on macOS and Linux (blocked: no machines here, and CI only runs by manual dispatch because there are no CI credits)
+- [ ] Zero-copy hardware decode path, then revisit the hardware-decode preference (not started: needs importing decoder surfaces into wgpu; measured hardware decode with CPU download is slower than software, so the preference stays ignored)

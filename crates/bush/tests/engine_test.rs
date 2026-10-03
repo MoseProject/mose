@@ -620,8 +620,8 @@ fn stabilization_runs_in_the_engine_zooms_and_is_stable_on_repeats() {
 #[test]
 fn speed_ramp_maps_the_playhead_to_the_integrated_source_time() {
     let engine = Engine::new(config(1)).unwrap();
-    // 0.9 s of source ramping 1x -> 2x lasts 0.6 s; at local 0.3 s the source time is
-    // 0.3 + 0.3^2 / (2 * 0.6) = 0.375 s.
+    // 0.9 s of source ramping 1x -> 2x (linear in source time) lasts 0.9 * ln 2 = 0.624 s; at
+    // local 0.3 s the source time is 0.9 * (e^(0.3 / 0.9) - 1) s.
     let ramped = scene(vec![clip(
         1,
         0,
@@ -634,7 +634,10 @@ fn speed_ramp_maps_the_playhead_to_the_integrated_source_time() {
     )]);
     engine.submit(request(ramped.clone(), 0.3)).unwrap();
     let (_, frame) = expect_frame(&engine);
-    assert_eq!(frame.pixels(), reference_frame(0.375).pixels());
+    assert_eq!(
+        frame.pixels(),
+        reference_frame(0.9 * ((0.3f64 / 0.9).exp() - 1.0)).pixels()
+    );
 
     // After the integrated duration the clip is gone.
     engine.submit(request(ramped, 0.65)).unwrap();
