@@ -84,3 +84,29 @@ fn frame_at_honours_cancellation() {
         .unwrap()
         .is_none());
 }
+
+#[test]
+fn sequential_targets_decode_forward_and_match_a_fresh_seek() {
+    let mut sequential = DecodeSource::open(&fixture()).unwrap();
+    let cancel = AtomicBool::new(false);
+    let fps = sequential.info().fps.unwrap();
+
+    for step in 0..12 {
+        let target = 0.2 + f64::from(step) / fps;
+        let forward = sequential.frame_at(target, &cancel).unwrap().unwrap();
+        let seeked = {
+            let mut one_shot = DecodeSource::open(&fixture()).unwrap();
+            one_shot.frame_at(target, &cancel).unwrap().unwrap()
+        };
+        assert_eq!(forward, seeked, "frame mismatch at step {step}");
+    }
+}
+
+#[test]
+fn repeated_target_returns_the_same_shared_frame() {
+    let mut source = DecodeSource::open(&fixture()).unwrap();
+    let cancel = AtomicBool::new(false);
+    let first = source.frame_at(0.4, &cancel).unwrap().unwrap();
+    let second = source.frame_at(0.4, &cancel).unwrap().unwrap();
+    assert!(std::sync::Arc::ptr_eq(&first, &second));
+}
