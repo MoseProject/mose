@@ -28,7 +28,7 @@ fn unit(hash: u64) -> f32 {
 
 /// Applies glitch of `intensity` (`0.0..=1.0`) to `frame`, seeded by `time_secs`.
 pub fn glitch(frame: &VideoFrame, intensity: f32, time_secs: f64) -> VideoFrame {
-    if !(intensity > 0.0) {
+    if intensity.is_nan() || intensity <= 0.0 {
         return frame.clone();
     }
     let intensity = intensity.min(1.0);
@@ -48,9 +48,8 @@ pub fn glitch(frame: &VideoFrame, intensity: f32, time_secs: f64) -> VideoFrame 
         let band_height = 2 + (hash % (height / 12).max(3) as u64) as usize;
         let start = (mix64(hash) % height.max(1) as u64) as usize;
         let shift = (unit(mix64(hash ^ 0x55)) * intensity * width as f32 * 0.12) as isize;
-        for row in start..(start + band_height).min(height) {
-            offsets[row] = shift;
-        }
+        let end = (start + band_height).min(height);
+        offsets[start..end].fill(shift);
     }
 
     for row in 0..height {
@@ -83,7 +82,7 @@ pub fn glitch(frame: &VideoFrame, intensity: f32, time_secs: f64) -> VideoFrame 
 /// Smooth pseudo-random offset in `-amplitude..=amplitude` at `time_secs`; `stream` decorrelates
 /// the x and y components.
 pub fn shake_offset(amplitude: f32, time_secs: f64, stream: u64) -> f32 {
-    if !(amplitude > 0.0) {
+    if amplitude.is_nan() || amplitude <= 0.0 {
         return 0.0;
     }
     let position = time_secs.max(0.0) * SHAKE_CELLS_PER_SECOND;

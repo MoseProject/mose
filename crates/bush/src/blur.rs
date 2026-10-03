@@ -20,14 +20,14 @@ const MAX_WORKERS: usize = 8;
 
 /// Gaussian blur with standard deviation `sigma` pixels. `sigma <= 0` returns the frame as is.
 pub fn gaussian_blur(frame: &VideoFrame, sigma: f32) -> VideoFrame {
-    if !(sigma > 0.0) {
+    if sigma.is_nan() || sigma <= 0.0 {
         return frame.clone();
     }
     let sigma = sigma.min(MAX_BLUR_SIGMA);
     let (width, height) = (frame.width() as usize, frame.height() as usize);
     let mut data = tight(frame);
     // Video frames are opaque, where premultiplying is the identity: skip both passes.
-    let opaque = data.chunks_exact(4).all(|pixel| pixel[3] == 255);
+    let opaque = data.as_chunks::<4>().0.iter().all(|pixel| pixel[3] == 255);
     if !opaque {
         premultiply(&mut data);
     }
@@ -51,14 +51,19 @@ pub fn gaussian_blur(frame: &VideoFrame, sigma: f32) -> VideoFrame {
 
 /// Unsharp mask: `frame + amount * (frame - blur(frame, sigma))`, `amount` in `0.0..=4.0`.
 pub fn sharpen(frame: &VideoFrame, amount: f32, sigma: f32) -> VideoFrame {
-    if !(amount > 0.0) {
+    if amount.is_nan() || amount <= 0.0 {
         return frame.clone();
     }
     let blurred = gaussian_blur(frame, sigma);
     let (width, height) = (frame.width() as usize, frame.height() as usize);
     let mut data = tight(frame);
     let blurred = tight(&blurred);
-    for (pixel, soft) in data.chunks_exact_mut(4).zip(blurred.chunks_exact(4)) {
+    for (pixel, soft) in data
+        .as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .zip(blurred.as_chunks::<4>().0)
+    {
         for channel in 0..3 {
             let difference = f32::from(pixel[channel]) - f32::from(soft[channel]);
             // Differences within the 8-bit rounding noise of the blur are not detail: leaving
@@ -112,7 +117,7 @@ fn tight(frame: &VideoFrame) -> Vec<u8> {
 }
 
 fn premultiply(data: &mut [u8]) {
-    for pixel in data.chunks_exact_mut(4) {
+    for pixel in data.as_chunks_mut::<4>().0 {
         let alpha = u32::from(pixel[3]);
         if alpha != 255 {
             for channel in &mut pixel[..3] {
@@ -123,7 +128,7 @@ fn premultiply(data: &mut [u8]) {
 }
 
 fn unpremultiply(data: &mut [u8]) {
-    for pixel in data.chunks_exact_mut(4) {
+    for pixel in data.as_chunks_mut::<4>().0 {
         let alpha = u32::from(pixel[3]);
         if alpha != 255 && alpha != 0 {
             for channel in &mut pixel[..3] {
@@ -186,7 +191,7 @@ fn blur_line(row: &mut [u8], line: &mut [u8], width: usize, radius: usize) {
     let window = (2 * radius + 1) as u64;
     // Division by the window is the hot spot: multiply by a rounded-up reciprocal instead. The
     // error is far below half a level, and a flat region stays exactly unchanged.
-    let reciprocal = ((1_u64 << 24) + window - 1) / window;
+    let reciprocal = (1_u64 << 24).div_ceil(window);
     let mut sums = [0u32; 4];
     // Prime the window for pixel 0 with clamped edge samples.
     for offset in 0..=2 * radius {
