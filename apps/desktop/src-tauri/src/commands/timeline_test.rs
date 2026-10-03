@@ -123,3 +123,434 @@ fn ripple_delete_closes_the_gap() {
     assert_eq!(clips[0].id, second);
     assert_eq!(clips[0].start_secs, 0.0);
 }
+
+mod commands {
+    use avcore::timeline::{MaskShape, Timeline, TrackKind, TransitionType};
+    use avcore::{Keyframe, Position};
+    use std::sync::atomic::Ordering;
+
+    use super::*;
+    use crate::commands::timeline::*;
+    use crate::testing::{harness, Harness};
+
+    fn setup() -> Harness {
+        let h = harness();
+        h.session().project = project_with(vec![
+            asset(1, MediaKind::Video, 10.0),
+            asset(2, MediaKind::Audio, 10.0),
+        ]);
+        h
+    }
+
+    fn timeline(h: &Harness) -> Timeline {
+        h.session().project.timeline().clone()
+    }
+
+    fn add(h: &Harness, asset_id: u64, track: Option<u64>, start: Option<f64>) {
+        add_asset_to_timeline(h.handle(), asset_id, track, start).unwrap();
+    }
+
+    /// Two video clips of 10 s back to back on one track: returns their ids.
+    fn two_clips(h: &Harness) -> (u64, u64) {
+        add(h, 1, None, None);
+        add(h, 1, None, None);
+        let timeline = timeline(h);
+        (
+            timeline.tracks[0].clips[0].id,
+            timeline.tracks[0].clips[1].id,
+        )
+    }
+
+    fn clip<'a>(timeline: &'a Timeline, id: u64) -> &'a avcore::timeline::ClipInstance {
+        timeline
+            .tracks
+            .iter()
+            .flat_map(|t| &t.clips)
+            .find(|c| c.id == id)
+            .unwrap()
+    }
+
+    fn can_undo(h: &Harness) -> bool {
+        h.session().view().can_undo
+    }
+
+    #[test]
+    fn adding_assets_places_them_after_each_other_by_default() {
+        let h = setup();
+        add(&h, 1, None, None);
+        add(&h, 1, None, None);
+        let timeline = timeline(&h);
+        assert_eq!(timeline.tracks.len(), 1);
+        let starts: Vec<f64> = timeline.tracks[0]
+            .clips
+            .iter()
+            .map(|c| c.start_secs)
+            .collect();
+        assert_eq!(starts, vec![0.0, 10.0]);
+    }
+
+    #[test]
+    fn adding_an_audio_asset_creates_an_audio_track_at_the_requested_time() {
+        let h = setup();
+        add(&h, 2, None, Some(3.0));
+        let timeline = timeline(&h);
+        assert_eq!(timeline.tracks[0].kind, TrackKind::Audio);
+        assert_eq!(timeline.tracks[0].clips[0].start_secs, 3.0);
+    }
+
+    #[test]
+    fn adding_an_unknown_asset_leaves_no_undo_step() {
+        let h = setup();
+        add(&h, 99, None, None);
+        assert!(!can_undo(&h));
+        assert!(timeline(&h).tracks.is_empty());
+    }
+
+    #[test]
+    fn a_clip_moves_to_another_track_and_back_along_its_own() {
+        let h = setup();
+        let (first, _) = two_clips(&h);
+        add_track(h.handle(), TrackKind::Video).unwrap();
+        let target = timeline(&h).tracks[1].id;
+        move_clip(h.handle(), first, target, 2.0).unwrap();
+        let tl = timeline(&h);
+        assert!(tl.tracks[1]
+            .clips
+            .iter()
+            .any(|c| c.id == first && c.start_secs == 2.0));
+        assert!(!tl.tracks[0].clips.iter().any(|c| c.id == first));
+    }
+
+    #[test]
+    fn trimming_either_edge_shortens_the_clip() {
+        let h = setup();
+        let (first, _) = two_clips(&h);
+        trim_clip(h.handle(), first, TrimEdge::Start, 2.0).unwrap();
+        assert!(clip(&timeline(&h), first).duration_secs() < 10.0);
+        let after_start = clip(&timeline(&h), first).duration_secs();
+        trim_clip(h.handle(), first, TrimEdge::End, 5.0).unwrap();
+        assert!(clip(&timeline(&h), first).duration_secs() < after_start);
+    }
+
+    #[test]
+    fn trimming_a_locked_or_missing_clip_changes_nothing() {
+        let h = setup();
+        let (first, _) = two_clips(&h);
+        let track_id = timeline(&h).tracks[0].id;
+        set_track_flags(h.handle(), track_id, None, Some(true)).unwrap();
+        let before = timeline(&h);
+        trim_clip(h.handle(), first, TrimEdge::Start, 2.0).unwrap();
+        trim_clip(h.handle(), 999, TrimEdge::End, 2.0).unwrap();
+        assert_eq!(timeline(&h), before);
+    }
+
+    /// A trimmed to 0..8 s and B trimmed to start at 12 s with its first 2 s of footage hidden:
+    /// each side has footage to give to a roll that meets at 10 s.
+    fn gapped_pair(h: &Harness) -> (u64, u64) {
+        let (first, second) = two_clips(h);
+        trim_clip(h.handle(), first, TrimEdge::End, 8.0).unwrap();
+        trim_clip(h.handle(), second, TrimEdge::Start, 12.0).unwrap();
+        (first, second)
+    }
+
+    #[test]
+    fn rolling_an_edit_moves_the_shared_boundary() {
+        let h = setup();
+        let (first, second) = gapped_pair(&h);
+        roll_edit_clip(h.handle(), first, 10.0).unwrap();
+        let tl = timeline(&h);
+        assert_eq!(clip(&tl, first).duration_secs(), 10.0);
+        assert_eq!(clip(&tl, second).start_secs, 10.0);
+    }
+
+    #[test]
+    fn rolling_from_the_start_edge_resolves_the_previous_clip() {
+        let h = setup();
+        let (first, second) = gapped_pair(&h);
+        roll_edit_from_start_edge(h.handle(), second, 10.0).unwrap();
+        let tl = timeline(&h);
+        assert_eq!(clip(&tl, first).duration_secs(), 10.0);
+        assert_eq!(clip(&tl, second).start_secs, 10.0);
+    }
+
+    #[test]
+    fn rolling_from_a_start_edge_needs_a_previous_clip() {
+        let h = setup();
+        let (first, _) = two_clips(&h);
+        let before = timeline(&h);
+        roll_edit_from_start_edge(h.handle(), first, 3.0).unwrap();
+        roll_edit_from_start_edge(h.handle(), 999, 3.0).unwrap();
+        roll_edit_clip(h.handle(), 999, 3.0).unwrap();
+        assert_eq!(timeline(&h), before);
+    }
+
+    #[test]
+    fn slipping_moves_the_source_window_only() {
+        let h = setup();
+        let (first, _) = two_clips(&h);
+        trim_clip(h.handle(), first, TrimEdge::End, 5.0).unwrap();
+        let before = clip(&timeline(&h), first).clone();
+        slip_clip(h.handle(), first, 2.0).unwrap();
+        let after = timeline(&h);
+        let after = clip(&after, first);
+        assert_eq!(after.start_secs, before.start_secs);
+        assert_eq!(after.duration_secs(), before.duration_secs());
+        assert_eq!(after.source_in_secs, before.source_in_secs + 2.0);
+        slip_clip(h.handle(), 999, 1.0).unwrap();
+    }
+
+    #[test]
+    fn sliding_repositions_a_clip_inside_its_neighbours() {
+        let h = setup();
+        add(&h, 1, None, None);
+        add(&h, 1, None, None);
+        add(&h, 1, None, None);
+        let ids: Vec<u64> = timeline(&h).tracks[0].clips.iter().map(|c| c.id).collect();
+        for &id in &ids {
+            trim_clip(h.handle(), id, TrimEdge::End, 0.0).ok();
+        }
+        slide_clip(h.handle(), ids[1], 12.0).unwrap();
+        slide_clip(h.handle(), 999, 1.0).unwrap();
+    }
+
+    #[test]
+    fn moving_a_group_follows_its_composite_members() {
+        let h = setup();
+        let (first, second) = two_clips(&h);
+        merge_clips_into_composite(h.handle(), vec![first, second]).unwrap();
+        move_clip_group(h.handle(), first, 5.0).unwrap();
+        let tl = timeline(&h);
+        assert_eq!(clip(&tl, first).start_secs, 5.0);
+        assert_eq!(clip(&tl, second).start_secs, 15.0);
+    }
+
+    #[test]
+    fn merging_needs_two_clips_on_one_track() {
+        let h = setup();
+        let (first, _) = two_clips(&h);
+        merge_clips_into_composite(h.handle(), vec![first]).unwrap();
+        assert!(clip(&timeline(&h), first).composite_id.is_none());
+    }
+
+    #[test]
+    fn a_compound_clip_nests_a_sequence_and_can_be_reinserted() {
+        let h = setup();
+        let (first, _) = two_clips(&h);
+        let nested = create_compound_clip(h.handle(), first, vec![first]).unwrap();
+        let nested = nested.expect("a video clip can be compounded");
+        assert_eq!(h.session().project.sequences.len(), 2);
+        insert_sequence_as_compound_clip(h.handle(), nested).unwrap();
+        assert_eq!(create_compound_clip(h.handle(), 999, vec![]).unwrap(), None);
+        assert!(!insert_sequence_as_compound_clip(h.handle(), 999).unwrap());
+    }
+
+    #[test]
+    fn copy_cut_and_paste_round_trip_through_the_clipboard() {
+        let h = setup();
+        let (first, _) = two_clips(&h);
+        assert_eq!(paste_clip(h.handle()).unwrap(), Vec::<u64>::new());
+
+        copy_clip(h.handle(), first).unwrap();
+        assert!(h.state().clip_clipboard.lock().unwrap().is_some());
+        copy_clip(h.handle(), 999).unwrap();
+        assert!(h.state().clip_clipboard.lock().unwrap().is_some());
+        let pasted = paste_clip(h.handle()).unwrap();
+        assert_eq!(pasted.len(), 1);
+        assert_eq!(timeline(&h).tracks[0].clips.len(), 3);
+
+        cut_clip(h.handle(), first).unwrap();
+        assert!(!timeline(&h).tracks[0].clips.iter().any(|c| c.id == first));
+    }
+
+    #[test]
+    fn formatting_is_copied_and_applied_to_another_clip() {
+        let h = setup();
+        let (first, second) = two_clips(&h);
+        let events = h.count_session_events();
+        paste_clip_formatting(h.handle(), second).unwrap();
+        assert_eq!(events.load(Ordering::SeqCst), 0);
+
+        update_clip(
+            h.handle(),
+            first,
+            ClipPatch {
+                brightness: Some(0.5),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        copy_clip_formatting(h.handle(), 999).unwrap();
+        assert!(h.state().formatting_clipboard.lock().unwrap().is_none());
+        copy_clip_formatting(h.handle(), first).unwrap();
+        paste_clip_formatting(h.handle(), second).unwrap();
+        assert_eq!(clip(&timeline(&h), second).brightness, 0.5);
+        paste_clip_formatting(h.handle(), 999).unwrap();
+    }
+
+    #[test]
+    fn splitting_and_deleting_go_through_the_undo_stack() {
+        let h = setup();
+        let (first, _) = two_clips(&h);
+        h.set_playhead(4.0);
+        split_at_playhead(h.handle(), vec![first]).unwrap();
+        assert_eq!(timeline(&h).tracks[0].clips.len(), 3);
+        delete_clips(h.handle(), vec![first], false).unwrap();
+        assert_eq!(timeline(&h).tracks[0].clips.len(), 2);
+        delete_clips(h.handle(), vec![999], true).unwrap();
+    }
+
+    #[test]
+    fn a_speed_ramp_splits_the_clip_into_steps() {
+        let h = setup();
+        let (first, second) = two_clips(&h);
+        apply_speed_ramp_to_clip(h.handle(), first, 0.5, 2.0, 4).unwrap();
+        let tl = timeline(&h);
+        assert_eq!(tl.tracks[0].clips.len(), 5);
+        let speeds: Vec<f32> = tl.tracks[0]
+            .clips
+            .iter()
+            .filter(|c| c.id != second)
+            .map(|c| c.speed_factor)
+            .collect();
+        assert_eq!(speeds, vec![0.5, 1.0, 1.5, 2.0]);
+    }
+
+    #[test]
+    fn a_speed_ramp_refuses_too_few_steps_locked_tracks_and_missing_clips() {
+        let h = setup();
+        let (first, _) = two_clips(&h);
+        let before = timeline(&h);
+        apply_speed_ramp_to_clip(h.handle(), first, 0.5, 2.0, 1).unwrap();
+        apply_speed_ramp_to_clip(h.handle(), 999, 0.5, 2.0, 4).unwrap();
+        let track_id = before.tracks[0].id;
+        set_track_flags(h.handle(), track_id, None, Some(true)).unwrap();
+        let locked = timeline(&h);
+        apply_speed_ramp_to_clip(h.handle(), first, 0.5, 2.0, 4).unwrap();
+        assert_eq!(timeline(&h), locked);
+    }
+
+    #[test]
+    fn a_patch_updates_every_field_it_carries_within_its_limits() {
+        let h = setup();
+        let (first, _) = two_clips(&h);
+        let key = vec![Keyframe {
+            time_fraction: 0.0,
+            value: 1.0f32,
+        }];
+        let position = vec![Keyframe {
+            time_fraction: 0.0,
+            value: Position { x: 0.2, y: 0.4 },
+        }];
+        update_clip(
+            h.handle(),
+            first,
+            ClipPatch {
+                gain_db: Some(99.0),
+                speed_factor: Some(99.0),
+                brightness: Some(9.0),
+                contrast: Some(9.0),
+                saturation: Some(9.0),
+                frozen: Some(true),
+                flipped_h: Some(true),
+                voice_cleanup_enabled: Some(true),
+                crop_x: Some(0.1),
+                crop_y: Some(0.2),
+                crop_w: Some(0.0),
+                crop_h: Some(0.0),
+                mask_shape: Some(MaskShape::Circle),
+                mask_corner_radius: Some(9.0),
+                transition_in: Some(TransitionType::Fade),
+                transition_duration_secs: Some(99.0),
+                blend_mode: Some(avcore::timeline::BlendMode::default()),
+                position_keyframes: Some(position),
+                layer_scale_x: Some(99.0),
+                layer_scale_y: Some(0.0),
+                scale_keyframes: Some(key.clone()),
+                rotation_keyframes: Some(key.clone()),
+                opacity_keyframes: Some(key.clone()),
+                gain_keyframes: Some(key.clone()),
+                brightness_keyframes: Some(key.clone()),
+                contrast_keyframes: Some(key.clone()),
+                saturation_keyframes: Some(key.clone()),
+                crop_x_keyframes: Some(key.clone()),
+                crop_y_keyframes: Some(key.clone()),
+                crop_w_keyframes: Some(key.clone()),
+                crop_h_keyframes: Some(key),
+            },
+        )
+        .unwrap();
+        let tl = timeline(&h);
+        let c = clip(&tl, first);
+        assert_eq!(c.gain_db, 24.0);
+        assert_eq!(c.speed_factor, 4.0);
+        assert_eq!(c.brightness, 1.0);
+        assert_eq!(c.contrast, 2.0);
+        assert_eq!(c.saturation, 2.0);
+        assert!(c.frozen && c.flipped_h && c.voice_cleanup_enabled);
+        assert_eq!((c.crop_x, c.crop_y), (0.1, 0.2));
+        assert_eq!((c.crop_w, c.crop_h), (0.05, 0.05));
+        assert_eq!(c.mask_shape, MaskShape::Circle);
+        assert_eq!(c.mask_corner_radius, 1.0);
+        assert_eq!(c.transition_in, TransitionType::Fade);
+        assert_eq!(c.transition_duration_secs, 3.0);
+        assert_eq!((c.layer_scale_x, c.layer_scale_y), (8.0, 0.05));
+        assert_eq!(c.position_keyframes.len(), 1);
+        assert_eq!(c.scale_keyframes.len(), 1);
+        assert_eq!(c.rotation_keyframes.len(), 1);
+        assert_eq!(c.opacity_keyframes.len(), 1);
+        assert_eq!(c.gain_keyframes.len(), 1);
+        assert_eq!(c.brightness_keyframes.len(), 1);
+        assert_eq!(c.contrast_keyframes.len(), 1);
+        assert_eq!(c.saturation_keyframes.len(), 1);
+        assert_eq!(c.crop_x_keyframes.len(), 1);
+        assert_eq!(c.crop_y_keyframes.len(), 1);
+        assert_eq!(c.crop_w_keyframes.len(), 1);
+        assert_eq!(c.crop_h_keyframes.len(), 1);
+    }
+
+    #[test]
+    fn an_empty_patch_or_a_locked_track_leaves_no_undo_step() {
+        let h = setup();
+        let (first, _) = two_clips(&h);
+        let events = h.count_session_events();
+        update_clip(h.handle(), first, ClipPatch::default()).unwrap();
+        update_clip(
+            h.handle(),
+            999,
+            ClipPatch {
+                frozen: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(events.load(Ordering::SeqCst), 0);
+        let track_id = timeline(&h).tracks[0].id;
+        set_track_flags(h.handle(), track_id, None, Some(true)).unwrap();
+        assert_eq!(events.load(Ordering::SeqCst), 1);
+        update_clip(
+            h.handle(),
+            first,
+            ClipPatch {
+                frozen: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(events.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn track_flags_toggle_only_when_something_changes() {
+        let h = setup();
+        add_track(h.handle(), TrackKind::Video).unwrap();
+        let id = timeline(&h).tracks[0].id;
+        set_track_flags(h.handle(), id, Some(false), Some(true)).unwrap();
+        let tl = timeline(&h);
+        assert!(!tl.tracks[0].visible && tl.tracks[0].locked);
+        let events = h.count_session_events();
+        set_track_flags(h.handle(), id, Some(false), Some(true)).unwrap();
+        set_track_flags(h.handle(), id, None, None).unwrap();
+        set_track_flags(h.handle(), 999, Some(true), None).unwrap();
+        assert_eq!(events.load(Ordering::SeqCst), 0);
+    }
+}
