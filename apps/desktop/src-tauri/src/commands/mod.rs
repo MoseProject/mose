@@ -35,13 +35,13 @@ pub mod youtube_download;
 use std::path::PathBuf;
 
 use avcore::{ExportAspectRatio, PanelLayout, Project};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, Runtime, State};
 
 use crate::state::{blank_project, publish, AppState, Session};
 
 /// Runs a non-undoable mutation (navigation, persistence metadata) and publishes the result.
-pub(crate) fn with_session<T>(
-    app: &AppHandle,
+pub(crate) fn with_session<R: Runtime, T>(
+    app: &AppHandle<R>,
     change: impl FnOnce(&mut Session) -> Result<T, String>,
 ) -> Result<T, String> {
     let state = app.state::<AppState>();
@@ -56,8 +56,8 @@ pub(crate) fn with_session<T>(
 /// then is the pre-edit snapshot pushed, so a rejected edit (locked track, out-of-range trim)
 /// leaves no empty undo step behind. The live playhead is synced in first, since edits like
 /// split-at-playhead read it from the timeline.
-pub(crate) fn undoable(
-    app: &AppHandle,
+pub(crate) fn undoable<R: Runtime>(
+    app: &AppHandle<R>,
     edit: impl FnOnce(&mut Project) -> bool,
 ) -> Result<(), String> {
     let state = app.state::<AppState>();
@@ -80,8 +80,8 @@ pub fn get_session(state: State<'_, AppState>) -> Result<serde_json::Value, Stri
 /// Saves the active project's editor dimensions. Layout changes are not undoable timeline edits,
 /// but are included in the next normal project save through `Project::panel_layout`.
 #[tauri::command]
-pub fn set_panel_layout(
-    app: AppHandle,
+pub fn set_panel_layout<R: Runtime>(
+    app: AppHandle<R>,
     library_width: f32,
     inspector_width: f32,
     timeline_height: f32,
@@ -107,7 +107,11 @@ pub fn set_panel_layout(
 }
 
 #[tauri::command]
-pub fn new_project(app: AppHandle, name: String, sequence_name: String) -> Result<(), String> {
+pub fn new_project<R: Runtime>(
+    app: AppHandle<R>,
+    name: String,
+    sequence_name: String,
+) -> Result<(), String> {
     let target_lufs = {
         let profile = app.state::<AppState>().prefs().view.lufs_profile;
         [-14.0, -16.0, -23.0].get(profile).copied().unwrap_or(-14.0)
@@ -122,7 +126,7 @@ pub fn new_project(app: AppHandle, name: String, sequence_name: String) -> Resul
 
 /// Shows an open dialog; `Ok(false)` when the user cancels.
 #[tauri::command]
-pub async fn open_project(app: AppHandle) -> Result<bool, String> {
+pub async fn open_project<R: Runtime>(app: AppHandle<R>) -> Result<bool, String> {
     let Some(path) = rfd::FileDialog::new()
         .add_filter("oca", &["ocproj"])
         .pick_file()
@@ -134,7 +138,7 @@ pub async fn open_project(app: AppHandle) -> Result<bool, String> {
 }
 
 #[tauri::command]
-pub async fn open_project_path(app: AppHandle, path: String) -> Result<(), String> {
+pub async fn open_project_path<R: Runtime>(app: AppHandle<R>, path: String) -> Result<(), String> {
     let path = PathBuf::from(path);
     let mut project = avcore::load_project_from_file(&path).map_err(|e| e.to_string())?;
     project.file_path = Some(path.clone());
@@ -152,7 +156,7 @@ pub async fn open_project_path(app: AppHandle, path: String) -> Result<(), Strin
 /// Saves to the project's own path, or asks for one (always, when `save_as`). `Ok(false)` when
 /// the user cancels the dialog.
 #[tauri::command]
-pub async fn save_project(app: AppHandle, save_as: bool) -> Result<bool, String> {
+pub async fn save_project<R: Runtime>(app: AppHandle<R>, save_as: bool) -> Result<bool, String> {
     let (existing, name) = {
         let state = app.state::<AppState>();
         let session = state.session();
@@ -185,7 +189,7 @@ pub async fn save_project(app: AppHandle, save_as: bool) -> Result<bool, String>
 }
 
 #[tauri::command]
-pub fn undo(app: AppHandle) -> Result<(), String> {
+pub fn undo<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
     with_session(&app, |session| {
         session.undo();
         Ok(())
@@ -193,7 +197,7 @@ pub fn undo(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn redo(app: AppHandle) -> Result<(), String> {
+pub fn redo<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
     with_session(&app, |session| {
         session.redo();
         Ok(())
@@ -216,8 +220,8 @@ pub fn preview_set_playing(state: State<'_, AppState>, playing: bool) {
 }
 
 #[tauri::command]
-pub fn set_export_settings(
-    app: AppHandle,
+pub fn set_export_settings<R: Runtime>(
+    app: AppHandle<R>,
     target_lufs: f32,
     aspect_ratio: ExportAspectRatio,
 ) -> Result<(), String> {
