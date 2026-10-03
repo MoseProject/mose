@@ -206,3 +206,15 @@ impl Lut3D {
         output
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_entries_are_exposed_in_table_order() {
+        let entries: Vec<[f32; 3]> = (0..8).map(|index| [index as f32 / 8.0; 3]).collect();
+        let lut = Lut3D::new(2, entries.clone()).unwrap();
+        assert_eq!(lut.entries(), entries.as_slice());
+    }
+}
