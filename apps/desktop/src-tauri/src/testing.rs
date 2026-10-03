@@ -49,6 +49,10 @@ pub(crate) struct FakeServices {
     pub exits: Mutex<Vec<i32>>,
     pub speech: Mutex<Option<Result<Vec<f32>, avcore::TtsError>>>,
     pub whisper_model: Mutex<Option<PathBuf>>,
+    /// Faces every detection returns; `None` makes detection fail.
+    pub faces: Mutex<Option<Vec<avcore::FaceBox>>>,
+    /// Alpha every segmented pixel gets; `None` makes segmentation fail.
+    pub person_alpha: Mutex<Option<f32>>,
     pub transcript: Mutex<Option<Result<avcore::TranscribeOutcome, avcore::TranscribeError>>>,
 }
 
@@ -75,6 +79,33 @@ impl Services for FakeServices {
     fn restart_application(&self) -> Result<(), avcore::ApplyUpdateError> {
         self.restarts.fetch_add(1, Ordering::SeqCst);
         self.restart.lock().unwrap().take().unwrap_or(Ok(()))
+    }
+
+    fn segment_person(
+        &self,
+        _model_path: &Path,
+        _rgba: &[u8],
+        width: u32,
+        height: u32,
+    ) -> Result<Vec<f32>, avcore::SegmentError> {
+        match *self.person_alpha.lock().unwrap() {
+            Some(alpha) => Ok(vec![alpha; (width * height) as usize]),
+            None => Err(avcore::SegmentError::Onnx("no model".into())),
+        }
+    }
+
+    fn detect_faces(
+        &self,
+        _model_path: &Path,
+        _rgba: &[u8],
+        _width: u32,
+        _height: u32,
+    ) -> Result<Vec<avcore::FaceBox>, avcore::ReframeError> {
+        self.faces
+            .lock()
+            .unwrap()
+            .clone()
+            .ok_or_else(|| avcore::ReframeError::Onnx("no model".into()))
     }
 
     fn bundled_whisper_model(&self) -> Option<PathBuf> {

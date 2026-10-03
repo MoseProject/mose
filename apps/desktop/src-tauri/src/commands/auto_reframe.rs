@@ -9,6 +9,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use super::with_session;
+use crate::services::Services;
 use crate::state::AppState;
 
 pub const AUTO_REFRAME_EVENT: &str = "auto-reframe-event";
@@ -105,11 +106,12 @@ pub fn auto_reframe_clip<R: Runtime>(app: AppHandle<R>, clip_id: u64) -> Result<
     let model_path = PathBuf::from(configured_model_path);
 
     let worker_app = app.clone();
+    let services = state.services.clone();
     std::thread::spawn(move || {
         let subject_center = match seed_point {
             Some(seed) => Some(seed),
             None => extract_frame(&source_path, midpoint_secs).and_then(|(w, h, rgba)| {
-                match avcore::detect_faces(&model_path, &rgba, w, h) {
+                match services.detect_faces(&model_path, &rgba, w, h) {
                     Ok(faces) => avcore::main_subject_center(&faces),
                     Err(error) => {
                         tracing::warn!(%error, "auto-reframe face detection failed");
@@ -221,8 +223,10 @@ pub fn dynamic_auto_reframe_clip<R: Runtime>(
             .dims_or((source_w, source_h))
     };
     let worker_app = app.clone();
+    let services = state.services.clone();
     std::thread::spawn(move || {
         let Some(samples) = dynamic_reframe_samples(
+            services.as_ref(),
             &source_path,
             clip.source_in_secs,
             clip.source_out_secs,
@@ -279,6 +283,7 @@ pub fn dynamic_auto_reframe_clip<R: Runtime>(
 }
 
 fn dynamic_reframe_samples(
+    services: &dyn Services,
     source_path: &Path,
     source_in_secs: f64,
     source_out_secs: f64,
@@ -321,7 +326,7 @@ fn dynamic_reframe_samples(
                         frame.rgba,
                         REFRAME_FRAME_MAX_DIM,
                     );
-                    avcore::detect_faces(model_path, &rgba, width, height)
+                    services.detect_faces(model_path, &rgba, width, height)
                         .map_err(|error| tracing::warn!(%error, "dynamic auto-reframe face detection failed"))
                         .ok()
                         .and_then(|faces| avcore::select_subject_center(

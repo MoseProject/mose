@@ -10,8 +10,8 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use avcore::{
-    ApplyUpdateError, ApplyUpdateOutcome, LatestRelease, PiperVoiceConfig, TranscribeError,
-    TranscribeOutcome, TtsError, UpdateCheckError,
+    ApplyUpdateError, ApplyUpdateOutcome, FaceBox, LatestRelease, PiperVoiceConfig, ReframeError,
+    SegmentError, TranscribeError, TranscribeOutcome, TtsError, UpdateCheckError,
 };
 
 pub trait Services: Send + Sync {
@@ -26,6 +26,21 @@ pub trait Services: Send + Sync {
         config: &PiperVoiceConfig,
         text: &str,
     ) -> Result<Vec<f32>, TtsError>;
+    /// Person matte for one RGBA frame: one alpha value per pixel.
+    fn segment_person(
+        &self,
+        model_path: &Path,
+        rgba: &[u8],
+        width: u32,
+        height: u32,
+    ) -> Result<Vec<f32>, SegmentError>;
+    fn detect_faces(
+        &self,
+        model_path: &Path,
+        rgba: &[u8],
+        width: u32,
+        height: u32,
+    ) -> Result<Vec<FaceBox>, ReframeError>;
     /// The Whisper model shipped with the app, when this install has one.
     fn bundled_whisper_model(&self) -> Option<PathBuf>;
     fn transcribe(
@@ -71,6 +86,26 @@ impl Services for SystemServices {
         text: &str,
     ) -> Result<Vec<f32>, TtsError> {
         avcore::synthesize(model_path, config, text)
+    }
+
+    fn segment_person(
+        &self,
+        model_path: &Path,
+        rgba: &[u8],
+        width: u32,
+        height: u32,
+    ) -> Result<Vec<f32>, SegmentError> {
+        avcore::segment_person(model_path, rgba, width, height)
+    }
+
+    fn detect_faces(
+        &self,
+        model_path: &Path,
+        rgba: &[u8],
+        width: u32,
+        height: u32,
+    ) -> Result<Vec<FaceBox>, ReframeError> {
+        avcore::detect_faces(model_path, rgba, width, height)
     }
 
     fn bundled_whisper_model(&self) -> Option<PathBuf> {

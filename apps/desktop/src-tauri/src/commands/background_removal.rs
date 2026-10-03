@@ -9,6 +9,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use super::with_session;
+use crate::services::Services;
 use crate::state::AppState;
 
 pub const MATTE_GENERATION_EVENT: &str = "matte-generation-event";
@@ -84,8 +85,10 @@ pub fn generate_matte_for_clip<R: Runtime>(app: AppHandle<R>, clip_id: u64) -> R
     let model_path = PathBuf::from(model_path);
 
     let worker_app = app.clone();
+    let services = state.services.clone();
     std::thread::spawn(move || {
         let result = generate_matte_one(
+            services.as_ref(),
             &source_path,
             clip.source_in_secs,
             clip.source_out_secs,
@@ -120,6 +123,7 @@ pub fn generate_matte_for_clip<R: Runtime>(app: AppHandle<R>, clip_id: u64) -> R
 }
 
 fn generate_matte_one(
+    services: &dyn Services,
     source_path: &Path,
     source_in_secs: f64,
     source_out_secs: f64,
@@ -154,7 +158,8 @@ fn generate_matte_one(
         } else if frame.width != frame_w || frame.height != frame_h {
             continue;
         }
-        let alpha = avcore::segment_person(model_path, &frame.rgba, frame.width, frame.height)
+        let alpha = services
+            .segment_person(model_path, &frame.rgba, frame.width, frame.height)
             .map_err(|e| format!("segmentation failed: {e}"))?;
         luma_frames.push(
             alpha
