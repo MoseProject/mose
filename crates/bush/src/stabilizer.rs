@@ -155,17 +155,9 @@ fn estimate_motion(previous: &Luma, current: &Luma) -> (f32, f32) {
         .min_by(|a, b| a.1.total_cmp(b.1))
         .expect("search window is not empty");
     let (best_x, best_y) = ((best_index % size) as i32, (best_index / size) as i32);
-    let refine = |negative: f32, centre: f32, positive: f32| -> f32 {
-        let denominator = negative - 2.0 * centre + positive;
-        if denominator.abs() < 1e-6 {
-            0.0
-        } else {
-            (0.5 * (negative - positive) / denominator).clamp(-0.5, 0.5)
-        }
-    };
     let cost = |x: i32, y: i32| costs[y as usize * size + x as usize];
     let fraction_x = if best_x > 0 && best_x < size as i32 - 1 {
-        refine(
+        parabolic_offset(
             cost(best_x - 1, best_y),
             cost(best_x, best_y),
             cost(best_x + 1, best_y),
@@ -174,7 +166,7 @@ fn estimate_motion(previous: &Luma, current: &Luma) -> (f32, f32) {
         0.0
     };
     let fraction_y = if best_y > 0 && best_y < size as i32 - 1 {
-        refine(
+        parabolic_offset(
             cost(best_x, best_y - 1),
             cost(best_x, best_y),
             cost(best_x, best_y + 1),
@@ -186,4 +178,36 @@ fn estimate_motion(previous: &Luma, current: &Luma) -> (f32, f32) {
         (best_x - SEARCH_RADIUS) as f32 + fraction_x,
         (best_y - SEARCH_RADIUS) as f32 + fraction_y,
     )
+}
+
+/// Sub-pixel offset of the minimum of the parabola through three costs; `0` when they are
+/// (nearly) collinear, which a real minimum cannot be.
+fn parabolic_offset(negative: f32, centre: f32, positive: f32) -> f32 {
+    let denominator = negative - 2.0 * centre + positive;
+    if denominator.abs() < 1e-6 {
+        0.0
+    } else {
+        (0.5 * (negative - positive) / denominator).clamp(-0.5, 0.5)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parabolic_offset;
+
+    #[test]
+    fn the_offset_follows_the_parabola_and_is_clamped() {
+        // Symmetric costs have their minimum at the centre.
+        assert_eq!(parabolic_offset(2.0, 1.0, 2.0), 0.0);
+        // A lower right neighbour pulls the minimum towards it; the shift never exceeds half a pixel.
+        assert!((parabolic_offset(3.0, 1.0, 2.0) - 1.0 / 6.0).abs() < 1e-6);
+        assert_eq!(parabolic_offset(10.0, 3.0, 1.0), 0.5);
+        assert_eq!(parabolic_offset(1.0, 3.0, 10.0), -0.5);
+    }
+
+    #[test]
+    fn collinear_costs_have_no_offset() {
+        assert_eq!(parabolic_offset(3.0, 2.0, 1.0), 0.0);
+        assert_eq!(parabolic_offset(1.0, 1.0, 1.0), 0.0);
+    }
 }
