@@ -118,7 +118,7 @@ pub use export_queue::{
     normalize_loaded_export_queue, persisted_export_queue_snapshot, save_export_queue_to_path,
     RenderControl,
 };
-pub use frame_sampler::FrameSampler;
+pub use frame_sampler::{FrameSampler, SampledFrame, SamplerError};
 pub use highlight_detection::{
     clip_amplitude_samples, detect_highlight_candidates, HighlightCandidate,
     TimelineAmplitudeSample, DEFAULT_HIGHLIGHT_GRID_SECS, DEFAULT_HIGHLIGHT_MIN_DURATION_SECS,

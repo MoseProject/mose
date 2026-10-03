@@ -17,6 +17,9 @@ gstreamer = "0.25.3"
 gstreamer-app = "0.25.2"
 gstreamer-video = "0.25.3"
 avbridge = { path = "../avbridge" }
+# Bush's decode-only `DecodeSource` (default features: no GPU, no audio device) is the frame
+# sampler's decoder; it replaced the GStreamer pipeline `FrameSampler` used to open.
+bush = { path = "../bush" }
 serde = { version = "1", features = ["derive"] }
 # Structured logging facade — just the macros (`warn!`/`error!`/...), no subscriber. Events
 # emitted here flow into whatever global subscriber `ui`'s `main.rs::init_logging` installs

@@ -737,6 +737,7 @@ name = "core"
 version = "0.1.0"
 dependencies = [
  "avbridge",
+ "bush",
  "cosmic-text",
  "criterion",
  "espeak-rs",
