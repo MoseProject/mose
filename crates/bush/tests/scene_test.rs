@@ -195,7 +195,8 @@ fn invalid_placement_is_rejected() {
 
 #[test]
 fn speed_ramp_changes_duration_and_integrates_source_time() {
-    // 2 s of source ramping 1x -> 3x: average speed 2x, so it lasts 1 s on the timeline.
+    // 2 s of source ramping 1x -> 3x, linear in source time (the exporter's definition): it
+    // lasts 2 / (3 - 1) * ln 3 s on the timeline and its speed grows as e^t.
     let mut contributor = media(1, 0, true, true);
     contributor.content = ContributorContent::Media(MediaSource {
         path: PathBuf::from("clip.mp4"),
@@ -208,23 +209,27 @@ fn speed_ramp_changes_duration_and_integrates_source_time() {
         ..Placement::default()
     };
 
-    assert_eq!(contributor.timeline_duration_secs(), Some(1.0));
-    assert!(contributor.is_active_at(0.99));
-    assert!(!contributor.is_active_at(1.0));
-    // source(t) = t + t^2: 0 -> 0, 0.5 -> 0.75, 1.0 -> 2.0.
+    let duration = 3f64.ln();
+    assert!((contributor.timeline_duration_secs().unwrap() - duration).abs() < 1e-12);
+    assert!(contributor.is_active_at(duration - 0.01));
+    assert!(!contributor.is_active_at(duration + 0.01));
+    // source(t) = e^t - 1: 0 -> 0, 0.5 -> e^0.5 - 1, the whole duration -> 2.0.
     assert_eq!(contributor.source_offset_at(0.0), 0.0);
-    assert!((contributor.source_offset_at(0.5) - 0.75).abs() < 1e-12);
-    assert!((contributor.source_offset_at(1.0) - 2.0).abs() < 1e-12);
-    assert_eq!(contributor.source_time_at(0.5), Some(0.75));
-    assert_eq!(contributor.speed_at(0.0), 1.0);
-    assert_eq!(contributor.speed_at(0.5), 2.0);
-    assert_eq!(contributor.speed_at(1.0), 3.0);
+    assert!((contributor.source_offset_at(0.5) - (0.5f64.exp() - 1.0)).abs() < 1e-12);
+    assert!((contributor.source_offset_at(duration) - 2.0).abs() < 1e-12);
+    assert!((contributor.speed_at(0.0) - 1.0).abs() < 1e-12);
+    assert!((contributor.speed_at(0.5) - 0.5f64.exp()).abs() < 1e-12);
+    assert!((contributor.speed_at(duration) - 3.0).abs() < 1e-12);
 
-    // A ramp down lasts longer: 2 s at 3x -> 1x is also 1 s; 2 s at 1x -> 0.5x is 2.67 s.
+    // A ramp down lasts longer: 2 s of source at 1x -> 0.5x is 2 / (0.5 - 1) * ln 0.5 s.
     contributor.placement.speed_ramp_end = Some(0.5);
     let duration = contributor.timeline_duration_secs().unwrap();
-    assert!((duration - 2.0 * 2.0 / 1.5).abs() < 1e-12);
+    assert!((duration - 4.0 * 2f64.ln()).abs() < 1e-12);
     assert!((contributor.source_offset_at(duration) - 2.0).abs() < 1e-9);
+
+    // Equal start and end speeds are a constant speed.
+    contributor.placement.speed_ramp_end = Some(1.0);
+    assert!((contributor.timeline_duration_secs().unwrap() - 2.0).abs() < 1e-12);
 }
 
 #[test]

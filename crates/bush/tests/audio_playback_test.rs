@@ -2,9 +2,10 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 
 use bush::{
-    AudioPlayer, AudioPlayerError, AudioRenderError, AudioRenderer, AudioSink, AudioSource,
-    Contributor, ContributorContent, ContributorId, FakeSink, MediaSource, Placement,
-    SceneSnapshot, SceneVersions, SinkError, SourceRange, Version,
+    Animation, AudioPlayer, AudioPlayerError, AudioRenderError, AudioRenderer, AudioSink,
+    AudioSource, Contributor, ContributorContent, ContributorId, Easing, FakeSink, Keyframe,
+    KeyframeTrack, MediaSource, Placement, SceneSnapshot, SceneVersions, SinkError, SourceRange,
+    Version,
 };
 
 const RATE: u32 = 44_100;
@@ -397,7 +398,8 @@ fn slowed_clips_run_longer_than_their_source() {
 #[test]
 fn speed_ramped_clips_follow_the_integrated_duration() {
     let cancel = AtomicBool::new(false);
-    // 0.9 s of source ramping 1x -> 2x: average 1.5x, so 0.6 s on the timeline (26460 frames).
+    // 0.9 s of source ramping 1x -> 2x, linear in source time: 0.9 * ln 2 = 0.624 s on the
+    // timeline (about 27500 frames).
     let scene = scene(vec![clip(
         1,
         true,
@@ -450,4 +452,69 @@ fn speed_ramped_clips_follow_the_integrated_duration() {
         renderer.render(&too_fast, 0, 1024, &cancel),
         Err(AudioRenderError::UnsupportedSpeed(_))
     ));
+}
+
+#[test]
+fn animated_gain_follows_the_decibel_track_and_overrides_the_static_gain() {
+    let cancel = AtomicBool::new(false);
+    let track = |from_db: f32, to_db: f32| {
+        KeyframeTrack::new(vec![
+            Keyframe {
+                time_secs: 0.0,
+                value: from_db,
+                easing: Easing::Linear,
+            },
+            Keyframe {
+                time_secs: 0.9,
+                value: to_db,
+                easing: Easing::Linear,
+            },
+        ])
+        .unwrap()
+    };
+    let animated = |from_db: f32, to_db: f32| {
+        scene(vec![clip(
+            1,
+            true,
+            Placement {
+                gain: 0.5,
+                animation: Animation {
+                    gain_db: Some(track(from_db, to_db)),
+                    ..Animation::default()
+                },
+                ..Placement::default()
+            },
+        )])
+    };
+    let plain = scene(vec![clip(1, true, Placement::default())]);
+    let window = 2048;
+    let reference = renderer()
+        .render(&plain, 0, window, &cancel)
+        .unwrap()
+        .unwrap();
+
+    // 0 dB all the way is unity even though the static gain says 0.5.
+    let unity = renderer()
+        .render(&animated(0.0, 0.0), 0, window, &cancel)
+        .unwrap()
+        .unwrap();
+    assert!((peak(unity.samples()) - peak(reference.samples())).abs() < 1e-4);
+
+    // A -60 dB -> 0 dB ramp is nearly silent at the start and full scale at the end.
+    let ramp = animated(-60.0, 0.0);
+    let start = renderer()
+        .render(&ramp, 0, window, &cancel)
+        .unwrap()
+        .unwrap();
+    assert!(peak(start.samples()) < peak(reference.samples()) * 0.01);
+    let end_frame = 38_000;
+    let late = renderer()
+        .render(&ramp, end_frame, window, &cancel)
+        .unwrap()
+        .unwrap();
+    let late_plain = renderer()
+        .render(&plain, end_frame, window, &cancel)
+        .unwrap()
+        .unwrap();
+    assert!(peak(late.samples()) > peak(late_plain.samples()) * 0.5);
 }
