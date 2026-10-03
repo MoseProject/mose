@@ -2,7 +2,7 @@
 //! post-download import, mirroring `ui::App`'s `youtube_download.rs` exactly. No core changes
 //! needed.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -65,6 +65,39 @@ pub fn download_youtube<R: Runtime>(
     format: String,
     quality: String,
 ) -> Result<(), String> {
+    start_download(
+        app,
+        url,
+        format,
+        quality,
+        avcore::is_yt_dlp_available(),
+        |url, target, dir, cancel, progress| {
+            avcore::download_youtube(url, target, dir, cancel, progress)
+        },
+    )
+}
+
+/// The download itself, given the helper's availability and the function that runs it, so the
+/// single-flight guard, the events and the import can be tested without the `ytbridge` binary.
+pub(crate) fn start_download<R: Runtime, F>(
+    app: AppHandle<R>,
+    url: String,
+    format: String,
+    quality: String,
+    available: bool,
+    download: F,
+) -> Result<(), String>
+where
+    F: FnOnce(
+            &str,
+            YoutubeDownloadTarget,
+            &Path,
+            &AtomicBool,
+            &mut dyn FnMut(f32),
+        ) -> Result<PathBuf, avcore::YoutubeDownloadError>
+        + Send
+        + 'static,
+{
     let url = url.trim().to_string();
     if url.is_empty() {
         return Err("blank URL".to_string());
@@ -72,7 +105,7 @@ pub fn download_youtube<R: Runtime>(
     let Some(target) = parse_target(&format, &quality) else {
         return Err("invalid format".to_string());
     };
-    if !avcore::is_yt_dlp_available() {
+    if !available {
         return Err("yt-dlp is not installed".to_string());
     }
     let state = app.state::<AppState>();
@@ -100,7 +133,7 @@ pub fn download_youtube<R: Runtime>(
             guard.clone().expect("cancel flag set just above")
         };
         let progress_app = worker_app.clone();
-        let result = avcore::download_youtube(&url, target, &out_dir, &cancel, move |fraction| {
+        let result = download(&url, target, &out_dir, &cancel, &mut |fraction| {
             let _ = progress_app.emit(
                 YOUTUBE_DOWNLOAD_EVENT,
                 YoutubeDownloadEventPayload::Progress { fraction },
