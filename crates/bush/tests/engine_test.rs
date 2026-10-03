@@ -6,7 +6,7 @@ use std::time::Duration;
 use bush::{
     BlendMode, Contributor, ContributorContent, ContributorId, DecodePolicy, DecodeSource, Engine,
     EngineConfig, EngineError, EngineEvent, EngineRequest, MediaSource, PixelFormat, Placement,
-    RasterOverlay, SceneSnapshot, SceneVersions, SourceRange, Version, VideoFrame,
+    RasterOverlay, RendererChoice, SceneSnapshot, SceneVersions, SourceRange, Version, VideoFrame,
 };
 
 const WAIT: Duration = Duration::from_secs(20);
@@ -28,6 +28,7 @@ fn config(max_open_sources: usize) -> EngineConfig {
         max_open_sources,
         frame_cache_bytes: 64 * 1024 * 1024,
         decode_policy: DecodePolicy::Software,
+        renderer: RendererChoice::Cpu,
     }
 }
 
@@ -320,6 +321,7 @@ fn h264_frame(policy: DecodePolicy, playhead: f64) -> VideoFrame {
         max_open_sources: 1,
         frame_cache_bytes: 64 * 1024 * 1024,
         decode_policy: policy,
+        renderer: RendererChoice::Cpu,
     })
     .unwrap();
     engine

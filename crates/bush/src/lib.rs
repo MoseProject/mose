@@ -16,6 +16,8 @@ mod deflicker;
 mod device_sink;
 mod engine;
 mod frame_mailbox;
+#[cfg(feature = "gpu")]
+mod gpu_renderer;
 mod keyframes;
 mod latest_intent;
 mod layer_mods;
@@ -38,6 +40,7 @@ pub use avbridge::DecodePolicy;
 pub use byte_cache::{ByteCache, CacheError, CacheInsert};
 pub use cpu_renderer::{
     BlendMode, CpuRenderer, CropRect, LayerEffects, LayerFrame, LayerTransform, RenderError,
+    Renderer,
 };
 pub use decode_source::{DecodeSource, DecodeSourceError, SourceInfo, MAX_SEEK_SEARCH_FRAMES};
 pub use deflicker::Deflicker;
@@ -45,9 +48,11 @@ pub use deflicker::Deflicker;
 pub use device_sink::{DeviceSink, DeviceSinkError};
 pub use engine::{
     Engine, EngineConfig, EngineError, EngineEvent, EngineRequest, EngineStats, LatencySummary,
-    MAX_CANVAS_PIXELS,
+    RendererChoice, MAX_CANVAS_PIXELS,
 };
 pub use frame_mailbox::{FrameMailbox, PublishedFrame};
+#[cfg(feature = "gpu")]
+pub use gpu_renderer::{GpuError, GpuRenderer};
 pub use keyframes::{Animation, Easing, Fade, Keyframe, KeyframeError, KeyframeTrack};
 pub use latest_intent::{Generation, LatestIntent, PendingIntent};
 pub use layer_mods::{ChromaKey, LayerMask, Lut3D, LutError, MaskShape};

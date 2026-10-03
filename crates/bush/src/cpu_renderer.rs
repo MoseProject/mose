@@ -211,6 +211,8 @@ pub enum RenderError {
     InvalidOpacity(f32),
     InvalidTransform,
     InvalidEffects,
+    /// A GPU renderer failed (adapter, device, shader, readback); the message names the stage.
+    Gpu(String),
     OutputExceedsBudget {
         requested_bytes: usize,
         budget_bytes: usize,
@@ -243,44 +245,8 @@ impl CpuRenderer {
         timestamp_secs: f64,
         layers: &[LayerFrame<'_>],
     ) -> Result<VideoFrame, RenderError> {
-        if width == 0 || height == 0 {
-            return Err(RenderError::ZeroCanvas);
-        }
-        if !timestamp_secs.is_finite() || timestamp_secs < 0.0 {
-            return Err(RenderError::NonFiniteTimestamp(timestamp_secs));
-        }
-        for layer in layers {
-            if !layer.opacity.is_finite() || !(0.0..=1.0).contains(&layer.opacity) {
-                return Err(RenderError::InvalidOpacity(layer.opacity));
-            }
-            if !layer.transform.is_valid() {
-                return Err(RenderError::InvalidTransform);
-            }
-            if !layer.effects.is_valid() {
-                return Err(RenderError::InvalidEffects);
-            }
-        }
-
-        let stride = usize::try_from(width)
-            .ok()
-            .and_then(|width| width.checked_mul(4))
-            .ok_or(RenderError::OutputExceedsBudget {
-                requested_bytes: usize::MAX,
-                budget_bytes: self.max_output_bytes,
-            })?;
-        let bytes =
-            stride
-                .checked_mul(height as usize)
-                .ok_or(RenderError::OutputExceedsBudget {
-                    requested_bytes: usize::MAX,
-                    budget_bytes: self.max_output_bytes,
-                })?;
-        if bytes > self.max_output_bytes {
-            return Err(RenderError::OutputExceedsBudget {
-                requested_bytes: bytes,
-                budget_bytes: self.max_output_bytes,
-            });
-        }
+        let (stride, bytes) =
+            validate_render_input(width, height, timestamp_secs, layers, self.max_output_bytes)?;
 
         let mut pixels = vec![0; bytes];
         let row_bytes = width as usize * 4;
@@ -316,6 +282,53 @@ impl CpuRenderer {
     }
 }
 
+/// Validates a render request and returns `(stride_bytes, total_bytes)`. Shared by every
+/// renderer so they all reject exactly the same input.
+pub(crate) fn validate_render_input(
+    width: u32,
+    height: u32,
+    timestamp_secs: f64,
+    layers: &[LayerFrame<'_>],
+    max_output_bytes: usize,
+) -> Result<(usize, usize), RenderError> {
+    if width == 0 || height == 0 {
+        return Err(RenderError::ZeroCanvas);
+    }
+    if !timestamp_secs.is_finite() || timestamp_secs < 0.0 {
+        return Err(RenderError::NonFiniteTimestamp(timestamp_secs));
+    }
+    for layer in layers {
+        if !layer.opacity.is_finite() || !(0.0..=1.0).contains(&layer.opacity) {
+            return Err(RenderError::InvalidOpacity(layer.opacity));
+        }
+        if !layer.transform.is_valid() {
+            return Err(RenderError::InvalidTransform);
+        }
+        if !layer.effects.is_valid() {
+            return Err(RenderError::InvalidEffects);
+        }
+    }
+
+    let overflow = RenderError::OutputExceedsBudget {
+        requested_bytes: usize::MAX,
+        budget_bytes: max_output_bytes,
+    };
+    let stride = usize::try_from(width)
+        .ok()
+        .and_then(|width| width.checked_mul(4))
+        .ok_or_else(|| overflow.clone())?;
+    let bytes = stride
+        .checked_mul(height as usize)
+        .ok_or_else(|| overflow.clone())?;
+    if bytes > max_output_bytes {
+        return Err(RenderError::OutputExceedsBudget {
+            requested_bytes: bytes,
+            budget_bytes: max_output_bytes,
+        });
+    }
+    Ok((stride, bytes))
+}
+
 /// Frames below this many pixels composite on the calling thread: spawning costs more.
 const PARALLEL_MIN_PIXELS: usize = 256 * 256;
 
@@ -332,6 +345,102 @@ fn worker_count(width: u32, height: u32, layer_count: usize) -> usize {
         .min(height as usize)
 }
 
+/// Where a layer lands on the canvas: its crop window in source pixels, the centre and rotation
+/// of the transformed rectangle, and its clipped destination bounding box. Shared by the CPU and
+/// GPU compositors so both walk exactly the same pixels with exactly the same arithmetic.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct LayerGeometry {
+    pub crop_x0: i64,
+    pub crop_y0: i64,
+    pub crop_w: i64,
+    pub crop_h: i64,
+    pub center_x: f32,
+    pub center_y: f32,
+    pub sin: f32,
+    pub cos: f32,
+    pub start_x: i64,
+    pub start_y: i64,
+    pub end_x: i64,
+    pub end_y: i64,
+}
+
+impl LayerGeometry {
+    /// `None` when the transformed layer does not intersect the canvas.
+    pub(crate) fn new(
+        canvas_width: u32,
+        canvas_height: u32,
+        layer: &LayerFrame<'_>,
+    ) -> Option<Self> {
+        let source = layer.frame;
+        let transform = layer.transform;
+        let crop_x0 = (transform.crop.x * source.width() as f32).round() as i64;
+        let crop_y0 = (transform.crop.y * source.height() as f32).round() as i64;
+        let crop_w = ((transform.crop.width * source.width() as f32).round() as i64)
+            .clamp(1, (i64::from(source.width()) - crop_x0).max(1));
+        let crop_h = ((transform.crop.height * source.height() as f32).round() as i64)
+            .clamp(1, (i64::from(source.height()) - crop_y0).max(1));
+        let scaled_w = crop_w as f32 * transform.scale_x;
+        let scaled_h = crop_h as f32 * transform.scale_y;
+        let center_x = layer.x as f32 + scaled_w / 2.0;
+        let center_y = layer.y as f32 + scaled_h / 2.0;
+        let (sin, cos) = transform.rotation_deg.to_radians().sin_cos();
+        let half_w = (scaled_w * cos.abs() + scaled_h * sin.abs()) / 2.0;
+        let half_h = (scaled_w * sin.abs() + scaled_h * cos.abs()) / 2.0;
+        let start_x = ((center_x - half_w).floor() as i64).max(0);
+        let start_y = ((center_y - half_h).floor() as i64).max(0);
+        let end_x = ((center_x + half_w).ceil() as i64).min(i64::from(canvas_width));
+        let end_y = ((center_y + half_h).ceil() as i64).min(i64::from(canvas_height));
+        if start_x >= end_x || start_y >= end_y {
+            return None;
+        }
+        Some(Self {
+            crop_x0,
+            crop_y0,
+            crop_w,
+            crop_h,
+            center_x,
+            center_y,
+            sin,
+            cos,
+            start_x,
+            start_y,
+            end_x,
+            end_y,
+        })
+    }
+}
+
+/// Anything that can composite layers into a frame: the CPU reference or a GPU implementation.
+pub trait Renderer: Send {
+    /// Composites `layers` bottom-to-top onto a transparent canvas.
+    fn render(
+        &mut self,
+        width: u32,
+        height: u32,
+        timestamp_secs: f64,
+        layers: &[LayerFrame<'_>],
+    ) -> Result<VideoFrame, RenderError>;
+
+    /// A short stable name for diagnostics ("cpu", or the GPU adapter).
+    fn name(&self) -> String;
+}
+
+impl Renderer for CpuRenderer {
+    fn render(
+        &mut self,
+        width: u32,
+        height: u32,
+        timestamp_secs: f64,
+        layers: &[LayerFrame<'_>],
+    ) -> Result<VideoFrame, RenderError> {
+        CpuRenderer::render(self, width, height, timestamp_secs, layers)
+    }
+
+    fn name(&self) -> String {
+        "cpu".to_string()
+    }
+}
+
 /// Inverse-maps each destination pixel centre into the source (nearest sample), so scale,
 /// rotation and crop share one deterministic path. Only the transformed bounding box is visited.
 /// `canvas` holds whole rows starting at canvas row `first_row`; rows outside it are skipped.
@@ -344,27 +453,23 @@ fn blend_layer(
 ) {
     let source = layer.frame;
     let transform = layer.transform;
-    let crop_x0 = (transform.crop.x * source.width() as f32).round() as i64;
-    let crop_y0 = (transform.crop.y * source.height() as f32).round() as i64;
-    let crop_w = ((transform.crop.width * source.width() as f32).round() as i64)
-        .clamp(1, (i64::from(source.width()) - crop_x0).max(1));
-    let crop_h = ((transform.crop.height * source.height() as f32).round() as i64)
-        .clamp(1, (i64::from(source.height()) - crop_y0).max(1));
-    let scaled_w = crop_w as f32 * transform.scale_x;
-    let scaled_h = crop_h as f32 * transform.scale_y;
-    let center_x = layer.x as f32 + scaled_w / 2.0;
-    let center_y = layer.y as f32 + scaled_h / 2.0;
-    let (sin, cos) = transform.rotation_deg.to_radians().sin_cos();
-    let half_w = (scaled_w * cos.abs() + scaled_h * sin.abs()) / 2.0;
-    let half_h = (scaled_w * sin.abs() + scaled_h * cos.abs()) / 2.0;
-    let start_x = ((center_x - half_w).floor() as i64).max(0);
-    let start_y = ((center_y - half_h).floor() as i64).max(0);
-    let end_x = ((center_x + half_w).ceil() as i64).min(i64::from(canvas_width));
-    let end_y = ((center_y + half_h).ceil() as i64).min(i64::from(canvas_height));
-    if start_x >= end_x || start_y >= end_y {
+    let Some(geometry) = LayerGeometry::new(canvas_width, canvas_height, layer) else {
         return;
-    }
-
+    };
+    let LayerGeometry {
+        crop_x0,
+        crop_y0,
+        crop_w,
+        crop_h,
+        center_x,
+        center_y,
+        sin,
+        cos,
+        start_x,
+        start_y,
+        end_x,
+        end_y,
+    } = geometry;
     let neutral_effects = layer.effects.is_neutral() && layer.lut.is_none();
     let canvas_width = canvas_width as usize;
     let band_rows = (canvas.len() / (canvas_width * 4)) as i64;

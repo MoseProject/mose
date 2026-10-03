@@ -6,8 +6,8 @@ use std::time::Duration;
 
 use bush::{
     Contributor, ContributorContent, ContributorId, DecodePolicy, Engine, EngineConfig,
-    EngineEvent, EngineRequest, MediaSource, Placement, SceneSnapshot, SceneVersions, SourceRange,
-    Version,
+    EngineEvent, EngineRequest, MediaSource, Placement, RendererChoice, SceneSnapshot,
+    SceneVersions, SourceRange, Version,
 };
 
 fn scene(path: PathBuf, opacity: f32) -> SceneSnapshot {
@@ -39,6 +39,7 @@ fn run(label: &str, path: PathBuf, width: u32, height: u32, edits_only: bool) {
         max_open_sources: 2,
         frame_cache_bytes: 256 * 1024 * 1024,
         decode_policy: DecodePolicy::Software,
+        renderer: RendererChoice::Cpu,
     })
     .unwrap();
     for step in 0..200u32 {
@@ -68,8 +69,20 @@ fn run(label: &str, path: PathBuf, width: u32, height: u32, edits_only: bool) {
 
 fn main() {
     let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../avbridge/tests/fixtures");
-    run("640x360 scrub (random seek)", fixtures.join("video_h264.mp4"), 640, 360, false);
-    run("640x360 live edit (cached)", fixtures.join("video_h264.mp4"), 640, 360, true);
+    run(
+        "640x360 scrub (random seek)",
+        fixtures.join("video_h264.mp4"),
+        640,
+        360,
+        false,
+    );
+    run(
+        "640x360 live edit (cached)",
+        fixtures.join("video_h264.mp4"),
+        640,
+        360,
+        true,
+    );
     if let Some(dir) = std::env::var_os("BUSH_BENCH_MEDIA_DIR").map(PathBuf::from) {
         let big = dir.join("h264_1080p.mp4");
         if big.exists() {

@@ -155,6 +155,12 @@ impl Lut3D {
         self.size
     }
 
+    /// The table entries, red varying fastest, then green, then blue.
+    #[cfg_attr(not(feature = "gpu"), allow(dead_code))]
+    pub(crate) fn entries(&self) -> &[[f32; 3]] {
+        &self.entries
+    }
+
     pub fn retained_bytes(&self) -> usize {
         self.entries.len() * std::mem::size_of::<[f32; 3]>()
     }

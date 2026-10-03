@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 use crate::{
     ByteCache, ContributorContent, ContributorId, CpuRenderer, DecodePolicy, DecodeSource,
-    Generation, LatestIntent, LayerFrame, Placement, SceneSnapshot, VideoFrame,
+    Generation, LatestIntent, LayerFrame, Placement, Renderer, SceneSnapshot, VideoFrame,
 };
 
 /// Fixed engine limits. Every field is validated by [`Engine::new`].
@@ -29,6 +29,19 @@ pub struct EngineConfig {
     /// Software decode, or hardware with software fallback. Hardware is opt-in: measure it on
     /// the target media before enabling it.
     pub decode_policy: DecodePolicy,
+    /// Which compositor to use. A GPU request without the `gpu` feature, or without a usable
+    /// adapter, falls back to the CPU reference; see [`Engine::renderer_name`].
+    pub renderer: RendererChoice,
+}
+
+/// Compositor selection for [`EngineConfig`].
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum RendererChoice {
+    /// The deterministic, threaded CPU compositor.
+    #[default]
+    Cpu,
+    /// The wgpu compute compositor when available (feature `gpu` and an adapter), else CPU.
+    GpuWithCpuFallback,
 }
 
 /// Largest canvas the engine accepts, in pixels (8K UHD is 33.2 M). Bounds the compositor's
@@ -157,6 +170,7 @@ struct Shared {
 pub struct Engine {
     shared: Arc<Shared>,
     join: Mutex<Option<JoinHandle<()>>>,
+    renderer_name: String,
 }
 
 impl std::fmt::Debug for Engine {
@@ -167,10 +181,11 @@ impl std::fmt::Debug for Engine {
 
 impl Engine {
     pub fn new(config: EngineConfig) -> Result<Self, EngineError> {
-        let renderer = canvas_budget(&config)
+        let max_bytes = canvas_budget(&config)
             .filter(|bytes| *bytes <= MAX_CANVAS_PIXELS * 4)
-            .and_then(|bytes| CpuRenderer::new(bytes).ok())
             .ok_or(EngineError::InvalidConfig)?;
+        let renderer = create_renderer(config.renderer, max_bytes)?;
+        let renderer_name = renderer.name();
         let cache =
             ByteCache::new(config.frame_cache_bytes).map_err(|_| EngineError::InvalidConfig)?;
         if config.max_open_sources == 0 {
@@ -201,6 +216,7 @@ impl Engine {
         Ok(Self {
             shared,
             join: Mutex::new(Some(join)),
+            renderer_name,
         })
     }
 
@@ -279,6 +295,11 @@ impl Engine {
         )
     }
 
+    /// The compositor in use: `cpu`, or `gpu:<adapter name>`.
+    pub fn renderer_name(&self) -> &str {
+        &self.renderer_name
+    }
+
     pub fn stats(&self) -> EngineStats {
         let counters = &self.shared.counters;
         EngineStats {
@@ -321,6 +342,23 @@ impl Drop for Engine {
     }
 }
 
+fn create_renderer(
+    choice: RendererChoice,
+    max_bytes: usize,
+) -> Result<Box<dyn Renderer>, EngineError> {
+    #[cfg(feature = "gpu")]
+    if choice == RendererChoice::GpuWithCpuFallback {
+        if let Ok(gpu) = crate::GpuRenderer::new(max_bytes) {
+            return Ok(Box::new(gpu));
+        }
+    }
+    #[cfg(not(feature = "gpu"))]
+    let _ = choice;
+    CpuRenderer::new(max_bytes)
+        .map(|cpu| Box::new(cpu) as Box<dyn Renderer>)
+        .map_err(|_| EngineError::InvalidConfig)
+}
+
 fn canvas_budget(config: &EngineConfig) -> Option<usize> {
     if config.canvas_width == 0 || config.canvas_height == 0 {
         return None;
@@ -354,7 +392,7 @@ impl MediaNeed<'_> {
 struct EngineThread {
     shared: Arc<Shared>,
     config: EngineConfig,
-    renderer: CpuRenderer,
+    renderer: Box<dyn Renderer>,
     cache: ByteCache<CacheKey, Arc<VideoFrame>>,
     /// Open decoders, least recently used first.
     sources: Vec<((PathBuf, u64), DecodeSource)>,

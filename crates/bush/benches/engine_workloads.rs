@@ -12,7 +12,8 @@ use std::time::Duration;
 use bush::{
     BlendMode, Contributor, ContributorContent, ContributorId, CpuRenderer, DecodePolicy,
     DecodeSource, Engine, EngineConfig, EngineEvent, EngineRequest, LayerFrame, MediaSource,
-    PixelFormat, Placement, SceneSnapshot, SceneVersions, SourceRange, Version, VideoFrame,
+    PixelFormat, Placement, RendererChoice, SceneSnapshot, SceneVersions, SourceRange, Version,
+    VideoFrame,
 };
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 
@@ -48,6 +49,7 @@ fn engine(width: u32, height: u32, policy: DecodePolicy) -> Engine {
         max_open_sources: 2,
         frame_cache_bytes: 128 * 1024 * 1024,
         decode_policy: policy,
+        renderer: RendererChoice::Cpu,
     })
     .unwrap()
 }
@@ -289,6 +291,7 @@ fn bench_multicam(c: &mut Criterion) {
                     max_open_sources: 3,
                     frame_cache_bytes: 256 * 1024 * 1024,
                     decode_policy: DecodePolicy::Software,
+                    renderer: RendererChoice::Cpu,
                 })
                 .unwrap()
             },

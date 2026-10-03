@@ -4,7 +4,7 @@ use std::time::Duration;
 use bush::{
     Contributor, ContributorContent, ContributorId, DecodePolicy, DecodeSource, Engine,
     EngineConfig, MediaSource, Placement, PlaybackState, Player, PlayerError, PlayerEvent,
-    SceneSnapshot, SceneVersions, SourceRange, Version,
+    RendererChoice, SceneSnapshot, SceneVersions, SourceRange, Version,
 };
 
 const WAIT: Duration = Duration::from_secs(20);
@@ -43,6 +43,7 @@ fn player() -> Player {
         max_open_sources: 1,
         frame_cache_bytes: 64 * 1024 * 1024,
         decode_policy: DecodePolicy::Software,
+        renderer: RendererChoice::Cpu,
     })
     .unwrap();
     Player::new(engine, scene(1.0), 0.9).unwrap()
@@ -168,6 +169,7 @@ fn rejects_non_positive_durations() {
         max_open_sources: 1,
         frame_cache_bytes: 1 << 20,
         decode_policy: DecodePolicy::Software,
+        renderer: RendererChoice::Cpu,
     })
     .unwrap();
     assert_eq!(

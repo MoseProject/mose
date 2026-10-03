@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use bush::{
     AudioSource, Contributor, ContributorContent, ContributorId, DecodePolicy, DecodeSource,
     Engine, EngineConfig, EngineError, EngineEvent, EngineRequest, MediaSource, Placement,
-    SceneSnapshot, SceneVersions, SourceRange, Version, MAX_CANVAS_PIXELS,
+    RendererChoice, SceneSnapshot, SceneVersions, SourceRange, Version, MAX_CANVAS_PIXELS,
 };
 
 const WAIT: Duration = Duration::from_secs(30);
@@ -35,6 +35,7 @@ fn config() -> EngineConfig {
         max_open_sources: 2,
         frame_cache_bytes: 16 * 1024 * 1024,
         decode_policy: DecodePolicy::Software,
+        renderer: RendererChoice::Cpu,
     }
 }
 
