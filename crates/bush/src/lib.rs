@@ -12,6 +12,8 @@ mod byte_cache;
 mod cpu_renderer;
 mod decode_source;
 mod deflicker;
+#[cfg(feature = "cpal")]
+mod device_sink;
 mod engine;
 mod frame_mailbox;
 mod keyframes;
@@ -39,6 +41,8 @@ pub use cpu_renderer::{
 };
 pub use decode_source::{DecodeSource, DecodeSourceError, SourceInfo, MAX_SEEK_SEARCH_FRAMES};
 pub use deflicker::Deflicker;
+#[cfg(feature = "cpal")]
+pub use device_sink::{DeviceSink, DeviceSinkError};
 pub use engine::{
     Engine, EngineConfig, EngineError, EngineEvent, EngineRequest, EngineStats, LatencySummary,
     MAX_CANVAS_PIXELS,

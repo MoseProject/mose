@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 avbridge = { path = "../avbridge" }
+cpal = { version = "0.18.2", optional = true }
 
 [dev-dependencies]
 criterion = "0.8.2"
@@ -17,3 +18,6 @@ harness = false
 [[bench]]
 name = "engine_workloads"
 harness = false
+
+[features]
+cpal = ["dep:cpal"]
