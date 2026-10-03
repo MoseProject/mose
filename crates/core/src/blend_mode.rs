@@ -17,7 +17,7 @@
 //! ([`crate::timeline::BlendMode`]), for live-preview compositing where GStreamer's
 //! `compositor` element (only `source`/`over`/`add` Porter-Duff operators — verified via
 //! `gst-inspect-1.0 compositor` against this project's GStreamer) can't do the job
-//! ([`crate::preview`] builds a dedicated `appsink` branch per blend-mode layer instead and
+//! (the old GStreamer preview built a dedicated `appsink` branch per blend-mode layer instead and
 //! composites its frames against the accumulated stack here, per-frame).
 //!
 //! Every formula below is transcribed term-for-term from FFmpeg's own source

@@ -626,10 +626,8 @@ pub struct ClipInstance {
     /// `true` if temporal luminance-flicker removal is enabled for this block, per
     /// `request.md`'s Fase 4 "Efeitos visuais" spec ("Remoção de flicker") — common in
     /// screen/gameplay captures at certain refresh rates. Wired to export via `video_filter_chain`
-    /// (`deflicker`); no equivalent stage exists in `core::preview`'s GStreamer
-    /// `build_video_filter_bin`, but [`crate::apply_deflicker_to_rgba`] covers it as a CPU-side
-    /// preview approximation instead (see `preview_effects`'s own doc comment) — the live
-    /// preview and the export encode still use two different implementations of the same idea,
+    /// (`deflicker`) and to the Bush preview (an exponential brightness smoother in `bush`) — the
+    /// live preview and the export encode use two different implementations of the same idea,
     /// not one shared code path. `#[serde(default)]` so older saved projects load with it off.
     #[serde(default)]
     pub deflicker_enabled: bool,
