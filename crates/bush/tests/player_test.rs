@@ -177,3 +177,65 @@ fn rejects_non_positive_durations() {
         PlayerError::InvalidDuration(0.0)
     );
 }
+
+#[test]
+fn audio_clock_drives_the_playhead_and_never_rewinds_it() {
+    let mut player = player();
+    player.play(Duration::from_secs(1)).unwrap();
+    next_frame(&mut player);
+
+    // Wall clock says 5 s passed, but the audio device only played 0.2 s: follow the audio.
+    player
+        .tick_synced(Duration::from_secs(6), 0.2)
+        .unwrap()
+        .expect("audio advanced");
+    assert!((player.position_secs() - 0.2).abs() < 1e-9);
+    let (position, _) = next_frame(&mut player);
+    assert!((position - 0.2).abs() < 1e-9);
+
+    // A stalled audio clock holds the picture; a glitch backwards does not rewind it.
+    assert_eq!(
+        player.tick_synced(Duration::from_secs(7), 0.2).unwrap(),
+        None
+    );
+    assert_eq!(
+        player.tick_synced(Duration::from_secs(8), 0.1).unwrap(),
+        None
+    );
+    assert!((player.position_secs() - 0.2).abs() < 1e-9);
+    assert_eq!(
+        player
+            .tick_synced(Duration::from_secs(9), f64::NAN)
+            .unwrap(),
+        None
+    );
+
+    assert!((player.drift_against(0.15) - 0.05).abs() < 1e-9);
+    assert!((player.drift_against(0.25) + 0.05).abs() < 1e-9);
+}
+
+#[test]
+fn audio_clock_reaching_the_end_pauses_and_reports_ended() {
+    let mut player = player();
+    player.play(Duration::ZERO).unwrap();
+    next_frame(&mut player);
+    player.tick_synced(Duration::from_secs(1), 30.0).unwrap();
+    assert!(player.has_ended());
+    assert_eq!(player.state(), PlaybackState::Paused);
+    assert_eq!(player.position_secs(), 0.9);
+    next_frame(&mut player);
+    assert_eq!(
+        player.wait(WAIT),
+        Some(PlayerEvent::Ended { position_secs: 0.9 })
+    );
+}
+
+#[test]
+fn synced_ticks_are_ignored_while_paused() {
+    let mut player = player();
+    assert_eq!(
+        player.tick_synced(Duration::from_secs(1), 0.5).unwrap(),
+        None
+    );
+    assert_eq!(player.position_secs(), 0.0);
+}

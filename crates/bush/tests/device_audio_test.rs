@@ -119,3 +119,77 @@ fn player_streams_a_real_clip_to_the_device() {
     std::thread::sleep(Duration::from_millis(300));
     assert!(sink.consumed_frames() > 0, "the device never pulled audio");
 }
+
+#[test]
+fn video_follows_the_device_audio_clock_without_drifting_ahead() {
+    use bush::{DecodePolicy, DecodeSource, Engine, EngineConfig, Player, RendererChoice};
+
+    let Some(mut sink) = open(48_000 * 2) else {
+        return;
+    };
+    let video =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../avbridge/tests/fixtures/video.mp4");
+    let info = DecodeSource::open(&video).unwrap().info();
+    let scene = |audible: bool| {
+        SceneSnapshot::new(
+            SceneVersions::default(),
+            vec![Contributor {
+                id: ContributorId(1),
+                layer: 0,
+                visible: true,
+                audible,
+                content: ContributorContent::Media(MediaSource {
+                    path: video.clone(),
+                    range: SourceRange::new(0.0, 0.9).unwrap(),
+                    version: Version(1),
+                }),
+                placement: Placement::default(),
+            }],
+        )
+        .unwrap()
+    };
+    let engine = Engine::new(EngineConfig {
+        canvas_width: info.width,
+        canvas_height: info.height,
+        max_open_sources: 1,
+        frame_cache_bytes: 64 * 1024 * 1024,
+        decode_policy: DecodePolicy::Software,
+        renderer: RendererChoice::Cpu,
+    })
+    .unwrap();
+    let mut player = Player::new(engine, scene(false), 3.0).unwrap();
+    // Silent audio scene: the device still runs its real clock while we feed it zeros.
+    let renderer = AudioRenderer::new(sink.sample_rate(), sink.channels(), 4096, 1).unwrap();
+    let mut audio = AudioPlayer::new(
+        renderer,
+        scene(false),
+        1024,
+        sink.sample_rate() as usize / 4,
+    );
+
+    let cancel = AtomicBool::new(false);
+    let started = Instant::now();
+    player.play(started.elapsed()).unwrap();
+    let mut worst_drift: f64 = 0.0;
+    while started.elapsed() < Duration::from_millis(1_500) {
+        audio.pump(&mut sink, &cancel).unwrap();
+        let audio_position = sink.consumed_frames() as f64 / f64::from(sink.sample_rate());
+        let _ = player
+            .tick_synced(started.elapsed(), audio_position)
+            .unwrap();
+        worst_drift = worst_drift.max(player.drift_against(audio_position).abs());
+        std::thread::sleep(Duration::from_millis(8));
+    }
+    let audio_position = sink.consumed_frames() as f64 / f64::from(sink.sample_rate());
+    let wall = started.elapsed().as_secs_f64();
+    eprintln!(
+        "A/V sync: audio clock {audio_position:.3} s, video {:.3} s, wall {wall:.3} s, worst drift {:.1} ms, underflows {}",
+        player.position_secs(),
+        worst_drift * 1000.0,
+        sink.underflow_callbacks()
+    );
+    // Video tracks the audio clock exactly (it is the master), and the audio clock keeps pace
+    // with the wall clock.
+    assert!(worst_drift < 0.001, "video led audio by {worst_drift} s");
+    assert!(audio_position > wall * 0.7 && audio_position < wall * 1.05);
+}

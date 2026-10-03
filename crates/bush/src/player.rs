@@ -189,6 +189,49 @@ impl Player {
         Ok(Some(generation))
     }
 
+    /// Like [`Self::tick`], but audio is the master clock: the playhead follows
+    /// `audio_position_secs` (frames the audio device has actually played divided by the sample
+    /// rate) instead of integrating wall-clock time, so video drops or repeats frames to stay in
+    /// sync and never runs ahead of sound. The playhead never moves backwards: a late or glitching
+    /// audio clock holds the picture, it does not rewind it. Returns `None` when paused or when
+    /// the audio clock has not advanced.
+    pub fn tick_synced(
+        &mut self,
+        now: Duration,
+        audio_position_secs: f64,
+    ) -> Result<Option<Generation>, PlayerError> {
+        if self.transport.state() != PlaybackState::Playing {
+            return Ok(None);
+        }
+        self.last_tick = Some(now);
+        if !audio_position_secs.is_finite() {
+            return Ok(None);
+        }
+        let target = audio_position_secs.max(self.transport.position_secs());
+        if target == self.transport.position_secs() {
+            return Ok(None);
+        }
+        self.transport.seek(target)?;
+        let reached_end = self.transport.position_secs() >= self.duration_secs;
+        if reached_end {
+            self.transport.seek(self.duration_secs)?;
+            self.transport.pause();
+            self.last_tick = None;
+            self.ended = true;
+        }
+        let generation = self.submit_current()?;
+        if reached_end {
+            self.end_generation = Some(generation);
+        }
+        Ok(Some(generation))
+    }
+
+    /// Signed drift of the integrated video clock against the audio clock, in seconds: positive
+    /// means the playhead is ahead of the audio device. Use it to report A/V sync health.
+    pub fn drift_against(&self, audio_position_secs: f64) -> f64 {
+        self.transport.position_secs() - audio_position_secs
+    }
+
     /// The newest finished event. Frames are tagged with the position they were rendered for.
     pub fn poll(&mut self) -> Option<PlayerEvent> {
         if let Some(position_secs) = self.pending_end_event.take() {

@@ -65,9 +65,11 @@ small, but none exists today, and the adapter must not paper over them:
 4. ~~`Sepia`~~ **done**: `LayerEffects::sepia` (classic matrix, mix 0..1, CPU and WGSL).
 5. ~~Blend modes beyond the eight in Bush~~ **done**: all 40 core modes exist
    (`BlendMode::ALL`, `ffmpeg_name()`), bit-exact against FFmpeg `blend` (see the matrix).
-6. **Audio master clock.** `Player` advances video from an injected clock; with audio it must
-   follow `DeviceSink::consumed_frames` so video drops or repeats frames to stay in sync.
-   This needs the long-run drift measurement listed as open in the matrix.
+6. ~~Audio master clock~~ **done in Bush**: `Player::tick_synced(now, audio_position_secs)` follows the
+   audio device clock (never rewinds), `drift_against` reports sync health; measured on the
+   development machine device (video tracks the audio clock exactly, audio clock within 1 % of
+   wall time over 1.5 s). The adapter must feed it `DeviceSink::consumed_frames / sample_rate`.
+   Long-run (minutes) drift and device loss are still unmeasured.
 7. **Voice cleanup** (`voice_cleanup_*`): offline DSP stays outside Bush. The adapter either
    bypasses it in preview (as GStreamer does today if that is the current behaviour; to be
    confirmed) or consumes a pre-rendered cleaned asset.

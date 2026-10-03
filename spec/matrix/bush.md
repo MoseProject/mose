@@ -101,6 +101,8 @@ the real default device.
       range the renderer returns `AudioRenderError::UnsupportedSpeed`. Cost about 6 ms per
       second of stereo output. Tests: `time_stretch_test` (pitch within 4 Hz at five speeds,
       unit speed transparent, chunking-invariant), `audio_playback_test`.
+- [x] Audio-master playback clock (`Player::tick_synced`), verified against the real device:
+      video follows the audio clock with zero drift in a 1.5 s run.
 - [ ] Long-run A/V drift measurement and device-loss recovery on real hardware (the fake sink
       covers the contract; only the short clock test ran on a device).
 
