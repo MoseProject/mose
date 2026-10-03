@@ -695,6 +695,8 @@ typedef struct {
     int fps_num;
     int fps_den;
     double duration_secs;
+    /* Nonzero when frames are decoded on a hardware device. */
+    int hardware;
 } DecodeInfo;
 
 typedef struct {
@@ -710,6 +712,12 @@ typedef struct {
    avbridge_decode_close. `out_info` is initialized only on DECODE_OK. */
 DecodeStatus avbridge_decode_open(const char *path, AvbridgeDecodeSession **out_session,
                                   DecodeInfo *out_info);
+
+/* Like avbridge_decode_open; when `hardware` is nonzero the first hardware device the codec
+   supports is tried, and any failure (no device, unsupported stream, driver refusal) falls back
+   to software decode. `out_info->hardware` reports which path was taken. */
+DecodeStatus avbridge_decode_open_ex(const char *path, int hardware,
+                                     AvbridgeDecodeSession **out_session, DecodeInfo *out_info);
 
 /* Flushes decoder state and seeks to the nearest preceding keyframe at timestamp_secs. */
 DecodeStatus avbridge_decode_seek(AvbridgeDecodeSession *session, double timestamp_secs);

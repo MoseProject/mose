@@ -130,6 +130,7 @@ struct RawDecodeInfo {
     fps_num: c_int,
     fps_den: c_int,
     duration_secs: f64,
+    hardware: c_int,
 }
 
 #[repr(C)]
@@ -264,8 +265,9 @@ unsafe extern "C" {
         canvas_fps_num: c_int,
         canvas_fps_den: c_int,
     ) -> c_int;
-    fn avbridge_decode_open(
+    fn avbridge_decode_open_ex(
         path: *const c_char,
+        hardware: c_int,
         out_session: *mut *mut RawDecodeSession,
         out_info: *mut RawDecodeInfo,
     ) -> c_int;
@@ -412,6 +414,21 @@ pub struct DecodeInfo {
     pub height: u32,
     pub fps: Option<f64>,
     pub duration_secs: Option<f64>,
+    /// Whether frames are decoded on a hardware device (always `false` under
+    /// [`DecodePolicy::Software`], or when the hardware path was unavailable).
+    pub hardware: bool,
+}
+
+/// Whether to try hardware decode. Hardware is opt-in because it is only a win when measured:
+/// transfers back to system memory can make it slower than software on small or low-bitrate
+/// streams.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum DecodePolicy {
+    /// Always decode in software.
+    #[default]
+    Software,
+    /// Try the first hardware device the codec supports; any failure falls back to software.
+    HardwareWithFallback,
 }
 
 /// One packed RGBA frame copied out of the native decode session.
@@ -460,8 +477,17 @@ pub enum DecodeError {
 }
 
 impl DecodeSession {
-    /// Opens the first video stream at `path`.
+    /// Opens the first video stream at `path` with software decode.
     pub fn open(path: &Path) -> Result<(Self, DecodeInfo), DecodeError> {
+        Self::open_with_policy(path, DecodePolicy::Software)
+    }
+
+    /// Opens the first video stream at `path` under `policy`. `DecodeInfo::hardware` reports
+    /// which path was actually taken.
+    pub fn open_with_policy(
+        path: &Path,
+        policy: DecodePolicy,
+    ) -> Result<(Self, DecodeInfo), DecodeError> {
         let c_path =
             CString::new(path.to_string_lossy().as_bytes()).map_err(DecodeError::InvalidPath)?;
         let mut raw = std::ptr::null_mut();
@@ -471,9 +497,12 @@ impl DecodeSession {
             fps_num: 0,
             fps_den: 0,
             duration_secs: 0.0,
+            hardware: 0,
         };
+        let hardware = c_int::from(policy == DecodePolicy::HardwareWithFallback);
         // SAFETY: c_path is NUL-terminated for this call; raw/info point to writable storage.
-        let status = unsafe { avbridge_decode_open(c_path.as_ptr(), &mut raw, &mut info) };
+        let status =
+            unsafe { avbridge_decode_open_ex(c_path.as_ptr(), hardware, &mut raw, &mut info) };
         decode_open_status(status)?;
         debug_assert!(!raw.is_null());
         let width = u32::try_from(info.width).map_err(|_| DecodeError::FrameSize)?;
@@ -493,6 +522,7 @@ impl DecodeSession {
                     .then_some(info.fps_num as f64 / info.fps_den as f64),
                 duration_secs: (info.duration_secs.is_finite() && info.duration_secs >= 0.0)
                     .then_some(info.duration_secs),
+                hardware: info.hardware != 0,
             },
         ))
     }
