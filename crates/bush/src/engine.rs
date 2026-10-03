@@ -547,15 +547,11 @@ impl EngineThread {
                 continue;
             }
             let frame = match &contributor.content {
-                ContributorContent::Media(_) => {
-                    if contributor.source_time_at(playhead).is_none() {
-                        continue;
-                    }
-                    match fetched.next() {
-                        Some(frame) => frame,
-                        None => return RenderOutcome::Failed("media plan out of sync".into()),
-                    }
-                }
+                // An active media contributor always has a source time, so the plan built above
+                // holds exactly one fetched frame for it, in the same order.
+                ContributorContent::Media(_) => fetched
+                    .next()
+                    .expect("one fetched frame per active media contributor"),
                 ContributorContent::RasterOverlay(_) => {
                     match request
                         .overlays
