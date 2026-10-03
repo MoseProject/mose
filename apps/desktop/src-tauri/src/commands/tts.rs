@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use crate::state::AppState;
 
@@ -24,7 +24,7 @@ pub enum TtsResult {
 /// file drop is. Errors (already running, blank text, no voice configured) surface
 /// synchronously; the outcome also arrives via [`TTS_EVENT`].
 #[tauri::command]
-pub fn generate_tts(app: AppHandle, text: String) -> Result<(), String> {
+pub fn generate_tts<R: Runtime>(app: AppHandle<R>, text: String) -> Result<(), String> {
     let text = text.trim().to_string();
     let state = app.state::<AppState>();
     {

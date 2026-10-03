@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use super::with_session;
 use crate::state::AppState;
@@ -27,7 +27,7 @@ pub enum MatteGenerationResult {
 /// configured, clip/asset not found) surface synchronously; the mask path is applied
 /// automatically on success, and either outcome is reported via [`MATTE_GENERATION_EVENT`].
 #[tauri::command]
-pub fn generate_matte_for_clip(app: AppHandle, clip_id: u64) -> Result<(), String> {
+pub fn generate_matte_for_clip<R: Runtime>(app: AppHandle<R>, clip_id: u64) -> Result<(), String> {
     let state = app.state::<AppState>();
     {
         let mut running = state

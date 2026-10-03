@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use super::with_session;
 use crate::state::AppState;
@@ -35,7 +35,7 @@ pub struct AutoReframeResult {
 /// the crop is applied automatically and [`AUTO_REFRAME_EVENT`] reports whether a subject was
 /// actually found.
 #[tauri::command]
-pub fn auto_reframe_clip(app: AppHandle, clip_id: u64) -> Result<(), String> {
+pub fn auto_reframe_clip<R: Runtime>(app: AppHandle<R>, clip_id: u64) -> Result<(), String> {
     let state = app.state::<AppState>();
     {
         let mut running = state
@@ -150,7 +150,10 @@ pub fn auto_reframe_clip(app: AppHandle, clip_id: u64) -> Result<(), String> {
 /// shares the static operation's single-flight guard so two detector jobs cannot compete for the
 /// ONNX runtime or overwrite one another's result.
 #[tauri::command]
-pub fn dynamic_auto_reframe_clip(app: AppHandle, clip_id: u64) -> Result<(), String> {
+pub fn dynamic_auto_reframe_clip<R: Runtime>(
+    app: AppHandle<R>,
+    clip_id: u64,
+) -> Result<(), String> {
     let state = app.state::<AppState>();
     {
         let mut running = state

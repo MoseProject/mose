@@ -11,7 +11,7 @@ use super::undoable;
 /// start -- what the timeline toolbar's "Detect Highlights" button does. No undo step pushed if
 /// no track has both roles tagged, or nothing was found.
 #[tauri::command]
-pub fn detect_highlights(app: tauri::AppHandle) -> Result<(), String> {
+pub fn detect_highlights<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
     undoable(&app, |project| {
         let mut game_audio_samples = Vec::new();
         let mut mic_samples = Vec::new();

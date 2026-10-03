@@ -6,7 +6,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use avcore::{Keyframe, Position};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use super::with_session;
 use crate::state::AppState;
@@ -26,8 +26,8 @@ const SEARCH_RADIUS_RANGE: std::ops::RangeInclusive<f32> = 0.02..=0.3;
 /// count (`0` means nothing was decoded and the clip's existing keyframes were left untouched).
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-pub fn motion_track_clip(
-    app: AppHandle,
+pub fn motion_track_clip<R: Runtime>(
+    app: AppHandle<R>,
     clip_id: u64,
     center_x: f32,
     center_y: f32,

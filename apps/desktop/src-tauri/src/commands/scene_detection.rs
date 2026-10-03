@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use avcore::timeline::MarkerKind;
 use avcore::{FrameSampler, SceneCut};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use super::with_session;
 use crate::state::AppState;
@@ -22,7 +22,10 @@ const MAX_SAMPLES: usize = 600;
 /// toolbar's "🎬 Detect Chapters" button does. Errors (already running, clip not found)
 /// surface synchronously; the result arrives via [`SCENE_CUT_EVENT`].
 #[tauri::command]
-pub fn detect_scene_cuts_for_clip(app: AppHandle, clip_id: u64) -> Result<(), String> {
+pub fn detect_scene_cuts_for_clip<R: Runtime>(
+    app: AppHandle<R>,
+    clip_id: u64,
+) -> Result<(), String> {
     let state = app.state::<AppState>();
     {
         let mut running = state

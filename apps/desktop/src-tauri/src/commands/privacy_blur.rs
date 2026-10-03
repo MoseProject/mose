@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use super::with_session;
 use crate::state::AppState;
@@ -31,8 +31,8 @@ pub enum PrivacyBlurResult {
 /// asset not found) surface synchronously; the mask path and seed vertices are applied
 /// automatically on success, reported via [`PRIVACY_BLUR_EVENT`].
 #[tauri::command]
-pub fn apply_privacy_blur_to_clip(
-    app: AppHandle,
+pub fn apply_privacy_blur_to_clip<R: Runtime>(
+    app: AppHandle<R>,
     clip_id: u64,
     center_x: f32,
     center_y: f32,
