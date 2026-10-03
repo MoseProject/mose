@@ -32,7 +32,7 @@ mod protocol;
 mod state;
 mod telemetry;
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use tauri::Manager;
 use tracing_subscriber::layer::SubscriberExt;
@@ -41,7 +41,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 use crate::export::ExportQueue;
 use crate::preview_engine::PreviewEngine;
 use crate::protocol::ThumbnailCache;
-use crate::state::{blank_project, AppState, Session};
+use crate::state::AppState;
 
 fn main() {
     // Must run before any helper process starts so packaged tools win over system installs.
@@ -77,30 +77,14 @@ fn main() {
             ));
             telemetry::spawn(Arc::clone(&telemetry_enabled));
 
-            app.manage(AppState {
-                session: Mutex::new(Session::new(blank_project(
-                    "Untitled".to_string(),
-                    "Sequence 1".to_string(),
-                ))),
-                prefs: Mutex::new(prefs),
+            app.manage(AppState::new(
+                prefs,
                 preview,
-                exports: Arc::new(ExportQueue::load(app.path().app_config_dir()?)),
-                clip_clipboard: Mutex::new(None),
-                formatting_clipboard: Mutex::new(None),
-                transcribing_asset_id: Mutex::new(None),
-                scene_cut_detection_clip_id: Mutex::new(None),
-                motion_tracking_clip_id: Mutex::new(None),
-                auto_reframing_clip_id: Mutex::new(None),
-                matte_generating_clip_id: Mutex::new(None),
-                privacy_blur_generating_clip_id: Mutex::new(None),
-                tts_generating: Mutex::new(false),
-                watch_folder_stop: Mutex::new(None),
-                youtube_download_cancel: Mutex::new(None),
-                error_reporter: Mutex::new(error_reporter),
-                pending_crash_review: Mutex::new(pending_crash_review),
+                Arc::new(ExportQueue::load(app.path().app_config_dir()?)),
+                error_reporter,
+                pending_crash_review,
                 telemetry_enabled,
-                nested_sequence_cache: Mutex::new(std::collections::HashMap::new()),
-            });
+            ));
             autosave::spawn(handle);
             Ok(())
         })
