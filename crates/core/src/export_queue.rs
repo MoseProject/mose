@@ -189,4 +189,89 @@ mod tests {
         assert_eq!(jobs[0].status, ExportJobStatus::Queued);
         assert_eq!(jobs[1].status, ExportJobStatus::Paused { percent: 0 });
     }
+
+    #[test]
+    fn pause_resume_and_cancel_drive_the_waiting_state() {
+        let control = RenderControl::default();
+        assert!(!control.is_paused() && !control.is_cancelled());
+        assert!(control.wait_if_paused(), "not paused: continue at once");
+
+        control.pause();
+        assert!(control.is_paused());
+        control.resume();
+        assert!(!control.is_paused());
+
+        // A paused worker blocks until another thread resumes it.
+        control.pause();
+        let control = std::sync::Arc::new(control);
+        let waiter = std::sync::Arc::clone(&control);
+        let handle = std::thread::spawn(move || waiter.wait_if_paused());
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        control.resume();
+        assert!(handle.join().unwrap());
+
+        // Cancelling wakes a paused worker and tells it to stop.
+        control.pause();
+        let waiter = std::sync::Arc::clone(&control);
+        let handle = std::thread::spawn(move || waiter.wait_if_paused());
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        control.cancel();
+        assert!(!handle.join().unwrap());
+        assert!(control.is_cancelled() && !control.is_paused());
+        assert!(control.cancel_flag().load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn a_taken_output_path_gets_a_numbered_sibling() {
+        let dir = tempfile::tempdir().unwrap();
+        let taken = dir.path().join("video.mp4");
+        std::fs::write(&taken, b"x").unwrap();
+        let second = next_available_path(&taken);
+        assert_eq!(second, dir.path().join("video (2).mp4"));
+        std::fs::write(&second, b"x").unwrap();
+        assert_eq!(
+            next_available_path(&taken),
+            dir.path().join("video (3).mp4")
+        );
+
+        // Without an extension the number is appended to the bare name.
+        let bare = dir.path().join("clip");
+        std::fs::write(&bare, b"x").unwrap();
+        assert_eq!(next_available_path(&bare), dir.path().join("clip (2)"));
+    }
+
+    #[test]
+    fn the_queue_round_trips_through_its_file_and_a_missing_file_is_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = export_queue_path(&dir.path().join("config"));
+        assert_eq!(path.file_name().unwrap(), "queue.ocqueue");
+        assert!(load_export_queue_from_path(&path).unwrap().is_empty());
+
+        // Saving creates the missing directory and stores active work as resumable.
+        let jobs = vec![
+            job(ExportJobStatus::Rendering { percent: 10 }),
+            job(ExportJobStatus::Done),
+        ];
+        save_export_queue_to_path(&jobs, &path).unwrap();
+        let loaded = load_export_queue_from_path(&path).unwrap();
+        assert_eq!(loaded.len(), 2);
+        assert_eq!(loaded[0].status, ExportJobStatus::Queued);
+        assert_eq!(loaded[1].status, ExportJobStatus::Done);
+
+        // A bare file name saves into the current directory's parent fallback.
+        let bare = std::path::PathBuf::from("avcore_export_queue_bare_test.ocqueue");
+        save_export_queue_to_path(&jobs, &bare).unwrap();
+        assert!(bare.exists());
+        std::fs::remove_file(&bare).unwrap();
+    }
+
+    #[test]
+    fn a_corrupt_queue_file_and_an_unreadable_path_are_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let corrupt = dir.path().join("queue.ocqueue");
+        std::fs::write(&corrupt, b"not a queue").unwrap();
+        assert!(load_export_queue_from_path(&corrupt).is_err());
+        // A directory where the file should be cannot be read as a file.
+        assert!(load_export_queue_from_path(dir.path()).is_err());
+    }
 }
