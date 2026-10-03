@@ -17,28 +17,33 @@ Decisions taken (defaults recommended in the plan review):
 
 ## Phase 0: safety net
 
-- [ ] Create the local tag `pre-gstreamer-removal` on the current `main`
-- [ ] Create and switch to the branch `refactor/remove-gstreamer`
+- [x] Create the local tag `pre-gstreamer-removal` on the current `main`
+- [x] Create and switch to the branch `refactor/remove-gstreamer`
 
 ## Phase 1: `core` frame sampling without GStreamer
 
 `FrameSampler` decodes through `preview::Preview`; six AI features, thumbnails and the matte
-check depend on it. Rebuild it on `avbridge::DecodeSession`.
+check depend on it. Rebuilt on Bush's `DecodeSource` (which wraps `avbridge::DecodeSession` and
+already has the tested "frame at or before T" seek), instead of duplicating that logic. Side
+effect: `core` now depends on `bush` (default features, no GPU or audio device).
 
-- [ ] Read `avbridge::DecodeSession` (`open_with_policy`, `advance`, `take_rgba`) and how Bush's
+- [x] Read `avbridge::DecodeSession` (`open_with_policy`, `advance`, `take_rgba`) and how Bush's
       `DecodeSource::frame_at` seeks, to reuse the same approach
-- [ ] Add `SampledFrame { width, height, rgba }` in `core` (replaces `preview::VideoFrame`)
-- [ ] Rewrite `FrameSampler::open` / `sample` on `DecodeSession`, with its own error type
-      (`SamplerError`) instead of `PreviewError`
-- [ ] Keep `FrameSampler::even_sample_times` unchanged (pure scheduling)
-- [ ] Move `scopes.rs` to `SampledFrame`
-- [ ] Update `render.rs` (matte frame check) to the new sampler API
-- [ ] Update the desktop callers: `scene_detection`, `auto_reframe`, `background_removal`,
+- [x] Add `SampledFrame { width, height, rgba }` in `core` (replaces `preview::VideoFrame`)
+- [x] Rewrite `FrameSampler::open` / `sample` on `bush::DecodeSource`, with its own error type
+      (`SamplerError`) instead of `PreviewError`; the poll interval parameter is gone and the
+      deadline is checked once the decode returns
+- [x] Keep `FrameSampler::even_sample_times` unchanged (pure scheduling)
+- [x] `scopes.rs` needed no code change (it takes plain RGBA); its doc comment is updated in
+      phase 3 with the other stale references
+- [x] Update `render.rs` (matte frame check) to the new sampler API
+- [x] Update the desktop callers: `scene_detection`, `auto_reframe`, `background_removal`,
       `motion_tracking`, `privacy_blur`, `protocol.rs` (thumbnails), `frames.rs`
-- [ ] Test: sampler against a real fixture, frame at T equals a direct `DecodeSession` decode
-- [ ] Test: sampling past the end, a missing file and a zero timeout return `None`/error, no panic
-- [ ] `cargo check -p core -p desktop` and the existing `frame_sampler` tests pass
-- [ ] Commit (`core`), then commit (`desktop` callers) separately
+- [x] Test: sampler against a real fixture, frame at T equals a direct `DecodeSource` decode
+- [x] Test: sampling backwards and past the end, a missing file and a zero deadline return
+      `None`/error, no panic
+- [x] `cargo check -p core -p desktop` and the `frame_sampler` tests pass (12 tests, release)
+- [x] Commit (`core`), then commit (`desktop` callers) separately
 
 ## Phase 2: `desktop` runs only Bush
 
