@@ -24,7 +24,13 @@ const PREVIEW_JPEG_QUALITY: u8 = 82;
 /// Nearest-neighbour downscale to `max_dim` on the longest side, dropping alpha, then JPEG.
 /// Returns `None` for an empty or malformed frame.
 pub fn encode_jpeg(frame: &VideoFrame, max_dim: u32) -> Option<Vec<u8>> {
-    let (width, height, rgb) = downscale_to_rgb(frame, max_dim)?;
+    encode_jpeg_rgba(frame.width, frame.height, &frame.rgba, max_dim)
+}
+
+/// [`encode_jpeg`] over a borrowed tightly packed RGBA buffer, so a caller that already owns the
+/// pixels (Bush) does not copy them into a `VideoFrame` first.
+pub fn encode_jpeg_rgba(width: u32, height: u32, rgba: &[u8], max_dim: u32) -> Option<Vec<u8>> {
+    let (width, height, rgb) = downscale_to_rgb(width, height, rgba, max_dim)?;
     let mut out = Vec::with_capacity(rgb.len() / 8);
     JpegEncoder::new_with_quality(&mut out, PREVIEW_JPEG_QUALITY)
         .encode(&rgb, width, height, ExtendedColorType::Rgb8)
@@ -32,26 +38,31 @@ pub fn encode_jpeg(frame: &VideoFrame, max_dim: u32) -> Option<Vec<u8>> {
     Some(out)
 }
 
-fn downscale_to_rgb(frame: &VideoFrame, max_dim: u32) -> Option<(u32, u32, Vec<u8>)> {
-    if frame.width == 0
-        || frame.height == 0
-        || frame.rgba.len() < (frame.width * frame.height * 4) as usize
+fn downscale_to_rgb(
+    src_width: u32,
+    src_height: u32,
+    rgba: &[u8],
+    max_dim: u32,
+) -> Option<(u32, u32, Vec<u8>)> {
+    if src_width == 0
+        || src_height == 0
+        || rgba.len() < (src_width as usize * src_height as usize * 4)
     {
         return None;
     }
-    let scale = (max_dim as f32 / frame.width.max(frame.height) as f32).min(1.0);
-    let width = ((frame.width as f32 * scale) as u32).max(1);
-    let height = ((frame.height as f32 * scale) as u32).max(1);
+    let scale = (max_dim as f32 / src_width.max(src_height) as f32).min(1.0);
+    let width = ((src_width as f32 * scale) as u32).max(1);
+    let height = ((src_height as f32 * scale) as u32).max(1);
     let mut rgb = vec![0u8; (width * height * 3) as usize];
     for y in 0..height {
-        let src_y = (y as u64 * frame.height as u64 / height as u64) as u32;
-        let src_row = (src_y * frame.width) as usize * 4;
+        let src_y = (y as u64 * src_height as u64 / height as u64) as u32;
+        let src_row = (src_y as usize * src_width as usize) * 4;
         let dst_row = (y * width) as usize * 3;
         for x in 0..width {
-            let src_x = (x as u64 * frame.width as u64 / width as u64) as usize;
+            let src_x = (x as u64 * src_width as u64 / width as u64) as usize;
             let src = src_row + src_x * 4;
             let dst = dst_row + x as usize * 3;
-            rgb[dst..dst + 3].copy_from_slice(&frame.rgba[src..src + 3]);
+            rgb[dst..dst + 3].copy_from_slice(&rgba[src..src + 3]);
         }
     }
     Some((width, height, rgb))
@@ -71,7 +82,8 @@ mod tests {
 
     #[test]
     fn downscale_keeps_aspect_and_caps_longest_side() {
-        let (w, h, rgb) = downscale_to_rgb(&solid(1920, 1080), 1280).unwrap();
+        let frame = solid(1920, 1080);
+        let (w, h, rgb) = downscale_to_rgb(frame.width, frame.height, &frame.rgba, 1280).unwrap();
         assert_eq!((w, h), (1280, 720));
         assert_eq!(rgb.len(), (1280 * 720 * 3) as usize);
         assert_eq!(&rgb[..3], &[10, 20, 30]);
@@ -79,7 +91,8 @@ mod tests {
 
     #[test]
     fn small_frames_are_never_upscaled() {
-        let (w, h, _) = downscale_to_rgb(&solid(320, 180), 1280).unwrap();
+        let frame = solid(320, 180);
+        let (w, h, _) = downscale_to_rgb(frame.width, frame.height, &frame.rgba, 1280).unwrap();
         assert_eq!((w, h), (320, 180));
     }
 
