@@ -104,3 +104,7 @@ pub fn apply_silence_gaps<R: Runtime>(
         changed
     })
 }
+
+#[cfg(test)]
+#[path = "silence_test.rs"]
+mod tests;
