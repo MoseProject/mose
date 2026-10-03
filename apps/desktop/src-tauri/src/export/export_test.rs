@@ -341,6 +341,16 @@ fn a_second_job_waits_for_a_free_worker_and_cancelling_the_first_stops_its_rende
     );
     queue.pause(h.handle(), first);
     queue.cancel(h.handle(), first);
+    // `wait_idle` alone could return in the instant between one worker finishing and the next
+    // job being picked up, so wait for the second job itself.
+    let started = Instant::now();
+    while status_of(&queue, second) != Some(ExportJobStatus::Done) {
+        assert!(
+            started.elapsed() < Duration::from_secs(120),
+            "the second job never finished"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
     wait_idle(&queue);
     assert!(matches!(
         status_of(&queue, first),
