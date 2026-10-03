@@ -475,3 +475,78 @@ fn gain_keyframes_become_a_decibel_track() {
     assert!((track.value_at(2.0) - 0.0).abs() < 1e-5);
     assert!((track.value_at(4.0) - 6.0).abs() < 1e-5);
 }
+
+#[test]
+fn intensity_curves_follow_the_exporter_filter_parameters() {
+    let mut styled = clip(0.0, 0.0, 4.0);
+    styled.blur_intensity = 0.5; // boxblur=5 -> variance 5 * 6 / 3
+    styled.sharpen = 1.0; // unsharp amount 3
+    styled.pixelize_intensity = 1.0; // 2 + 48 pixel blocks
+    styled.vignette_intensity = 1.0;
+    styled.shake_intensity = 1.0; // 8% of the canvas
+    styled.deflicker_enabled = true; // 5-frame mean
+    let (_, contributor) = one_clip(styled);
+    let placement = &contributor.placement;
+    assert!((placement.blur_sigma - 10f32.sqrt()).abs() < 1e-5);
+    assert!((placement.sharpen - 3.0).abs() < 1e-6);
+    assert_eq!(placement.effects.pixelize_block, 50);
+    assert!((placement.effects.vignette - 0.87).abs() < 1e-6);
+    let expected_shake = 0.08 * (CANVAS.0 + CANVAS.1) as f32 / 2.0;
+    assert!((placement.shake - expected_shake).abs() < 1e-3);
+    assert!((placement.deflicker.unwrap() - 1.0 / 3.0).abs() < 1e-6);
+
+    // The exporter truncates the blur radius to whole pixels: 0.09 * 10 is radius 0.
+    let mut faint = clip(0.0, 0.0, 4.0);
+    faint.blur_intensity = 0.09;
+    let (_, contributor) = one_clip(faint);
+    assert_eq!(contributor.placement.blur_sigma, 0.0);
+}
+
+#[test]
+fn mattes_apply_above_the_first_video_track_and_a_missing_file_degrades() {
+    let matte = std::env::temp_dir().join("oca_mapper_test_matte.mp4");
+    std::fs::write(&matte, b"matte").unwrap();
+    let matte_path = matte.display().to_string();
+
+    let mut background = clip(0.0, 0.0, 4.0);
+    background.background_removal_enabled = true;
+    background.background_removal_mask_path = matte_path.clone();
+    let mut overlay = ClipInstance::new(11, 1, 0.0, 0.0, 4.0);
+    overlay.background_removal_enabled = true;
+    overlay.background_removal_mask_path = matte_path.clone();
+    overlay.privacy_blur_enabled = true;
+    overlay.privacy_blur_mask_path = matte_path;
+    overlay.privacy_blur_sigma = 12.0;
+    let mut missing = ClipInstance::new(12, 1, 0.0, 0.0, 4.0);
+    missing.background_removal_enabled = true;
+    missing.background_removal_mask_path = "does-not-exist.mp4".to_string();
+
+    let mapped = map_with(
+        vec![
+            track(1, TrackKind::Video, vec![background]),
+            track(2, TrackKind::Video, vec![overlay, missing]),
+        ],
+        Vec::new(),
+    );
+    let by_id = |id: u64| {
+        mapped
+            .scene
+            .contributors()
+            .iter()
+            .find(|contributor| contributor.id.0 == id)
+            .unwrap()
+            .placement
+            .clone()
+    };
+    // The background track never composites, so it carries no matte.
+    assert!(by_id(10).alpha_matte.is_none());
+    let above = by_id(11);
+    assert_eq!(above.alpha_matte.unwrap().path, matte);
+    let blur = above.privacy_blur.unwrap();
+    assert_eq!(blur.matte.path, matte);
+    assert_eq!(blur.sigma, 12.0);
+    // A missing matte file renders unmasked and is reported.
+    assert!(by_id(12).alpha_matte.is_none());
+    assert!(mapped.approximations.contains(&Approximation::MatteMissing));
+    let _ = std::fs::remove_file(&matte);
+}
