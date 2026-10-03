@@ -394,6 +394,37 @@ fn bench_gpu_vs_cpu(c: &mut Criterion) {
 #[cfg(not(feature = "gpu"))]
 fn bench_gpu_vs_cpu(_: &mut Criterion) {}
 
+/// Pitch-preserving stretch cost: one second of stereo output per iteration.
+fn bench_time_stretch(c: &mut Criterion) {
+    use bush::TimeStretcher;
+
+    let source: Vec<f32> = (0..44_100 * 8 * 2)
+        .map(|index| ((index / 2) as f32 * 0.05).sin() * 0.4)
+        .collect();
+    let mut group = c.benchmark_group("time_stretch");
+    for speed in [0.5, 1.5, 3.0] {
+        group.bench_function(format!("one_second_stereo/{speed}x"), |b| {
+            b.iter(|| {
+                let mut stretcher = TimeStretcher::new(speed, 2).unwrap();
+                stretcher.reset(0.0);
+                let mut read = |start: i64, frames: usize| {
+                    let mut out = vec![0.0_f32; frames * 2];
+                    for frame in 0..frames {
+                        let at = start + frame as i64;
+                        if at >= 0 && (at as usize) < source.len() / 2 {
+                            out[frame * 2] = source[at as usize * 2];
+                            out[frame * 2 + 1] = source[at as usize * 2 + 1];
+                        }
+                    }
+                    Some(out)
+                };
+                black_box(stretcher.render(44_100, &mut read).unwrap())
+            });
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     engine_workloads,
     bench_composite_1080p,
@@ -403,6 +434,7 @@ criterion_group!(
     bench_decode_policy,
     bench_large_media,
     bench_multicam,
-    bench_gpu_vs_cpu
+    bench_gpu_vs_cpu,
+    bench_time_stretch
 );
 criterion_main!(engine_workloads);

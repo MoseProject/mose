@@ -5,13 +5,13 @@
 //! [`AudioSink`] topped up to a bounded buffer. A device sink implements [`AudioSink`]; tests use
 //! [`FakeSink`], whose underflow and overrun accounting is deterministic.
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
 use crate::{
     AudioBlock, AudioBlockError, AudioMixer, AudioSource, AudioSourceError, ContributorContent,
-    ContributorId, MixError, MixInput, SceneSnapshot,
+    ContributorId, MixError, MixInput, SceneSnapshot, TimeStretcher, MAX_SPEED, MIN_SPEED,
 };
 
 /// Destination for mixed audio. Implemented by a device callback bridge in production.
@@ -115,7 +115,8 @@ pub enum AudioRenderError {
     Source(AudioSourceError),
     Mix(MixError),
     Block(AudioBlockError),
-    /// Audio time-stretching is not implemented; a non-unit speed on an audible clip is an
+    /// Audio is stretched pitch-preserving only for speeds in
+    /// [`MIN_SPEED`](crate::MIN_SPEED)..=[`MAX_SPEED`](crate::MAX_SPEED); anything else is an
     /// explicit error rather than silently playing at the wrong pitch.
     UnsupportedSpeed(ContributorId),
     InvalidConfig,
@@ -151,6 +152,15 @@ pub struct AudioRenderer {
     mixer: AudioMixer,
     /// Open sources, least recently used first.
     sources: Vec<(SourceKey, AudioSource)>,
+    /// Time-stretch state for contributors playing at a speed other than 1.
+    stretchers: HashMap<ContributorId, StretchState>,
+}
+
+#[derive(Debug)]
+struct StretchState {
+    stretcher: TimeStretcher,
+    /// Timeline frame the next block must start at for the state to be continuous.
+    next_frame: u64,
 }
 
 impl AudioRenderer {
@@ -170,6 +180,7 @@ impl AudioRenderer {
             max_open_sources,
             mixer: AudioMixer::new(sample_rate, channels, max_block_frames)?,
             sources: Vec::new(),
+            stretchers: HashMap::new(),
         })
     }
 
@@ -201,31 +212,89 @@ impl AudioRenderer {
                 continue;
             };
             let placement = &contributor.placement;
-            if (placement.speed - 1.0).abs() > f64::EPSILON {
+            let unit_speed = (placement.speed - 1.0).abs() <= f64::EPSILON;
+            if !unit_speed && !(MIN_SPEED..=MAX_SPEED).contains(&placement.speed) {
                 return Err(AudioRenderError::UnsupportedSpeed(contributor.id));
             }
             let clip_start = (placement.timeline_start_secs * rate).round() as u64;
-            let clip_frames =
-                ((source.range.out_secs - source.range.in_secs) * rate).round() as u64;
+            let clip_frames = ((source.range.out_secs - source.range.in_secs) / placement.speed
+                * rate)
+                .round() as u64;
             let overlap_start = start_frame.max(clip_start);
             let overlap_end = window_end.min(clip_start + clip_frames);
             if overlap_start >= overlap_end {
+                self.stretchers.remove(&contributor.id);
                 continue;
             }
-            let source_frame =
-                (source.range.in_secs * rate).round() as u64 + (overlap_start - clip_start);
             let length = (overlap_end - overlap_start) as usize;
+            let source_start = (source.range.in_secs * rate).round() as u64;
 
             let slot = self.open_source(&source.path, source.version.0)?;
-            let Some(block) = self.sources[slot].1.read(source_frame, length, cancel)? else {
-                return Ok(None);
+            let samples = if unit_speed {
+                self.stretchers.remove(&contributor.id);
+                let source_frame = source_start + (overlap_start - clip_start);
+                let Some(block) = self.sources[slot].1.read(source_frame, length, cancel)? else {
+                    return Ok(None);
+                };
+                block.samples().to_vec()
+            } else {
+                // Continue the existing stretch only if this block follows the previous one.
+                let mut state = match self.stretchers.remove(&contributor.id) {
+                    Some(state)
+                        if state.next_frame == overlap_start
+                            && state.stretcher.speed() == placement.speed =>
+                    {
+                        state
+                    }
+                    _ => {
+                        let mut stretcher =
+                            TimeStretcher::new(placement.speed, usize::from(self.channels))
+                                .ok_or(AudioRenderError::UnsupportedSpeed(contributor.id))?;
+                        stretcher.reset(
+                            source_start as f64
+                                + (overlap_start - clip_start) as f64 * placement.speed,
+                        );
+                        StretchState {
+                            stretcher,
+                            next_frame: overlap_start,
+                        }
+                    }
+                };
+                let channels = usize::from(self.channels);
+                let source_audio = &mut self.sources[slot].1;
+                let mut failure: Option<AudioSourceError> = None;
+                let rendered = state.stretcher.render(length, &mut |start, frames| {
+                    // Frames before the stream start are silence.
+                    let padding = (-start).clamp(0, frames as i64) as usize;
+                    let mut out = vec![0.0_f32; padding * channels];
+                    if padding < frames {
+                        match source_audio.read(start.max(0) as u64, frames - padding, cancel) {
+                            Ok(Some(block)) => out.extend_from_slice(block.samples()),
+                            Ok(None) => return None,
+                            Err(error) => {
+                                failure = Some(error);
+                                return None;
+                            }
+                        }
+                    }
+                    Some(out)
+                });
+                if let Some(error) = failure {
+                    return Err(error.into());
+                }
+                let Some(samples) = rendered else {
+                    return Ok(None);
+                };
+                state.next_frame = overlap_end;
+                self.stretchers.insert(contributor.id, state);
+                samples
             };
             // Re-time from source time to timeline time so the mixer aligns it.
             let aligned = AudioBlock::new(
                 self.sample_rate,
                 self.channels,
                 overlap_start as f64 / rate,
-                block.samples().to_vec(),
+                samples,
             )?;
             parts.push((aligned, placement.gain));
         }

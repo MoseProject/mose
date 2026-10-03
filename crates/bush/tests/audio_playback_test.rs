@@ -208,7 +208,7 @@ fn inaudible_contributors_are_silent_and_unsupported_speed_is_explicit() {
         7,
         true,
         Placement {
-            speed: 2.0,
+            speed: 8.0,
             ..Placement::default()
         },
     )]);
@@ -299,4 +299,72 @@ fn fake_sink_reports_underflow_overrun_and_device_loss() {
         player.pump(&mut sink, &cancel),
         Err(AudioPlayerError::Sink(SinkError::Closed))
     ));
+}
+
+#[test]
+fn sped_up_clips_are_stretched_continuously_and_end_early() {
+    let cancel = AtomicBool::new(false);
+    // 0.9 s of source at 2x occupies 0.45 s of timeline.
+    let scene = scene(vec![clip(
+        1,
+        true,
+        Placement {
+            speed: 2.0,
+            ..Placement::default()
+        },
+    )]);
+
+    let mut whole = renderer();
+    let single = whole.render(&scene, 0, 8192, &cancel).unwrap().unwrap();
+    assert!(peak(single.samples()) > 0.01, "stretched audio is silent");
+
+    // Two consecutive blocks join exactly like one block of the same length.
+    let mut chunked = renderer();
+    let first = chunked.render(&scene, 0, 4096, &cancel).unwrap().unwrap();
+    let second = chunked
+        .render(&scene, 4096, 4096, &cancel)
+        .unwrap()
+        .unwrap();
+    let mut joined = first.samples().to_vec();
+    joined.extend_from_slice(second.samples());
+    assert_eq!(joined, single.samples());
+
+    // The clip ends at 0.45 s (19845 frames): afterwards the output is silent.
+    let after = chunked
+        .render(&scene, 30_000, 2048, &cancel)
+        .unwrap()
+        .unwrap();
+    assert!(after.samples().iter().all(|sample| *sample == 0.0));
+
+    // A jump (seek) restarts the stretch at the matching source position without error.
+    let jumped = chunked
+        .render(&scene, 10_000, 2048, &cancel)
+        .unwrap()
+        .unwrap();
+    assert!(peak(jumped.samples()) > 0.001);
+}
+
+#[test]
+fn slowed_clips_run_longer_than_their_source() {
+    let cancel = AtomicBool::new(false);
+    let scene = scene(vec![clip(
+        1,
+        true,
+        Placement {
+            speed: 0.5,
+            ..Placement::default()
+        },
+    )]);
+    let mut renderer = renderer();
+    // 0.9 s of source at half speed lasts 1.8 s: still audible at 1.5 s, silent at 2 s.
+    let at_one_and_a_half = renderer
+        .render(&scene, 66_150, 2048, &cancel)
+        .unwrap()
+        .unwrap();
+    assert!(peak(at_one_and_a_half.samples()) > 0.001);
+    let past_end = renderer
+        .render(&scene, 88_200 + 2048, 2048, &cancel)
+        .unwrap()
+        .unwrap();
+    assert!(past_end.samples().iter().all(|sample| *sample == 0.0));
 }

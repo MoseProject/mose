@@ -69,8 +69,12 @@ the real default device.
 - [x] Real output (`DeviceSink`, `--features cpal`): validated on the default device of the
       development machine (WASAPI, 48 kHz): consumption within +1.9 % of wall clock over 0.6 s,
       underflow counting, bounded queue. Tests: `device_audio_test` (skips itself without a device).
-- [ ] Audio time-stretch: a non-unit speed on an audible clip is an explicit
-      `AudioRenderError::UnsupportedSpeed`, never wrong-pitch playback.
+- [x] Pitch-preserving time stretch (`time_stretch.rs`, WSOLA, speeds 0.25x-4x): a clip with
+      `Placement::speed != 1` keeps its pitch, ends early or runs long, and consecutive blocks
+      join bit-exactly; seeks restart the stretch at the matching source position. Outside the
+      range the renderer returns `AudioRenderError::UnsupportedSpeed`. Cost about 6 ms per
+      second of stereo output. Tests: `time_stretch_test` (pitch within 4 Hz at five speeds,
+      unit speed transparent, chunking-invariant), `audio_playback_test`.
 - [ ] Long-run A/V drift measurement and device-loss recovery on real hardware (the fake sink
       covers the contract; only the short clock test ran on a device).
 

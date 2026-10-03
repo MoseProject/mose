@@ -27,6 +27,7 @@ mod scene;
 mod scene_scheduler;
 mod scene_versions;
 mod source_variants;
+mod time_stretch;
 mod transport;
 mod video_frame;
 
@@ -69,5 +70,6 @@ pub use scene_versions::{invalidation_scope, InvalidationScope, SceneVersions, V
 pub use source_variants::{
     PreviewQuality, SourceVariant, SourceVariantError, SourceVariantKind, SourceVariants,
 };
+pub use time_stretch::{TimeStretcher, MAX_SPEED, MIN_SPEED};
 pub use transport::{PlaybackState, Transport, TransportError};
 pub use video_frame::{PixelFormat, VideoFrame, VideoFrameError};
