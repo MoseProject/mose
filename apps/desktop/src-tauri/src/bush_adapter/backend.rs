@@ -630,3 +630,7 @@ fn first_video_fps(timeline: &Timeline, media: &[MediaAsset]) -> f64 {
         .filter(|fps| *fps >= 1.0)
         .unwrap_or(FALLBACK_FPS)
 }
+
+#[cfg(test)]
+#[path = "backend_test.rs"]
+mod tests;
