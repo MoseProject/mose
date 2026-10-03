@@ -625,3 +625,7 @@ pub fn send_crash_once(crash: &PendingCrashReview) {
         Err(e) => tracing::warn!(error = %e, "dropping invalid crash report"),
     }
 }
+
+#[cfg(test)]
+#[path = "error_reporting/error_reporting_test.rs"]
+mod tests;
