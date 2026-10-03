@@ -47,24 +47,27 @@ effect: `core` now depends on `bush` (default features, no GPU or audio device).
 
 ## Phase 2: `desktop` runs only Bush
 
-- [ ] Make `bush` a regular dependency of `desktop` (features `gpu`, `cpal`); remove the
+- [x] Make `bush` a regular dependency of `desktop` (features `gpu`, `cpal`); remove the
       `bush-preview` feature
-- [ ] `PreviewEngine::spawn` always runs the Bush backend; drop the engine selection
+- [x] `PreviewEngine::spawn` always runs the Bush backend; drop the engine selection
       (`bush_adapter::selected`, `OCA_PREVIEW_ENGINE`)
-- [ ] Delete the GStreamer loop in `preview_engine.rs`: `run`, `Layers`, `live_updates_between`,
+- [x] Delete the GStreamer loop in `preview_engine.rs`: `run`, `Layers`, `live_updates_between`,
       `resolve_layers`, `open_request`, `seek_for`, `timeline_position`,
       `refresh_text_highlights`; keep `PreviewTick`, `Command`, `LatestFrame`,
       `preview_source_path`, the interval constants
-- [ ] Delete `preview_engine_test.rs` tests for the removed functions; keep tests that still apply
-- [ ] Remove the `preview_engine` preference field, the `preview_engines` command and the
+- [x] Delete `preview_engine_test.rs` tests for the removed functions; keep tests that still apply
+      (none did: the file only covered the removed functions)
+- [x] Remove the `preview_engine` preference field, the `preview_engines` command and the
       picker in the preferences screen (`types.ts`, `ipc.ts`, `i18n.ts`, `Prefs.tsx`)
-- [ ] Remove the hardware-decode checkbox from the preferences screen; keep the stored field so
-      existing `prefs.oc` files still load
-- [ ] Rename `e2e/test_bush_preview.py` to `e2e/test_preview.py`, drop the engine skip; delete
+- [x] Remove the hardware-decode checkbox from the preferences screen and the
+      `preview_set_hardware_decode` command; keep the stored field so existing `prefs.oc` files
+      still load
+- [x] Rename `e2e/test_bush_preview.py` to `e2e/test_preview.py`, drop the engine skip; delete
       `e2e/test_preview_engine_pref.py`
-- [ ] `cargo check -p desktop --all-targets`, `npm run typecheck`, `npx vitest run`
-- [ ] e2e: preview loads, seeks, plays with audio, text/shape overlays, meter, cut
-- [ ] Commits: desktop backend, desktop frontend, tests
+- [x] `cargo check -p desktop --all-targets`, `npm run typecheck`, `npx vitest run` (23 tests)
+- [x] e2e: preview loads, seeks, plays with audio, text/shape overlays, meter, cut (1080p clip,
+      28.8 frames/s, seek 47 ms, first frame 78 ms, built with no feature flag)
+- [x] Commits: desktop backend, desktop frontend, tests
 
 ## Phase 3: `core` drops the GStreamer preview
 
