@@ -23,6 +23,11 @@ pub enum DeviceSinkError {
     NoDevice,
     UnsupportedFormat(SampleFormat),
     Device(String),
+    /// The new default device differs in rate or channels; open a fresh sink.
+    FormatChanged {
+        sample_rate: u32,
+        channels: u16,
+    },
 }
 
 struct Shared {
@@ -32,12 +37,13 @@ struct Shared {
     consumed_frames: AtomicU64,
     underflow_callbacks: AtomicU64,
     failed: AtomicBool,
+    recoveries: AtomicU64,
 }
 
 /// A running output stream fed through [`AudioSink`]. Dropping it stops the stream.
 pub struct DeviceSink {
     shared: Arc<Shared>,
-    _stream: cpal::Stream,
+    stream: cpal::Stream,
     sample_rate: u32,
     engine_channels: u16,
 }
@@ -62,8 +68,7 @@ impl DeviceSink {
         let supported = device
             .default_output_config()
             .map_err(|error| DeviceSinkError::Device(error.to_string()))?;
-        let config = supported.config();
-        let engine_channels = config.channels.clamp(1, ENGINE_MAX_CHANNELS);
+        let engine_channels = supported.channels().clamp(1, ENGINE_MAX_CHANNELS);
         let shared = Arc::new(Shared {
             queue: Mutex::new(VecDeque::with_capacity(
                 capacity_frames * usize::from(engine_channels),
@@ -73,26 +78,67 @@ impl DeviceSink {
             consumed_frames: AtomicU64::new(0),
             underflow_callbacks: AtomicU64::new(0),
             failed: AtomicBool::new(false),
+            recoveries: AtomicU64::new(0),
         });
-        let device_channels = usize::from(config.channels);
-
-        let stream = match supported.sample_format() {
-            SampleFormat::F32 => build::<f32>(&device, config, &shared, device_channels),
-            SampleFormat::I16 => build::<i16>(&device, config, &shared, device_channels),
-            SampleFormat::I32 => build::<i32>(&device, config, &shared, device_channels),
-            other => return Err(DeviceSinkError::UnsupportedFormat(other)),
-        }?;
-        stream
-            .play()
-            .map_err(|error| DeviceSinkError::Device(error.to_string()))?;
+        let stream = open_stream(&device, &supported, &shared)?;
         Ok(Self {
             shared,
-            _stream: stream,
+            stream,
             sample_rate: supported.sample_rate(),
             engine_channels,
         })
     }
 
+    /// True once the stream reported an error (device unplugged, driver reset). Writes fail
+    /// with [`SinkError::Closed`] until [`DeviceSink::recover`] succeeds.
+    pub fn is_failed(&self) -> bool {
+        self.shared.failed.load(Ordering::Acquire)
+    }
+
+    /// Times [`DeviceSink::recover`] brought the stream back.
+    pub fn recoveries(&self) -> u64 {
+        self.shared.recoveries.load(Ordering::Relaxed)
+    }
+
+    /// Reopens the stream on the current default output device after a failure (or on demand,
+    /// for example after the user changes the default device). The queue is emptied, so the
+    /// caller must re-seek its [`crate::AudioPlayer`] to refill from the playhead;
+    /// `consumed_frames` keeps counting across the recovery. If the new device runs at a
+    /// different rate or channel count the audio renderer would be wrong, so that case fails
+    /// with [`DeviceSinkError::FormatChanged`] and the caller opens a fresh sink instead.
+    pub fn recover(&mut self) -> Result<(), DeviceSinkError> {
+        let host = cpal::default_host();
+        let device = host
+            .default_output_device()
+            .ok_or(DeviceSinkError::NoDevice)?;
+        let supported = device
+            .default_output_config()
+            .map_err(|error| DeviceSinkError::Device(error.to_string()))?;
+        let channels = supported.channels().clamp(1, ENGINE_MAX_CHANNELS);
+        if supported.sample_rate() != self.sample_rate || channels != self.engine_channels {
+            return Err(DeviceSinkError::FormatChanged {
+                sample_rate: supported.sample_rate(),
+                channels,
+            });
+        }
+        self.shared
+            .queue
+            .lock()
+            .expect("device queue poisoned")
+            .clear();
+        match open_stream(&device, &supported, &self.shared) {
+            Ok(stream) => {
+                self.stream = stream;
+                self.shared.failed.store(false, Ordering::Release);
+                self.shared.recoveries.fetch_add(1, Ordering::Relaxed);
+                Ok(())
+            }
+            Err(error) => {
+                self.shared.failed.store(true, Ordering::Release);
+                Err(error)
+            }
+        }
+    }
     /// The device sample rate; build the audio renderer at this rate.
     pub const fn sample_rate(&self) -> u32 {
         self.sample_rate
@@ -114,6 +160,24 @@ impl DeviceSink {
     }
 }
 
+fn open_stream(
+    device: &cpal::Device,
+    supported: &cpal::SupportedStreamConfig,
+    shared: &Arc<Shared>,
+) -> Result<cpal::Stream, DeviceSinkError> {
+    let config = supported.config();
+    let device_channels = usize::from(config.channels);
+    let stream = match supported.sample_format() {
+        SampleFormat::F32 => build::<f32>(device, config, shared, device_channels),
+        SampleFormat::I16 => build::<i16>(device, config, shared, device_channels),
+        SampleFormat::I32 => build::<i32>(device, config, shared, device_channels),
+        other => return Err(DeviceSinkError::UnsupportedFormat(other)),
+    }?;
+    stream
+        .play()
+        .map_err(|error| DeviceSinkError::Device(error.to_string()))?;
+    Ok(stream)
+}
 fn build<T>(
     device: &cpal::Device,
     config: cpal::StreamConfig,
