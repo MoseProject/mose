@@ -161,6 +161,16 @@ impl Lut3D {
         Self::parse(&contents)
     }
 
+    /// Entries per axis.
+    pub fn size(&self) -> usize {
+        self.size
+    }
+
+    /// The table, red varying fastest, then green, then blue (the `.cube` data order).
+    pub fn entries(&self) -> &[[f32; 3]] {
+        &self.data
+    }
+
     fn at(&self, x: usize, y: usize, z: usize) -> [f32; 3] {
         self.data[x + y * self.size + z * self.size * self.size]
     }
