@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::{
     ByteCache, ContributorContent, ContributorId, CpuRenderer, DecodeSource, Generation,
@@ -26,6 +26,45 @@ pub struct EngineConfig {
     pub max_open_sources: usize,
     /// Byte budget for decoded source frames retained between requests.
     pub frame_cache_bytes: usize,
+}
+
+/// Largest canvas the engine accepts, in pixels (8K UHD is 33.2 M). Bounds the compositor's
+/// per-frame allocation regardless of what a caller asks for.
+pub const MAX_CANVAS_PIXELS: usize = 8192 * 4608;
+
+/// Number of most recent request latencies retained for percentile reporting.
+const LATENCY_WINDOW: usize = 1024;
+
+/// Percentile summary of submit-to-published-frame latency over the most recent requests.
+/// Cancelled and superseded requests are not samples: they never produced a frame.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct LatencySummary {
+    pub samples: usize,
+    pub p50_micros: u64,
+    pub p95_micros: u64,
+    pub p99_micros: u64,
+    pub max_micros: u64,
+}
+
+impl LatencySummary {
+    fn from_samples(window: &VecDeque<u64>) -> Self {
+        if window.is_empty() {
+            return Self::default();
+        }
+        let mut sorted: Vec<u64> = window.iter().copied().collect();
+        sorted.sort_unstable();
+        let at = |percentile: usize| {
+            let index = (sorted.len() * percentile).div_ceil(100).max(1) - 1;
+            sorted[index.min(sorted.len() - 1)]
+        };
+        Self {
+            samples: sorted.len(),
+            p50_micros: at(50),
+            p95_micros: at(95),
+            p99_micros: at(99),
+            max_micros: *sorted.last().unwrap_or(&0),
+        }
+    }
 }
 
 /// Everything needed to produce one frame. Overlay pixels are supplied by the caller, already
@@ -91,6 +130,7 @@ struct Counters {
 struct Pending {
     request: EngineRequest,
     cancel: Arc<AtomicBool>,
+    submitted_at: Instant,
 }
 
 #[derive(Default)]
@@ -104,6 +144,7 @@ struct Shared {
     inbox: Mutex<Inbox>,
     wake: Condvar,
     events: Mutex<VecDeque<EngineEvent>>,
+    latencies: Mutex<VecDeque<u64>>,
     event_wake: Condvar,
     stopped: AtomicBool,
     counters: Counters,
@@ -124,6 +165,7 @@ impl std::fmt::Debug for Engine {
 impl Engine {
     pub fn new(config: EngineConfig) -> Result<Self, EngineError> {
         let renderer = canvas_budget(&config)
+            .filter(|bytes| *bytes <= MAX_CANVAS_PIXELS * 4)
             .and_then(|bytes| CpuRenderer::new(bytes).ok())
             .ok_or(EngineError::InvalidConfig)?;
         let cache =
@@ -136,6 +178,7 @@ impl Engine {
             inbox: Mutex::new(Inbox::default()),
             wake: Condvar::new(),
             events: Mutex::new(VecDeque::new()),
+            latencies: Mutex::new(VecDeque::new()),
             event_wake: Condvar::new(),
             stopped: AtomicBool::new(false),
             counters: Counters::default(),
@@ -181,6 +224,7 @@ impl Engine {
             Pending {
                 request,
                 cancel: Arc::new(AtomicBool::new(false)),
+                submitted_at: Instant::now(),
             },
         );
         drop(inbox);
@@ -218,6 +262,17 @@ impl Engine {
             })
             .expect("engine events poisoned");
         events.pop_front()
+    }
+
+    /// Submit-to-frame latency percentiles over the most recent published frames.
+    pub fn latency(&self) -> LatencySummary {
+        LatencySummary::from_samples(
+            &self
+                .shared
+                .latencies
+                .lock()
+                .expect("engine latencies poisoned"),
+        )
     }
 
     pub fn stats(&self) -> EngineStats {
@@ -292,7 +347,8 @@ impl EngineThread {
     fn run(mut self) {
         while let Some((generation, pending)) = self.take_next() {
             let outcome = self.render(&pending.request, &pending.cancel);
-            self.publish(generation, outcome);
+            let submitted_at = pending.submitted_at;
+            self.publish(generation, outcome, submitted_at);
         }
     }
 
@@ -310,7 +366,7 @@ impl EngineThread {
         }
     }
 
-    fn publish(&self, generation: Generation, outcome: RenderOutcome) {
+    fn publish(&self, generation: Generation, outcome: RenderOutcome, submitted_at: Instant) {
         let counters = &self.shared.counters;
         let event = match outcome {
             RenderOutcome::Cancelled => {
@@ -319,6 +375,17 @@ impl EngineThread {
             }
             RenderOutcome::Frame(frame) => {
                 counters.frames_rendered.fetch_add(1, Ordering::Relaxed);
+                let micros = u64::try_from(submitted_at.elapsed().as_micros()).unwrap_or(u64::MAX);
+                let mut latencies = self
+                    .shared
+                    .latencies
+                    .lock()
+                    .expect("engine latencies poisoned");
+                if latencies.len() == LATENCY_WINDOW {
+                    latencies.pop_front();
+                }
+                latencies.push_back(micros);
+                drop(latencies);
                 EngineEvent::Frame { generation, frame }
             }
             RenderOutcome::Failed(message) => {

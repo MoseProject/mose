@@ -34,7 +34,10 @@ pub use cpu_renderer::{
     BlendMode, CpuRenderer, CropRect, LayerEffects, LayerFrame, LayerTransform, RenderError,
 };
 pub use decode_source::{DecodeSource, DecodeSourceError, SourceInfo, MAX_SEEK_SEARCH_FRAMES};
-pub use engine::{Engine, EngineConfig, EngineError, EngineEvent, EngineRequest, EngineStats};
+pub use engine::{
+    Engine, EngineConfig, EngineError, EngineEvent, EngineRequest, EngineStats, LatencySummary,
+    MAX_CANVAS_PIXELS,
+};
 pub use frame_mailbox::{FrameMailbox, PublishedFrame};
 pub use latest_intent::{Generation, LatestIntent, PendingIntent};
 pub use player::{Player, PlayerError, PlayerEvent};
