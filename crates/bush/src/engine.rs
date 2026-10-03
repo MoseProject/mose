@@ -5,7 +5,7 @@
 //! next decode boundary, so a burst of scrubs costs one frame, not one frame per scrub. Every
 //! queue is a single latest-value slot and every cache is byte-bounded.
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
@@ -194,6 +194,7 @@ impl Engine {
                 renderer,
                 cache,
                 sources: Vec::new(),
+                deflickers: HashMap::new(),
             }
             .run();
         });
@@ -338,6 +339,8 @@ struct EngineThread {
     cache: ByteCache<CacheKey, Arc<VideoFrame>>,
     /// Open decoders, least recently used first.
     sources: Vec<((PathBuf, u64), DecodeSource)>,
+    /// Temporal deflicker state per contributor; only present while the effect is enabled.
+    deflickers: HashMap<ContributorId, crate::Deflicker>,
 }
 
 enum RenderOutcome {
@@ -450,7 +453,20 @@ impl EngineThread {
                     }
                 }
             };
-            layers.push((frame, contributor.placement_at(playhead)));
+            let placement = contributor.placement_at(playhead);
+            let frame = match (placement.deflicker, &contributor.content) {
+                (Some(smoothing), ContributorContent::Media(_)) => {
+                    match self.deflicker_for(contributor.id, smoothing) {
+                        Some(deflicker) => Arc::new(deflicker.process(&frame)),
+                        None => frame,
+                    }
+                }
+                _ => {
+                    self.deflickers.remove(&contributor.id);
+                    frame
+                }
+            };
+            layers.push((frame, placement));
         }
         if cancel.load(Ordering::Acquire) {
             return RenderOutcome::Cancelled;
@@ -478,6 +494,17 @@ impl EngineThread {
             Ok(frame) => RenderOutcome::Frame(frame),
             Err(error) => RenderOutcome::Failed(format!("render failed: {error:?}")),
         }
+    }
+
+    fn deflicker_for(
+        &mut self,
+        id: ContributorId,
+        smoothing: f32,
+    ) -> Option<&mut crate::Deflicker> {
+        if let std::collections::hash_map::Entry::Vacant(entry) = self.deflickers.entry(id) {
+            entry.insert(crate::Deflicker::new(smoothing)?);
+        }
+        self.deflickers.get_mut(&id)
     }
 
     /// The decoded frame for `source_time`, from the cache or a (reused) decode session.

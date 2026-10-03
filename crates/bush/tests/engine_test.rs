@@ -397,3 +397,35 @@ fn fade_in_and_keyframed_position_are_applied_per_frame() {
     assert!(left_empty, "left half should be uncovered");
     assert!((110..=145).contains(&right_alpha), "alpha {right_alpha}");
 }
+
+#[test]
+fn deflicker_runs_in_the_engine_and_is_stable_when_a_frame_repeats() {
+    let engine = Engine::new(config(1)).unwrap();
+    let timeline = scene(vec![clip(
+        1,
+        0,
+        fixture(),
+        Placement {
+            deflicker: Some(0.2),
+            ..Placement::default()
+        },
+    )]);
+
+    let mut frames = Vec::new();
+    for playhead in [0.0, 0.04, 0.08, 0.08, 0.08] {
+        engine.submit(request(timeline.clone(), playhead)).unwrap();
+        frames.push(expect_frame(&engine).1);
+    }
+    assert_eq!(frames[2].pixels(), frames[3].pixels());
+    assert_eq!(frames[3].pixels(), frames[4].pixels());
+
+    let invalid = Placement {
+        deflicker: Some(0.0),
+        ..Placement::default()
+    };
+    assert!(SceneSnapshot::new(
+        SceneVersions::default(),
+        vec![clip(1, 0, fixture(), invalid)]
+    )
+    .is_err());
+}

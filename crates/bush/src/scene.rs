@@ -87,6 +87,8 @@ pub struct Placement {
     pub fade: Fade,
     /// Shared 3D colour lookup; cloning a placement shares the table.
     pub lut: Option<Arc<Lut3D>>,
+    /// Temporal brightness smoothing weight (`0.0 < w <= 1.0`, lower is steadier); `None` off.
+    pub deflicker: Option<f32>,
 }
 
 impl Default for Placement {
@@ -105,6 +107,7 @@ impl Default for Placement {
             animation: Animation::default(),
             fade: Fade::default(),
             lut: None,
+            deflicker: None,
         }
     }
 }
@@ -126,6 +129,9 @@ impl Placement {
             || !(0.0..=4.0).contains(&self.gain)
             || !self.animation.is_valid()
             || !self.fade.is_valid()
+            || self
+                .deflicker
+                .is_some_and(|weight| !(weight > 0.0 && weight <= 1.0))
         {
             return Err(SceneError::InvalidPlacement);
         }
