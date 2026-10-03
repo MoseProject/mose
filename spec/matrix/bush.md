@@ -118,13 +118,15 @@ Per-request engine latency (`cargo run --release -p bush --example latency_probe
 
 | Path | p50 | p95 | p99 |
 | --- | --- | --- | --- |
-| 640x360 random scrub | 0.78 ms | 1.6 ms | 4.3 ms |
-| 640x360 live edit (cached source frame) | 0.84 ms | 1.1 ms | 1.3 ms |
-| 1080p random scrub | 12.3 ms | 38 ms | 46 ms |
-| 1080p live edit (cached source frame) | 4.6 ms | 5.7 ms | 6.3 ms |
+| 640x360 random scrub | 0.80 ms | 1.2 ms | 4.5 ms |
+| 640x360 live edit (cached source frame) | 0.76 ms | 0.94 ms | 1.2 ms |
+| 1080p random scrub | 7.9 ms | 27.6 ms | 39.5 ms |
+| 1080p live edit (cached source frame) | 4.9 ms | 5.7 ms | 6.3 ms |
 
+Frame-accurate seeks decode from the preceding key unit but convert only the presented frame
+to RGBA (the 1080p scrub went from p50 12.3 / p95 38 ms to 7.9 / 27.6 ms with that change).
 Reading them: the GPU path removes the compositing bottleneck for effect-heavy and 4K scenes. 1080p playback and a 1080p live edit are inside a 33 ms budget. A 1080p scrub
-tail (p95 38 ms) is the seek-to-key-unit plus decode-forward cost of a 30-frame GOP; 4K software
+tail (p95 27.6 ms) is the seek-to-key-unit plus decode-forward cost of a 30-frame GOP; 4K software
 decode sits just under 30 fps and is the first thing a GPU/zero-copy path would fix.
 
 ## Commands
