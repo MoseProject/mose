@@ -44,9 +44,13 @@ struct LayerBuffers {
     params: wgpu::Buffer,
     source: wgpu::Buffer,
     source_bytes: u64,
+    /// Id of the frame whose pixels `source` currently holds, so an unchanged layer is not
+    /// uploaded again.
+    uploaded_frame: Option<u64>,
 }
 
 pub struct GpuRenderer {
+    uploads_skipped: u64,
     device: wgpu::Device,
     queue: wgpu::Queue,
     pipeline: wgpu::ComputePipeline,
@@ -63,6 +67,11 @@ pub struct GpuRenderer {
 }
 
 impl GpuRenderer {
+    /// Layer uploads avoided because the GPU already held that exact frame.
+    pub const fn uploads_skipped(&self) -> u64 {
+        self.uploads_skipped
+    }
+
     /// True once the GPU device is lost or destroyed; every later render fails.
     pub fn is_lost(&self) -> bool {
         self.lost.load(Ordering::Acquire)
@@ -167,6 +176,7 @@ impl GpuRenderer {
             max_output_bytes,
             canvas: None,
             layer_buffers: Vec::new(),
+            uploads_skipped: 0,
             empty_lut,
             softlight,
             blur,
@@ -223,6 +233,7 @@ impl GpuRenderer {
                     mapped_at_creation: false,
                 }),
                 source_bytes: 4,
+                uploaded_frame: None,
             });
         }
         let slot = &mut self.layer_buffers[index];
@@ -234,6 +245,7 @@ impl GpuRenderer {
                 mapped_at_creation: false,
             });
             slot.source_bytes = source_bytes;
+            slot.uploaded_frame = None;
         }
     }
 }
@@ -409,20 +421,27 @@ impl Renderer for GpuRenderer {
             };
             let frame = layer.frame;
             let row_bytes = frame.width() as usize * 4;
-            let tight: std::borrow::Cow<'_, [u8]> = if frame.stride_bytes() == row_bytes {
-                std::borrow::Cow::Borrowed(&frame.pixels()[..row_bytes * frame.height() as usize])
-            } else {
-                let mut packed = Vec::with_capacity(row_bytes * frame.height() as usize);
-                for row in 0..frame.height() as usize {
-                    let start = row * frame.stride_bytes();
-                    packed.extend_from_slice(&frame.pixels()[start..start + row_bytes]);
-                }
-                std::borrow::Cow::Owned(packed)
-            };
-            self.ensure_layer_buffers(index, tight.len() as u64);
+            let tight_bytes = row_bytes * frame.height() as usize;
+            self.ensure_layer_buffers(index, tight_bytes as u64);
             let params = layer_params(width, height, layer, &geometry, frame.width());
+            if self.layer_buffers[index].uploaded_frame == Some(frame.id()) {
+                self.uploads_skipped += 1;
+            } else {
+                let tight: std::borrow::Cow<'_, [u8]> = if frame.stride_bytes() == row_bytes {
+                    std::borrow::Cow::Borrowed(&frame.pixels()[..tight_bytes])
+                } else {
+                    let mut packed = Vec::with_capacity(tight_bytes);
+                    for row in 0..frame.height() as usize {
+                        let start = row * frame.stride_bytes();
+                        packed.extend_from_slice(&frame.pixels()[start..start + row_bytes]);
+                    }
+                    std::borrow::Cow::Owned(packed)
+                };
+                self.queue
+                    .write_buffer(&self.layer_buffers[index].source, 0, &tight);
+                self.layer_buffers[index].uploaded_frame = Some(frame.id());
+            }
             let buffers = &self.layer_buffers[index];
-            self.queue.write_buffer(&buffers.source, 0, &tight);
             self.queue.write_buffer(&buffers.params, 0, &params);
             let blur = (layer.effects.blur_sigma > 0.0 || layer.effects.sharpen > 0.0).then_some((
                 layer.effects.blur_sigma,
