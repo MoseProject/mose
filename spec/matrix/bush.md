@@ -68,6 +68,15 @@ the real default device.
       several layers per frame); end to end including upload and readback blur 8 takes 7.9 ms
       versus 24 ms on the CPU at 1080p, blur + sharpen 9.2 versus 55 ms, and at 4K 30 versus
       215 ms. Tests: `blur_test`, `engine_test`, `gpu_parity_test`.
+- [x] GPU loss: `GpuRenderer` flags device loss instead of panicking; the engine switches to the
+      CPU compositor mid-session and retries the frame (`EngineStats::gpu_fallbacks`). Tests:
+      `gpu_loss_test` (simulated loss and a destroyed wgpu device; the wgpu loss callback itself
+      was not separately exercised).
+- [x] GPU source upload reuse: `VideoFrame::id` identifies pixel content, and a layer slot that
+      already holds that frame skips the upload (`GpuRenderer::uploads_skipped`). Helps static
+      layers, paused playback and live edits of other layers; a playing video layer changes
+      frame every tick and still uploads. Static-layer bench: 4K 2 layers 14 ms, 4K 6 layers
+      with effects 16 ms (was 65 ms). Tests: `gpu_upload_reuse_test`.
 - [x] Glitch (`Placement::glitch`: channel split plus displaced bands, 12 steps per second) and
       shake (`Placement::shake`: smooth value-noise jitter in canvas pixels). Both are pure
       functions of clip time, so paused frames never flicker. Tests: `glitch_test`.
@@ -109,13 +118,10 @@ the real default device.
 - [x] Long-run A/V soak on the real device (`long_run_*`, ignored by default, `BUSH_SOAK_SECS`):
       60 s run, audio clock within 7 ms of wall time at every 10 s report (relative rate error
       -42 ppm), video never led the audio clock, one underflow callback (startup).
-- [x] Audio device recovery: DeviceSink::is_failed/ecover/ecoveries reopen the stream on
-      the current default device (queue emptied, clock keeps counting, format change reported as
-      FormatChanged). Verified on the real device by an on-demand reopen; a physical unplug was
-      not exercised.
-- [x] GPU loss: GpuRenderer flags device loss instead of panicking; the engine switches to the
-      CPU compositor mid-session and retries the frame (EngineStats::gpu_fallbacks). Tests:
-      gpu_loss_test (simulated loss and a destroyed wgpu device).
+- [x] Audio device recovery: `DeviceSink::is_failed` / `recover` / `recoveries` reopen the
+      stream on the current default device (queue emptied, clock keeps counting, a format change
+      is reported as `FormatChanged`). Verified on the real device by an on-demand reopen; a
+      physical unplug was not exercised.
 
 ## Hardware decode
 
