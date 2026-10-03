@@ -127,4 +127,4 @@ effect: `core` now depends on `bush` (default features, no GPU or audio device).
 - [x] Gain keyframes in the audio renderer
 - [x] Render background-removal and privacy-blur mattes in the preview (unit-tested, not yet checked visually in the app)
 - [ ] Verify audio and decode on macOS and Linux (blocked: no machines here, and CI only runs by manual dispatch because there are no CI credits)
-- [ ] Zero-copy hardware decode path, then revisit the hardware-decode preference (not started: needs importing decoder surfaces into wgpu; measured hardware decode with CPU download is slower than software, so the preference stays ignored)
+- [x] Zero-copy hardware decode path, then revisit the hardware-decode preference (decided not to build, see spec/matrix/bush.md "Decode policy"; the preference stays ignored)
