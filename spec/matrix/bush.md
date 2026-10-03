@@ -104,8 +104,18 @@ the real default device.
 - [x] Real output (`DeviceSink`, `--features cpal`): validated on the default device of the
       development machine (WASAPI, 48 kHz): consumption within +1.9 % of wall clock over 0.6 s,
       underflow counting, bounded queue. Tests: `device_audio_test` (skips itself without a device).
-- [x] Linear speed ramps (`Placement::speed_ramp_end`): timeline duration and source time are
-      integrated exactly for video, audio follows block by block.
+- [x] Speed ramps (`Placement::speed_ramp_end`) linear in source time, the definition core and the
+      exporter use: duration `L / (v1 - v0) * ln(v1 / v0)`, speed `v0 * e^(ct)`. Video and audio
+      follow it block by block. The exporter's own audio uses the average speed, so a ramped
+      clip's audio differs from the export by design (the preview follows the video).
+- [x] Animated gain (`Animation::gain_db`): dB keyframes interpolated linearly in dB like the
+      exporter's gain expression, applied per audio block with a linear gain between 64-frame steps.
+- [x] Mattes (`matte.rs`): `Placement::alpha_matte` multiplies a layer's alpha (background removal,
+      clip-local source time, only above the first video track like the export) and
+      `Placement::privacy_blur` blurs the finished canvas through a matte (matte spread evenly over
+      the clip window). A missing matte degrades to the unmasked layer. Unit tests in `matte.rs`
+      and the mapper; not checked visually in the app against a generated matte. The privacy sigma
+      is in preview-canvas pixels (the export uses export-canvas pixels).
 - [x] Pitch-preserving time stretch (`time_stretch.rs`, WSOLA, speeds 0.25x-4x): a clip with
       `Placement::speed != 1` keeps its pitch, ends early or runs long, and consecutive blocks
       join bit-exactly; seeks restart the stretch at the matching source position. Outside the
@@ -142,8 +152,11 @@ selects it and `OCA_BUSH_RENDERER=gpu` lets it composite on the GPU. Design and 
       with its timeline window; keyframes (opacity, position, rotation, crop, colour), Ken-Burns
       zoom as an animated crop, flip, colour filters, masks, chroma key, 40 blend modes, LUT,
       fade/slide/zoom transitions, freeze (near-zero speed), gain, text and shape overlays.
-      Known approximations are reported per scene (speed ramp as average speed, gain keyframes,
-      frozen audio, zoom-out, mattes) and the intensity curves are provisional (gap 9).
+      Known approximations are reported per scene (frozen audio, zoom-out, a missing matte file).
+      The intensity curves come from the exporter's filter parameters (blur = boxblur variance,
+      sharpen = 3x unsharp, pixelize block 2 + 48i, shake = 8% of the canvas, deflicker = 5-frame
+      mean, vignette fitted to FFmpeg's corner falloff). Glitch and stabilization are different
+      algorithms from the export (noise and deshake) and share only the 0..1 strength.
 - [x] Backend (`backend.rs`): same command channel, latest-frame slot, playhead and tick as the
       GStreamer loop. Audio is the master clock (device sink, recovery on failure), JPEG
       encoding runs on its own thread, the next frame is requested when the previous one lands
