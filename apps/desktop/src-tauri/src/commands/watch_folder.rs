@@ -58,6 +58,32 @@ pub fn pick_watch_folder() -> Option<String> {
 /// folder first (only one watch runs at a time, same as the egui shell).
 #[tauri::command]
 pub fn start_watching_folder<R: Runtime>(app: AppHandle<R>, path: String) -> Result<(), String> {
+    start_watching(app, PathBuf::from(path), WatchTiming::default());
+    Ok(())
+}
+
+/// How often the watch loop scans and how long a file must keep its size to count as finished.
+/// The app uses [`WatchTiming::default`]; tests shorten both so a watch runs in milliseconds.
+#[derive(Clone, Copy)]
+pub(crate) struct WatchTiming {
+    pub poll: Duration,
+    pub stable_for: Duration,
+}
+
+impl Default for WatchTiming {
+    fn default() -> Self {
+        Self {
+            poll: POLL_INTERVAL,
+            stable_for: Duration::from_secs(avcore::DEFAULT_STABLE_SECS),
+        }
+    }
+}
+
+pub(crate) fn start_watching<R: Runtime>(
+    app: AppHandle<R>,
+    watch_path: PathBuf,
+    timing: WatchTiming,
+) {
     let state = app.state::<AppState>();
     stop_watch_thread(&state);
     let stop = Arc::new(AtomicBool::new(false));
@@ -67,9 +93,7 @@ pub fn start_watching_folder<R: Runtime>(app: AppHandle<R>, path: String) -> Res
         .unwrap_or_else(|p| p.into_inner()) = Some(Arc::clone(&stop));
 
     let worker_app = app.clone();
-    let watch_path = PathBuf::from(path);
-    std::thread::spawn(move || watch_loop(watch_path, stop, worker_app));
-    Ok(())
+    std::thread::spawn(move || watch_loop(watch_path, stop, worker_app, timing));
 }
 
 /// Stops the background watch loop, if running -- what the screen's "Stop watching" button does.
@@ -106,15 +130,20 @@ pub fn add_watched_file_to_project<R: Runtime>(
     crate::commands::media::import_media(app, vec![output.display().to_string()]);
 }
 
-fn watch_loop<R: Runtime>(watch_path: PathBuf, stop: Arc<AtomicBool>, app: AppHandle<R>) {
-    let stable_for = Duration::from_secs(avcore::DEFAULT_STABLE_SECS);
+fn watch_loop<R: Runtime>(
+    watch_path: PathBuf,
+    stop: Arc<AtomicBool>,
+    app: AppHandle<R>,
+    timing: WatchTiming,
+) {
+    let stable_for = timing.stable_for;
     let mut tracker = avcore::StabilityTracker::new();
     let mut seen: HashSet<PathBuf> = HashSet::new();
     let mut errored: HashSet<PathBuf> = HashSet::new();
 
     while !stop.load(Ordering::Relaxed) {
         let Ok(entries) = std::fs::read_dir(&watch_path) else {
-            std::thread::sleep(POLL_INTERVAL);
+            std::thread::sleep(timing.poll);
             continue;
         };
 
@@ -209,7 +238,7 @@ fn watch_loop<R: Runtime>(watch_path: PathBuf, stop: Arc<AtomicBool>, app: AppHa
             }
         }
 
-        std::thread::sleep(POLL_INTERVAL);
+        std::thread::sleep(timing.poll);
     }
 }
 
