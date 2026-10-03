@@ -809,3 +809,66 @@ fn layers_that_share_one_source_decode_their_own_times() {
     let (_, frame) = expect_frame(&engine);
     assert_eq!(frame.timestamp_secs(), 0.5);
 }
+
+/// A compositor that always fails for a reason other than a lost GPU.
+struct BrokenRenderer;
+
+impl bush::Renderer for BrokenRenderer {
+    fn render(
+        &mut self,
+        _width: u32,
+        _height: u32,
+        _timestamp_secs: f64,
+        _layers: &[bush::LayerFrame<'_>],
+    ) -> Result<VideoFrame, bush::RenderError> {
+        Err(bush::RenderError::ZeroCanvas)
+    }
+
+    fn name(&self) -> String {
+        "broken".into()
+    }
+}
+
+#[test]
+fn a_renderer_failure_is_reported_without_a_cpu_fallback() {
+    let engine = Engine::with_renderer(config(1), Box::new(BrokenRenderer)).unwrap();
+    assert_eq!(engine.renderer_name(), "broken");
+    engine
+        .submit(request(
+            scene(vec![clip(1, 0, fixture(), Placement::default())]),
+            0.2,
+        ))
+        .unwrap();
+    assert!(wait_failure(&engine).contains("render failed"));
+    assert_eq!(engine.stats().gpu_fallbacks, 0);
+}
+
+#[test]
+fn a_request_superseded_mid_render_is_cancelled() {
+    // Many distinct sources keep a render busy long enough for the next request to arrive.
+    let layers = |playhead_offset: u64| {
+        (1..=10)
+            .map(|id| {
+                let mut contributor = clip(id, id as i32, fixture(), Placement::default());
+                if let ContributorContent::Media(source) = &mut contributor.content {
+                    source.version = Version(id + playhead_offset);
+                }
+                contributor
+            })
+            .collect::<Vec<_>>()
+    };
+    let engine = Engine::new(config(10)).unwrap();
+    for round in 0..40u64 {
+        engine
+            .submit(request(scene(layers(round * 100)), 0.1))
+            .unwrap();
+        engine
+            .submit(request(scene(layers(round * 100 + 50)), 0.2))
+            .unwrap();
+        expect_frame(&engine);
+        if engine.stats().cancelled > 0 {
+            return;
+        }
+    }
+    panic!("no render was ever cancelled: {:?}", engine.stats());
+}
