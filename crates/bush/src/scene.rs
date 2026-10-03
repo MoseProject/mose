@@ -97,6 +97,10 @@ pub struct Placement {
     pub glitch: f32,
     /// Shake amplitude in canvas pixels, 0.0..=200.0 (0 is off): smooth positional jitter.
     pub shake: f32,
+    /// Stabilization smoothing weight (0 < w <= 1, lower is steadier); `None` is off. The layer is
+    /// counter-translated onto the smoothed camera path and zoomed by `STABILIZE_ZOOM` to hide
+    /// the moving borders.
+    pub stabilize: Option<f32>,
 }
 
 impl Default for Placement {
@@ -120,6 +124,7 @@ impl Default for Placement {
             sharpen: 0.0,
             glitch: 0.0,
             shake: 0.0,
+            stabilize: None,
         }
     }
 }
@@ -145,6 +150,9 @@ impl Placement {
             || !(0.0..=4.0).contains(&self.sharpen)
             || !(0.0..=1.0).contains(&self.glitch)
             || !(0.0..=200.0).contains(&self.shake)
+            || self
+                .stabilize
+                .is_some_and(|weight| !(weight > 0.0 && weight <= 1.0))
             || self
                 .deflicker
                 .is_some_and(|weight| !(weight > 0.0 && weight <= 1.0))

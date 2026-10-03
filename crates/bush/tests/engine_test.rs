@@ -579,3 +579,40 @@ fn blur_and_sharpen_apply_in_the_engine_before_compositing() {
         .is_err());
     }
 }
+
+#[test]
+fn stabilization_runs_in_the_engine_zooms_and_is_stable_on_repeats() {
+    let engine = Engine::new(config(1)).unwrap();
+    let stabilized = scene(vec![clip(
+        1,
+        0,
+        fixture(),
+        Placement {
+            stabilize: Some(0.2),
+            ..Placement::default()
+        },
+    )]);
+
+    let mut frames = Vec::new();
+    for playhead in [0.0, 0.04, 0.08, 0.08, 0.08] {
+        engine
+            .submit(request(stabilized.clone(), playhead))
+            .unwrap();
+        frames.push(expect_frame(&engine).1);
+    }
+    // A repeated instant never drifts.
+    assert_eq!(frames[2].pixels(), frames[3].pixels());
+    assert_eq!(frames[3].pixels(), frames[4].pixels());
+    // The coverage zoom changes the picture relative to the unstabilized frame.
+    assert_ne!(frames[2].pixels(), reference_frame(0.08).pixels());
+
+    let invalid = Placement {
+        stabilize: Some(0.0),
+        ..Placement::default()
+    };
+    assert!(SceneSnapshot::new(
+        SceneVersions::default(),
+        vec![clip(1, 0, fixture(), invalid)]
+    )
+    .is_err());
+}

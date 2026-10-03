@@ -210,6 +210,7 @@ impl Engine {
                 cache,
                 sources: Vec::new(),
                 deflickers: HashMap::new(),
+                stabilizers: HashMap::new(),
             }
             .run();
         });
@@ -401,6 +402,8 @@ struct EngineThread {
     sources: Vec<((PathBuf, u64), DecodeSource)>,
     /// Temporal deflicker state per contributor; only present while the effect is enabled.
     deflickers: HashMap<ContributorId, crate::Deflicker>,
+    /// Stabilizer state per contributor; only present while the effect is enabled.
+    stabilizers: HashMap<ContributorId, crate::Stabilizer>,
 }
 
 enum RenderOutcome {
@@ -533,7 +536,33 @@ impl EngineThread {
                     }
                 }
             };
-            let placement = contributor.placement_at(playhead);
+            let mut placement = contributor.placement_at(playhead);
+            if let (Some(smoothing), ContributorContent::Media(_)) =
+                (placement.stabilize, &contributor.content)
+            {
+                let stabilizer = match self.stabilizers.entry(contributor.id) {
+                    std::collections::hash_map::Entry::Occupied(entry) => Some(entry.into_mut()),
+                    std::collections::hash_map::Entry::Vacant(entry) => {
+                        crate::Stabilizer::new(smoothing).map(|new| entry.insert(new))
+                    }
+                };
+                if let Some(stabilizer) = stabilizer {
+                    let (dx, dy) = stabilizer.analyze(&frame);
+                    // Counter-translate onto the smooth path and zoom about the layer centre so
+                    // the shifted borders stay outside the picture.
+                    let zoom = crate::STABILIZE_ZOOM;
+                    let scale_x = placement.transform.scale_x;
+                    let scale_y = placement.transform.scale_y;
+                    placement.x += (dx * scale_x).round() as i32
+                        - (frame.width() as f32 * scale_x * (zoom - 1.0) / 2.0).round() as i32;
+                    placement.y += (dy * scale_y).round() as i32
+                        - (frame.height() as f32 * scale_y * (zoom - 1.0) / 2.0).round() as i32;
+                    placement.transform.scale_x *= zoom;
+                    placement.transform.scale_y *= zoom;
+                }
+            } else {
+                self.stabilizers.remove(&contributor.id);
+            }
             let frame = match (placement.deflicker, &contributor.content) {
                 (Some(smoothing), ContributorContent::Media(_)) => {
                     match self.deflicker_for(contributor.id, smoothing) {

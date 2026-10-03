@@ -60,7 +60,14 @@ the real default device.
 - [x] Glitch (`Placement::glitch`: channel split plus displaced bands, 12 steps per second) and
       shake (`Placement::shake`: smooth value-noise jitter in canvas pixels). Both are pure
       functions of clip time, so paused frames never flicker. Tests: `glitch_test`.
-- [ ] Stabilization (needs motion history), slide/zoom transitions
+- [x] Stabilization (`stabilizer.rs`, `Placement::stabilize`): global motion by SAD block
+      matching with sub-pixel refinement on a 160 px analysis plane, EMA-smoothed camera path,
+      counter-translation plus a 6 % coverage zoom. Constant state; repeats do not drift; jumps
+      reset it. Verified on synthetic jitter (`stabilizer_test`: jitter std cut by more than half,
+      a steady pan followed with the expected EMA lag) and through the engine. Limits: translation
+      only (no rotation or rolling-shutter correction), motion above 16 px per frame at 1080p is
+      not tracked.
+- [ ] Dedicated slide/zoom transition effects
       (expressible today with keyframes, no dedicated effect), background-removal matte inputs.
       None of these exist in the scene model, so none can be silently ignored.
 - [ ] Text/shape rasterization is the caller job by design: Bush composites caller-supplied
