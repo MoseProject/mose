@@ -644,3 +644,168 @@ fn speed_ramp_maps_the_playhead_to_the_integrated_source_time() {
     let (_, gone) = expect_frame(&engine);
     assert!(gone.pixels().iter().all(|byte| *byte == 0));
 }
+
+fn wait_failure(engine: &Engine) -> String {
+    match engine.wait(WAIT).expect("engine produced no event") {
+        EngineEvent::Failed { message, .. } => message,
+        EngineEvent::Frame { .. } => panic!("expected a failure"),
+    }
+}
+
+fn render_once(contributors: Vec<Contributor>, playhead: f64) -> VideoFrame {
+    let engine = Engine::new(config(2)).unwrap();
+    engine
+        .submit(request(scene(contributors), playhead))
+        .unwrap();
+    expect_frame(&engine).1
+}
+
+fn matte(path: &str) -> bush::MatteSource {
+    bush::MatteSource {
+        path: PathBuf::from(path),
+        version: Version(7),
+    }
+}
+
+#[test]
+fn an_alpha_matte_masks_the_layer_and_a_missing_matte_leaves_it_unmasked() {
+    let plain = render_once(vec![clip(1, 0, fixture(), Placement::default())], 0.5);
+    // Any video is a valid matte: its luma becomes the layer's alpha.
+    let masked = render_once(
+        vec![clip(
+            1,
+            0,
+            fixture(),
+            Placement {
+                alpha_matte: Some(bush::MatteSource {
+                    path: fixture(),
+                    version: Version(7),
+                }),
+                ..Placement::default()
+            },
+        )],
+        0.5,
+    );
+    assert_ne!(masked.pixels(), plain.pixels());
+
+    let unreadable = render_once(
+        vec![clip(
+            1,
+            0,
+            fixture(),
+            Placement {
+                alpha_matte: Some(matte("does-not-exist.mp4")),
+                ..Placement::default()
+            },
+        )],
+        0.5,
+    );
+    assert_eq!(unreadable.pixels(), plain.pixels());
+}
+
+#[test]
+fn a_privacy_blur_softens_the_canvas_and_a_missing_matte_leaves_it_sharp() {
+    let plain = render_once(vec![clip(1, 0, fixture(), Placement::default())], 0.5);
+    let blurred = render_once(
+        vec![clip(
+            1,
+            0,
+            fixture(),
+            Placement {
+                privacy_blur: Some(bush::PrivacyBlur {
+                    matte: bush::MatteSource {
+                        path: fixture(),
+                        version: Version(7),
+                    },
+                    sigma: 6.0,
+                }),
+                ..Placement::default()
+            },
+        )],
+        0.5,
+    );
+    assert_ne!(blurred.pixels(), plain.pixels());
+
+    let unreadable = render_once(
+        vec![clip(
+            1,
+            0,
+            fixture(),
+            Placement {
+                privacy_blur: Some(bush::PrivacyBlur {
+                    matte: matte("does-not-exist.mp4"),
+                    sigma: 6.0,
+                }),
+                ..Placement::default()
+            },
+        )],
+        0.5,
+    );
+    assert_eq!(unreadable.pixels(), plain.pixels());
+}
+
+#[test]
+fn an_overlay_without_a_raster_and_a_missing_source_fail_the_render() {
+    let engine = Engine::new(config(2)).unwrap();
+    let mut overlay = clip(1, 0, fixture(), Placement::default());
+    overlay.content = ContributorContent::RasterOverlay(RasterOverlay {
+        width: 4,
+        height: 4,
+        version: Version(1),
+    });
+    engine.submit(request(scene(vec![overlay]), 0.1)).unwrap();
+    assert!(wait_failure(&engine).contains("has no raster data"));
+
+    let missing = clip(
+        2,
+        0,
+        PathBuf::from("does-not-exist.mp4"),
+        Placement::default(),
+    );
+    engine.submit(request(scene(vec![missing]), 0.1)).unwrap();
+    assert!(wait_failure(&engine).contains("does-not-exist.mp4"));
+    assert_eq!(engine.stats().failures, 2);
+}
+
+#[test]
+fn events_carry_their_generation_and_the_engine_has_a_debug_form() {
+    let engine = Engine::new(config(1)).unwrap();
+    let generation = engine
+        .submit(request(
+            scene(vec![clip(1, 0, fixture(), Placement::default())]),
+            0.2,
+        ))
+        .unwrap();
+    let event = engine.wait(WAIT).unwrap();
+    assert_eq!(event.generation(), generation);
+    assert!(format!("{engine:?}").starts_with("Engine"));
+}
+
+#[test]
+fn the_latency_window_keeps_only_recent_samples() {
+    let engine = Engine::new(config(1)).unwrap();
+    let scene = scene(vec![clip(1, 0, fixture(), Placement::default())]);
+    for _ in 0..1100 {
+        engine.submit(request(scene.clone(), 0.2)).unwrap();
+        expect_frame(&engine);
+    }
+    assert_eq!(engine.stats().frames_rendered, 1100);
+    assert!(engine.latency().p50_micros > 0);
+}
+
+#[test]
+fn layers_that_share_one_source_decode_their_own_times() {
+    let engine = Engine::new(config(1)).unwrap();
+    // Same file and version on two layers, one delayed so it shows an earlier source time.
+    let late = Placement {
+        timeline_start_secs: 0.25,
+        ..Placement::default()
+    };
+    let scene = scene(vec![
+        clip(1, 0, fixture(), Placement::default()),
+        clip(2, 1, fixture(), late),
+    ]);
+    engine.submit(request(scene, 0.5)).unwrap();
+    let (_, frame) = expect_frame(&engine);
+    assert_eq!(frame.timestamp_secs(), 0.5);
+}
