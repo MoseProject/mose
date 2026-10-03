@@ -26,7 +26,7 @@ fn snapshot_due(recovery: &Path, minutes: u8) -> bool {
         .is_none_or(|elapsed| elapsed >= std::time::Duration::from_secs(u64::from(minutes) * 60))
 }
 
-pub fn spawn(app: tauri::AppHandle) {
+pub fn spawn<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
     std::thread::spawn(move || loop {
         std::thread::sleep(std::time::Duration::from_secs(1));
         let state = app.state::<AppState>();

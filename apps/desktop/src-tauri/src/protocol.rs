@@ -17,7 +17,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use tauri::http::{header, Response, StatusCode};
-use tauri::{AppHandle, Manager, UriSchemeResponder};
+use tauri::{AppHandle, Manager, Runtime, UriSchemeResponder};
 
 use crate::frames::{encode_jpeg, THUMBNAIL_MAX_DIM};
 use crate::state::AppState;
@@ -32,7 +32,7 @@ pub struct ThumbnailCache {
     entries: Mutex<HashMap<PathBuf, Option<Arc<Vec<u8>>>>>,
 }
 
-pub fn handle(app: &AppHandle, path: &str, responder: UriSchemeResponder) {
+pub fn handle<R: Runtime>(app: &AppHandle<R>, path: &str, responder: UriSchemeResponder) {
     let mut parts = path.trim_start_matches('/').splitn(2, '/');
     match (parts.next(), parts.next()) {
         (Some("frame"), _) => {
