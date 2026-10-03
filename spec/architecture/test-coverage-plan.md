@@ -49,10 +49,10 @@ phase.
 
 ## Phase 0: tooling
 
-- [ ] `make coverage` target: `cargo llvm-cov` per crate with the exclusion regex, summary table
-- [ ] `make coverage-web`: `vitest run --coverage`
-- [ ] `@vitest/coverage-v8` dev dependency, `coverage` block in `vite.config.ts`
-- [ ] Commit this plan
+- [x] `make coverage` target: `cargo llvm-cov` per crate with the exclusion regex, summary table
+- [x] `make coverage-web`: `vitest run --coverage`
+- [x] `@vitest/coverage-v8` dev dependency, `coverage` block in `package.json` script
+- [x] Commit this plan
 
 ## Phase 1: `bush` (91.4%, 337 lines)
 
