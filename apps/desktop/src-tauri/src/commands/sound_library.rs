@@ -59,3 +59,7 @@ pub fn list_sound_library(state: State<'_, AppState>) -> Vec<LibraryTrackView> {
         .map(LibraryTrackView::from)
         .collect()
 }
+
+#[cfg(test)]
+#[path = "sound_library_test.rs"]
+mod tests;
