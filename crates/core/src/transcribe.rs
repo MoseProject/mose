@@ -309,3 +309,61 @@ fn group_tokens(tokens: impl IntoIterator<Item = RawToken>) -> Vec<TranscribeWor
     }
     words
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn token(text: &str, start_secs: f64, end_secs: f64, probability: f32) -> RawToken {
+        RawToken {
+            text: text.to_string(),
+            start_secs,
+            end_secs,
+            probability,
+        }
+    }
+
+    #[test]
+    fn a_leading_space_starts_a_word_and_other_tokens_extend_it() {
+        let words = group_tokens([
+            token("[_BEG_]", 0.0, 0.0, 1.0),
+            token("Hello", 0.0, 0.4, 0.5),
+            token(" run", 0.5, 0.7, 0.9),
+            token("ning", 0.7, 1.0, 0.7),
+            token("[_TT_50]", 1.0, 1.0, 1.0),
+        ]);
+        assert_eq!(words.len(), 3 - 1);
+        assert_eq!(words[0].text, "Hello");
+        assert_eq!((words[0].start_secs, words[0].end_secs), (0.0, 0.4));
+        assert_eq!(words[0].confidence, 0.5);
+        // The two tokens of "running" merge: text joined, range extended, mean probability.
+        assert_eq!(words[1].text, "running");
+        assert_eq!((words[1].start_secs, words[1].end_secs), (0.5, 1.0));
+        assert!((words[1].confidence - 0.8).abs() < 1e-6);
+    }
+
+    #[test]
+    fn empty_words_are_dropped_and_no_tokens_give_no_words() {
+        assert!(group_tokens([]).is_empty());
+        // A lone space token is an empty word at the start and at the end.
+        let words = group_tokens([
+            token(" ", 0.0, 0.1, 0.5),
+            token(" hi", 0.1, 0.2, 0.5),
+            token(" ", 0.2, 0.3, 0.5),
+        ]);
+        assert_eq!(words.len(), 1);
+        assert_eq!(words[0].text, "hi");
+    }
+
+    #[test]
+    fn errors_have_readable_messages_and_wrap_pcm_failures() {
+        let model = TranscribeError::ModelLoad(std::path::PathBuf::from("model.bin"));
+        assert!(model.to_string().contains("model.bin"));
+        assert!(!TranscribeError::NoAudio.to_string().is_empty());
+        assert!(!TranscribeError::StateInit.to_string().is_empty());
+        assert!(!TranscribeError::Inference.to_string().is_empty());
+        let wrapped = TranscribeError::from(avbridge::PcmError::NoAudioStream);
+        assert!(matches!(wrapped, TranscribeError::Audio(_)));
+        assert!(wrapped.to_string().contains("extract audio"));
+    }
+}
