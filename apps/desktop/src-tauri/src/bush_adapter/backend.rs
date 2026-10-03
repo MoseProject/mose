@@ -31,7 +31,7 @@ use bush::{
     AudioPlayer, AudioRenderer, AudioSink, DecodePolicy, DeviceSink, Engine, EngineConfig, Player,
     PlayerEvent, RendererChoice, SceneSnapshot, SceneVersions, Version,
 };
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Runtime};
 
 use super::mapper::{map_timeline, Approximation, OverlayCache, SourceResolver};
 use crate::frames::{encode_jpeg_rgba, PREVIEW_MAX_DIM};
@@ -197,9 +197,9 @@ fn new_engine(canvas: (u32, u32)) -> Option<Engine> {
     .ok()
 }
 
-pub fn run(
+pub fn run<R: Runtime>(
     rx: mpsc::Receiver<Command>,
-    app: AppHandle,
+    app: AppHandle<R>,
     latest: LatestFrame,
     playhead_bits: Arc<AtomicU64>,
 ) {

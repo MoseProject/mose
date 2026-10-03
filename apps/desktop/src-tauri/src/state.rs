@@ -17,7 +17,7 @@ use avcore::timeline::{ClipFormatting, ClipInstance, TrackKind};
 use avcore::undo::UndoStack;
 use avcore::{Project, Sequence, SequenceExportSettings, Timeline};
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use crate::export::ExportQueue;
 use crate::prefs::PrefsDocument;
@@ -166,7 +166,7 @@ impl AppState {
 
 /// Emits the current session to the webview and hands the timeline to the preview engine.
 /// Every command that mutates [`Session`] ends with this.
-pub fn publish(app: &AppHandle, session: &Session) {
+pub fn publish<R: Runtime>(app: &AppHandle<R>, session: &Session) {
     let state = app.state::<AppState>();
     state.preview.set_content(session.project.clone());
     if let Err(error) = app.emit(SESSION_CHANGED, session.view()) {

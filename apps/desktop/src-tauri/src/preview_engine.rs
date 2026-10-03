@@ -21,7 +21,7 @@ use std::time::Duration;
 
 use avcore::{MediaAsset, Project};
 use serde::Serialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, Runtime};
 
 /// Event carrying a [`PreviewTick`].
 pub const PREVIEW_TICK: &str = "preview-tick";
@@ -68,7 +68,7 @@ pub struct PreviewEngine {
 }
 
 impl PreviewEngine {
-    pub fn spawn(app: AppHandle) -> Self {
+    pub fn spawn<R: Runtime>(app: AppHandle<R>) -> Self {
         let (tx, rx) = mpsc::channel();
         let latest: LatestFrame = Arc::new(Mutex::new(None));
         let playhead_bits = Arc::new(AtomicU64::new(0f64.to_bits()));
