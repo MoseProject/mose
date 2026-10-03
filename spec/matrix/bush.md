@@ -52,7 +52,12 @@ the real default device.
       masks, pixelize and LUT; a thin fringe of nearest-neighbour ties when downscaling.
       Limits: frames are uploaded and the canvas read back every render (the engine API returns
       CPU frames), so the win is largest with effects and many layers (table below).
-- [ ] Stabilization (needs motion history), blur/sharpen, glitch, shake, slide/zoom transitions
+- [x] Gaussian blur (three box passes, cost independent of sigma, premultiplied alpha) and
+      unsharp-mask sharpen (`blur.rs`, `Placement::blur_sigma` / `sharpen`), applied to the layer
+      frame before compositing so CPU and GPU renderers share them. Measured: blur 18 ms at
+      1080p and 77 ms at 4K, sharpen 34 ms / 148 ms on the CPU (a GPU blur is future work).
+      Tests: `blur_test`, `engine_test` (blur and sharpen through the engine, cache reuse).
+- [ ] Stabilization (needs motion history), glitch, shake, slide/zoom transitions
       (expressible today with keyframes, no dedicated effect), background-removal matte inputs.
       None of these exist in the scene model, so none can be silently ignored.
 - [ ] Text/shape rasterization is the caller job by design: Bush composites caller-supplied

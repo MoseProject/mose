@@ -368,6 +368,9 @@ fn canvas_budget(config: &EngineConfig) -> Option<usize> {
         .checked_mul(4)
 }
 
+/// Blur radius of the unsharp mask behind Placement::sharpen, in source pixels.
+const SHARPEN_SIGMA: f32 = 1.5;
+
 type CacheKey = (PathBuf, u64, i64);
 
 type DecodeResult = Result<Option<Arc<VideoFrame>>, crate::DecodeSourceError>;
@@ -542,6 +545,23 @@ impl EngineThread {
                     self.deflickers.remove(&contributor.id);
                     frame
                 }
+            };
+            // Neighbourhood effects work on the frame before compositing, so the CPU and GPU
+            // renderers share them.
+            let frame = if matches!(contributor.content, ContributorContent::Media(_))
+                && (placement.blur_sigma > 0.0 || placement.sharpen > 0.0)
+            {
+                let mut processed = frame;
+                if placement.blur_sigma > 0.0 {
+                    processed = Arc::new(crate::gaussian_blur(&processed, placement.blur_sigma));
+                }
+                if placement.sharpen > 0.0 {
+                    processed =
+                        Arc::new(crate::sharpen(&processed, placement.sharpen, SHARPEN_SIGMA));
+                }
+                processed
+            } else {
+                frame
             };
             layers.push((frame, placement));
         }

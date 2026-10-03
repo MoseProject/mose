@@ -518,3 +518,64 @@ fn more_sources_than_session_slots_still_render_correctly() {
     let (_, frame) = expect_frame(&engine);
     assert_eq!(frame.pixels(), reference_frame(0.3).pixels());
 }
+
+#[test]
+fn blur_and_sharpen_apply_in_the_engine_before_compositing() {
+    let engine = Engine::new(config(1)).unwrap();
+    let plain = scene(vec![clip(1, 0, fixture(), Placement::default())]);
+    engine.submit(request(plain, 0.4)).unwrap();
+    let (_, original) = expect_frame(&engine);
+
+    let blurred_scene = scene(vec![clip(
+        1,
+        0,
+        fixture(),
+        Placement {
+            blur_sigma: 4.0,
+            ..Placement::default()
+        },
+    )]);
+    engine.submit(request(blurred_scene, 0.4)).unwrap();
+    let (_, blurred) = expect_frame(&engine);
+    assert_eq!(
+        blurred.pixels(),
+        bush::gaussian_blur(&reference_frame(0.4), 4.0).pixels()
+    );
+    assert_ne!(blurred.pixels(), original.pixels());
+
+    let sharp_scene = scene(vec![clip(
+        1,
+        0,
+        fixture(),
+        Placement {
+            sharpen: 1.0,
+            ..Placement::default()
+        },
+    )]);
+    engine.submit(request(sharp_scene, 0.4)).unwrap();
+    let (_, sharp) = expect_frame(&engine);
+    assert_eq!(
+        sharp.pixels(),
+        bush::sharpen(&reference_frame(0.4), 1.0, 1.5).pixels()
+    );
+
+    // The source frame was decoded once and reused for all three looks.
+    assert_eq!(engine.stats().cache_misses, 1);
+
+    for invalid in [
+        Placement {
+            blur_sigma: 65.0,
+            ..Placement::default()
+        },
+        Placement {
+            sharpen: 5.0,
+            ..Placement::default()
+        },
+    ] {
+        assert!(SceneSnapshot::new(
+            SceneVersions::default(),
+            vec![clip(1, 0, fixture(), invalid)]
+        )
+        .is_err());
+    }
+}

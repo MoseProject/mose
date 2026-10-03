@@ -425,6 +425,41 @@ fn bench_time_stretch(c: &mut Criterion) {
     group.finish();
 }
 
+/// Neighbourhood effects on 1080p and 4K frames (cost is independent of sigma by design).
+fn bench_blur(c: &mut Criterion) {
+    let mut group = c.benchmark_group("blur");
+    group.sample_size(10);
+    for (label, width, height) in [("1080p", 1920, 1080), ("4k", 3840, 2160)] {
+        let mut pixels = Vec::with_capacity((width * height * 4) as usize);
+        for index in 0..width * height {
+            pixels.extend_from_slice(&[
+                (index % 251) as u8,
+                (index % 241) as u8,
+                (index % 239) as u8,
+                255,
+            ]);
+        }
+        let frame = VideoFrame::new(
+            PixelFormat::Rgba8,
+            width,
+            height,
+            width as usize * 4,
+            0.0,
+            pixels,
+        )
+        .unwrap();
+        for sigma in [2.0_f32, 32.0] {
+            group.bench_function(format!("gaussian/{label}/sigma_{sigma}"), |b| {
+                b.iter(|| black_box(bush::gaussian_blur(&frame, sigma)));
+            });
+        }
+        group.bench_function(format!("sharpen/{label}"), |b| {
+            b.iter(|| black_box(bush::sharpen(&frame, 1.0, 1.5)));
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     engine_workloads,
     bench_composite_1080p,
@@ -435,6 +470,7 @@ criterion_group!(
     bench_large_media,
     bench_multicam,
     bench_gpu_vs_cpu,
-    bench_time_stretch
+    bench_time_stretch,
+    bench_blur
 );
 criterion_main!(engine_workloads);

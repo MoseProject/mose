@@ -89,6 +89,10 @@ pub struct Placement {
     pub lut: Option<Arc<Lut3D>>,
     /// Temporal brightness smoothing weight (`0.0 < w <= 1.0`, lower is steadier); `None` off.
     pub deflicker: Option<f32>,
+    /// Gaussian blur standard deviation in source pixels, 0.0..=MAX_BLUR_SIGMA (0 is off).
+    pub blur_sigma: f32,
+    /// Unsharp-mask amount, 0.0..=4.0 (0 is off).
+    pub sharpen: f32,
 }
 
 impl Default for Placement {
@@ -108,6 +112,8 @@ impl Default for Placement {
             fade: Fade::default(),
             lut: None,
             deflicker: None,
+            blur_sigma: 0.0,
+            sharpen: 0.0,
         }
     }
 }
@@ -129,6 +135,8 @@ impl Placement {
             || !(0.0..=4.0).contains(&self.gain)
             || !self.animation.is_valid()
             || !self.fade.is_valid()
+            || !(0.0..=crate::MAX_BLUR_SIGMA).contains(&self.blur_sigma)
+            || !(0.0..=4.0).contains(&self.sharpen)
             || self
                 .deflicker
                 .is_some_and(|weight| !(weight > 0.0 && weight <= 1.0))

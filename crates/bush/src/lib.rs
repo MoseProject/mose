@@ -8,6 +8,7 @@ mod audio_block;
 mod audio_mixer;
 mod audio_playback;
 mod audio_source;
+mod blur;
 mod byte_cache;
 mod cpu_renderer;
 mod decode_source;
@@ -38,6 +39,7 @@ pub use audio_playback::{
 };
 pub use audio_source::{AudioSource, AudioSourceError};
 pub use avbridge::DecodePolicy;
+pub use blur::{gaussian_blur, sharpen, MAX_BLUR_SIGMA};
 pub use byte_cache::{ByteCache, CacheError, CacheInsert};
 pub use cpu_renderer::{
     BlendMode, CpuRenderer, CropRect, LayerEffects, LayerFrame, LayerTransform, RenderError,
