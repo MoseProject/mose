@@ -5,9 +5,9 @@
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-//! The Bush playback loop behind `PreviewEngine`: same command channel, latest-frame slot,
-//! playhead atomic and `preview-tick` event as the GStreamer loop, so the rest of the app cannot
-//! tell which engine is running.
+//! The Bush playback loop behind `PreviewEngine`: it reads the command channel, fills the
+//! latest-frame slot and the playhead atomic, and emits the `preview-tick` event the webview
+//! listens to.
 //!
 //! One thread owns a [`bush::Player`] (video, wall or audio clock) and, once playback starts, a
 //! [`bush::DeviceSink`] with an [`bush::AudioPlayer`]. While audio plays, the device clock is the

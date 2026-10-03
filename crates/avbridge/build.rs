@@ -16,9 +16,9 @@
 //! Locates FFmpeg (libavformat/libavcodec/libavutil) via the `FFMPEG_DIR` env var
 //! (`FFMPEG_DIR/include`, `FFMPEG_DIR/lib`) and compiles `csrc/*.c` against it.
 //!
-//! On Windows the import libs are copied into OUT_DIR under unique names to avoid the
-//! GStreamer-vs-FFmpeg naming conflict (see comment below).  On macOS/Linux we link
-//! directly with -L/-l; the naming conflict does not arise there.
+//! On Windows the import libs are copied into OUT_DIR under unique names so a bare `-lavformat`
+//! can never resolve to another FFmpeg's import libs found on the linker path (see comment
+//! below).  On macOS/Linux we link directly with -L/-l; the naming conflict does not arise there.
 
 use std::env;
 use std::path::{Path, PathBuf};
@@ -88,11 +88,12 @@ fn main() {
     let is_windows = target_os == "windows";
 
     if is_windows {
-        // On Windows, GStreamer's SDK bundles its own FFmpeg build (gst-libav) with
-        // generically named import libs (avformat.lib etc.) for a different, older FFmpeg
-        // version.  If gstreamer-sys's -L also ends up on the link line a bare -lavformat
-        // can silently resolve to the wrong copy — ABI mismatch that only surfaces at
-        // runtime (see features/fase1/commit_plan.md, chore-002).
+        // History: the project used to link GStreamer, whose Windows SDK bundles its own FFmpeg
+        // build (gst-libav) with generically named import libs (avformat.lib etc.) for a
+        // different, older FFmpeg version.  A bare -lavformat could silently resolve to the
+        // wrong copy — an ABI mismatch that only surfaces at runtime (see
+        // features/fase1/commit_plan.md, chore-002).  GStreamer is gone, but the fix stays: it
+        // is harmless and keeps the link independent of whatever else is on the search path.
         //
         // Fix: copy the exact import libs into OUT_DIR under unique names and link those,
         // so bare-name search always finds our copy first.  cargo:rustc-link-arg with a
@@ -124,7 +125,7 @@ fn main() {
         }
         println!("cargo:rustc-link-search=native={}", out_dir.display());
     } else {
-        // macOS / Linux: no GStreamer naming conflict; link directly.
+        // macOS / Linux: no import-lib naming conflict; link directly.
         // Verify the expected shared-lib files exist so the error is actionable.
         let (ext, prefix) = if target_os == "macos" {
             ("dylib", "lib")

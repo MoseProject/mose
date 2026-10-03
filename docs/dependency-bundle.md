@@ -15,7 +15,6 @@ publication when any required runtime component is missing.
 | Component | Included form | Used by |
 |---|---|---|
 | FFmpeg (pinned 8.1 LGPL build on Windows/Linux; GPL-enabled Homebrew runner build on macOS) | `ffmpeg` CLI, libav shared libraries | Native bridge, yt-dlp merge/extraction |
-| GStreamer (LGPL core plus plugin-specific licenses; 1.26.11 Windows, Ubuntu 24.04 Linux, Homebrew macOS) | Core libraries, plugin scanner and the plugins in `packaging/gstreamer-plugin-allowlist.json` | Preview, decoding and scrubbing |
 | ONNX Runtime 1.28 | Statically linked by `ort-sys` | Auto-reframe and background removal |
 | whisper.cpp | Statically linked by `whisper-rs` | Automatic subtitles |
 | Whisper Base | `resources/models/ggml-base.bin` | Automatic subtitles |
@@ -36,7 +35,7 @@ Each portable Windows/Linux package also carries `resources/DEPENDENCIES.json`, 
 and the bundle manifest. It inventories every Rust package with its exact version, registry
 source and checksum as well as every native/model dependency. It also records the path, size
 and SHA-256 of every actual file in the assembled payload, including shared libraries,
-GStreamer plugins and private Python files; validation rejects missing, additional or changed
+private Python files; validation rejects missing, additional or changed
 files. `packaging/generate_third_party_notices.py` runs offline during every assembly. It uses
 locked Cargo metadata and the bundle manifest to generate `resources/licenses/THIRD_PARTY_NOTICES.txt`,
 copies package-specific `LICENSE`, `COPYING`, `COPYRIGHT`, `UNLICENSE`, and `NOTICE` files, and
@@ -46,7 +45,7 @@ Cargo crate, such as ONNX Runtime's third-party notice, are pinned and checksum-
 `packaging/licenses/components-manifest.json`. Font OFL notices and the oca license are also included
 under `resources/licenses/`. Bundle validation requires every distributed native/model component
 to appear in the generated notice. `resources/RUNTIME_VERSIONS.txt` records the
-actual FFmpeg, GStreamer and Python versions reported by the assembled payload.
+actual FFmpeg and Python versions reported by the assembled payload.
 It also records yt-dlp, yt-dlp EJS and Deno versions. Bundle validation recalculates every
 model's hash and rejects a runtime-version mismatch, so an accidental script/manifest drift
 cannot be published.
@@ -59,24 +58,23 @@ directory, Start menu/optional desktop shortcuts and uninstallation; setup perfo
 downloads. Inno Setup itself is needed only on the release runner that compiles the installer
 and is not installed on end-user machines. The installer is currently unsigned; release signing
 requires configuring a Windows code-signing certificate in CI.
-The Linux portable tree uses a launcher that sets private library, plugin and tool paths before
+The Linux portable tree uses a launcher that sets private library and tool paths before
 starting `ui-bin`; the AppImage and `.deb` wrap that exact validated tree. The Debian package
 installs it under `/opt/oca`, exposes `/usr/bin/oca`, registers an English/pt-BR desktop entry,
 and performs no network access in its maintainer scripts. `OCA_RESOURCE_DIR` can override
 the default `resources/`-beside-the-executable lookup for development and diagnostics.
 The macOS release has separate native Apple Silicon and Intel DMGs. `Oca.app` uses the standard
 `Contents/MacOS`, `Contents/Resources` and `Contents/Frameworks` layout. The assembler walks all
-Mach-O executables, libraries, Python extensions and GStreamer plugins recursively, copies every
+Mach-O executables, libraries and Python extensions recursively, copies every
 non-system dependency into the app, rewrites load paths to `@loader_path`, rejects architecture
 or external-path leaks, and signs the resulting bundle. Releases use Developer ID signing and
 Apple notarization when the corresponding CI secrets are configured; otherwise CI produces a
 validated ad-hoc-signed artifact suitable for testing but subject to Gatekeeper warnings.
 
-The GStreamer allowlist contains only the elements used by the preview graph plus demuxers,
-parsers and decoders for the media formats supported by the editor. Assembly fails when a common
-plugin or the platform audio-output alternative is unavailable. The collector validates plugin
-identifiers, rejects symlinks that escape the SDK plugin directory and refuses a non-empty output
-directory, so an SDK update cannot silently add arbitrary plugins to a release.
+The preview decodes and composites in Bush (`crates/bush`), which uses the FFmpeg libraries above;
+there is no separate media framework or plugin set to bundle. Audio output goes through the
+operating system's own audio API (WASAPI, CoreAudio, ALSA); on Linux the ALSA library and its
+configuration stay system-provided and are not copied into the bundle.
 
 ## Deliberate system contract
 

@@ -14,7 +14,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! `desktop` -- the Tauri shell for oca. The webview (React/TypeScript in `../src`) renders;
-//! this crate owns the editing session, GStreamer preview, import and export, all through
+//! this crate owns the editing session, the Bush preview, import and export, all through
 //! `avcore`. Runs alongside the egui shell (`crates/ui`) while screens migrate; see
 //! `spec/architecture/tauri-migration.md`.
 
@@ -44,7 +44,7 @@ use crate::protocol::ThumbnailCache;
 use crate::state::{blank_project, AppState, Session};
 
 fn main() {
-    // Must run before GStreamer initializes so packaged runtimes win over system installs.
+    // Must run before any helper process starts so packaged tools win over system installs.
     avcore::configure_bundled_runtime();
     init_logging();
     install_panic_hook();

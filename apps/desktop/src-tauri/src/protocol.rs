@@ -63,7 +63,7 @@ pub fn handle(app: &AppHandle, path: &str, responder: UriSchemeResponder) {
                 return;
             };
             let app = app.clone();
-            // Frame sampling blocks on GStreamer preroll; keep it off the webview's IPC thread.
+            // Frame sampling decodes video; keep it off the webview's IPC thread.
             std::thread::spawn(move || {
                 let cache = app.state::<ThumbnailCache>();
                 responder.respond(jpeg_or_not_found(cache.get_or_extract(&source)));

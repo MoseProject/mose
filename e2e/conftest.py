@@ -16,10 +16,9 @@
 # ("http://localhost:5173") instead of the built `frontendDist`, so the launched window shows a
 # WebView2 "can't reach this page" error with no Vite dev server running -- this is exactly the
 # packaging bug `release.yml` had until this was diagnosed (see tauri-migration.md gap 7); the
-# Tauri CLI sets env/cfg state a bare `cargo build` never does. Also needs the FFmpeg/GStreamer
-# runtime DLL directories on PATH for the *launched process* -- same requirement as running
-# target/release/oca-desktop.exe by hand (see CLAUDE.md's Commands section). `make test-e2e`
-# exports both before invoking pytest.
+# Tauri CLI sets env/cfg state a bare `cargo build` never does. Also needs the FFmpeg runtime
+# DLL directory on PATH for the *launched process* -- same requirement as running
+# target/release/oca-desktop.exe by hand (see CLAUDE.md's Commands section).
 #
 # tauri-driver listens on TAURI_DRIVER_PORT (default 4444) and spawns msedgedriver itself; only
 # one instance may own that port at a time, so it's started once per test session, not per test.
