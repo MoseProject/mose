@@ -87,6 +87,34 @@ fn sink_bounds_its_queue_and_clears_on_request() {
 }
 
 #[test]
+fn recover_reopens_the_stream_and_keeps_the_clock_counting() {
+    let Some(mut sink) = open(48_000) else {
+        return;
+    };
+    assert!(!sink.is_failed());
+    sink.write(&silence(&sink, 4_000)).unwrap();
+    std::thread::sleep(Duration::from_millis(150));
+    let consumed_before = sink.consumed_frames();
+    assert!(consumed_before > 0);
+
+    match sink.recover() {
+        Ok(()) => {}
+        // The default device changed format between open and recover; nothing to assert.
+        Err(DeviceSinkError::FormatChanged { .. }) => return,
+        Err(error) => panic!("recover failed: {error:?}"),
+    }
+    assert_eq!(sink.recoveries(), 1);
+    assert!(!sink.is_failed());
+    assert_eq!(sink.buffered_frames(), 0, "recovery must empty the queue");
+
+    sink.write(&silence(&sink, 4_000)).unwrap();
+    std::thread::sleep(Duration::from_millis(150));
+    assert!(
+        sink.consumed_frames() > consumed_before,
+        "the reopened stream never pulled audio"
+    );
+}
+#[test]
 fn player_streams_a_real_clip_to_the_device() {
     let Some(mut sink) = open(48_000 * 2) else {
         return;
