@@ -21,6 +21,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod autosave;
+#[cfg(feature = "bush-preview")]
+mod bush_adapter;
 mod commands;
 mod error_reporting;
 mod export;

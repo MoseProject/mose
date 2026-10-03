@@ -33,3 +33,10 @@ ureq = "3"
 # Channel primitives only (no task runtime) -- same "sync"-only feature set crates/ui pins, per
 # CLAUDE.md's "background work is plain std::thread::spawn, not tokio tasks" convention.
 tokio = { version = "1", features = ["sync"] }
+# Bush, the standalone native preview engine (spec/matrix/bush.md). Optional so release builds do
+# not carry wgpu/cpal until the adapter is chosen; see spec/architecture/bush-adapter-rfc.md.
+bush = { path = "../../../crates/bush", optional = true, features = ["gpu", "cpal"] }
+
+[features]
+# Plays the preview through Bush instead of GStreamer (selected at runtime, off by default).
+bush-preview = ["dep:bush"]
