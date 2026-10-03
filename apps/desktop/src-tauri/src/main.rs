@@ -31,6 +31,8 @@ mod preview_engine;
 mod protocol;
 mod state;
 mod telemetry;
+#[cfg(test)]
+mod testing;
 
 use std::sync::Arc;
 

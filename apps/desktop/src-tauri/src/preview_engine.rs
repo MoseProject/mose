@@ -85,6 +85,19 @@ impl PreviewEngine {
         }
     }
 
+    /// An engine with no playback thread behind it: the receiver hands back every command a
+    /// test's code under test sent, so assertions can read them in order.
+    #[cfg(test)]
+    pub(crate) fn detached() -> (Self, mpsc::Receiver<Command>) {
+        let (tx, rx) = mpsc::channel();
+        let engine = Self {
+            tx,
+            latest: Arc::new(Mutex::new(None)),
+            playhead_bits: Arc::new(AtomicU64::new(0f64.to_bits())),
+        };
+        (engine, rx)
+    }
+
     pub fn set_content(&self, project: Project) {
         let _ = self.tx.send(Command::Content {
             project: Box::new(project),
