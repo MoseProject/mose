@@ -15,7 +15,7 @@ use super::*;
 
 /// One temporary queue directory shared by every test that goes through `queue_dir()`: the
 /// override is a process-wide environment variable, so it is set once and never changed.
-fn shared_queue_dir() -> &'static PathBuf {
+pub(crate) fn shared_queue_dir() -> &'static PathBuf {
     static DIR: OnceLock<PathBuf> = OnceLock::new();
     DIR.get_or_init(|| {
         let dir =
@@ -27,12 +27,12 @@ fn shared_queue_dir() -> &'static PathBuf {
 }
 
 /// The shared queue directory is process-wide, so the tests that use it take turns.
-fn shared_lock() -> std::sync::MutexGuard<'static, ()> {
+pub(crate) fn shared_lock() -> std::sync::MutexGuard<'static, ()> {
     static LOCK: Mutex<()> = Mutex::new(());
     LOCK.lock().unwrap_or_else(|poison| poison.into_inner())
 }
 
-fn temp_dir(name: &str) -> PathBuf {
+pub(crate) fn temp_dir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("oca_desktop_er_{name}_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -435,11 +435,11 @@ fn the_delivery_worker_delivers_the_queue_then_new_reports_and_keeps_failures() 
     delete_all_queued_in(dir);
 }
 
-fn crash_file(dir: &Path, timestamp: u64, body: &str) {
+pub(crate) fn crash_file(dir: &Path, timestamp: u64, body: &str) {
     std::fs::write(dir.join(format!("crash_{timestamp}.txt")), body).unwrap();
 }
 
-const CRASH_BODY: &str =
+pub(crate) const CRASH_BODY: &str =
     "oca v1.2.3 crash report\nlocation: src/main.rs:10\nmessage: boom\nbacktrace:\nframe 1\nframe 2\n";
 
 #[test]

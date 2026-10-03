@@ -628,4 +628,4 @@ pub fn send_crash_once(crash: &PendingCrashReview) {
 
 #[cfg(test)]
 #[path = "error_reporting/error_reporting_test.rs"]
-mod tests;
+pub(crate) mod tests;

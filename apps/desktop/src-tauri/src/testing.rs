@@ -34,7 +34,6 @@ fn isolate_user_dirs() {
         std::fs::create_dir_all(&root).expect("creating the scratch root");
         std::env::set_var("APPDATA", &root);
         std::env::set_var("HOME", &root);
-        std::env::set_var("OCA_ERROR_QUEUE_DIR", root.join("error-queue"));
         std::env::remove_var("OCA_SENTRY_DSN");
     });
 }

@@ -136,3 +136,7 @@ pub fn get_queued_report_count() -> usize {
 pub fn delete_queued_reports() {
     error_reporting::delete_all_queued();
 }
+
+#[cfg(test)]
+#[path = "error_reporting_test.rs"]
+mod tests;
