@@ -61,22 +61,143 @@ fn rnd(x: f32) -> f32 {
     return floor(x + 0.5);
 }
 
-fn blend_channel(mode: u32, backdrop: f32, source: f32) -> f32 {
-    switch mode {
-        case 1u: { return backdrop * source; }
-        case 2u: { return backdrop + source - backdrop * source; }
-        case 3u: {
-            if (backdrop <= 0.5) {
-                return 2.0 * backdrop * source;
-            }
-            return 1.0 - 2.0 * (1.0 - backdrop) * (1.0 - source);
-        }
-        case 4u: { return min(backdrop, source); }
-        case 5u: { return max(backdrop, source); }
-        case 6u: { return min(backdrop + source, 1.0); }
-        case 7u: { return abs(backdrop - source); }
-        default: { return source; }
+@group(0) @binding(4) var<storage, read> softlight: array<u32>;
+
+fn clip255(value: i32) -> u32 {
+    return u32(clamp(value, 0, 255));
+}
+
+fn burn_i(a: i32, b: i32) -> i32 {
+    if (a == 0) {
+        return a;
     }
+    return max(0, 255 - ((255 - b) << 8u) / a);
+}
+
+fn dodge_i(a: i32, b: i32) -> i32 {
+    if (a == 255) {
+        return a;
+    }
+    return min(255, (b << 8u) / (255 - a));
+}
+
+fn mul_i(scale: i32, a: i32, b: i32) -> i32 {
+    return scale * (a * b / 255);
+}
+
+fn scr_i(scale: i32, a: i32, b: i32) -> i32 {
+    return 255 - scale * ((255 - a) * (255 - b) / 255);
+}
+
+// FFmpeg 8-bit blend functions (see blend8.rs): a is the blended layer, b the backdrop.
+fn blend_int(mode: u32, au: u32, bu: u32) -> u32 {
+    let a = i32(au);
+    let b = i32(bu);
+    switch mode {
+        case 1u: { return u32(a * b / 255); }
+        case 2u: { return u32(255 - (255 - a) * (255 - b) / 255); }
+        case 4u: { return min(au, bu); }
+        case 5u: { return max(au, bu); }
+        case 6u: { return clip255(a + b); }
+        case 7u: { return u32(abs(a - b)); }
+        case 3u: {
+            if (a < 128) { return clip255(mul_i(2, b, a)); }
+            return clip255(scr_i(2, b, a));
+        }
+        case 8u: { return au & bu; }
+        case 9u: { return u32((a + b) / 2); }
+        case 10u: { return clip255(burn_i(a, b)); }
+        case 11u: { return clip255(a - b + 128); }
+        case 12u: {
+            if (b == 0) { return 255u; }
+            return clip255(255 * a / b);
+        }
+        case 13u: { return clip255(dodge_i(a, b)); }
+        case 14u: { return clip255(a + b - 2 * a * b / 255); }
+        case 15u: {
+            if (b < 128) { return clip255(mul_i(2, a, b)); }
+            return clip255(scr_i(2, a, b));
+        }
+        case 16u: { return u32(255 - abs(255 - a - b)); }
+        case 17u: { return au | bu; }
+        case 18u: { return u32(min(a, b) - max(a, b) + 255); }
+        case 19u: {
+            if (b < 128) { return clip255(min(a, 2 * b)); }
+            return clip255(max(a, 2 * (b - 128)));
+        }
+        case 20u: {
+            if (b == 255) { return 255u; }
+            return clip255(min(a * a / (255 - b), 255));
+        }
+        case 21u: { return (softlight[(bu * 256u + au) / 4u] >> (((bu * 256u + au) % 4u) * 8u)) & 255u; }
+        case 22u: { return clip255(a - b); }
+        case 23u: {
+            if (a < 128) { return clip255(burn_i(2 * a, b)); }
+            return clip255(dodge_i(2 * (a - 128), b));
+        }
+        case 24u: { return au ^ bu; }
+        case 25u: {
+            if (a >= 255 - b) { return 255u; }
+            return 0u;
+        }
+        case 26u: {
+            if (b < 128) { return clip255(b + 2 * a - 255); }
+            return clip255(b + 2 * (a - 128));
+        }
+        case 27u: {
+            if (a == 255) { return 255u; }
+            return clip255(min(b * b / (255 - a), 255));
+        }
+        case 28u: { return clip255(a + b - 128); }
+        case 29u: {
+            let value = (a - 128) * b;
+            // Floor division by 32 (WGSL division truncates toward zero).
+            let remainder = ((value % 32) + 32) % 32;
+            return clip255((value - remainder) / 32 + 128);
+        }
+        case 30u: {
+            if (a == 0) { return 0u; }
+            return clip255(255 - min((255 - b) * (255 - b) / a, 255));
+        }
+        case 31u: {
+            if (b == 0) { return 0u; }
+            return clip255(255 - min((255 - a) * (255 - a) / b, 255));
+        }
+        case 32u: { return u32(abs(255 - a - b)); }
+        case 33u: {
+            if (a > b) {
+                if (b == 255) { return 0u; }
+                return clip255(min((a - b) * 255 / (255 - b), 255));
+            }
+            if (b == 0) { return 0u; }
+            return clip255(min((b - a) * 255 / b, 255));
+        }
+        case 34u: { return u32(floor(sqrt(f32(a * b)) + 0.5)); }
+        case 35u: {
+            if (a == 0 && b == 0) { return 0u; }
+            return u32(2 * a * b / (a + b));
+        }
+        case 36u: { return u32((255 - a - b) & 255); }
+        case 37u: { return u32((254 - a - b) & 255); }
+        case 38u: {
+            let pi = 3.14159265358979;
+            let value = 255.0 * (0.5 - 0.25 * cos(pi * f32(a) / 255.0) - 0.25 * cos(pi * f32(b) / 255.0));
+            return clip255(i32(floor(value + 0.5)));
+        }
+        case 39u: {
+            if (a < 128) { return clip255(2 * a * b / 255); }
+            if (a == 255) { return 255u; }
+            return clip255(min(b * 255 / (2 * (255 - a)), 255));
+        }
+        default: { return au; }
+    }
+}
+
+fn blend_any(mode: u32, backdrop: f32, source: f32, backdrop_byte: f32, source_byte: f32) -> f32 {
+    if (mode == 0u) {
+        return source;
+    }
+    return f32(blend_int(mode, u32(source_byte), u32(backdrop_byte))) / 255.0;
 }
 
 fn lut_at(r: u32, g: u32, b: u32) -> vec3<f32> {
@@ -237,9 +358,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         let source_colour = rgb_bytes / 255.0;
         let backdrop_colour = backdrop_bytes.xyz / 255.0;
         var blended: vec3<f32>;
-        blended.x = blend_channel(p.blend, backdrop_colour.x, source_colour.x);
-        blended.y = blend_channel(p.blend, backdrop_colour.y, source_colour.y);
-        blended.z = blend_channel(p.blend, backdrop_colour.z, source_colour.z);
+        blended.x = blend_any(p.blend, backdrop_colour.x, source_colour.x, backdrop_bytes.x, rgb_bytes.x);
+        blended.y = blend_any(p.blend, backdrop_colour.y, source_colour.y, backdrop_bytes.y, rgb_bytes.y);
+        blended.z = blend_any(p.blend, backdrop_colour.z, source_colour.z, backdrop_bytes.z, rgb_bytes.z);
         let premultiplied = source_alpha * (1.0 - backdrop_alpha) * source_colour
             + source_alpha * backdrop_alpha * blended
             + (1.0 - source_alpha) * backdrop_alpha * backdrop_colour;

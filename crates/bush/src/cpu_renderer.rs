@@ -14,27 +14,141 @@ pub enum BlendMode {
     Lighten,
     Add,
     Difference,
+    And,
+    Average,
+    Burn,
+    GrainExtract,
+    Divide,
+    Dodge,
+    Exclusion,
+    HardLight,
+    Negation,
+    Or,
+    Phoenix,
+    PinLight,
+    Reflect,
+    SoftLight,
+    Subtract,
+    VividLight,
+    Xor,
+    HardMix,
+    LinearLight,
+    Glow,
+    GrainMerge,
+    Multiply128,
+    Heat,
+    Freeze,
+    Extremity,
+    SoftDifference,
+    Geometric,
+    Harmonic,
+    Bleach,
+    Stain,
+    Interpolate,
+    HardOverlay,
 }
 
 impl BlendMode {
-    /// Blends one colour channel; both operands are in `0.0..=1.0`.
-    fn channel(self, backdrop: f32, source: f32) -> f32 {
+    /// Every mode, in FFmpeg order (the same 40 as the core timeline enum).
+    pub const ALL: [Self; 40] = [
+        Self::Normal,
+        Self::Multiply,
+        Self::Screen,
+        Self::Overlay,
+        Self::Darken,
+        Self::Lighten,
+        Self::Add,
+        Self::Difference,
+        Self::And,
+        Self::Average,
+        Self::Burn,
+        Self::GrainExtract,
+        Self::Divide,
+        Self::Dodge,
+        Self::Exclusion,
+        Self::HardLight,
+        Self::Negation,
+        Self::Or,
+        Self::Phoenix,
+        Self::PinLight,
+        Self::Reflect,
+        Self::SoftLight,
+        Self::Subtract,
+        Self::VividLight,
+        Self::Xor,
+        Self::HardMix,
+        Self::LinearLight,
+        Self::Glow,
+        Self::GrainMerge,
+        Self::Multiply128,
+        Self::Heat,
+        Self::Freeze,
+        Self::Extremity,
+        Self::SoftDifference,
+        Self::Geometric,
+        Self::Harmonic,
+        Self::Bleach,
+        Self::Stain,
+        Self::Interpolate,
+        Self::HardOverlay,
+    ];
+
+    /// The name FFmpeg `blend=all_mode=` uses for this mode; `Normal` has no blend function.
+    pub const fn ffmpeg_name(self) -> &'static str {
         match self {
-            Self::Normal => source,
-            Self::Multiply => backdrop * source,
-            Self::Screen => backdrop + source - backdrop * source,
-            Self::Overlay => {
-                if backdrop <= 0.5 {
-                    2.0 * backdrop * source
-                } else {
-                    1.0 - 2.0 * (1.0 - backdrop) * (1.0 - source)
-                }
-            }
-            Self::Darken => backdrop.min(source),
-            Self::Lighten => backdrop.max(source),
-            Self::Add => (backdrop + source).min(1.0),
-            Self::Difference => (backdrop - source).abs(),
+            Self::Normal => "normal",
+            Self::Multiply => "multiply",
+            Self::Screen => "screen",
+            Self::Overlay => "overlay",
+            Self::Darken => "darken",
+            Self::Lighten => "lighten",
+            Self::Add => "addition",
+            Self::Difference => "difference",
+            Self::And => "and",
+            Self::Average => "average",
+            Self::Burn => "burn",
+            Self::GrainExtract => "grainextract",
+            Self::Divide => "divide",
+            Self::Dodge => "dodge",
+            Self::Exclusion => "exclusion",
+            Self::HardLight => "hardlight",
+            Self::Negation => "negation",
+            Self::Or => "or",
+            Self::Phoenix => "phoenix",
+            Self::PinLight => "pinlight",
+            Self::Reflect => "reflect",
+            Self::SoftLight => "softlight",
+            Self::Subtract => "subtract",
+            Self::VividLight => "vividlight",
+            Self::Xor => "xor",
+            Self::HardMix => "hardmix",
+            Self::LinearLight => "linearlight",
+            Self::Glow => "glow",
+            Self::GrainMerge => "grainmerge",
+            Self::Multiply128 => "multiply128",
+            Self::Heat => "heat",
+            Self::Freeze => "freeze",
+            Self::Extremity => "extremity",
+            Self::SoftDifference => "softdifference",
+            Self::Geometric => "geometric",
+            Self::Harmonic => "harmonic",
+            Self::Bleach => "bleach",
+            Self::Stain => "stain",
+            Self::Interpolate => "interpolate",
+            Self::HardOverlay => "hardoverlay",
         }
+    }
+
+    /// Blends one colour channel; both operands are in `0.0..=1.0`. Every mode except `Normal`
+    /// uses FFmpeg 8-bit integer arithmetic (see `blend8.rs`), so a preview of opaque pixels
+    /// equals the exported pixels.
+    fn channel(self, backdrop: f32, source: f32) -> f32 {
+        if crate::blend8::uses_integer_domain(self) {
+            let a = (source * 255.0).round() as u8;
+            let b = (backdrop * 255.0).round() as u8;
+            return f32::from(crate::blend8::blend8(self, a, b)) / 255.0;
+        }
+        source
     }
 }
 

@@ -33,7 +33,13 @@ the real default device.
 
 ## Compositing (CPU reference, `cpu_renderer.rs`, `layer_mods.rs`)
 
-- [x] Normal/multiply/screen/overlay/darken/lighten/add/difference blends (W3C formulas, exact).
+- [x] All 40 core blend modes (`BlendMode::ALL`) computed with FFmpeg 8-bit integer arithmetic,
+      so a preview of opaque pixels equals the export. Verified against tables measured from a
+      real FFmpeg build (CRC goldens for 37 modes bit-exact, `interpolate` within 1 level on 0.16 %
+      of input pairs, `hardoverlay` one pair; a live-ffmpeg test re-measures when `ffmpeg` is on
+      PATH) and the GPU shader reproduces every table. `softlight` is a measured 64 KB table.
+      Note: FFmpeg `overlay` keys on the blended layer and `hardlight` on the backdrop (the
+      reverse of Photoshop), and Bush follows FFmpeg because the export does.
 - [x] Scale, rotation, crop, placement by top-left corner; nearest sampling.
 - [x] Horizontal/vertical flip, sepia, and keyframes on brightness, contrast, saturation and the
       crop window (CPU and GPU parity tested).

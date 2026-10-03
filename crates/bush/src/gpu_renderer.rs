@@ -52,6 +52,7 @@ pub struct GpuRenderer {
     canvas: Option<Canvas>,
     layer_buffers: Vec<LayerBuffers>,
     empty_lut: wgpu::Buffer,
+    softlight: wgpu::Buffer,
 }
 
 impl GpuRenderer {
@@ -101,6 +102,7 @@ impl GpuRenderer {
                 storage(1, true),
                 storage(2, false),
                 storage(3, true),
+                storage(4, true),
             ],
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -121,6 +123,11 @@ impl GpuRenderer {
             contents: &[0u8; 16],
             usage: wgpu::BufferUsages::STORAGE,
         });
+        let softlight = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("bush-softlight"),
+            contents: crate::blend8::softlight_table(),
+            usage: wgpu::BufferUsages::STORAGE,
+        });
         Ok(Self {
             device,
             queue,
@@ -131,6 +138,7 @@ impl GpuRenderer {
             canvas: None,
             layer_buffers: Vec::new(),
             empty_lut,
+            softlight,
         })
     }
 
@@ -224,6 +232,38 @@ fn blend_code(mode: BlendMode) -> u32 {
         BlendMode::Lighten => 5,
         BlendMode::Add => 6,
         BlendMode::Difference => 7,
+        BlendMode::And => 8,
+        BlendMode::Average => 9,
+        BlendMode::Burn => 10,
+        BlendMode::GrainExtract => 11,
+        BlendMode::Divide => 12,
+        BlendMode::Dodge => 13,
+        BlendMode::Exclusion => 14,
+        BlendMode::HardLight => 15,
+        BlendMode::Negation => 16,
+        BlendMode::Or => 17,
+        BlendMode::Phoenix => 18,
+        BlendMode::PinLight => 19,
+        BlendMode::Reflect => 20,
+        BlendMode::SoftLight => 21,
+        BlendMode::Subtract => 22,
+        BlendMode::VividLight => 23,
+        BlendMode::Xor => 24,
+        BlendMode::HardMix => 25,
+        BlendMode::LinearLight => 26,
+        BlendMode::Glow => 27,
+        BlendMode::GrainMerge => 28,
+        BlendMode::Multiply128 => 29,
+        BlendMode::Heat => 30,
+        BlendMode::Freeze => 31,
+        BlendMode::Extremity => 32,
+        BlendMode::SoftDifference => 33,
+        BlendMode::Geometric => 34,
+        BlendMode::Harmonic => 35,
+        BlendMode::Bleach => 36,
+        BlendMode::Stain => 37,
+        BlendMode::Interpolate => 38,
+        BlendMode::HardOverlay => 39,
     }
 }
 
@@ -404,6 +444,10 @@ impl Renderer for GpuRenderer {
                     wgpu::BindGroupEntry {
                         binding: 3,
                         resource: lut.as_ref().unwrap_or(&self.empty_lut).as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: self.softlight.as_entire_binding(),
                     },
                 ],
             });

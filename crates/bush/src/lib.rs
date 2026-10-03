@@ -8,6 +8,7 @@ mod audio_block;
 mod audio_mixer;
 mod audio_playback;
 mod audio_source;
+mod blend8;
 mod blur;
 mod byte_cache;
 mod cpu_renderer;

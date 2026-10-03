@@ -501,3 +501,36 @@ fn flips_match_the_reference_alone_and_with_other_transforms() {
         assert_parity(label, &comparison, 255, 0.01);
     }
 }
+
+#[test]
+fn gpu_reproduces_every_blend_mode_table() {
+    let Some(mut gpu) = gpu(1 << 24) else { return };
+    let mut source_pixels = Vec::new();
+    let mut backdrop_pixels = Vec::new();
+    for y in 0..256u32 {
+        for x in 0..256u32 {
+            source_pixels.extend_from_slice(&[x as u8, x as u8, x as u8, 255]);
+            backdrop_pixels.extend_from_slice(&[y as u8, y as u8, y as u8, 255]);
+        }
+    }
+    let source = VideoFrame::new(PixelFormat::Rgba8, 256, 256, 1024, 0.0, source_pixels).unwrap();
+    let backdrop =
+        VideoFrame::new(PixelFormat::Rgba8, 256, 256, 1024, 0.0, backdrop_pixels).unwrap();
+    for mode in BlendMode::ALL {
+        let mut top = LayerFrame::new(&source);
+        top.blend = mode;
+        let comparison = compare(&mut gpu, 256, 256, &[LayerFrame::new(&backdrop), top]);
+        // Integer modes are exact; the two float-evaluated ones may differ by one level where
+        // CPU and GPU round a cosine or square root differently.
+        let (max_difference, max_fraction) = match mode {
+            BlendMode::Interpolate | BlendMode::Geometric => (1, 0.005),
+            _ => (0, 0.0),
+        };
+        assert_parity(
+            mode.ffmpeg_name(),
+            &comparison,
+            max_difference,
+            max_fraction,
+        );
+    }
+}

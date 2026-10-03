@@ -63,8 +63,8 @@ small, but none exists today, and the adapter must not paper over them:
    curve time map in `Contributor::source_time_at` and in the audio stretcher.
 3. ~~`flipped_h`~~ **done**: `LayerTransform::flip_x`/`flip_y` (CPU and WGSL, byte-exact parity).
 4. ~~`Sepia`~~ **done**: `LayerEffects::sepia` (classic matrix, mix 0..1, CPU and WGSL).
-5. **Blend modes beyond the eight in Bush**: enumerate the core modes actually used by presets and
-   add the missing separable ones, or restrict the UI.
+5. ~~Blend modes beyond the eight in Bush~~ **done**: all 40 core modes exist
+   (`BlendMode::ALL`, `ffmpeg_name()`), bit-exact against FFmpeg `blend` (see the matrix).
 6. **Audio master clock.** `Player` advances video from an injected clock; with audio it must
    follow `DeviceSink::consumed_frames` so video drops or repeats frames to stay in sync.
    This needs the long-run drift measurement listed as open in the matrix.
