@@ -636,3 +636,20 @@ fn render_and_sink_failures_convert_into_player_errors() {
         AudioPlayerError::Sink(_)
     ));
 }
+
+#[test]
+fn a_cancelled_stretched_render_returns_nothing() {
+    let cancelled = AtomicBool::new(true);
+    let scene = scene(vec![clip(
+        1,
+        true,
+        Placement {
+            speed: 2.0,
+            ..Placement::default()
+        },
+    )]);
+    assert!(renderer()
+        .render(&scene, 0, 1024, &cancelled)
+        .unwrap()
+        .is_none());
+}
