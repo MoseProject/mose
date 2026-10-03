@@ -40,6 +40,13 @@ fetch('http://oca.localhost/frame/' + Date.now())
 """
 
 
+# Width in percent of each meter bar (PreviewPanel.tsx square-roots the linear peak).
+METER_WIDTHS = """
+return Array.from(document.querySelectorAll('.meter > div'))
+  .map(bar => parseFloat(bar.style.width) || 0);
+"""
+
+
 def latest_frame(driver):
     return driver.execute_async_script(FETCH_FRAME)
 
@@ -97,15 +104,19 @@ def test_bush_plays_a_clip_and_reacts_to_seeks(oca_driver):
     time.sleep(0.3)
     invoke(oca_driver, "preview_set_playing", {"playing": True})
     seen = set()
+    meter_widths = []
     deadline = time.monotonic() + float(os.environ.get("OCA_BUSH_E2E_PLAY_SECS", "0.8"))
     started = time.monotonic()
     while time.monotonic() < deadline:
         frame = latest_frame(oca_driver)
         if frame:
             seen.add(frame[1])
+        meter_widths.extend(oca_driver.execute_script(METER_WIDTHS))
         time.sleep(0.005)
     elapsed = time.monotonic() - started
     screenshot(oca_driver, "bush_03_playing.png")
     invoke(oca_driver, "preview_set_playing", {"playing": False})
     print(f"distinct frames while playing: {len(seen)} in {elapsed:.2f} s ({len(seen) / elapsed:.1f}/s)")
     assert len(seen) >= 4, f"playback delivered only {len(seen)} distinct frames"
+    print(f"audio meter: max bar width {max(meter_widths, default=0.0):.1f}% over {len(meter_widths)} samples")
+    assert max(meter_widths, default=0.0) > 0.0, "the audio level meter never moved while playing"
