@@ -4,10 +4,11 @@ Status: **approved 2026-10-03, first slices implemented behind the `bush-preview
 (off by default; GStreamer stays the default engine). Per
 [preview-engine-replacement.md](preview-engine-replacement.md) the adapter was a separate
 approval point. Implemented: the timeline-to-scene mapper, the playback backend (seek, step,
-play with audio-master clock, device recovery, text and shape overlays, LUT), runtime selection
-with `OCA_PREVIEW_ENGINE=bush`, the audio level meter, and an e2e test that drives the real app.
-Still open: the `compare` tool, a persisted preference instead of the environment variable, the
-intensity curves (gap 9, provisional constants) and removal of GStreamer. Measured results are in
+play with audio-master clock, device recovery, text and shape overlays, LUT), engine selection
+(saved `preview_engine` preference with a picker on the preferences screen, or
+`OCA_PREVIEW_ENGINE=bush`), the audio level meter, and e2e tests that drive the real app.
+Still open: the `compare` tool, the intensity curves (gap 9, provisional constants), a
+GStreamer baseline and removal of GStreamer. Measured results are in
 [../matrix/bush.md](../matrix/bush.md). The rest of this document is the original proposal and
 is still the plan for what remains.
 

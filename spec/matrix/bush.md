@@ -154,8 +154,11 @@ selects it and `OCA_BUSH_RENDERER=gpu` lets it composite on the GPU. Design and 
       `e2e/out/`): clip loads, seeks, plays with audio, text and shape overlays composite.
 - [x] Audio level meter: `AudioPlayer::peaks_at` keeps each rendered block's peak and the
       backend reads the block the device is playing (e2e checks the bars move while playing).
-- [ ] `compare` tool, persisted preference, GStreamer baseline run (the GStreamer preview
-      produced no frame in this machine's e2e environment, so no side-by-side numbers yet).
+- [x] Persisted `preview_engine` preference (prefs screen picker, shown only in builds with the
+      feature, applied at the next start; `OCA_PREVIEW_ENGINE` overrides it). e2e:
+      `test_preview_engine_pref.py`.
+- [ ] `compare` tool and a GStreamer baseline run (the GStreamer preview produced no frame in
+      this machine's e2e environment, so no side-by-side numbers yet).
 
 Measured in the app, 1080p H.264 with AAC audio, 20 s clip, Bush CPU renderer (GPU renderer
 identical on this single-layer scene):
