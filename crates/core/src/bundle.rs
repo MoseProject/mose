@@ -105,39 +105,17 @@ pub fn validate_bundled_resources(root: &Path) -> Result<(), MissingBundleResour
     }
 }
 
-/// Configures subprocess and GStreamer lookup paths before either runtime is initialized.
-/// Missing directories are ignored so source-tree development keeps using system SDKs.
+/// Puts the bundled helper tools on `PATH` before any subprocess is started. A missing
+/// directory is ignored so source-tree development keeps using system SDKs.
 pub fn configure_bundled_runtime() {
     let Some(resources) = bundled_resources_dir() else {
         return;
     };
     let runtime = resources.join("runtime");
-    let gst_plugins = runtime.join("gstreamer").join("lib").join("gstreamer-1.0");
-    if gst_plugins.is_dir() {
-        std::env::set_var("GST_PLUGIN_PATH_1_0", &gst_plugins);
-        std::env::set_var("GST_PLUGIN_SYSTEM_PATH_1_0", &gst_plugins);
-    }
-    let scanner_name = if cfg!(windows) {
-        "gst-plugin-scanner.exe"
-    } else {
-        "gst-plugin-scanner"
-    };
-    let scanner = runtime
-        .join("gstreamer")
-        .join("libexec")
-        .join("gstreamer-1.0")
-        .join(scanner_name);
-    if scanner.is_file() {
-        std::env::set_var("GST_PLUGIN_SCANNER_1_0", scanner);
-    }
 
     let tools = runtime.join("bin");
-    let gst_bin = runtime.join("gstreamer").join("bin");
-    if tools.is_dir() || gst_bin.is_dir() {
-        let mut paths = [tools, gst_bin]
-            .into_iter()
-            .filter(|path| path.is_dir())
-            .collect::<Vec<_>>();
+    if tools.is_dir() {
+        let mut paths = vec![tools];
         if let Some(existing) = std::env::var_os("PATH") {
             paths.extend(std::env::split_paths(&existing));
         }
