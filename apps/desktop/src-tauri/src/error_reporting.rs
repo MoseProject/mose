@@ -92,8 +92,14 @@ pub fn apply_consent_change(consent: ErrorReportingConsent) -> Option<Arc<dyn Er
 // bounded on-disk queue
 // ---------------------------------------------------------------------------
 
+/// Overrides the queue directory (tests point it at a temporary folder).
+const QUEUE_DIR_ENV_VAR: &str = "OCA_ERROR_QUEUE_DIR";
+
 fn queue_dir() -> PathBuf {
-    crate::platform_log_dir().join("error_reports")
+    match std::env::var_os(QUEUE_DIR_ENV_VAR) {
+        Some(dir) => PathBuf::from(dir),
+        None => crate::platform_log_dir().join("error_reports"),
+    }
 }
 
 fn envelope_path(dir: &std::path::Path, event_id: &str) -> PathBuf {
@@ -408,12 +414,21 @@ const INLINE_RETRY_BACKOFFS: [Duration; 3] = [
 ];
 
 fn deliver_with_retry(sender: &dyn EnvelopeSender, envelope: &QueueEnvelope) -> bool {
+    deliver_with_backoffs(sender, envelope, &INLINE_RETRY_BACKOFFS)
+}
+
+/// [`deliver_with_retry`] with explicit waits between attempts.
+fn deliver_with_backoffs(
+    sender: &dyn EnvelopeSender,
+    envelope: &QueueEnvelope,
+    backoffs: &[Duration],
+) -> bool {
     match sender.send(envelope) {
         DeliveryOutcome::Delivered | DeliveryOutcome::PermanentFailure => return true,
         DeliveryOutcome::NotConfigured => return false,
         DeliveryOutcome::TransientFailure => {}
     }
-    for backoff in INLINE_RETRY_BACKOFFS {
+    for backoff in backoffs.iter().copied() {
         std::thread::sleep(backoff);
         match sender.send(envelope) {
             DeliveryOutcome::Delivered | DeliveryOutcome::PermanentFailure => return true,
