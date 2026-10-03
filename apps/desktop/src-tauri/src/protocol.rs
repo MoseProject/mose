@@ -112,3 +112,65 @@ fn not_found() -> Response<Vec<u8>> {
     *response.status_mut() = StatusCode::NOT_FOUND;
     response
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fixture() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../crates/core/tests/fixtures/video.mp4")
+    }
+
+    #[test]
+    fn a_missing_image_is_a_404_without_a_body() {
+        let response = jpeg_or_not_found(None);
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert!(response.body().is_empty());
+        assert_eq!(not_found().status(), StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn an_image_is_served_as_an_uncached_jpeg_open_to_the_webview() {
+        let response = jpeg_or_not_found(Some(Arc::new(vec![0xFF, 0xD8, 0xFF])));
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()[header::CONTENT_TYPE], "image/jpeg");
+        assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+        assert_eq!(response.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN], "*");
+        assert_eq!(response.body(), &vec![0xFF, 0xD8, 0xFF]);
+    }
+
+    #[test]
+    fn thumbnails_are_extracted_once_and_failures_are_remembered() {
+        let cache = ThumbnailCache::default();
+
+        let jpeg = cache
+            .get_or_extract(&fixture())
+            .expect("a thumbnail of the fixture");
+        assert_eq!(
+            &jpeg[..2],
+            &[0xFF, 0xD8],
+            "a JPEG starts with its SOI marker"
+        );
+        // The second request returns the very same bytes from the cache.
+        let again = cache.get_or_extract(&fixture()).unwrap();
+        assert!(Arc::ptr_eq(&jpeg, &again));
+
+        let missing = Path::new("definitely-missing.mp4");
+        assert!(cache.get_or_extract(missing).is_none());
+        assert!(
+            cache.get_or_extract(missing).is_none(),
+            "the miss is cached too"
+        );
+        assert!(cache.entries.lock().unwrap().contains_key(missing));
+    }
+
+    #[test]
+    fn a_file_that_is_not_media_has_no_thumbnail() {
+        let path =
+            std::env::temp_dir().join(format!("oca_desktop_thumb_{}.bin", std::process::id()));
+        std::fs::write(&path, b"not a video").unwrap();
+        assert!(extract_thumbnail(&path).is_none());
+        let _ = std::fs::remove_file(&path);
+        assert!(extract_thumbnail(Path::new("missing.mp4")).is_none());
+    }
+}
