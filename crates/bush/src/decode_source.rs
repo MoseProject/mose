@@ -1,10 +1,10 @@
 //! Bush's standalone adapter over avbridge's worker-owned FFmpeg decode session.
 
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
-use avbridge::{DecodeError, DecodePolicy, DecodeSession};
+use avbridge::{Advance, DecodeError, DecodePolicy, DecodeSession, FrameSlot};
 
 use crate::{PixelFormat, VideoFrame, VideoFrameError};
 
@@ -37,8 +37,9 @@ pub struct DecodeSource {
     info: SourceInfo,
     /// The frame most recently returned by [`Self::frame_at`].
     current: Option<Arc<VideoFrame>>,
-    /// A decoded frame past `current`, kept so the next forward request does not lose it.
-    lookahead: Option<VideoFrame>,
+    /// Timestamp of a frame the native session decoded past `current` but has not converted
+    /// yet; it is converted only if a later request presents it.
+    pending_timestamp: Option<f64>,
 }
 
 /// Decode failure or invalid native frame data rejected at Bush's boundary.
@@ -83,7 +84,7 @@ impl DecodeSource {
                 hardware: info.hardware,
             },
             current: None,
-            lookahead: None,
+            pending_timestamp: None,
         })
     }
 
@@ -94,7 +95,7 @@ impl DecodeSource {
     /// Seeks to the key unit at or before `timestamp_secs`.
     pub fn seek(&mut self, timestamp_secs: f64) -> Result<(), DecodeSourceError> {
         self.current = None;
-        self.lookahead = None;
+        self.pending_timestamp = None;
         self.session.seek(timestamp_secs)?;
         Ok(())
     }
@@ -104,10 +105,9 @@ impl DecodeSource {
         &mut self,
         cancel: &AtomicBool,
     ) -> Result<Option<VideoFrame>, DecodeSourceError> {
+        // The native session returns a frame it decoded ahead before decoding a new one.
         self.current = None;
-        if let Some(frame) = self.lookahead.take() {
-            return Ok(Some(frame));
-        }
+        self.pending_timestamp = None;
         self.decode_next(cancel)
     }
 
@@ -134,8 +134,9 @@ impl DecodeSource {
     /// Frame-accurate access: the frame presented at `target_secs`, i.e. the last decoded frame
     /// with `timestamp <= target`. A target shortly after the previously presented frame is
     /// reached by decoding forward (and a repeated target is free); anything else seeks to the
-    /// preceding key unit and decodes forward, discarding intermediate frames. If the first
-    /// frame is already past the target (a target before the stream start) it is returned.
+    /// preceding key unit and decodes forward. Intermediate frames are decoded but never
+    /// converted to RGBA: only the frame that is finally presented is. If the first frame is
+    /// already past the target (a target before the stream start) it is returned.
     /// `Ok(None)` means cancelled, or the stream ended before producing any frame.
     pub fn frame_at(
         &mut self,
@@ -150,34 +151,64 @@ impl DecodeSource {
             self.seek(target_secs)?;
         }
 
+        // Whether the native newest frame is a candidate (timestamp <= target) rather than an
+        // overshoot or nothing.
+        let mut newest_is_candidate = false;
         for _ in 0..MAX_SEEK_SEARCH_FRAMES {
-            let next = match self.lookahead.take() {
-                Some(frame) => frame,
-                None => match self.decode_next(cancel)? {
-                    Some(frame) => frame,
-                    None => {
-                        return Ok(if cancel.load(Ordering::Acquire) {
-                            None
-                        } else {
-                            self.current.clone()
-                        });
+            let timestamp = match self.pending_timestamp {
+                Some(timestamp) => timestamp,
+                None => match self.session.advance(cancel)? {
+                    Advance::Frame(timestamp) => timestamp,
+                    Advance::Cancelled => return Ok(None),
+                    Advance::EndOfStream => {
+                        // The newest decoded frame is the last one: present it if it was a
+                        // candidate, else whatever was presented before.
+                        if newest_is_candidate {
+                            self.current = self.take(FrameSlot::Newest)?;
+                        }
+                        return Ok(self.current.clone());
                     }
                 },
             };
-            if next.timestamp_secs() > target_secs + TIMESTAMP_EPSILON_SECS {
-                if self.current.is_none() {
+            if timestamp > target_secs + TIMESTAMP_EPSILON_SECS {
+                // The newest frame overshoots, so the frame before it is the answer.
+                if self.session.has_held_frame() {
+                    self.current = self.take(FrameSlot::Held)?;
+                    self.pending_timestamp = Some(timestamp);
+                } else if self.current.is_some() {
+                    self.pending_timestamp = Some(timestamp);
+                } else {
                     // Target precedes the first decodable frame: present that frame.
-                    let first = Arc::new(next);
-                    self.current = Some(Arc::clone(&first));
-                    return Ok(Some(first));
+                    self.current = self.take(FrameSlot::Newest)?;
+                    self.pending_timestamp = None;
                 }
-                self.lookahead = Some(next);
                 return Ok(self.current.clone());
             }
-            self.current = Some(Arc::new(next));
+            // A candidate: leave it unconverted and look at the next frame.
+            self.pending_timestamp = None;
+            newest_is_candidate = true;
         }
         Err(DecodeSourceError::SeekSearchLimit {
             limit: MAX_SEEK_SEARCH_FRAMES,
         })
+    }
+
+    /// Converts one native frame slot into a shared validated frame.
+    fn take(&mut self, slot: FrameSlot) -> Result<Option<Arc<VideoFrame>>, DecodeSourceError> {
+        self.session
+            .take_rgba(slot)?
+            .map(|frame| {
+                VideoFrame::new(
+                    PixelFormat::Rgba8,
+                    frame.width,
+                    frame.height,
+                    frame.stride_bytes,
+                    frame.timestamp_secs,
+                    frame.pixels,
+                )
+                .map(Arc::new)
+                .map_err(Into::into)
+            })
+            .transpose()
     }
 }
