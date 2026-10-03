@@ -111,6 +111,12 @@ impl AudioStack {
         self.anchor_secs = secs;
     }
 
+    /// Linear peaks of the block the device is playing right now, for the level meter.
+    fn peaks(&self) -> (f32, f32) {
+        let frame = (self.position_secs() * f64::from(self.sink.sample_rate())) as u64;
+        self.player.peaks_at(frame)
+    }
+
     /// Timeline seconds the device has actually played.
     fn position_secs(&self) -> f64 {
         let played = self
@@ -453,6 +459,10 @@ pub fn run(
         }
 
         if dirty && (!playing || last_tick.elapsed() >= TICK_INTERVAL) {
+            let (peak_l, peak_r) = audio
+                .as_ref()
+                .filter(|_| playing)
+                .map_or((0.0, 0.0), AudioStack::peaks);
             let tick = PreviewTick {
                 frame_seq: frame_seq.wrapping_add(encoded),
                 playhead_secs: f64::from_bits(playhead_bits.load(Ordering::Acquire)),
@@ -460,8 +470,8 @@ pub fn run(
                 has_clip: scene.is_some(),
                 available,
                 error: error.clone(),
-                peak_l: 0.0,
-                peak_r: 0.0,
+                peak_l,
+                peak_r,
             };
             if let Err(error) = app.emit(PREVIEW_TICK, tick) {
                 tracing::warn!(%error, "failed to emit preview tick");
