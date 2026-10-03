@@ -156,11 +156,8 @@ pub(crate) fn blend8(mode: BlendMode, a: u8, b: u8) -> u8 {
         BlendMode::Extremity => (255 - ia - ib).unsigned_abs() as u8,
         BlendMode::SoftDifference => {
             if ia > ib {
-                if ib == 255 {
-                    0
-                } else {
-                    clip(((ia - ib) * 255 / (255 - ib)).min(255))
-                }
+                // `ia <= 255`, so `ib < 255` here and the divisor is never zero.
+                clip(((ia - ib) * 255 / (255 - ib)).min(255))
             } else if ib == 0 {
                 0
             } else {
