@@ -40,7 +40,12 @@ function YoutubeDownloadButton() {
         void unlisten.then((stop) => stop());
       }
     });
-    void run(api.downloadYoutube(url, format, quality)).catch(() => setDownloading(false));
+    // `run` swallows the rejection and resolves undefined, so success is marked explicitly.
+    void run(api.downloadYoutube(url, format, quality).then(() => true)).then((started) => {
+      if (started) return;
+      setDownloading(false);
+      void unlisten.then((stop) => stop());
+    });
   };
 
   if (!open) {
