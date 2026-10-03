@@ -12,6 +12,7 @@ mod decode_source;
 mod engine;
 mod frame_mailbox;
 mod latest_intent;
+mod player;
 mod preview_worker;
 mod scene;
 mod scene_scheduler;
@@ -30,6 +31,7 @@ pub use decode_source::{DecodeSource, DecodeSourceError, SourceInfo, MAX_SEEK_SE
 pub use engine::{Engine, EngineConfig, EngineError, EngineEvent, EngineRequest, EngineStats};
 pub use frame_mailbox::{FrameMailbox, PublishedFrame};
 pub use latest_intent::{Generation, LatestIntent, PendingIntent};
+pub use player::{Player, PlayerError, PlayerEvent};
 pub use preview_worker::{
     PreviewCommand, PreviewWorker, WorkerFailure, WorkerOperation, WorkerSubmitError,
 };
