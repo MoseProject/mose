@@ -93,6 +93,10 @@ pub struct Placement {
     pub blur_sigma: f32,
     /// Unsharp-mask amount, 0.0..=4.0 (0 is off).
     pub sharpen: f32,
+    /// Glitch strength, 0.0..=1.0 (0 is off): channel split plus displaced bands.
+    pub glitch: f32,
+    /// Shake amplitude in canvas pixels, 0.0..=200.0 (0 is off): smooth positional jitter.
+    pub shake: f32,
 }
 
 impl Default for Placement {
@@ -114,6 +118,8 @@ impl Default for Placement {
             deflicker: None,
             blur_sigma: 0.0,
             sharpen: 0.0,
+            glitch: 0.0,
+            shake: 0.0,
         }
     }
 }
@@ -137,6 +143,8 @@ impl Placement {
             || !self.fade.is_valid()
             || !(0.0..=crate::MAX_BLUR_SIGMA).contains(&self.blur_sigma)
             || !(0.0..=4.0).contains(&self.sharpen)
+            || !(0.0..=1.0).contains(&self.glitch)
+            || !(0.0..=200.0).contains(&self.shake)
             || self
                 .deflicker
                 .is_some_and(|weight| !(weight > 0.0 && weight <= 1.0))
@@ -243,6 +251,10 @@ impl Contributor {
         }
         if let Some(track) = &animation.rotation_deg {
             resolved.transform.rotation_deg = track.value_at(local);
+        }
+        if resolved.shake > 0.0 {
+            resolved.x += crate::shake_offset(resolved.shake, playhead_secs, 1).round() as i32;
+            resolved.y += crate::shake_offset(resolved.shake, playhead_secs, 2).round() as i32;
         }
         resolved.opacity *= self
             .placement

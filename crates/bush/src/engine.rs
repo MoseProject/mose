@@ -549,7 +549,7 @@ impl EngineThread {
             // Neighbourhood effects work on the frame before compositing, so the CPU and GPU
             // renderers share them.
             let frame = if matches!(contributor.content, ContributorContent::Media(_))
-                && (placement.blur_sigma > 0.0 || placement.sharpen > 0.0)
+                && (placement.blur_sigma > 0.0 || placement.sharpen > 0.0 || placement.glitch > 0.0)
             {
                 let mut processed = frame;
                 if placement.blur_sigma > 0.0 {
@@ -558,6 +558,9 @@ impl EngineThread {
                 if placement.sharpen > 0.0 {
                     processed =
                         Arc::new(crate::sharpen(&processed, placement.sharpen, SHARPEN_SIGMA));
+                }
+                if placement.glitch > 0.0 {
+                    processed = Arc::new(crate::glitch(&processed, placement.glitch, playhead));
                 }
                 processed
             } else {

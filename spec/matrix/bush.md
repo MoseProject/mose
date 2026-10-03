@@ -57,7 +57,10 @@ the real default device.
       frame before compositing so CPU and GPU renderers share them. Measured: blur 18 ms at
       1080p and 77 ms at 4K, sharpen 34 ms / 148 ms on the CPU (a GPU blur is future work).
       Tests: `blur_test`, `engine_test` (blur and sharpen through the engine, cache reuse).
-- [ ] Stabilization (needs motion history), glitch, shake, slide/zoom transitions
+- [x] Glitch (`Placement::glitch`: channel split plus displaced bands, 12 steps per second) and
+      shake (`Placement::shake`: smooth value-noise jitter in canvas pixels). Both are pure
+      functions of clip time, so paused frames never flicker. Tests: `glitch_test`.
+- [ ] Stabilization (needs motion history), slide/zoom transitions
       (expressible today with keyframes, no dedicated effect), background-removal matte inputs.
       None of these exist in the scene model, so none can be silently ignored.
 - [ ] Text/shape rasterization is the caller job by design: Bush composites caller-supplied

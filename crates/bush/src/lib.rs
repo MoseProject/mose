@@ -17,6 +17,7 @@ mod deflicker;
 mod device_sink;
 mod engine;
 mod frame_mailbox;
+mod glitch;
 #[cfg(feature = "gpu")]
 mod gpu_renderer;
 mod keyframes;
@@ -54,6 +55,7 @@ pub use engine::{
     RendererChoice, MAX_CANVAS_PIXELS,
 };
 pub use frame_mailbox::{FrameMailbox, PublishedFrame};
+pub use glitch::{glitch, shake_offset};
 #[cfg(feature = "gpu")]
 pub use gpu_renderer::{GpuError, GpuRenderer};
 pub use keyframes::{Animation, Easing, Fade, Keyframe, KeyframeError, KeyframeTrack};
