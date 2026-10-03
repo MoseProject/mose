@@ -163,3 +163,7 @@ fn apply_detected_scene_cuts(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "scene_detection_test.rs"]
+mod tests;
