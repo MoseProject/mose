@@ -1,0 +1,307 @@
+// @vitest-environment jsdom
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { t } from "../i18n";
+import type { SessionView, YoutubeDownloadEvent } from "../types";
+
+let emitDownload: (event: YoutubeDownloadEvent) => void = () => {};
+const stopListening = vi.fn();
+
+vi.mock("../ipc", () => ({
+  api: {
+    importMediaDialog: vi.fn().mockResolvedValue(undefined),
+    importMedia: vi.fn().mockResolvedValue(undefined),
+    generateTts: vi.fn().mockResolvedValue(undefined),
+    listSoundLibrary: vi.fn(),
+    isYtDlpAvailable: vi.fn(),
+    downloadYoutube: vi.fn().mockResolvedValue(undefined),
+    cancelYoutubeDownload: vi.fn().mockResolvedValue(undefined),
+    addAssetToTimeline: vi.fn().mockResolvedValue(undefined),
+    transcribeAsset: vi.fn().mockResolvedValue(undefined),
+    toggleFavorite: vi.fn().mockResolvedValue(undefined),
+  },
+  onYoutubeDownload: vi.fn((handler: (event: YoutubeDownloadEvent) => void) => {
+    emitDownload = handler;
+    return Promise.resolve(stopListening);
+  }),
+  thumbnailUrl: (id: number) => `thumb://${id}`,
+}));
+
+const { MediaLibrary } = await import("./MediaLibrary");
+const { api } = await import("../ipc");
+const { assetDragStore, transcribingAssetIdStore } = await import("../store");
+
+const asset = (overrides: Record<string, unknown> = {}) => ({
+  id: 1,
+  kind: "Video",
+  file_name: "clip.mp4",
+  source_path: "C:/media/clip.mp4",
+  duration_secs: 65,
+  resolution: [1920, 1080],
+  fps: 59.94,
+  loudness: { integrated_lufs: -18.04 },
+  has_audio: true,
+  favorited: false,
+  ...overrides,
+});
+
+const sessionWith = (assets: unknown[]) =>
+  ({ project: { media_library: assets } }) as unknown as SessionView;
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(api.isYtDlpAvailable).mockResolvedValue(true);
+  vi.mocked(api.listSoundLibrary).mockResolvedValue([]);
+  transcribingAssetIdStore.set(null);
+  assetDragStore.set(null);
+});
+afterEach(() => cleanup());
+
+describe("media library", () => {
+  it("shows an empty state and imports through the dialog", () => {
+    render(<MediaLibrary session={sessionWith([])} />);
+    expect(screen.getByText(t("libraryEmpty"))).toBeTruthy();
+    fireEvent.click(screen.getAllByText(t("importFiles"))[0]);
+    expect(api.importMediaDialog).toHaveBeenCalled();
+  });
+
+  it("describes a video asset with its metadata and thumbnail", () => {
+    const { container } = render(<MediaLibrary session={sessionWith([asset()])} />);
+    expect(screen.getByText("clip.mp4")).toBeTruthy();
+    expect(screen.getByText(/1920×1080 · 60 fps · -18\.0 LUFS/)).toBeTruthy();
+    expect(container.querySelector("img")!.getAttribute("src")).toBe("thumb://1");
+  });
+
+  it("falls back to a glyph when the thumbnail fails, and for audio assets", () => {
+    const { container } = render(
+      <MediaLibrary
+        session={sessionWith([
+          asset(),
+          asset({ id: 2, kind: "Audio", file_name: "song.mp3", resolution: null, fps: null, loudness: null }),
+        ])}
+      />,
+    );
+    fireEvent.error(container.querySelector("img")!);
+    expect(container.querySelector("img")).toBeNull();
+    expect(screen.getByText("▶")).toBeTruthy();
+    expect(screen.getByText("♪")).toBeTruthy();
+    expect(screen.getByText(t("analyzing"), { exact: false })).toBeTruthy();
+  });
+
+  it("adds an asset to the timeline on double click and toggles its favorite", () => {
+    render(<MediaLibrary session={sessionWith([asset()])} />);
+    fireEvent.doubleClick(screen.getByText("clip.mp4"));
+    expect(api.addAssetToTimeline).toHaveBeenCalledWith(1);
+    fireEvent.click(screen.getByTitle(t("favorite")));
+    expect(api.toggleFavorite).toHaveBeenCalledWith(1);
+    cleanup();
+
+    render(<MediaLibrary session={sessionWith([asset({ favorited: true })])} />);
+    expect(screen.getByTitle(t("favorite")).textContent).toBe("★");
+  });
+
+  it("transcribes assets with audio, locking the button while one runs", () => {
+    render(<MediaLibrary session={sessionWith([asset(), asset({ id: 2, has_audio: false })])} />);
+    expect(screen.getAllByTitle(t("transcribe"))).toHaveLength(1);
+    fireEvent.click(screen.getByTitle(t("transcribe")));
+    expect(api.transcribeAsset).toHaveBeenCalledWith(1);
+    cleanup();
+
+    transcribingAssetIdStore.set(1);
+    render(<MediaLibrary session={sessionWith([asset()])} />);
+    const busy = screen.getByTitle(t("transcribing")) as HTMLButtonElement;
+    expect(busy.textContent).toBe("…");
+    expect(busy.disabled).toBe(true);
+    cleanup();
+
+    transcribingAssetIdStore.set(9);
+    render(<MediaLibrary session={sessionWith([asset()])} />);
+    expect((screen.getByTitle(t("transcribe")) as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe("asset dragging", () => {
+  const press = (target: Element, x: number, y: number, button = 0) =>
+    fireEvent(target, new MouseEvent("pointerdown", { bubbles: true, button, clientX: x, clientY: y }));
+  const move = (x: number, y: number) =>
+    fireEvent(window, new MouseEvent("pointermove", { clientX: x, clientY: y }));
+
+  it("starts a drag only after the pointer travels past the threshold, then clears it", async () => {
+    render(<MediaLibrary session={sessionWith([asset()])} />);
+    press(screen.getByText("clip.mp4"), 10, 10);
+    move(12, 11);
+    expect(assetDragStore.get()).toBeNull();
+
+    move(40, 30);
+    expect(assetDragStore.get()).toEqual({ assetId: 1, clientX: 40, clientY: 30 });
+    move(50, 30);
+    expect(assetDragStore.get()).toMatchObject({ clientX: 50 });
+
+    fireEvent(window, new MouseEvent("pointerup"));
+    await waitFor(() => expect(assetDragStore.get()).toBeNull());
+    move(90, 90);
+    expect(assetDragStore.get()).toBeNull();
+  });
+
+  it("ignores presses other than the primary button", () => {
+    render(<MediaLibrary session={sessionWith([asset()])} />);
+    press(screen.getByText("clip.mp4"), 10, 10, 2);
+    move(100, 100);
+    expect(assetDragStore.get()).toBeNull();
+  });
+
+  it("does not start a drag from the row's buttons", () => {
+    render(<MediaLibrary session={sessionWith([asset()])} />);
+    press(screen.getByTitle(t("favorite")), 10, 10);
+    move(100, 100);
+    expect(assetDragStore.get()).toBeNull();
+  });
+});
+
+describe("text to speech", () => {
+  it("generates speech from trimmed non-empty text and closes", () => {
+    render(<MediaLibrary session={sessionWith([])} />);
+    fireEvent.click(screen.getByText(t("ttsButton")));
+    const generate = screen.getByText(t("ttsGenerate")) as HTMLButtonElement;
+    expect(generate.disabled).toBe(true);
+    fireEvent.change(screen.getByPlaceholderText(t("ttsPlaceholder")), { target: { value: "hello" } });
+    fireEvent.click(generate);
+    expect(api.generateTts).toHaveBeenCalledWith("hello");
+    expect(screen.queryByRole("heading")).toBeNull();
+  });
+
+  it("closes from Cancel and from the backdrop", () => {
+    const { container } = render(<MediaLibrary session={sessionWith([])} />);
+    fireEvent.click(screen.getByText(t("ttsButton")));
+    fireEvent.click(screen.getByText(t("cancel")));
+    expect(screen.queryByRole("heading")).toBeNull();
+
+    fireEvent.click(screen.getByText(t("ttsButton")));
+    fireEvent.click(container.querySelector(".modal-overlay")!);
+    expect(screen.queryByRole("heading")).toBeNull();
+  });
+});
+
+describe("sound library", () => {
+  it("explains an empty library and toggles closed", async () => {
+    const { container } = render(<MediaLibrary session={sessionWith([])} />);
+    fireEvent.click(screen.getByText(t("soundLibrary")));
+    expect(await screen.findByText(t("soundLibraryEmpty"))).toBeTruthy();
+    fireEvent.click(container.querySelector(".modal-overlay")!);
+    expect(screen.queryByText(t("soundLibraryEmpty"))).toBeNull();
+
+    fireEvent.click(screen.getByText(t("soundLibrary")));
+    await screen.findByText(t("soundLibraryEmpty"));
+    fireEvent.click(screen.getAllByText(t("soundLibrary"))[0]);
+    expect(screen.queryByText(t("soundLibraryEmpty"))).toBeNull();
+  });
+
+  it("lists tracks and imports the chosen one", async () => {
+    vi.mocked(api.listSoundLibrary).mockResolvedValue([
+      { name: "Boom", path: "C:/s/boom.wav", durationSecs: 2, category: "sfx" },
+      { name: "Theme", path: "C:/s/theme.mp3", durationSecs: 61, category: "music" },
+    ]);
+    render(<MediaLibrary session={sessionWith([])} />);
+    fireEvent.click(screen.getByText(t("soundLibrary")));
+    expect(await screen.findByText(/🔊 Boom/)).toBeTruthy();
+    expect(screen.getByText(/🎵 Theme/)).toBeTruthy();
+
+    const imports = screen.getAllByText(t("importFiles"));
+    fireEvent.click(imports[imports.length - 1]);
+    expect(api.importMedia).toHaveBeenCalledWith(["C:/s/theme.mp3"]);
+    expect(screen.queryByText(/Boom/)).toBeNull();
+  });
+
+  it("treats a failed listing as empty", async () => {
+    vi.mocked(api.listSoundLibrary).mockRejectedValue(new Error("no folder"));
+    render(<MediaLibrary session={sessionWith([])} />);
+    fireEvent.click(screen.getByText(t("soundLibrary")));
+    expect(await screen.findByText(t("soundLibraryEmpty"))).toBeTruthy();
+  });
+});
+
+describe("YouTube download", () => {
+  const open = async () => {
+    const view = render(<MediaLibrary session={sessionWith([])} />);
+    fireEvent.click(screen.getByText(t("youtubeDownload")));
+    await waitFor(() => expect(api.isYtDlpAvailable).toHaveBeenCalled());
+    return view;
+  };
+  const type = (value: string) =>
+    fireEvent.change(screen.getByPlaceholderText(t("youtubeDownloadUrlHint")), { target: { value } });
+  const startButton = () => screen.getByText(t("youtubeDownloadStart")) as HTMLButtonElement;
+
+  it("warns when the download tool is missing", async () => {
+    vi.mocked(api.isYtDlpAvailable).mockResolvedValue(false);
+    await open();
+    expect(await screen.findByText(t("youtubeDownloadToolMissing"))).toBeTruthy();
+  });
+
+  it("needs a URL, and switching format resets the quality", async () => {
+    await open();
+    expect(startButton().disabled).toBe(true);
+    const [format, quality] = screen.getAllByRole("combobox") as HTMLSelectElement[];
+    expect([...quality.options].map((o) => o.value)).toEqual(["best", "1080", "720", "480", "360"]);
+    fireEvent.change(format, { target: { value: "mp3" } });
+    expect(quality.value).toBe("192");
+    expect([...quality.options].map((o) => o.value)).toEqual(["320", "192", "128"]);
+    fireEvent.change(quality, { target: { value: "128" } });
+    fireEvent.change(format, { target: { value: "mp4" } });
+    expect(quality.value).toBe("best");
+  });
+
+  it("keeps Start disabled for a blank URL", async () => {
+    await open();
+    type("   ");
+    expect(startButton().disabled).toBe(true);
+    expect(api.downloadYoutube).not.toHaveBeenCalled();
+  });
+
+  it("downloads, shows progress and closes when done", async () => {
+    await open();
+    type("https://youtu.be/x");
+    fireEvent.click(startButton());
+    expect(api.downloadYoutube).toHaveBeenCalledWith("https://youtu.be/x", "mp4", "best");
+
+    act(() => emitDownload({ type: "progress", fraction: 0.5 }));
+    expect((document.querySelector("progress") as HTMLProgressElement).value).toBe(0.5);
+    // The modal cannot be dismissed from the backdrop mid-download.
+    fireEvent.click(document.querySelector(".modal-overlay")!);
+    expect(screen.getByText(t("youtubeDownloadCancel"))).toBeTruthy();
+
+    act(() => emitDownload({ type: "done" }));
+    await waitFor(() => expect(stopListening).toHaveBeenCalled());
+    expect(screen.queryByPlaceholderText(t("youtubeDownloadUrlHint"))).toBeNull();
+  });
+
+  it("cancels a running download and reports a failed one", async () => {
+    await open();
+    type("https://youtu.be/x");
+    fireEvent.click(startButton());
+    fireEvent.click(screen.getByText(t("youtubeDownloadCancel")));
+    expect(api.cancelYoutubeDownload).toHaveBeenCalled();
+
+    act(() => emitDownload({ type: "failed", message: "403" }));
+    expect(await screen.findByText("403")).toBeTruthy();
+    expect(startButton()).toBeTruthy();
+    await waitFor(() => expect(stopListening).toHaveBeenCalled());
+  });
+
+  it("recovers when starting the download itself fails", async () => {
+    vi.mocked(api.downloadYoutube).mockRejectedValueOnce(new Error("spawn"));
+    await open();
+    type("https://youtu.be/x");
+    fireEvent.click(startButton());
+    await waitFor(() => expect(document.querySelector("progress")).toBeNull());
+  });
+
+  it("closes from Cancel and from the backdrop while idle", async () => {
+    const { container } = await open();
+    fireEvent.click(screen.getByText(t("cancel")));
+    expect(screen.queryByPlaceholderText(t("youtubeDownloadUrlHint"))).toBeNull();
+
+    fireEvent.click(screen.getByText(t("youtubeDownload")));
+    fireEvent.click(container.querySelector(".modal-overlay")!);
+    expect(screen.queryByPlaceholderText(t("youtubeDownloadUrlHint"))).toBeNull();
+  });
+});
