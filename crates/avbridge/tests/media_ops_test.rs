@@ -20,10 +20,10 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
 use avbridge::{
-    apply_privacy_blur, apply_shape_overlays, encode_matte_video, encode_timeline_export_multi,
-    generate_proxy, mix_audio_timeline, probe, remux_copy, version, AudioMixError, Canvas,
-    EncodeError, GpuEncoderPreference, PrivacyBlurError, ProxyError, RemuxError, ShapeSegment,
-    StreamKind, TextOverlayError,
+    apply_privacy_blur, apply_shape_overlays, apply_text_overlays, encode_matte_video,
+    encode_timeline_export_multi, generate_proxy, mix_audio_timeline, probe, remux_copy, version,
+    AudioMixError, Canvas, ClipSegment, EncodeError, EncodeOutcome, GpuEncoderPreference,
+    PrivacyBlurError, ProxyError, RemuxError, ShapeSegment, StreamKind, TextOverlayError,
 };
 
 fn fixture(name: &str) -> PathBuf {
@@ -189,5 +189,61 @@ fn empty_inputs_are_rejected_before_any_native_call() {
         mix_audio_timeline(&[], 1.0, &out, -14.0, &cancel),
         Err(AudioMixError::NoAudio)
     ));
+    assert!(!out.exists());
+}
+
+fn clip() -> ClipSegment {
+    ClipSegment {
+        source_path: fixture("video.mp4"),
+        source_in_secs: 0.0,
+        source_out_secs: 0.4,
+        gain_db: 0.0,
+        video_filter: String::new(),
+        frozen: false,
+        speed_factor: 1.0,
+        smooth_speed_ramp_end_factor: 0.0,
+        position_x_expr: String::new(),
+        position_y_expr: String::new(),
+        transition_in: 0,
+        transition_duration_secs: 0.3,
+        timeline_start_secs: 0.0,
+        mask_video_path: String::new(),
+        blend_mode: String::new(),
+        anchor_x: 0.5,
+        anchor_y: 0.5,
+    }
+}
+
+#[test]
+fn a_single_track_multi_export_delegates_to_the_plain_timeline_export() {
+    let out = temp("single-track.mp4");
+    let _ = std::fs::remove_file(&out);
+    let canvas = Canvas {
+        width: 320,
+        height: 240,
+        fps_num: 30,
+        fps_den: 1,
+        bit_rate_bps: 500_000,
+    };
+    let outcome = encode_timeline_export_multi(
+        &[vec![clip()]],
+        canvas,
+        &out,
+        -14.0,
+        GpuEncoderPreference::Auto,
+        &AtomicBool::new(false),
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, EncodeOutcome::Completed);
+    assert_eq!(probe(&out).unwrap().resolution, Some((320, 240)));
+    let _ = std::fs::remove_file(&out);
+}
+
+#[test]
+fn text_overlays_without_segments_are_a_no_op() {
+    let out = temp("no-text.mp4");
+    let _ = std::fs::remove_file(&out);
+    apply_text_overlays(&fixture("video.mp4"), &out, &[], 320, 240, 30, 1).unwrap();
     assert!(!out.exists());
 }
