@@ -104,6 +104,10 @@ pub struct Placement {
     /// counter-translated onto the smoothed camera path and zoomed by `STABILIZE_ZOOM` to hide
     /// the moving borders.
     pub stabilize: Option<f32>,
+    /// Stretch the cropped layer to fill the canvas (times `transform.scale_*`), centred, with
+    /// `x`/`y` as an offset from the centred position. Off keeps the decoded size and `x`/`y` as
+    /// the top-left corner. The decoded size can be a proxy's, so only the engine knows it.
+    pub fit_canvas: bool,
 }
 
 impl Default for Placement {
@@ -129,11 +133,37 @@ impl Default for Placement {
             glitch: 0.0,
             shake: 0.0,
             stabilize: None,
+            fit_canvas: false,
         }
     }
 }
 
 impl Placement {
+    /// Top-left corner and transform to composite a `frame_width` x `frame_height` source with:
+    /// unchanged unless `fit_canvas`, otherwise the cropped region stretched to the canvas.
+    pub(crate) fn layout_on(
+        &self,
+        canvas_width: u32,
+        canvas_height: u32,
+        frame_width: u32,
+        frame_height: u32,
+    ) -> (i32, i32, LayerTransform) {
+        if !self.fit_canvas {
+            return (self.x, self.y, self.transform);
+        }
+        let crop = self.transform.crop;
+        let cropped_width = (frame_width as f32 * crop.width).max(1.0);
+        let cropped_height = (frame_height as f32 * crop.height).max(1.0);
+        let mut transform = self.transform;
+        transform.scale_x = self.transform.scale_x * canvas_width as f32 / cropped_width;
+        transform.scale_y = self.transform.scale_y * canvas_height as f32 / cropped_height;
+        let drawn_width = self.transform.scale_x * canvas_width as f32;
+        let drawn_height = self.transform.scale_y * canvas_height as f32;
+        let x = ((canvas_width as f32 - drawn_width) / 2.0).round() as i32 + self.x;
+        let y = ((canvas_height as f32 - drawn_height) / 2.0).round() as i32 + self.y;
+        (x, y, transform)
+    }
+
     fn validate(&self) -> Result<(), SceneError> {
         let finite = self.timeline_start_secs.is_finite() && self.speed.is_finite();
         let window_ok = self

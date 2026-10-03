@@ -605,19 +605,27 @@ impl EngineThread {
 
         let layer_frames: Vec<LayerFrame<'_>> = layers
             .iter()
-            .map(|(frame, placement)| LayerFrame {
-                frame,
-                x: placement.x,
-                y: placement.y,
-                opacity: placement.opacity,
-                transform: placement.transform,
-                blend: placement.blend,
-                effects: LayerEffects {
-                    blur_sigma: placement.blur_sigma,
-                    sharpen: placement.sharpen,
-                    ..placement.effects
-                },
-                lut: placement.lut.as_deref(),
+            .map(|(frame, placement)| {
+                let (x, y, transform) = placement.layout_on(
+                    self.config.canvas_width,
+                    self.config.canvas_height,
+                    frame.width(),
+                    frame.height(),
+                );
+                LayerFrame {
+                    frame,
+                    x,
+                    y,
+                    opacity: placement.opacity,
+                    transform,
+                    blend: placement.blend,
+                    effects: LayerEffects {
+                        blur_sigma: placement.blur_sigma,
+                        sharpen: placement.sharpen,
+                        ..placement.effects
+                    },
+                    lut: placement.lut.as_deref(),
+                }
             })
             .collect();
         let mut result = self.renderer.render(
