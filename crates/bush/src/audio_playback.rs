@@ -212,14 +212,15 @@ impl AudioRenderer {
                 continue;
             };
             let placement = &contributor.placement;
-            let unit_speed = (placement.speed - 1.0).abs() <= f64::EPSILON;
-            if !unit_speed && !(MIN_SPEED..=MAX_SPEED).contains(&placement.speed) {
+            let ramp_end = placement.speed_ramp_end;
+            let unit_speed = (placement.speed - 1.0).abs() <= f64::EPSILON && ramp_end.is_none();
+            let supported = |speed: f64| (MIN_SPEED..=MAX_SPEED).contains(&speed);
+            if !unit_speed && !(supported(placement.speed) && ramp_end.is_none_or(supported)) {
                 return Err(AudioRenderError::UnsupportedSpeed(contributor.id));
             }
             let clip_start = (placement.timeline_start_secs * rate).round() as u64;
-            let clip_frames = ((source.range.out_secs - source.range.in_secs) / placement.speed
-                * rate)
-                .round() as u64;
+            let clip_frames =
+                (contributor.timeline_duration_secs().unwrap_or(0.0) * rate).round() as u64;
             let overlap_start = start_frame.max(clip_start);
             let overlap_end = window_end.min(clip_start + clip_frames);
             if overlap_start >= overlap_end {
@@ -240,19 +241,14 @@ impl AudioRenderer {
             } else {
                 // Continue the existing stretch only if this block follows the previous one.
                 let mut state = match self.stretchers.remove(&contributor.id) {
-                    Some(state)
-                        if state.next_frame == overlap_start
-                            && state.stretcher.speed() == placement.speed =>
-                    {
-                        state
-                    }
+                    Some(state) if state.next_frame == overlap_start => state,
                     _ => {
                         let mut stretcher =
                             TimeStretcher::new(placement.speed, usize::from(self.channels))
                                 .ok_or(AudioRenderError::UnsupportedSpeed(contributor.id))?;
+                        let local = (overlap_start - clip_start) as f64 / rate;
                         stretcher.reset(
-                            source_start as f64
-                                + (overlap_start - clip_start) as f64 * placement.speed,
+                            source_start as f64 + contributor.source_offset_at(local) * rate,
                         );
                         StretchState {
                             stretcher,
@@ -260,6 +256,9 @@ impl AudioRenderer {
                         }
                     }
                 };
+                // A speed ramp changes the stretch speed block by block.
+                let block_local = (overlap_start - clip_start) as f64 / rate;
+                state.stretcher.set_speed(contributor.speed_at(block_local));
                 let channels = usize::from(self.channels);
                 let source_audio = &mut self.sources[slot].1;
                 let mut failure: Option<AudioSourceError> = None;

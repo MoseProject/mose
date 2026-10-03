@@ -57,6 +57,16 @@ impl TimeStretcher {
         self.speed
     }
 
+    /// Changes the speed for following output (a speed ramp). `false` if outside the supported
+    /// range, in which case the speed is unchanged.
+    pub fn set_speed(&mut self, speed: f64) -> bool {
+        if !speed.is_finite() || !(MIN_SPEED..=MAX_SPEED).contains(&speed) {
+            return false;
+        }
+        self.speed = speed;
+        true
+    }
+
     /// Restarts at `source_frame` (a seek or a first block): all history is discarded.
     pub fn reset(&mut self, source_frame: f64) {
         self.analysis_position = source_frame;

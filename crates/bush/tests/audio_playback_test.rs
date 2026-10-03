@@ -368,3 +368,61 @@ fn slowed_clips_run_longer_than_their_source() {
         .unwrap();
     assert!(past_end.samples().iter().all(|sample| *sample == 0.0));
 }
+
+#[test]
+fn speed_ramped_clips_follow_the_integrated_duration() {
+    let cancel = AtomicBool::new(false);
+    // 0.9 s of source ramping 1x -> 2x: average 1.5x, so 0.6 s on the timeline (26460 frames).
+    let scene = scene(vec![clip(
+        1,
+        true,
+        Placement {
+            speed: 1.0,
+            speed_ramp_end: Some(2.0),
+            ..Placement::default()
+        },
+    )]);
+    let mut renderer = renderer();
+    let early = renderer.render(&scene, 0, 4096, &cancel).unwrap().unwrap();
+    assert!(peak(early.samples()) > 0.01);
+    let late = renderer
+        .render(&scene, 24_000, 2048, &cancel)
+        .unwrap()
+        .unwrap();
+    assert!(peak(late.samples()) > 0.001, "ramped clip ended too early");
+    let after = renderer
+        .render(&scene, 30_000, 2048, &cancel)
+        .unwrap()
+        .unwrap();
+    assert!(after.samples().iter().all(|sample| *sample == 0.0));
+
+    // Sequential blocks stay continuous through the changing speed.
+    let mut chunked = self::renderer();
+    let mut whole = self::renderer();
+    let single = whole.render(&scene, 0, 4096, &cancel).unwrap().unwrap();
+    let first = chunked.render(&scene, 0, 2048, &cancel).unwrap().unwrap();
+    let second = chunked
+        .render(&scene, 2048, 2048, &cancel)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        first.samples().len() + second.samples().len(),
+        single.samples().len()
+    );
+    assert_eq!(first.samples(), &single.samples()[..2048]);
+
+    // A ramp outside the supported speed range is an explicit error.
+    let too_fast = self::scene(vec![clip(
+        2,
+        true,
+        Placement {
+            speed: 1.0,
+            speed_ramp_end: Some(9.0),
+            ..Placement::default()
+        },
+    )]);
+    assert!(matches!(
+        renderer.render(&too_fast, 0, 1024, &cancel),
+        Err(AudioRenderError::UnsupportedSpeed(_))
+    ));
+}

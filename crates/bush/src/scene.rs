@@ -73,6 +73,9 @@ pub struct Placement {
     pub duration_secs: Option<f64>,
     /// Source seconds consumed per timeline second; `1.0` is normal speed.
     pub speed: f64,
+    /// When set, speed ramps linearly from `speed` at the clip start to this value at its end
+    /// (the timeline duration shortens or lengthens accordingly).
+    pub speed_ramp_end: Option<f64>,
     pub x: i32,
     pub y: i32,
     pub opacity: f32,
@@ -109,6 +112,7 @@ impl Default for Placement {
             timeline_start_secs: 0.0,
             duration_secs: None,
             speed: 1.0,
+            speed_ramp_end: None,
             x: 0,
             y: 0,
             opacity: 1.0,
@@ -138,6 +142,9 @@ impl Placement {
         if !finite
             || self.timeline_start_secs < 0.0
             || self.speed <= 0.0
+            || self
+                .speed_ramp_end
+                .is_some_and(|end| !end.is_finite() || end <= 0.0)
             || !window_ok
             || !self.opacity.is_finite()
             || !(0.0..=1.0).contains(&self.opacity)
@@ -229,7 +236,12 @@ impl Contributor {
     pub fn timeline_duration_secs(&self) -> Option<f64> {
         match &self.content {
             ContributorContent::Media(source) => {
-                Some((source.range.out_secs - source.range.in_secs) / self.placement.speed)
+                let length = source.range.out_secs - source.range.in_secs;
+                Some(match self.placement.speed_ramp_end {
+                    // Linear speed s0 -> s1 over T covers (s0 + s1) / 2 * T source seconds.
+                    Some(end) => 2.0 * length / (self.placement.speed + end),
+                    None => length / self.placement.speed,
+                })
             }
             ContributorContent::RasterOverlay(_) => self.placement.duration_secs,
         }
@@ -310,6 +322,29 @@ impl Contributor {
         }
     }
 
+    /// Source seconds consumed `local_secs` after the contributor starts (speed ramp included).
+    pub fn source_offset_at(&self, local_secs: f64) -> f64 {
+        let start_speed = self.placement.speed;
+        match (self.placement.speed_ramp_end, self.timeline_duration_secs()) {
+            (Some(end), Some(duration)) if duration > 0.0 => {
+                start_speed * local_secs
+                    + (end - start_speed) * local_secs * local_secs / (2.0 * duration)
+            }
+            _ => start_speed * local_secs,
+        }
+    }
+
+    /// Instantaneous playback speed `local_secs` after the contributor starts.
+    pub fn speed_at(&self, local_secs: f64) -> f64 {
+        match (self.placement.speed_ramp_end, self.timeline_duration_secs()) {
+            (Some(end), Some(duration)) if duration > 0.0 => {
+                self.placement.speed
+                    + (end - self.placement.speed) * (local_secs / duration).clamp(0.0, 1.0)
+            }
+            _ => self.placement.speed,
+        }
+    }
+
     /// Source time presented at `playhead_secs` for a media contributor active then.
     pub fn source_time_at(&self, playhead_secs: f64) -> Option<f64> {
         let ContributorContent::Media(source) = &self.content else {
@@ -318,7 +353,7 @@ impl Contributor {
         if !self.is_active_at(playhead_secs) {
             return None;
         }
-        let local = (playhead_secs - self.placement.timeline_start_secs) * self.placement.speed;
+        let local = self.source_offset_at(playhead_secs - self.placement.timeline_start_secs);
         Some((source.range.in_secs + local).min(source.range.out_secs))
     }
 }

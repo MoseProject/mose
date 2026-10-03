@@ -192,3 +192,58 @@ fn invalid_placement_is_rejected() {
         );
     }
 }
+
+#[test]
+fn speed_ramp_changes_duration_and_integrates_source_time() {
+    // 2 s of source ramping 1x -> 3x: average speed 2x, so it lasts 1 s on the timeline.
+    let mut contributor = media(1, 0, true, true);
+    contributor.content = ContributorContent::Media(MediaSource {
+        path: PathBuf::from("clip.mp4"),
+        range: SourceRange::new(0.0, 2.0).unwrap(),
+        version: Version(1),
+    });
+    contributor.placement = Placement {
+        speed: 1.0,
+        speed_ramp_end: Some(3.0),
+        ..Placement::default()
+    };
+
+    assert_eq!(contributor.timeline_duration_secs(), Some(1.0));
+    assert!(contributor.is_active_at(0.99));
+    assert!(!contributor.is_active_at(1.0));
+    // source(t) = t + t^2: 0 -> 0, 0.5 -> 0.75, 1.0 -> 2.0.
+    assert_eq!(contributor.source_offset_at(0.0), 0.0);
+    assert!((contributor.source_offset_at(0.5) - 0.75).abs() < 1e-12);
+    assert!((contributor.source_offset_at(1.0) - 2.0).abs() < 1e-12);
+    assert_eq!(contributor.source_time_at(0.5), Some(0.75));
+    assert_eq!(contributor.speed_at(0.0), 1.0);
+    assert_eq!(contributor.speed_at(0.5), 2.0);
+    assert_eq!(contributor.speed_at(1.0), 3.0);
+
+    // A ramp down lasts longer: 2 s at 3x -> 1x is also 1 s; 2 s at 1x -> 0.5x is 2.67 s.
+    contributor.placement.speed_ramp_end = Some(0.5);
+    let duration = contributor.timeline_duration_secs().unwrap();
+    assert!((duration - 2.0 * 2.0 / 1.5).abs() < 1e-12);
+    assert!((contributor.source_offset_at(duration) - 2.0).abs() < 1e-9);
+}
+
+#[test]
+fn constant_speed_is_unchanged_and_invalid_ramps_are_rejected() {
+    let mut contributor = media(1, 0, true, true);
+    contributor.placement = Placement {
+        speed: 2.0,
+        ..Placement::default()
+    };
+    assert_eq!(contributor.timeline_duration_secs(), Some(1.0));
+    assert_eq!(contributor.source_offset_at(0.25), 0.5);
+    assert_eq!(contributor.speed_at(0.9), 2.0);
+
+    for end in [0.0, -1.0, f64::NAN] {
+        let mut bad = media(1, 0, true, true);
+        bad.placement.speed_ramp_end = Some(end);
+        assert_eq!(
+            SceneSnapshot::new(SceneVersions::default(), vec![bad]).unwrap_err(),
+            SceneError::InvalidPlacement
+        );
+    }
+}
