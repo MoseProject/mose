@@ -87,8 +87,9 @@ pub enum Approximation {
     ScaleWithCropKeyframes,
     /// A slide or zoom transition is skipped because position or scale keyframes own that axis.
     TransitionIgnored,
-    /// Background-removal and privacy-blur mattes are not rendered.
-    Matte,
+    /// Background removal or privacy blur is on but its matte file is missing, so the clip
+    /// renders unmasked (the exporter degrades the same way).
+    MatteMissing,
 }
 
 /// Rasters Bush composites for the scene's overlay contributors, by contributor id.
@@ -249,6 +250,12 @@ pub fn map_timeline(
 ) -> Result<Mapped, SceneError> {
     let mut approximations = BTreeSet::new();
     let mut contributors = Vec::new();
+    // Like the exporter, an alpha matte only takes effect above the first video track: the
+    // background track never composites, so its alpha is discarded.
+    let first_video_track = timeline
+        .tracks
+        .iter()
+        .position(|track| track.kind == TrackKind::Video);
     for (index, track) in timeline
         .tracks
         .iter()
@@ -270,7 +277,9 @@ pub fn map_timeline(
             let Some(path) = resolver.source_path(asset) else {
                 continue;
             };
-            let Some(mapped) = map_clip(clip, canvas, resolver, &mut approximations) else {
+            let overlay = first_video_track.is_some_and(|first| index != first);
+            let Some(mapped) = map_clip(clip, canvas, overlay, resolver, &mut approximations)
+            else {
                 continue;
             };
             contributors.push(Contributor {
@@ -299,6 +308,7 @@ pub fn map_timeline(
 fn map_clip(
     clip: &ClipInstance,
     canvas: (u32, u32),
+    overlay: bool,
     resolver: &mut dyn SourceResolver,
     approximations: &mut BTreeSet<Approximation>,
 ) -> Option<MappedClip> {
@@ -437,8 +447,21 @@ fn map_clip(
             invert: false,
         }),
     };
-    if clip.background_removal_enabled || clip.privacy_blur_enabled {
-        approximations.insert(Approximation::Matte);
+    if clip.background_removal_enabled && overlay {
+        placement.alpha_matte = matte_source(&clip.background_removal_mask_path);
+        if placement.alpha_matte.is_none() {
+            approximations.insert(Approximation::MatteMissing);
+        }
+    }
+    if clip.privacy_blur_enabled {
+        placement.privacy_blur =
+            matte_source(&clip.privacy_blur_mask_path).map(|matte| PrivacyBlur {
+                matte,
+                sigma: clip.privacy_blur_sigma.clamp(0.1, MAX_BLUR_SIGMA),
+            });
+        if placement.privacy_blur.is_none() {
+            approximations.insert(Approximation::MatteMissing);
+        }
     }
     placement.effects = effects;
     placement.blend = blend_of(clip.blend_mode);
@@ -593,6 +616,28 @@ fn apply_transition(
         }
         TransitionType::None | TransitionType::HardCut => {}
     }
+}
+
+/// The matte video at `path`, versioned by its size and modification time so regenerating a
+/// matte in place invalidates frames cached from the old one; `None` when unset or missing.
+fn matte_source(path: &str) -> Option<MatteSource> {
+    if path.is_empty() {
+        return None;
+    }
+    let metadata = std::fs::metadata(path).ok().filter(|meta| meta.is_file())?;
+    let mut hasher = DefaultHasher::new();
+    path.hash(&mut hasher);
+    metadata.len().hash(&mut hasher);
+    metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|age| age.as_nanos())
+        .hash(&mut hasher);
+    Some(MatteSource {
+        path: PathBuf::from(path),
+        version: Version(hasher.finish()),
+    })
 }
 
 /// Gaussian sigma with the variance of the exporter's box blur: a box of radius `R` (whole
