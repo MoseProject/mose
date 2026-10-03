@@ -100,6 +100,16 @@ impl AudioSource {
         frames: usize,
         cancel: &AtomicBool,
     ) -> Result<Option<AudioBlock>, AudioSourceError> {
+        self.read_within(start_frame, frames, cancel, MAX_BLOCKS_PER_READ)
+    }
+
+    fn read_within(
+        &mut self,
+        start_frame: u64,
+        frames: usize,
+        cancel: &AtomicBool,
+        max_blocks: u32,
+    ) -> Result<Option<AudioBlock>, AudioSourceError> {
         if frames > self.max_read_frames {
             return Err(AudioSourceError::ReadTooLarge {
                 frames,
@@ -126,7 +136,7 @@ impl AudioSource {
         let mut blocks = 0;
         while !self.end_of_stream && (!self.positioned || self.decoded_end() < end) {
             blocks += 1;
-            if blocks > MAX_BLOCKS_PER_READ {
+            if blocks > max_blocks {
                 return Err(AudioSourceError::DecodeLimit);
             }
             match self.session.next_block(cancel)? {
@@ -219,6 +229,17 @@ mod tests {
         assert!(matches!(
             AudioSourceError::from(error),
             AudioSourceError::InvalidBlock(_)
+        ));
+    }
+
+    #[test]
+    fn a_read_that_needs_more_blocks_than_allowed_fails() {
+        let mut source = source();
+        let cancel = AtomicBool::new(false);
+        // Reaching the end of a clip takes more than zero blocks.
+        assert!(matches!(
+            source.read_within(0, 4096, &cancel, 0),
+            Err(AudioSourceError::DecodeLimit)
         ));
     }
 
