@@ -275,6 +275,8 @@ export interface PrefsView {
   outputFolder: string;
   autosaveMinutes: number;
   previewHardwareDecode: boolean;
+  /** "gstreamer" (or empty) or "bush"; read at startup. */
+  previewEngine: string;
   recentProjectPaths: string[];
   savedLayerTemplates: LayerTemplate[];
   whisperModelPath: string;
