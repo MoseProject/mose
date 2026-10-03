@@ -121,3 +121,87 @@ fn nms_collapses_overlapping_boxes() {
     approx(kept[0].score, 0.9);
     approx(kept[1].score, 0.85);
 }
+
+#[test]
+fn zero_area_boxes_never_overlap() {
+    let empty = FaceBox {
+        x: 0.5,
+        y: 0.5,
+        w: 0.0,
+        h: 0.0,
+        score: 0.9,
+    };
+    assert_eq!(empty.iou(empty), 0.0);
+}
+
+#[test]
+fn preprocessing_normalises_and_resamples_to_the_model_grid() {
+    // A 2x2 frame: the model grid samples it nearest-neighbour into 320x240 channel planes.
+    let mut rgba = Vec::new();
+    for value in [0u8, 127, 255, 64] {
+        rgba.extend_from_slice(&[value, value, value, 255]);
+    }
+    let chw = preprocess(&rgba, 2, 2);
+    let plane = (MODEL_INPUT_WIDTH * MODEL_INPUT_HEIGHT) as usize;
+    assert_eq!(chw.len(), 3 * plane);
+    // Top-left of the grid maps to source pixel (0, 0) = 0, so (0 - 127) / 128.
+    assert!((chw[0] - (-127.0 / 128.0)).abs() < 1e-6);
+    // The last column of the first row maps to source pixel (1, 0) = 127 -> 0.
+    assert_eq!(chw[(MODEL_INPUT_WIDTH - 1) as usize], 0.0);
+    // The bottom-right of every channel plane is source pixel (1, 1) = 64.
+    let last = plane - 1;
+    for channel in 0..3 {
+        assert!((chw[channel * plane + last] - (64.0 - 127.0) / 128.0).abs() < 1e-6);
+    }
+}
+
+#[test]
+fn the_two_model_outputs_are_told_apart_by_their_last_dimension() {
+    let scores = (vec![1, 3, 2], vec![0.0; 6]);
+    let boxes = (vec![1, 3, 4], vec![0.0; 12]);
+    let (anchors, s, b) = select_outputs(vec![boxes.clone(), scores.clone()]).unwrap();
+    assert_eq!((anchors, s.len(), b.len()), (3, 6, 12));
+    // Tensors of any other shape are ignored, and both outputs must be present.
+    let other = (vec![1, 5], vec![0.0; 5]);
+    assert!(select_outputs(vec![other.clone(), boxes]).is_err());
+    assert!(select_outputs(vec![other, scores]).is_err());
+    let error = select_outputs(Vec::new()).unwrap_err();
+    assert!(error.to_string().contains("no scores output"));
+}
+
+#[test]
+fn only_confident_non_degenerate_non_overlapping_faces_are_decoded() {
+    // Four anchors: a face, a weak face, a degenerate box and a heavy overlap of the first.
+    let scores = [
+        0.0, 0.95, //
+        0.0, 0.2, //
+        0.0, 0.9, //
+        0.0, 0.8,
+    ];
+    let boxes = [
+        0.1, 0.1, 0.5, 0.5, //
+        0.1, 0.1, 0.5, 0.5, //
+        0.6, 0.6, 0.6, 0.9, //
+        0.12, 0.12, 0.5, 0.5,
+    ];
+    let faces = decode_faces(4, &scores, &boxes);
+    assert_eq!(faces.len(), 1);
+    assert_eq!(faces[0].score, 0.95);
+    assert!((faces[0].w - 0.4).abs() < 1e-6);
+
+    // Corners outside the frame are clamped to it.
+    let clamped = decode_faces(1, &[0.0, 0.9], &[-0.5, -0.5, 1.5, 1.5]);
+    assert_eq!(
+        (clamped[0].x, clamped[0].y, clamped[0].w, clamped[0].h),
+        (0.0, 0.0, 1.0, 1.0)
+    );
+}
+
+#[test]
+fn errors_are_readable_and_a_missing_model_fails_to_load() {
+    assert!(ReframeError::Onnx("bad".into()).to_string().contains("bad"));
+    let io = ReframeError::Io(std::io::Error::other("disk"));
+    assert!(io.to_string().contains("disk"));
+    let result = detect_faces(std::path::Path::new("missing-model.onnx"), &[0; 16], 2, 2);
+    assert!(matches!(result, Err(ReframeError::Onnx(_))));
+}
