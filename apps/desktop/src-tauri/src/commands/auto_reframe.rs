@@ -301,7 +301,7 @@ fn dynamic_reframe_samples(
                 .collect(),
         );
     }
-    let Ok(sampler) = avcore::FrameSampler::open(source_path, Duration::from_millis(20)) else {
+    let Ok(sampler) = avcore::FrameSampler::open(source_path) else {
         tracing::warn!(path = %source_path.display(), "dynamic auto-reframe could not open source video");
         return None;
     };
@@ -339,7 +339,7 @@ fn dynamic_reframe_samples(
 }
 
 fn extract_frame(path: &Path, at_secs: f64) -> Option<(u32, u32, Vec<u8>)> {
-    let sampler = avcore::FrameSampler::open(path, Duration::from_millis(20)).ok()?;
+    let sampler = avcore::FrameSampler::open(path).ok()?;
     let frame = sampler.sample(at_secs, Duration::from_millis(1500))?;
     Some(downscale_frame_rgba(
         frame.width,

@@ -9,7 +9,7 @@
 //! thread, so shipping a compressed, display-sized frame is far cheaper end to end than raw
 //! pixels over IPC.
 
-use avcore::preview::VideoFrame;
+use avcore::SampledFrame;
 
 /// Longest side of a preview frame sent to the webview. Matches a typical program monitor on a
 /// 1440p display; the source keeps full resolution for export.
@@ -21,12 +21,12 @@ const PREVIEW_JPEG_QUALITY: u8 = 82;
 
 /// Nearest-neighbour downscale to `max_dim` on the longest side, dropping alpha, then JPEG.
 /// Returns `None` for an empty or malformed frame.
-pub fn encode_jpeg(frame: &VideoFrame, max_dim: u32) -> Option<Vec<u8>> {
+pub fn encode_jpeg(frame: &SampledFrame, max_dim: u32) -> Option<Vec<u8>> {
     encode_jpeg_rgba(frame.width, frame.height, &frame.rgba, max_dim)
 }
 
 /// [`encode_jpeg`] over a borrowed tightly packed RGBA buffer, so a caller that already owns the
-/// pixels (Bush) does not copy them into a `VideoFrame` first.
+/// pixels (Bush) does not copy them into a `SampledFrame` first.
 pub fn encode_jpeg_rgba(width: u32, height: u32, rgba: &[u8], max_dim: u32) -> Option<Vec<u8>> {
     if width == 0 || height == 0 || rgba.len() < width as usize * height as usize * 4 {
         return None;
@@ -100,8 +100,8 @@ fn downscale_to_rgb(
 mod tests {
     use super::*;
 
-    fn solid(width: u32, height: u32) -> VideoFrame {
-        VideoFrame {
+    fn solid(width: u32, height: u32) -> SampledFrame {
+        SampledFrame {
             width,
             height,
             rgba: [10u8, 20, 30, 255].repeat((width * height) as usize),

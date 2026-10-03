@@ -90,7 +90,7 @@ fn extract_thumbnail(path: &Path) -> Option<Vec<u8>> {
     if !path.exists() {
         return None;
     }
-    let sampler = avcore::FrameSampler::open(path, Duration::from_millis(20)).ok()?;
+    let sampler = avcore::FrameSampler::open(path).ok()?;
     let frame = sampler.sample(THUMBNAIL_AT_SECS, Duration::from_millis(800))?;
     encode_jpeg(&frame, THUMBNAIL_MAX_DIM)
 }

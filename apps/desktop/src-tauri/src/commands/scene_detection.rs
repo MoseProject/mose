@@ -107,7 +107,7 @@ fn detect_scene_cuts_one(
         2,
         MAX_SAMPLES,
     );
-    let Ok(sampler) = FrameSampler::open(source_path, Duration::from_millis(10)) else {
+    let Ok(sampler) = FrameSampler::open(source_path) else {
         return Vec::new();
     };
     let samples: Vec<(f64, avcore::GrayFrame)> = sample_times

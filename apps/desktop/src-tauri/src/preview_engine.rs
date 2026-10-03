@@ -35,7 +35,7 @@ use avcore::{
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
-use crate::frames::{encode_jpeg, PREVIEW_MAX_DIM};
+use crate::frames::{encode_jpeg_rgba, PREVIEW_MAX_DIM};
 
 /// Event carrying a [`PreviewTick`].
 pub const PREVIEW_TICK: &str = "preview-tick";
@@ -590,7 +590,9 @@ fn run(
                     if effects.deflicker_enabled {
                         avcore::apply_deflicker_to_rgba(&mut frame.rgba, &mut deflicker_history.1);
                     }
-                    if let Some(jpeg) = encode_jpeg(&frame, PREVIEW_MAX_DIM) {
+                    if let Some(jpeg) =
+                        encode_jpeg_rgba(frame.width, frame.height, &frame.rgba, PREVIEW_MAX_DIM)
+                    {
                         if let Ok(mut frame) = latest.lock() {
                             *frame = Some(Arc::new(jpeg));
                         }
