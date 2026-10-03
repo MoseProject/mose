@@ -145,19 +145,29 @@ fn generate_matte_one(
     let sampler = avcore::FrameSampler::open(source_path)
         .map_err(|e| format!("failed to open source for decoding: {e}"))?;
 
-    let mut luma_frames: Vec<Vec<u8>> = Vec::with_capacity(sample_times.len());
-    let mut frame_w = 0u32;
-    let mut frame_h = 0u32;
-    for &t in &sample_times {
-        let Some(frame) = sampler.sample(t, Duration::from_millis(1500)) else {
-            continue;
-        };
-        if frame_w == 0 {
-            frame_w = frame.width;
-            frame_h = frame.height;
-        } else if frame.width != frame_w || frame.height != frame_h {
-            continue;
-        }
+    let frames: Vec<avcore::SampledFrame> = sample_times
+        .iter()
+        .filter_map(|&t| sampler.sample(t, Duration::from_millis(1500)))
+        .collect();
+    matte_from_frames(services, &frames, duration, model_path, mask_dir, mask_path)
+}
+
+/// Segments the people in already decoded frames and encodes the matte video. Frames whose size
+/// differs from the first one's are skipped.
+fn matte_from_frames(
+    services: &dyn Services,
+    frames: &[avcore::SampledFrame],
+    duration: f64,
+    model_path: &Path,
+    mask_dir: &Path,
+    mask_path: &Path,
+) -> Result<PathBuf, String> {
+    let (frame_w, frame_h) = frames.first().map_or((0, 0), |f| (f.width, f.height));
+    let mut luma_frames: Vec<Vec<u8>> = Vec::with_capacity(frames.len());
+    for frame in frames
+        .iter()
+        .filter(|f| f.width == frame_w && f.height == frame_h)
+    {
         let alpha = services
             .segment_person(model_path, &frame.rgba, frame.width, frame.height)
             .map_err(|e| format!("segmentation failed: {e}"))?;

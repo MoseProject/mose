@@ -82,16 +82,22 @@ pub fn detect_scene_cuts_for_clip<R: Runtime>(
                 .lock()
                 .unwrap_or_else(|p| p.into_inner()) = None;
         }
-        if !cuts.is_empty() {
-            let _ = with_session(&worker_app, |session| {
-                apply_detected_scene_cuts(session.project.timeline_mut(), clip_id, &cuts);
-                session.dirty = true;
-                Ok(())
-            });
-        }
+        publish_cuts(&worker_app, clip_id, &cuts);
         let _ = worker_app.emit(SCENE_CUT_EVENT, cuts.len());
     });
     Ok(())
+}
+
+/// Adds the detected cuts to the project as chapter markers; nothing is published for none.
+fn publish_cuts<R: Runtime>(app: &AppHandle<R>, clip_id: u64, cuts: &[SceneCut]) {
+    if cuts.is_empty() {
+        return;
+    }
+    let _ = with_session(app, |session| {
+        apply_detected_scene_cuts(session.project.timeline_mut(), clip_id, cuts);
+        session.dirty = true;
+        Ok(())
+    });
 }
 
 fn detect_scene_cuts_one(
@@ -123,9 +129,6 @@ fn detect_scene_cuts_one(
             ))
         })
         .collect();
-    if samples.len() < 2 {
-        return Vec::new();
-    }
     avcore::detect_scene_cuts(&samples, avcore::DEFAULT_SCENE_CUT_THRESHOLD)
 }
 

@@ -156,21 +156,41 @@ fn apply_privacy_blur_one(
     let sampler = avcore::FrameSampler::open(source_path)
         .map_err(|e| format!("failed to open source for decoding: {e}"))?;
 
-    let mut gray_frames: Vec<avcore::GrayFrame> = Vec::with_capacity(sample_times.len());
-    let mut frame_w = 0u32;
-    let mut frame_h = 0u32;
-    for &t in &sample_times {
-        let Some(frame) = sampler.sample(t, Duration::from_millis(1500)) else {
-            continue;
-        };
-        if frame_w == 0 {
-            frame_w = frame.width;
-            frame_h = frame.height;
-        } else if frame.width != frame_w || frame.height != frame_h {
-            continue;
-        }
-        gray_frames.push(avcore::rgba_to_gray(&frame.rgba, frame.width, frame.height));
-    }
+    let frames: Vec<avcore::SampledFrame> = sample_times
+        .iter()
+        .filter_map(|&t| sampler.sample(t, Duration::from_millis(1500)))
+        .collect();
+    matte_from_frames(
+        &frames,
+        duration,
+        center_x,
+        center_y,
+        width_frac,
+        height_frac,
+        mask_dir,
+        mask_path,
+    )
+}
+
+/// Propagates the blur region through already decoded frames and encodes the matte video.
+/// Frames whose size differs from the first one's are skipped.
+#[allow(clippy::too_many_arguments)]
+fn matte_from_frames(
+    frames: &[avcore::SampledFrame],
+    duration: f64,
+    center_x: f32,
+    center_y: f32,
+    width_frac: f32,
+    height_frac: f32,
+    mask_dir: &Path,
+    mask_path: &Path,
+) -> Result<(PathBuf, Vec<(f32, f32)>), String> {
+    let (frame_w, frame_h) = frames.first().map_or((0, 0), |f| (f.width, f.height));
+    let gray_frames: Vec<avcore::GrayFrame> = frames
+        .iter()
+        .filter(|f| f.width == frame_w && f.height == frame_h)
+        .map(|f| avcore::rgba_to_gray(&f.rgba, f.width, f.height))
+        .collect();
     if gray_frames.len() < 2 {
         return Err("couldn't decode enough frames to propagate a mask".to_string());
     }
