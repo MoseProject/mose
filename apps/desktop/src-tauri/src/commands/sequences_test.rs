@@ -92,11 +92,10 @@ mod commands {
 
         let h = two_sequences();
         let second = h.session().project.sequences[1].id;
-        h.session().dirty = false;
-        select_sequence(h.handle(), 0).unwrap();
-        h.session().dirty = false;
         remove_sequence(h.handle(), second).unwrap();
         assert_eq!(h.session().project.active_sequence, 0);
+        assert!(h.session().dirty);
+        assert!(!h.session().view().can_undo);
     }
 
     #[test]

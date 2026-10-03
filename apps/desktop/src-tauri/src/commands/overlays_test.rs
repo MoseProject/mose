@@ -569,3 +569,42 @@ mod commands {
         );
     }
 }
+
+mod edge_cases {
+    use std::sync::atomic::Ordering;
+
+    use crate::commands::overlays::*;
+    use crate::commands::timeline::{trim_clip, TrimEdge};
+    use crate::testing::harness;
+
+    #[test]
+    fn trimming_a_missing_overlay_or_patching_the_wrong_kind_changes_nothing() {
+        let h = harness();
+        let text = add_text_clip(h.handle(), "t".into(), None, None)
+            .unwrap()
+            .unwrap();
+        let shape = add_shape_clip(h.handle()).unwrap().unwrap();
+        let events = h.count_session_events();
+        trim_overlay_clip(h.handle(), 999, TrimEdge::End, 3.0).unwrap();
+        update_text_clip(
+            h.handle(),
+            shape,
+            TextClipPatch {
+                text: Some("x".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        update_shape_clip(
+            h.handle(),
+            text,
+            ShapeClipPatch {
+                width: Some(0.5),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        trim_clip(h.handle(), text, TrimEdge::End, 1.0).unwrap();
+        assert_eq!(events.load(Ordering::SeqCst), 0);
+    }
+}
