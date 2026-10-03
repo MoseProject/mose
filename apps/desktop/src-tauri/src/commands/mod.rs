@@ -233,3 +233,7 @@ pub fn set_export_settings<R: Runtime>(
         Ok(())
     })
 }
+
+#[cfg(test)]
+#[path = "mod_test.rs"]
+mod tests;
