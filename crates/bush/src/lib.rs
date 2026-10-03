@@ -9,6 +9,7 @@ mod audio_mixer;
 mod byte_cache;
 mod cpu_renderer;
 mod decode_source;
+mod engine;
 mod frame_mailbox;
 mod latest_intent;
 mod preview_worker;
@@ -24,6 +25,7 @@ pub use audio_mixer::{AudioMixer, MixError, MixInput};
 pub use byte_cache::{ByteCache, CacheError, CacheInsert};
 pub use cpu_renderer::{BlendMode, CpuRenderer, CropRect, LayerFrame, LayerTransform, RenderError};
 pub use decode_source::{DecodeSource, DecodeSourceError, SourceInfo, MAX_SEEK_SEARCH_FRAMES};
+pub use engine::{Engine, EngineConfig, EngineError, EngineEvent, EngineRequest, EngineStats};
 pub use frame_mailbox::{FrameMailbox, PublishedFrame};
 pub use latest_intent::{Generation, LatestIntent, PendingIntent};
 pub use preview_worker::{

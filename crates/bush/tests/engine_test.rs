@@ -1,0 +1,309 @@
+use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+use std::time::Duration;
+
+use bush::{
+    BlendMode, Contributor, ContributorContent, ContributorId, DecodeSource, Engine, EngineConfig,
+    EngineError, EngineEvent, EngineRequest, MediaSource, PixelFormat, Placement, RasterOverlay,
+    SceneSnapshot, SceneVersions, SourceRange, Version, VideoFrame,
+};
+
+const WAIT: Duration = Duration::from_secs(20);
+
+fn fixture() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../avbridge/tests/fixtures/video.mp4")
+}
+
+fn dimensions() -> (u32, u32) {
+    let info = DecodeSource::open(&fixture()).unwrap().info();
+    (info.width, info.height)
+}
+
+fn config(max_open_sources: usize) -> EngineConfig {
+    let (width, height) = dimensions();
+    EngineConfig {
+        canvas_width: width,
+        canvas_height: height,
+        max_open_sources,
+        frame_cache_bytes: 64 * 1024 * 1024,
+    }
+}
+
+fn clip(id: u64, layer: i32, path: PathBuf, placement: Placement) -> Contributor {
+    Contributor {
+        id: ContributorId(id),
+        layer,
+        visible: true,
+        audible: false,
+        content: ContributorContent::Media(MediaSource {
+            path,
+            range: SourceRange::new(0.0, 0.9).unwrap(),
+            version: Version(1),
+        }),
+        placement,
+    }
+}
+
+fn scene(contributors: Vec<Contributor>) -> SceneSnapshot {
+    SceneSnapshot::new(SceneVersions::default(), contributors).unwrap()
+}
+
+fn request(scene: SceneSnapshot, playhead_secs: f64) -> EngineRequest {
+    EngineRequest {
+        scene,
+        playhead_secs,
+        overlays: Vec::new(),
+    }
+}
+
+fn expect_frame(engine: &Engine) -> (bush::Generation, VideoFrame) {
+    match engine.wait(WAIT).expect("engine produced no event") {
+        EngineEvent::Frame { generation, frame } => (generation, frame),
+        EngineEvent::Failed { message, .. } => panic!("engine failed: {message}"),
+    }
+}
+
+fn reference_frame(target_secs: f64) -> Arc<VideoFrame> {
+    DecodeSource::open(&fixture())
+        .unwrap()
+        .frame_at(target_secs, &AtomicBool::new(false))
+        .unwrap()
+        .unwrap()
+}
+
+#[test]
+fn single_clip_renders_the_decoded_frame_at_the_playhead() {
+    let engine = Engine::new(config(2)).unwrap();
+    let generation = engine
+        .submit(request(
+            scene(vec![clip(1, 0, fixture(), Placement::default())]),
+            0.5,
+        ))
+        .unwrap();
+
+    let (event_generation, frame) = expect_frame(&engine);
+
+    assert_eq!(event_generation, generation);
+    assert_eq!(frame.timestamp_secs(), 0.5);
+    assert_eq!(frame.pixels(), reference_frame(0.5).pixels());
+}
+
+#[test]
+fn clip_outside_its_window_renders_a_transparent_canvas() {
+    let engine = Engine::new(config(1)).unwrap();
+    let placement = Placement {
+        timeline_start_secs: 10.0,
+        ..Placement::default()
+    };
+    engine
+        .submit(request(scene(vec![clip(1, 0, fixture(), placement)]), 1.0))
+        .unwrap();
+
+    let (_, frame) = expect_frame(&engine);
+    assert!(frame.pixels().iter().all(|byte| *byte == 0));
+}
+
+#[test]
+fn speed_and_timeline_start_map_playhead_to_source_time() {
+    let engine = Engine::new(config(1)).unwrap();
+    let placement = Placement {
+        timeline_start_secs: 2.0,
+        speed: 2.0,
+        ..Placement::default()
+    };
+    // Playhead 2.2 -> source time (2.2 - 2.0) * 2 = 0.4.
+    engine
+        .submit(request(scene(vec![clip(1, 0, fixture(), placement)]), 2.2))
+        .unwrap();
+    let (_, frame) = expect_frame(&engine);
+
+    assert_eq!(frame.pixels(), reference_frame(0.4).pixels());
+}
+
+#[test]
+fn raster_overlay_composites_above_video_in_layer_order() {
+    let (width, height) = dimensions();
+    let engine = Engine::new(config(1)).unwrap();
+    let overlay_frame = Arc::new(
+        VideoFrame::new(
+            PixelFormat::Rgba8,
+            width,
+            height,
+            width as usize * 4,
+            0.0,
+            [255, 0, 255, 255].repeat((width * height) as usize),
+        )
+        .unwrap(),
+    );
+    let overlay = Contributor {
+        id: ContributorId(2),
+        layer: 5,
+        visible: true,
+        audible: false,
+        content: ContributorContent::RasterOverlay(RasterOverlay {
+            width,
+            height,
+            version: Version(1),
+        }),
+        placement: Placement::default(),
+    };
+    engine
+        .submit(EngineRequest {
+            scene: scene(vec![overlay, clip(1, 0, fixture(), Placement::default())]),
+            playhead_secs: 0.3,
+            overlays: vec![(ContributorId(2), overlay_frame)],
+        })
+        .unwrap();
+
+    let (_, frame) = expect_frame(&engine);
+    assert!(frame
+        .pixels()
+        .chunks_exact(4)
+        .all(|pixel| pixel == [255, 0, 255, 255]));
+}
+
+#[test]
+fn burst_of_submits_publishes_only_the_newest_generation() {
+    let engine = Engine::new(config(1)).unwrap();
+    let mut last = bush::Generation(0);
+    for step in 0..40 {
+        last = engine
+            .submit(request(
+                scene(vec![clip(1, 0, fixture(), Placement::default())]),
+                f64::from(step % 8) / 10.0,
+            ))
+            .unwrap();
+    }
+
+    let (generation, _) = expect_frame(&engine);
+    assert_eq!(generation, last, "a stale generation was published");
+    std::thread::sleep(Duration::from_millis(100));
+    assert!(engine.poll().is_none(), "a second event was published");
+    let stats = engine.stats();
+    assert_eq!(stats.submitted, 40);
+    assert!(stats.superseded + stats.cancelled > 0);
+}
+
+#[test]
+fn unchanged_source_frame_is_served_from_the_cache_on_a_live_edit() {
+    let engine = Engine::new(config(1)).unwrap();
+    let visible = scene(vec![clip(1, 0, fixture(), Placement::default())]);
+    engine.submit(request(visible, 0.4)).unwrap();
+    expect_frame(&engine);
+
+    let faded = scene(vec![clip(
+        1,
+        0,
+        fixture(),
+        Placement {
+            opacity: 0.5,
+            blend: BlendMode::Multiply,
+            ..Placement::default()
+        },
+    )]);
+    engine.submit(request(faded, 0.4)).unwrap();
+    let (_, frame) = expect_frame(&engine);
+
+    let stats = engine.stats();
+    assert_eq!(stats.cache_misses, 1);
+    assert_eq!(stats.cache_hits, 1);
+    assert_eq!(frame.width(), dimensions().0);
+}
+
+#[test]
+fn unreadable_media_fails_with_a_redacted_message() {
+    let engine = Engine::new(config(1)).unwrap();
+    let garbage =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../avbridge/tests/fixtures/garbage.bin");
+    engine
+        .submit(request(
+            scene(vec![clip(1, 0, garbage, Placement::default())]),
+            0.1,
+        ))
+        .unwrap();
+
+    match engine.wait(WAIT).unwrap() {
+        EngineEvent::Failed { message, .. } => {
+            assert!(message.contains("garbage.bin"));
+            assert!(!message.contains("fixtures"), "path leaked: {message}");
+        }
+        other => panic!("expected failure, got {other:?}"),
+    }
+    assert_eq!(engine.stats().failures, 1);
+}
+
+#[test]
+fn engine_recovers_after_a_failed_request() {
+    let engine = Engine::new(config(1)).unwrap();
+    engine
+        .submit(request(
+            scene(vec![clip(
+                1,
+                0,
+                PathBuf::from("missing.mp4"),
+                Placement::default(),
+            )]),
+            0.1,
+        ))
+        .unwrap();
+    assert!(matches!(
+        engine.wait(WAIT).unwrap(),
+        EngineEvent::Failed { .. }
+    ));
+
+    engine
+        .submit(request(
+            scene(vec![clip(1, 0, fixture(), Placement::default())]),
+            0.1,
+        ))
+        .unwrap();
+    expect_frame(&engine);
+}
+
+#[test]
+fn repeated_non_linear_scrubs_stay_frame_accurate() {
+    let engine = Engine::new(config(1)).unwrap();
+    let timeline = scene(vec![clip(1, 0, fixture(), Placement::default())]);
+    for playhead in [0.1, 0.6, 0.2, 0.8, 0.0] {
+        engine.submit(request(timeline.clone(), playhead)).unwrap();
+        let (_, frame) = expect_frame(&engine);
+        assert_eq!(frame.timestamp_secs(), playhead);
+        assert_eq!(frame.pixels(), reference_frame(playhead).pixels());
+    }
+}
+
+#[test]
+fn rejects_invalid_configuration_and_playhead() {
+    let mut bad = config(1);
+    bad.canvas_width = 0;
+    assert_eq!(Engine::new(bad).unwrap_err(), EngineError::InvalidConfig);
+    assert_eq!(
+        Engine::new(config(0)).unwrap_err(),
+        EngineError::InvalidConfig
+    );
+    let mut no_cache = config(1);
+    no_cache.frame_cache_bytes = 0;
+    assert_eq!(
+        Engine::new(no_cache).unwrap_err(),
+        EngineError::InvalidConfig
+    );
+
+    let engine = Engine::new(config(1)).unwrap();
+    assert_eq!(
+        engine.submit(request(scene(vec![]), f64::NAN)).unwrap_err(),
+        EngineError::InvalidPlayhead
+    );
+}
+
+#[test]
+fn shutdown_is_idempotent_and_rejects_later_submits() {
+    let engine = Engine::new(config(1)).unwrap();
+    engine.shutdown();
+    engine.shutdown();
+    assert_eq!(
+        engine.submit(request(scene(vec![]), 0.0)).unwrap_err(),
+        EngineError::Stopped
+    );
+    assert!(engine.wait(Duration::from_millis(10)).is_none());
+}
