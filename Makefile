@@ -44,7 +44,7 @@ else
   endif
 endif
 
-.PHONY: build release test test-core test-bush test-xtask test-e2e bench bench-bush fmt fmt-check lint graph docs check clean desktop-install desktop-dev desktop-build test-desktop
+.PHONY: coverage coverage-web build release test test-core test-bush test-xtask test-e2e bench bench-bush fmt fmt-check lint graph docs check clean desktop-install desktop-dev desktop-build test-desktop
 
 # Debug build of the whole workspace (core, avbridge, ytbridge, desktop, xtask).
 build:
@@ -108,6 +108,21 @@ bench-bush:
 # Bush test suite (needs FFMPEG_DIR). Add --features cpal for the device tests.
 test-bush:
 	cargo test -p bush
+
+# Line coverage per crate (needs cargo-llvm-cov). Excluded by file, see
+# spec/architecture/test-coverage-plan.md: the Tauri entry point, the audio device sink, the GPU
+# renderer, and the test files themselves. `desktop` runs in release because its debug test binary
+# hits an MSVC CRT assertion at startup on Windows.
+COVERAGE_IGNORE = (main\.rs|device_sink\.rs|gpu_[a-z_]+\.(rs|wgsl)|_test\.rs|[/\\]tests[/\\])
+coverage:
+	cargo llvm-cov -p avbridge --ignore-filename-regex '$(COVERAGE_IGNORE)'
+	cargo llvm-cov -p bush --ignore-filename-regex '$(COVERAGE_IGNORE)'
+	cargo llvm-cov -p core --ignore-run-fail --ignore-filename-regex '$(COVERAGE_IGNORE)'
+	cargo llvm-cov -p desktop --release --ignore-filename-regex '$(COVERAGE_IGNORE)'
+
+# Frontend line coverage (vitest + v8).
+coverage-web:
+	cd apps/desktop && npm run coverage
 
 fmt:
 	cargo fmt --all
