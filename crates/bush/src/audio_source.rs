@@ -194,3 +194,52 @@ impl AudioSource {
         self.queue.extend(samples.iter().copied());
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const RATE: u32 = 8_000;
+
+    fn source() -> AudioSource {
+        let fixture =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../avbridge/tests/fixtures/audio.m4a");
+        AudioSource::open(&fixture, RATE, 1, 4096).unwrap()
+    }
+
+    fn queued(source: &AudioSource) -> Vec<f32> {
+        source.queue.iter().copied().collect()
+    }
+
+    #[test]
+    fn the_format_is_reported_and_a_block_error_is_wrapped() {
+        let source = source();
+        assert_eq!((source.sample_rate(), source.channels()), (RATE, 1));
+        let error = AudioBlock::new(0, 1, 0.0, Vec::new()).unwrap_err();
+        assert!(matches!(
+            AudioSourceError::from(error),
+            AudioSourceError::InvalidBlock(_)
+        ));
+    }
+
+    #[test]
+    fn priming_before_time_zero_is_dropped() {
+        let mut source = source();
+        // Four frames starting 2 frames before zero: the first two are priming.
+        source.append(-2.0 / f64::from(RATE), &[1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(source.queue_start_frame, 0);
+        assert_eq!(queued(&source), vec![3.0, 4.0]);
+    }
+
+    #[test]
+    fn a_gap_is_zero_filled_and_an_overlap_is_skipped() {
+        let mut source = source();
+        source.append(0.0, &[1.0, 2.0]);
+        // Starts two frames after the queued end: two zero frames fill the gap.
+        source.append(4.0 / f64::from(RATE), &[5.0, 6.0]);
+        assert_eq!(queued(&source), vec![1.0, 2.0, 0.0, 0.0, 5.0, 6.0]);
+        // Starts one frame before the end: that frame is already queued.
+        source.append(5.0 / f64::from(RATE), &[60.0, 7.0]);
+        assert_eq!(queued(&source), vec![1.0, 2.0, 0.0, 0.0, 5.0, 6.0, 7.0]);
+    }
+}
