@@ -192,3 +192,7 @@ fn with_current_project<R: Runtime, T>(
     publish(app, &session);
     Some(out)
 }
+
+#[cfg(test)]
+#[path = "media_test.rs"]
+mod tests;

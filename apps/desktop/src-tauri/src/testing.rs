@@ -15,6 +15,9 @@ use crate::prefs::PrefsDocument;
 use crate::preview_engine::{Command, PreviewEngine};
 use crate::state::{AppState, Session, SESSION_CHANGED};
 
+/// How long a test waits for a background worker before giving up.
+const WAIT: std::time::Duration = std::time::Duration::from_secs(120);
+
 static ISOLATE: Once = Once::new();
 static NEXT_DIR: AtomicU32 = AtomicU32::new(0);
 
@@ -77,6 +80,16 @@ impl Harness {
         self.state().preview.set_playhead(secs);
     }
 
+    /// Polls until `done` holds for the session, for work that finishes on a background thread.
+    /// Panics with `what` after `WAIT` so a stuck worker fails the test instead of hanging it.
+    pub fn wait_until(&self, what: &str, done: impl Fn(&Session) -> bool) {
+        let started = std::time::Instant::now();
+        while !done(&self.session()) {
+            assert!(started.elapsed() < WAIT, "timed out waiting for {what}");
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+    }
+
     /// The preview commands sent so far, draining the channel.
     pub fn drain_preview(&self) -> Vec<Command> {
         self.preview.try_iter().collect()
@@ -119,6 +132,13 @@ pub(crate) fn video_asset(id: u64, duration_secs: f64) -> avcore::MediaAsset {
         waveform_peaks: None,
         favorited: false,
     }
+}
+
+/// A media file shipped with `avcore`'s own tests (`video.mp4`, `video_silent.mp4`, `audio.m4a`).
+pub(crate) fn fixture(name: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../crates/core/tests/fixtures")
+        .join(name)
 }
 
 /// `dir/name`, for tests that need a path next to the harness's other files.
