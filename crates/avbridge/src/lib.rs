@@ -21,6 +21,10 @@
 //! FFmpeg binding — so it stays small and auditable. See [`build.rs`](../build.rs) for how the
 //! FFmpeg dev libs (`FFMPEG_DIR`) are located and linked.
 
+mod audio_decode;
+
+pub use audio_decode::{AudioDecodeError, AudioDecodeInfo, AudioDecodeSession, DecodedAudioBlock};
+
 use std::ffi::{c_void, CStr, CString, NulError};
 use std::os::raw::{c_char, c_int, c_longlong};
 use std::path::{Path, PathBuf};

@@ -685,6 +685,8 @@ typedef enum {
     DECODE_ERR_PIPELINE = 8,
     /* Dimensions or a packed RGBA frame exceed Bush's native allocation limit. */
     DECODE_ERR_FRAME_SIZE = 9,
+    /* The input has no audio stream. */
+    DECODE_ERR_NO_AUDIO_STREAM = 10,
 } DecodeStatus;
 
 typedef struct {
@@ -718,5 +720,37 @@ DecodeStatus avbridge_decode_next_rgba(AvbridgeDecodeSession *session, const uin
                                        DecodedRgbaFrame *out_frame);
 void avbridge_decode_free_frame(DecodedRgbaFrame *frame);
 void avbridge_decode_close(AvbridgeDecodeSession *session);
+
+/* Opaque one-audio-stream demux/decode session used by Bush preview. Output is always packed
+   32-bit float at the requested rate and channel count (1 or 2). */
+typedef struct AvbridgeAudioSession AvbridgeAudioSession;
+
+typedef struct {
+    int sample_rate;
+    int channels;
+    int source_sample_rate;
+    int source_channels;
+    double duration_secs;
+} AudioDecodeInfo;
+
+typedef struct {
+    float *samples;
+    int64_t frame_count;
+    /* Presentation time of the first frame; may be slightly negative (codec priming). */
+    double timestamp_secs;
+} DecodedAudioBlock;
+
+/* `out_session` is set only on DECODE_OK and must be released by avbridge_audio_close. */
+DecodeStatus avbridge_audio_open(const char *path, int target_sample_rate, int target_channels,
+                                 AvbridgeAudioSession **out_session, AudioDecodeInfo *out_info);
+/* Seeks to the packet at or before timestamp_secs and resets resampler state. Following blocks
+   may start before the target; callers trim to sample accuracy. */
+DecodeStatus avbridge_audio_seek(AvbridgeAudioSession *session, double timestamp_secs);
+/* Produces the next filtered block (owned by the caller, release with
+   avbridge_audio_free_block). Checks cancel when non-NULL. */
+DecodeStatus avbridge_audio_next_block(AvbridgeAudioSession *session, const uint8_t *cancel,
+                                       DecodedAudioBlock *out_block);
+void avbridge_audio_free_block(DecodedAudioBlock *block);
+void avbridge_audio_close(AvbridgeAudioSession *session);
 
 #endif
