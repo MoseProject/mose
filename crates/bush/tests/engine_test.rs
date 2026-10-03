@@ -4,9 +4,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use bush::{
-    BlendMode, Contributor, ContributorContent, ContributorId, DecodeSource, Engine, EngineConfig,
-    EngineError, EngineEvent, EngineRequest, MediaSource, PixelFormat, Placement, RasterOverlay,
-    SceneSnapshot, SceneVersions, SourceRange, Version, VideoFrame,
+    BlendMode, Contributor, ContributorContent, ContributorId, DecodePolicy, DecodeSource, Engine,
+    EngineConfig, EngineError, EngineEvent, EngineRequest, MediaSource, PixelFormat, Placement,
+    RasterOverlay, SceneSnapshot, SceneVersions, SourceRange, Version, VideoFrame,
 };
 
 const WAIT: Duration = Duration::from_secs(20);
@@ -27,6 +27,7 @@ fn config(max_open_sources: usize) -> EngineConfig {
         canvas_height: height,
         max_open_sources,
         frame_cache_bytes: 64 * 1024 * 1024,
+        decode_policy: DecodePolicy::Software,
     }
 }
 
@@ -306,4 +307,45 @@ fn shutdown_is_idempotent_and_rejects_later_submits() {
         EngineError::Stopped
     );
     assert!(engine.wait(Duration::from_millis(10)).is_none());
+}
+
+fn h264() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../avbridge/tests/fixtures/video_h264.mp4")
+}
+
+fn h264_frame(policy: DecodePolicy, playhead: f64) -> VideoFrame {
+    let engine = Engine::new(EngineConfig {
+        canvas_width: 640,
+        canvas_height: 360,
+        max_open_sources: 1,
+        frame_cache_bytes: 64 * 1024 * 1024,
+        decode_policy: policy,
+    })
+    .unwrap();
+    engine
+        .submit(request(
+            scene(vec![clip(1, 0, h264(), Placement::default())]),
+            playhead,
+        ))
+        .unwrap();
+    expect_frame(&engine).1
+}
+
+#[test]
+fn hardware_decode_policy_renders_the_same_picture_as_software() {
+    for playhead in [0.0, 0.4, 0.84] {
+        let software = h264_frame(DecodePolicy::Software, playhead);
+        let hardware = h264_frame(DecodePolicy::HardwareWithFallback, playhead);
+        let difference = software
+            .pixels()
+            .iter()
+            .zip(hardware.pixels())
+            .map(|(a, b)| f64::from(a.abs_diff(*b)))
+            .sum::<f64>()
+            / software.pixels().len() as f64;
+        assert!(
+            difference < 3.0,
+            "mean difference {difference} at {playhead}s"
+        );
+    }
 }

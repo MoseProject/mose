@@ -29,6 +29,7 @@ pub use audio_playback::{
     AudioPlayer, AudioPlayerError, AudioRenderError, AudioRenderer, AudioSink, FakeSink, SinkError,
 };
 pub use audio_source::{AudioSource, AudioSourceError};
+pub use avbridge::DecodePolicy;
 pub use byte_cache::{ByteCache, CacheError, CacheInsert};
 pub use cpu_renderer::{
     BlendMode, CpuRenderer, CropRect, LayerEffects, LayerFrame, LayerTransform, RenderError,

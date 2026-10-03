@@ -13,8 +13,8 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use crate::{
-    ByteCache, ContributorContent, ContributorId, CpuRenderer, DecodeSource, Generation,
-    LatestIntent, LayerFrame, Placement, SceneSnapshot, VideoFrame,
+    ByteCache, ContributorContent, ContributorId, CpuRenderer, DecodePolicy, DecodeSource,
+    Generation, LatestIntent, LayerFrame, Placement, SceneSnapshot, VideoFrame,
 };
 
 /// Fixed engine limits. Every field is validated by [`Engine::new`].
@@ -26,6 +26,9 @@ pub struct EngineConfig {
     pub max_open_sources: usize,
     /// Byte budget for decoded source frames retained between requests.
     pub frame_cache_bytes: usize,
+    /// Software decode, or hardware with software fallback. Hardware is opt-in: measure it on
+    /// the target media before enabling it.
+    pub decode_policy: DecodePolicy,
 }
 
 /// Largest canvas the engine accepts, in pixels (8K UHD is 33.2 M). Bounds the compositor's
@@ -528,7 +531,7 @@ impl EngineThread {
             self.sources.push(entry);
             return Ok(self.sources.len() - 1);
         }
-        let source = DecodeSource::open(path)
+        let source = DecodeSource::open_with_policy(path, self.config.decode_policy)
             .map_err(|error| format!("{}: {error:?}", display_name(path)))?;
         while self.sources.len() >= self.config.max_open_sources {
             self.sources.remove(0);

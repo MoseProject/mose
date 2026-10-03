@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use avbridge::{DecodeError, DecodeSession};
+use avbridge::{DecodeError, DecodePolicy, DecodeSession};
 
 use crate::{PixelFormat, VideoFrame, VideoFrameError};
 
@@ -15,6 +15,8 @@ pub struct SourceInfo {
     pub height: u32,
     pub fps: Option<f64>,
     pub duration_secs: Option<f64>,
+    /// Whether frames are decoded on a hardware device.
+    pub hardware: bool,
 }
 
 /// Upper bound on frames decoded forward from a key unit to reach an exact target. Bounds
@@ -65,7 +67,12 @@ impl From<VideoFrameError> for DecodeSourceError {
 impl DecodeSource {
     /// Opens `path`; native validation errors are surfaced, never hidden by a fallback.
     pub fn open(path: &Path) -> Result<Self, DecodeSourceError> {
-        let (session, info) = DecodeSession::open(path)?;
+        Self::open_with_policy(path, DecodePolicy::Software)
+    }
+
+    /// Like [`Self::open`], choosing software or hardware-with-fallback decode.
+    pub fn open_with_policy(path: &Path, policy: DecodePolicy) -> Result<Self, DecodeSourceError> {
+        let (session, info) = DecodeSession::open_with_policy(path, policy)?;
         Ok(Self {
             session,
             info: SourceInfo {
@@ -73,6 +80,7 @@ impl DecodeSource {
                 height: info.height,
                 fps: info.fps,
                 duration_secs: info.duration_secs,
+                hardware: info.hardware,
             },
             current: None,
             lookahead: None,
