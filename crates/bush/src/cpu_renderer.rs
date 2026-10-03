@@ -63,6 +63,9 @@ pub struct LayerTransform {
     pub scale_y: f32,
     pub rotation_deg: f32,
     pub crop: CropRect,
+    /// Mirror the cropped layer horizontally / vertically (before rotation).
+    pub flip_x: bool,
+    pub flip_y: bool,
 }
 
 impl Default for LayerTransform {
@@ -72,6 +75,8 @@ impl Default for LayerTransform {
             scale_y: 1.0,
             rotation_deg: 0.0,
             crop: CropRect::FULL,
+            flip_x: false,
+            flip_y: false,
         }
     }
 }
@@ -108,6 +113,8 @@ pub struct LayerEffects {
     pub saturation: f32,
     /// Darkens towards the layer corners, `0.0..=1.0`.
     pub vignette: f32,
+    /// Sepia tone mix, `0.0..=1.0` (`0` is off).
+    pub sepia: f32,
     /// Mosaic block edge in source pixels; `0` and `1` are off. At most 512.
     pub pixelize_block: u32,
     pub chroma_key: Option<ChromaKey>,
@@ -121,6 +128,7 @@ impl Default for LayerEffects {
             contrast: 1.0,
             saturation: 1.0,
             vignette: 0.0,
+            sepia: 0.0,
             pixelize_block: 0,
             chroma_key: None,
             mask: None,
@@ -140,6 +148,7 @@ impl LayerEffects {
             && self.contrast == neutral.contrast
             && self.saturation == neutral.saturation
             && self.vignette == neutral.vignette
+            && self.sepia == neutral.sepia
     }
 
     pub(crate) fn is_valid(&self) -> bool {
@@ -147,6 +156,7 @@ impl LayerEffects {
             && (0.0..=4.0).contains(&self.contrast)
             && (0.0..=4.0).contains(&self.saturation)
             && (0.0..=1.0).contains(&self.vignette)
+            && (0.0..=1.0).contains(&self.sepia)
             && self.pixelize_block <= 512
             && self.chroma_key.is_none_or(|key| key.is_valid())
             && self.mask.is_none_or(|mask| mask.is_valid())
@@ -160,7 +170,21 @@ impl LayerEffects {
         });
         let luma = 0.2126 * out[0] + 0.7152 * out[1] + 0.0722 * out[2];
         for channel in &mut out {
-            *channel = ((luma + (*channel - luma) * self.saturation) * falloff).clamp(0.0, 1.0);
+            *channel = (luma + (*channel - luma) * self.saturation).clamp(0.0, 1.0);
+        }
+        if self.sepia > 0.0 {
+            let [red, green, blue] = out;
+            let toned = [
+                0.393 * red + 0.769 * green + 0.189 * blue,
+                0.349 * red + 0.686 * green + 0.168 * blue,
+                0.272 * red + 0.534 * green + 0.131 * blue,
+            ];
+            for (channel, tone) in out.iter_mut().zip(toned) {
+                *channel = (*channel + (tone.min(1.0) - *channel) * self.sepia).clamp(0.0, 1.0);
+            }
+        }
+        for channel in &mut out {
+            *channel = (*channel * falloff).clamp(0.0, 1.0);
         }
         out
     }
@@ -476,7 +500,12 @@ fn blend_layer(
     let band_start = first_row as i64;
     let start_y = start_y.max(band_start);
     let end_y = end_y.min(band_start + band_rows);
-    let identity = transform.scale_x == 1.0 && transform.scale_y == 1.0 && sin == 0.0 && cos == 1.0;
+    let identity = !transform.flip_x
+        && !transform.flip_y
+        && transform.scale_x == 1.0
+        && transform.scale_y == 1.0
+        && sin == 0.0
+        && cos == 1.0;
     for destination_y in start_y..end_y {
         if identity && neutral_effects {
             // Unscaled, unrotated, uncoloured: the source maps 1:1 onto destination pixels, so
@@ -519,6 +548,12 @@ fn blend_layer(
                 // Mosaic: every pixel in a block samples the block centre.
                 local_x = ((local_x / block) * block + block / 2).min(crop_w - 1);
                 local_y = ((local_y / block) * block + block / 2).min(crop_h - 1);
+            }
+            if transform.flip_x {
+                local_x = crop_w - 1 - local_x;
+            }
+            if transform.flip_y {
+                local_y = crop_h - 1 - local_y;
             }
             let source_x = (crop_x0 + local_x) as usize;
             let source_y = (crop_y0 + local_y) as usize;

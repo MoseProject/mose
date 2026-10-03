@@ -35,6 +35,8 @@ the real default device.
 
 - [x] Normal/multiply/screen/overlay/darken/lighten/add/difference blends (W3C formulas, exact).
 - [x] Scale, rotation, crop, placement by top-left corner; nearest sampling.
+- [x] Horizontal/vertical flip, sepia, and keyframes on brightness, contrast, saturation and the
+      crop window (CPU and GPU parity tested).
 - [x] Brightness, contrast, saturation, vignette, pixelize, chroma key (soft ramp), rectangle /
       rounded-rectangle / ellipse masks (feather, invert), trilinear 3D LUT.
 - [x] Keyframe tracks (linear/hold/ease-in/ease-out/ease-in-out) for opacity, x, y, scale,

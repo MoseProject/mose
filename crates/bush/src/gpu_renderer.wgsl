@@ -40,7 +40,7 @@ struct Params {
     chroma_color: vec4<f32>,
     mask_shape: u32,
     mask_invert: u32,
-    pad0: u32,
+    sepia: f32,
     pad1: u32,
 }
 
@@ -48,6 +48,8 @@ const FLAG_CHROMA: u32 = 1u;
 const FLAG_MASK: u32 = 2u;
 const FLAG_LUT: u32 = 4u;
 const FLAG_COLOUR: u32 = 8u;
+const FLAG_FLIP_X: u32 = 16u;
+const FLAG_FLIP_Y: u32 = 32u;
 
 @group(0) @binding(0) var<uniform> p: Params;
 @group(0) @binding(1) var<storage, read> src: array<u32>;
@@ -156,6 +158,12 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         local_x = min((local_x / block) * block + block / 2, p.crop_w - 1);
         local_y = min((local_y / block) * block + block / 2, p.crop_h - 1);
     }
+    if ((p.flags & FLAG_FLIP_X) != 0u) {
+        local_x = p.crop_w - 1 - local_x;
+    }
+    if ((p.flags & FLAG_FLIP_Y) != 0u) {
+        local_y = p.crop_h - 1 - local_y;
+    }
     let source_x = u32(p.crop_x0 + local_x);
     let source_y = u32(p.crop_y0 + local_y);
     let word = src[source_y * p.src_stride_px + source_x];
@@ -186,7 +194,16 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
             let falloff = 1.0 - p.vignette * radius * radius;
             rgb = clamp((rgb - 0.5) * p.contrast + 0.5 + p.brightness, vec3<f32>(0.0), vec3<f32>(1.0));
             let luma = 0.2126 * rgb.x + 0.7152 * rgb.y + 0.0722 * rgb.z;
-            rgb = clamp((vec3<f32>(luma) + (rgb - luma) * p.saturation) * falloff, vec3<f32>(0.0), vec3<f32>(1.0));
+            rgb = clamp(vec3<f32>(luma) + (rgb - luma) * p.saturation, vec3<f32>(0.0), vec3<f32>(1.0));
+            if (p.sepia > 0.0) {
+                let toned = vec3<f32>(
+                    0.393 * rgb.x + 0.769 * rgb.y + 0.189 * rgb.z,
+                    0.349 * rgb.x + 0.686 * rgb.y + 0.168 * rgb.z,
+                    0.272 * rgb.x + 0.534 * rgb.y + 0.131 * rgb.z,
+                );
+                rgb = clamp(rgb + (min(toned, vec3<f32>(1.0)) - rgb) * p.sepia, vec3<f32>(0.0), vec3<f32>(1.0));
+            }
+            rgb = clamp(rgb * falloff, vec3<f32>(0.0), vec3<f32>(1.0));
         }
         rgb_bytes = vec3<f32>(rnd(rgb.x * 255.0), rnd(rgb.y * 255.0), rnd(rgb.z * 255.0));
     }

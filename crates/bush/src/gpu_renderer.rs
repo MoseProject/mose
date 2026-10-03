@@ -19,6 +19,8 @@ const FLAG_CHROMA: u32 = 1;
 const FLAG_MASK: u32 = 2;
 const FLAG_LUT: u32 = 4;
 const FLAG_COLOUR: u32 = 8;
+const FLAG_FLIP_X: u32 = 16;
+const FLAG_FLIP_Y: u32 = 32;
 
 #[derive(Debug)]
 pub enum GpuError {
@@ -248,8 +250,15 @@ fn layer_params(
         || effects.contrast != neutral.contrast
         || effects.saturation != neutral.saturation
         || effects.vignette != neutral.vignette
+        || effects.sepia != neutral.sepia
     {
         flags |= FLAG_COLOUR;
+    }
+    if layer.transform.flip_x {
+        flags |= FLAG_FLIP_X;
+    }
+    if layer.transform.flip_y {
+        flags |= FLAG_FLIP_Y;
     }
     let key = effects.chroma_key;
     let mask = effects.mask;
@@ -294,7 +303,7 @@ fn layer_params(
     writer.f32(0.0);
     writer.u32(mask.map_or(0, |mask| u32::from(mask.shape == MaskShape::Ellipse)));
     writer.u32(mask.map_or(0, |mask| u32::from(mask.invert)));
-    writer.u32(0);
+    writer.f32(effects.sepia);
     writer.u32(0);
     debug_assert_eq!(writer.0.len(), PARAMS_BYTES);
     writer.0

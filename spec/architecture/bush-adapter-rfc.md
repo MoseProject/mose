@@ -57,12 +57,12 @@ PreviewEngine (existing handle)
 These are the real gaps found by reading `ClipInstance` against the Bush scene model. Each is
 small, but none exists today, and the adapter must not paper over them:
 
-1. **Keyframes on effect parameters** (`brightness`, `contrast`, `saturation`, crop). Bush only
-   animates opacity, position, scale and rotation; effect fields are static.
+1. ~~Keyframes on effect parameters~~ **done**: `Animation` now animates brightness, contrast,
+   saturation and the crop window (kept a valid sub-rectangle at every instant).
 2. **Speed ramps** (`speed_ramp_end_factor`): Bush speed is constant. Needs a piecewise or
    curve time map in `Contributor::source_time_at` and in the audio stretcher.
-3. **`flipped_h`**: add a flip flag to `LayerTransform` (CPU and WGSL).
-4. **`Sepia`**: add a colour matrix effect or document a LUT equivalent.
+3. ~~`flipped_h`~~ **done**: `LayerTransform::flip_x`/`flip_y` (CPU and WGSL, byte-exact parity).
+4. ~~`Sepia`~~ **done**: `LayerEffects::sepia` (classic matrix, mix 0..1, CPU and WGSL).
 5. **Blend modes beyond the eight in Bush**: enumerate the core modes actually used by presets and
    add the missing separable ones, or restrict the UI.
 6. **Audio master clock.** `Player` advances video from an injected clock; with audio it must

@@ -681,3 +681,104 @@ fn invalid_mask_key_and_block_values_are_rejected() {
         );
     }
 }
+
+#[test]
+fn flips_mirror_the_cropped_layer_before_rotation() {
+    // 3x2 image: top row R G B, bottom row C M Y.
+    let source = frame(
+        3,
+        2,
+        vec![
+            255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, //
+            0, 255, 255, 255, 255, 0, 255, 255, 255, 255, 0, 255,
+        ],
+    );
+    let renderer = CpuRenderer::new(1024).unwrap();
+    let render = |flip_x: bool, flip_y: bool| {
+        let mut layer = LayerFrame::new(&source);
+        layer.transform.flip_x = flip_x;
+        layer.transform.flip_y = flip_y;
+        renderer.render(3, 2, 0.0, &[layer]).unwrap()
+    };
+
+    let both = render(true, true);
+    assert_eq!(pixel(&both, 0, 0), [255, 255, 0, 255]); // Y
+    assert_eq!(pixel(&both, 2, 1), [255, 0, 0, 255]); // R
+    let horizontal = render(true, false);
+    assert_eq!(pixel(&horizontal, 0, 0), [0, 0, 255, 255]); // B
+    assert_eq!(pixel(&horizontal, 2, 0), [255, 0, 0, 255]); // R
+    let vertical = render(false, true);
+    assert_eq!(pixel(&vertical, 0, 0), [0, 255, 255, 255]); // C
+    assert_eq!(pixel(&vertical, 0, 1), [255, 0, 0, 255]); // R
+                                                          // Flipping twice restores the picture.
+    assert_eq!(render(false, false).pixels(), source.pixels());
+}
+
+#[test]
+fn flip_follows_the_crop_window() {
+    let source = frame(
+        4,
+        1,
+        vec![10, 0, 0, 255, 20, 0, 0, 255, 30, 0, 0, 255, 40, 0, 0, 255],
+    );
+    let renderer = CpuRenderer::new(1024).unwrap();
+    let mut layer = LayerFrame::new(&source);
+    layer.transform.crop = CropRect {
+        x: 0.25,
+        y: 0.0,
+        width: 0.5,
+        height: 1.0,
+    };
+    layer.transform.flip_x = true;
+    let output = renderer.render(2, 1, 0.0, &[layer]).unwrap();
+    // The crop holds 20,30; flipped it reads 30,20.
+    assert_eq!(pixel(&output, 0, 0)[0], 30);
+    assert_eq!(pixel(&output, 1, 0)[0], 20);
+}
+
+#[test]
+fn sepia_tones_towards_the_classic_matrix_and_mixes_linearly() {
+    let source = solid(1, 1, [100, 150, 200, 255]);
+    let renderer = CpuRenderer::new(16).unwrap();
+    let render = |sepia: f32| {
+        let mut layer = LayerFrame::new(&source);
+        layer.effects.sepia = sepia;
+        renderer
+            .render(1, 1, 0.0, &[layer])
+            .unwrap()
+            .pixels()
+            .to_vec()
+    };
+    assert_eq!(render(0.0), [100, 150, 200, 255]);
+    // r' = .393*100 + .769*150 + .189*200 = 192.45, g' = 171.4, b' = 133.8.
+    let full = render(1.0);
+    assert_eq!(full, [192, 171, 134, 255]);
+    let half = render(0.5);
+    assert!((i32::from(half[0]) - (100 + 192) / 2).abs() <= 1);
+    assert!((i32::from(half[2]) - (200 + 134) / 2).abs() <= 1);
+    // Sepia on a bright pixel saturates instead of wrapping.
+    let bright = solid(1, 1, [250, 250, 250, 255]);
+    let mut layer = LayerFrame::new(&bright);
+    layer.effects.sepia = 1.0;
+    let pixel = renderer
+        .render(1, 1, 0.0, &[layer])
+        .unwrap()
+        .pixels()
+        .to_vec();
+    assert_eq!(pixel[0], 255);
+    assert!(pixel[1] >= 200 && pixel[2] < pixel[0]);
+}
+
+#[test]
+fn sepia_must_be_a_unit_fraction() {
+    let source = solid(1, 1, [0, 0, 0, 255]);
+    let renderer = CpuRenderer::new(16).unwrap();
+    for sepia in [-0.1, 1.1, f32::NAN] {
+        let mut layer = LayerFrame::new(&source);
+        layer.effects.sepia = sepia;
+        assert_eq!(
+            renderer.render(1, 1, 0.0, &[layer]).unwrap_err(),
+            RenderError::InvalidEffects
+        );
+    }
+}

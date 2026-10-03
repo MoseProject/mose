@@ -260,6 +260,33 @@ impl Contributor {
         if let Some(track) = &animation.rotation_deg {
             resolved.transform.rotation_deg = track.value_at(local);
         }
+        if let Some(track) = &animation.brightness {
+            resolved.effects.brightness = track.value_at(local);
+        }
+        if let Some(track) = &animation.contrast {
+            resolved.effects.contrast = track.value_at(local);
+        }
+        if let Some(track) = &animation.saturation {
+            resolved.effects.saturation = track.value_at(local);
+        }
+        {
+            // An animated crop window must stay a valid sub-rectangle at every instant.
+            let crop = &mut resolved.transform.crop;
+            if let Some(track) = &animation.crop_width {
+                crop.width = track.value_at(local).clamp(0.01, 1.0);
+            }
+            if let Some(track) = &animation.crop_height {
+                crop.height = track.value_at(local).clamp(0.01, 1.0);
+            }
+            if let Some(track) = &animation.crop_x {
+                crop.x = track.value_at(local);
+            }
+            if let Some(track) = &animation.crop_y {
+                crop.y = track.value_at(local);
+            }
+            crop.x = crop.x.clamp(0.0, 1.0 - crop.width);
+            crop.y = crop.y.clamp(0.0, 1.0 - crop.height);
+        }
         if resolved.shake > 0.0 {
             resolved.x += crate::shake_offset(resolved.shake, playhead_secs, 1).round() as i32;
             resolved.y += crate::shake_offset(resolved.shake, playhead_secs, 2).round() as i32;

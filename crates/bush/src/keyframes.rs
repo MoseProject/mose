@@ -113,6 +113,14 @@ pub struct Animation {
     pub scale_x: Option<KeyframeTrack>,
     pub scale_y: Option<KeyframeTrack>,
     pub rotation_deg: Option<KeyframeTrack>,
+    /// Colour adjustments and crop window, animated like the geometry above.
+    pub brightness: Option<KeyframeTrack>,
+    pub contrast: Option<KeyframeTrack>,
+    pub saturation: Option<KeyframeTrack>,
+    pub crop_x: Option<KeyframeTrack>,
+    pub crop_y: Option<KeyframeTrack>,
+    pub crop_width: Option<KeyframeTrack>,
+    pub crop_height: Option<KeyframeTrack>,
 }
 
 impl Animation {
@@ -123,6 +131,13 @@ impl Animation {
             && self.scale_x.is_none()
             && self.scale_y.is_none()
             && self.rotation_deg.is_none()
+            && self.brightness.is_none()
+            && self.contrast.is_none()
+            && self.saturation.is_none()
+            && self.crop_x.is_none()
+            && self.crop_y.is_none()
+            && self.crop_width.is_none()
+            && self.crop_height.is_none()
     }
 
     /// Slides the layer horizontally from `from_x` to `to_x` over `duration_secs`, then holds.
@@ -167,7 +182,20 @@ impl Animation {
                     .all(|keyframe| keyframe.value > 0.0)
             })
         });
-        opacity_ok && scale_ok
+        let within = |track: &Option<KeyframeTrack>, range: std::ops::RangeInclusive<f32>| {
+            track
+                .as_ref()
+                .is_none_or(|track| track.values_within(range))
+        };
+        opacity_ok
+            && scale_ok
+            && within(&self.brightness, -1.0..=1.0)
+            && within(&self.contrast, 0.0..=4.0)
+            && within(&self.saturation, 0.0..=4.0)
+            && within(&self.crop_x, 0.0..=1.0)
+            && within(&self.crop_y, 0.0..=1.0)
+            && within(&self.crop_width, 0.0..=1.0)
+            && within(&self.crop_height, 0.0..=1.0)
     }
 }
 

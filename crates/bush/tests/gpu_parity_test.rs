@@ -280,6 +280,14 @@ fn colour_effects_chroma_mask_pixelize_and_lut_match_the_reference() {
             },
             None,
         ),
+        (
+            "sepia",
+            LayerEffects {
+                sepia: 0.8,
+                ..LayerEffects::default()
+            },
+            None,
+        ),
         ("lut", LayerEffects::default(), Some(&lut)),
         (
             "everything",
@@ -288,6 +296,7 @@ fn colour_effects_chroma_mask_pixelize_and_lut_match_the_reference() {
                 contrast: 0.9,
                 saturation: 1.4,
                 vignette: 0.3,
+                sepia: 0.4,
                 pixelize_block: 4,
                 chroma_key: Some(ChromaKey {
                     color: [10, 200, 30],
@@ -466,4 +475,29 @@ fn engine_with_the_gpu_renderer_matches_the_cpu_engine() {
         max_difference <= 1,
         "engine GPU vs CPU max difference {max_difference}"
     );
+}
+
+#[test]
+fn flips_match_the_reference_alone_and_with_other_transforms() {
+    let Some(mut gpu) = gpu(1 << 24) else { return };
+    let base = noise(200, 150, 71, false);
+    let source = noise(120, 90, 72, true);
+    for (label, flip_x, flip_y, rotation, scale) in [
+        ("flip x", true, false, 0.0_f32, 1.0_f32),
+        ("flip y", false, true, 0.0, 1.0),
+        ("flip both", true, true, 0.0, 1.0),
+        ("flip x + scale", true, false, 0.0, 1.6),
+        ("flip y + rotate", false, true, 25.0, 1.0),
+    ] {
+        let mut layer = LayerFrame::new(&source);
+        layer.x = 30;
+        layer.y = 20;
+        layer.transform.flip_x = flip_x;
+        layer.transform.flip_y = flip_y;
+        layer.transform.rotation_deg = rotation;
+        layer.transform.scale_x = scale;
+        layer.transform.scale_y = scale;
+        let comparison = compare(&mut gpu, 200, 150, &[LayerFrame::new(&base), layer]);
+        assert_parity(label, &comparison, 255, 0.01);
+    }
 }

@@ -244,3 +244,73 @@ fn slide_and_zoom_builders_make_transitions() {
     assert!(Animation::zoom(0.0, 1.0, 1.0, Easing::Linear).is_none());
     assert!(Animation::zoom(1.0, -1.0, 1.0, Easing::Linear).is_none());
 }
+
+#[test]
+fn effect_and_crop_tracks_are_animated_and_kept_valid() {
+    let contributor = clip(Placement {
+        animation: Animation {
+            brightness: Some(track(vec![
+                key(0.0, 0.0, Easing::Linear),
+                key(2.0, 0.4, Easing::Linear),
+            ])),
+            contrast: Some(track(vec![
+                key(0.0, 1.0, Easing::Linear),
+                key(2.0, 2.0, Easing::Linear),
+            ])),
+            saturation: Some(track(vec![
+                key(0.0, 1.0, Easing::Linear),
+                key(2.0, 0.0, Easing::Linear),
+            ])),
+            crop_width: Some(track(vec![
+                key(0.0, 1.0, Easing::Linear),
+                key(2.0, 0.5, Easing::Linear),
+            ])),
+            crop_x: Some(track(vec![
+                key(0.0, 0.0, Easing::Linear),
+                key(2.0, 0.9, Easing::Linear),
+            ])),
+            ..Animation::default()
+        },
+        ..Placement::default()
+    });
+
+    let halfway = contributor.placement_at(1.0);
+    assert!((halfway.effects.brightness - 0.2).abs() < 1e-6);
+    assert!((halfway.effects.contrast - 1.5).abs() < 1e-6);
+    assert!((halfway.effects.saturation - 0.5).abs() < 1e-6);
+    assert!((halfway.transform.crop.width - 0.75).abs() < 1e-6);
+
+    // At the end the animated x (0.9) cannot push the window outside the frame: width 0.5
+    // forces x <= 0.5.
+    let end = contributor.placement_at(2.0).transform.crop;
+    assert_eq!(end.width, 0.5);
+    assert!(end.x + end.width <= 1.0 + 1e-6);
+
+    // Out-of-range animated values are rejected at scene construction.
+    for bad in [
+        Animation {
+            brightness: Some(track(vec![key(0.0, 2.0, Easing::Linear)])),
+            ..Animation::default()
+        },
+        Animation {
+            contrast: Some(track(vec![key(0.0, -1.0, Easing::Linear)])),
+            ..Animation::default()
+        },
+        Animation {
+            crop_height: Some(track(vec![key(0.0, 1.5, Easing::Linear)])),
+            ..Animation::default()
+        },
+    ] {
+        assert_eq!(
+            SceneSnapshot::new(
+                SceneVersions::default(),
+                vec![clip(Placement {
+                    animation: bad,
+                    ..Placement::default()
+                })]
+            )
+            .unwrap_err(),
+            SceneError::InvalidPlacement
+        );
+    }
+}
