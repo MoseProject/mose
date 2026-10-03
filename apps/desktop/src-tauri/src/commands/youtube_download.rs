@@ -187,3 +187,7 @@ fn youtube_downloads_dir() -> PathBuf {
         .map(|d| d.join("youtube_downloads"))
         .unwrap_or_else(|| PathBuf::from("youtube_downloads"))
 }
+
+#[cfg(test)]
+#[path = "youtube_download_test.rs"]
+mod tests;
