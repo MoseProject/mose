@@ -30,6 +30,7 @@ mod frames;
 mod prefs;
 mod preview_engine;
 mod protocol;
+mod services;
 mod state;
 mod telemetry;
 #[cfg(test)]
@@ -87,6 +88,7 @@ fn main() {
                 error_reporter,
                 pending_crash_review,
                 telemetry_enabled,
+                Arc::new(services::SystemServices),
             ));
             autosave::spawn(handle);
             Ok(())

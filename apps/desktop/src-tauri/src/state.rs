@@ -146,6 +146,8 @@ pub struct AppState {
     /// separate from `PreviewEngine`'s own copy (it lives on that dedicated thread), so a
     /// compound clip's nested content isn't re-rendered on every export of the same sequence.
     pub nested_sequence_cache: Mutex<HashMap<u64, avcore::nested_sequence::NestedSequenceCache>>,
+    /// Calls that leave the process or need model files; faked in tests.
+    pub services: Arc<dyn crate::services::Services>,
 }
 
 impl AppState {
@@ -158,6 +160,7 @@ impl AppState {
         error_reporter: Option<Arc<dyn avcore::ErrorReporter>>,
         pending_crash_review: Option<crate::error_reporting::PendingCrashReview>,
         telemetry_enabled: Arc<std::sync::atomic::AtomicBool>,
+        services: Arc<dyn crate::services::Services>,
     ) -> Self {
         Self {
             session: Mutex::new(Session::new(blank_project(
@@ -182,6 +185,7 @@ impl AppState {
             pending_crash_review: Mutex::new(pending_crash_review),
             telemetry_enabled,
             nested_sequence_cache: Mutex::new(std::collections::HashMap::new()),
+            services,
         }
     }
 

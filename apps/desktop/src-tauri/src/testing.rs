@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::mpsc::Receiver;
-use std::sync::{Arc, MutexGuard, Once};
+use std::sync::{Arc, Mutex, MutexGuard, Once};
 
 use tauri::test::{mock_app, MockRuntime};
 use tauri::{App, AppHandle, Listener, Manager, State};
@@ -13,6 +13,7 @@ use tauri::{App, AppHandle, Listener, Manager, State};
 use crate::export::ExportQueue;
 use crate::prefs::PrefsDocument;
 use crate::preview_engine::{Command, PreviewEngine};
+use crate::services::Services;
 use crate::state::{AppState, Session, SESSION_CHANGED};
 
 /// How long a test waits for a background worker before giving up.
@@ -38,8 +39,60 @@ fn isolate_user_dirs() {
     });
 }
 
+/// Stands in for [`crate::services::SystemServices`]: each call returns what the test queued
+/// for it, or a failure when nothing was queued.
+#[derive(Default)]
+pub(crate) struct FakeServices {
+    pub release: Mutex<Option<Result<avcore::LatestRelease, avcore::UpdateCheckError>>>,
+    pub update: Mutex<Option<Result<avcore::ApplyUpdateOutcome, avcore::ApplyUpdateError>>>,
+    pub restart: Mutex<Option<Result<(), avcore::ApplyUpdateError>>>,
+    pub restarts: AtomicUsize,
+    pub speech: Mutex<Option<Result<Vec<f32>, avcore::TtsError>>>,
+}
+
+impl Services for FakeServices {
+    fn fetch_latest_release(&self) -> Result<avcore::LatestRelease, avcore::UpdateCheckError> {
+        self.release
+            .lock()
+            .unwrap()
+            .take()
+            .unwrap_or_else(|| Err(avcore::UpdateCheckError::Request("offline".into())))
+    }
+
+    fn apply_update(
+        &self,
+        _version: &str,
+    ) -> Result<avcore::ApplyUpdateOutcome, avcore::ApplyUpdateError> {
+        self.update
+            .lock()
+            .unwrap()
+            .take()
+            .unwrap_or(Err(avcore::ApplyUpdateError::UnsupportedPlatform))
+    }
+
+    fn restart_application(&self) -> Result<(), avcore::ApplyUpdateError> {
+        self.restarts.fetch_add(1, Ordering::SeqCst);
+        self.restart.lock().unwrap().take().unwrap_or(Ok(()))
+    }
+
+    fn synthesize(
+        &self,
+        _model_path: &Path,
+        _config: &avcore::PiperVoiceConfig,
+        _text: &str,
+    ) -> Result<Vec<f32>, avcore::TtsError> {
+        self.speech
+            .lock()
+            .unwrap()
+            .take()
+            .unwrap_or(Ok(vec![0.0; 1600]))
+    }
+}
+
 pub(crate) struct Harness {
     pub app: App<MockRuntime>,
+    /// What the fake services answer; queue results here before running a command.
+    pub services: Arc<FakeServices>,
     /// Every command the code under test sent to the preview engine, oldest first.
     pub preview: Receiver<Command>,
     /// A fresh directory private to this harness.
@@ -135,6 +188,7 @@ pub(crate) fn harness() -> Harness {
     let dir = scratch_root().join(format!("h{}", NEXT_DIR.fetch_add(1, Ordering::SeqCst)));
     std::fs::create_dir_all(&dir).expect("creating the harness directory");
     let app = mock_app();
+    let services = Arc::new(FakeServices::default());
     let (engine, preview) = PreviewEngine::detached();
     app.manage(AppState::new(
         PrefsDocument::default(),
@@ -143,8 +197,14 @@ pub(crate) fn harness() -> Harness {
         None,
         None,
         Arc::new(AtomicBool::new(true)),
+        Arc::clone(&services) as Arc<dyn Services>,
     ));
-    Harness { app, preview, dir }
+    Harness {
+        app,
+        services,
+        preview,
+        dir,
+    }
 }
 
 /// A video asset that exists only in the library (nothing on disk behind `source_path`).
