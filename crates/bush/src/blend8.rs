@@ -205,6 +205,12 @@ pub(crate) fn softlight_table() -> &'static [u8; 65536] {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn normal_blend_returns_the_source_channel() {
+        use crate::BlendMode;
+        assert_eq!(super::blend8(BlendMode::Normal, 77, 200), 77);
+    }
+
+    #[test]
     fn the_softlight_table_is_a_full_256_by_256_lookup() {
         let table = super::softlight_table();
         assert_eq!(table.len(), 256 * 256);
