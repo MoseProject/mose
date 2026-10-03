@@ -17,9 +17,10 @@ import pytest
 from conftest import poll_until
 from helpers import FIXTURE_VIDEO, goto_editor, import_and_add_to_timeline, invoke
 
+# `gstreamer` runs the same measurements against the existing engine, as a baseline to compare.
 pytestmark = pytest.mark.skipif(
-    os.environ.get("OCA_PREVIEW_ENGINE", "").lower() != "bush",
-    reason="set OCA_PREVIEW_ENGINE=bush (and build with --features bush-preview)",
+    os.environ.get("OCA_PREVIEW_ENGINE", "").lower() not in ("bush", "gstreamer"),
+    reason="set OCA_PREVIEW_ENGINE=bush (build with --features bush-preview) or gstreamer",
 )
 
 OUT_DIR = Path(__file__).resolve().parent / "out"
@@ -52,9 +53,11 @@ def test_bush_plays_a_clip_and_reacts_to_seeks(oca_driver):
     goto_editor(oca_driver)
     video = Path(os.environ.get("OCA_BUSH_E2E_VIDEO", FIXTURE_VIDEO))
     import_and_add_to_timeline(oca_driver, video)
+    added_at = time.monotonic()
 
-    first = poll_until(lambda: latest_frame(oca_driver), timeout_secs=15.0, interval_secs=0.2)
-    assert first and first[0] > 1000, "Bush never produced a first preview frame"
+    first = poll_until(lambda: latest_frame(oca_driver), timeout_secs=15.0, interval_secs=0.01)
+    print(f"\nadd-to-timeline-to-first-frame: {(time.monotonic() - added_at) * 1000:.0f} ms")
+    assert first and first[0] > 1000, "the preview never produced a first frame"
     screenshot(oca_driver, "bush_01_loaded.png")
 
     # A seek must yield a different picture, and quickly.
