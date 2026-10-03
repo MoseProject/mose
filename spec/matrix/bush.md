@@ -93,6 +93,8 @@ the real default device.
 - [x] Real output (`DeviceSink`, `--features cpal`): validated on the default device of the
       development machine (WASAPI, 48 kHz): consumption within +1.9 % of wall clock over 0.6 s,
       underflow counting, bounded queue. Tests: `device_audio_test` (skips itself without a device).
+- [x] Linear speed ramps (`Placement::speed_ramp_end`): timeline duration and source time are
+      integrated exactly for video, audio follows block by block.
 - [x] Pitch-preserving time stretch (`time_stretch.rs`, WSOLA, speeds 0.25x-4x): a clip with
       `Placement::speed != 1` keeps its pitch, ends early or runs long, and consecutive blocks
       join bit-exactly; seeks restart the stretch at the matching source position. Outside the

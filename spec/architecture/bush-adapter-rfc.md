@@ -59,8 +59,8 @@ small, but none exists today, and the adapter must not paper over them:
 
 1. ~~Keyframes on effect parameters~~ **done**: `Animation` now animates brightness, contrast,
    saturation and the crop window (kept a valid sub-rectangle at every instant).
-2. **Speed ramps** (`speed_ramp_end_factor`): Bush speed is constant. Needs a piecewise or
-   curve time map in `Contributor::source_time_at` and in the audio stretcher.
+2. ~~Speed ramps~~ **done**: `Placement::speed_ramp_end` ramps speed linearly; video and audio
+   follow the integrated source time (the audio stretcher changes speed block by block).
 3. ~~`flipped_h`~~ **done**: `LayerTransform::flip_x`/`flip_y` (CPU and WGSL, byte-exact parity).
 4. ~~`Sepia`~~ **done**: `LayerEffects::sepia` (classic matrix, mix 0..1, CPU and WGSL).
 5. ~~Blend modes beyond the eight in Bush~~ **done**: all 40 core modes exist
