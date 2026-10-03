@@ -171,16 +171,15 @@ fn renderer_choice() -> RendererChoice {
     }
 }
 
-/// Software decode unless `OCA_BUSH_DECODE=hardware`. The app's hardware-decode preference
-/// defaults to on for GStreamer, but on the development machine Bush's hardware path is slower
-/// (first frame 406 ms against 93 ms, render p50 6.1 ms against 4.3 ms at 1080p), so the
-/// preference is deliberately not applied here until a zero-copy path exists.
-fn effective_hardware_decode(_preference: bool) -> bool {
+/// Software decode unless `OCA_BUSH_DECODE=hardware`. On the development machine Bush's
+/// hardware path is slower (first frame 406 ms against 93 ms, render p50 6.1 ms against 4.3 ms
+/// at 1080p), so it stays a developer switch until a zero-copy path exists.
+fn hardware_decode_requested() -> bool {
     matches!(std::env::var("OCA_BUSH_DECODE").as_deref(), Ok("hardware"))
 }
 
-fn new_engine(canvas: (u32, u32), hardware_decode: bool) -> Option<Engine> {
-    let hardware_decode = effective_hardware_decode(hardware_decode);
+fn new_engine(canvas: (u32, u32)) -> Option<Engine> {
+    let hardware_decode = hardware_decode_requested();
     tracing::info!(hardware_decode, "bush engine decode policy");
     Engine::new(EngineConfig {
         canvas_width: canvas.0,
@@ -220,7 +219,6 @@ pub fn run(
     let mut audio: Option<AudioStack> = None;
     let mut scene: Option<SceneSnapshot> = None;
     let mut approximations: BTreeSet<Approximation> = BTreeSet::new();
-    let mut hardware_decode = false;
     let mut revision = 0u64;
     let mut playing = false;
     let mut available = false;
@@ -314,13 +312,6 @@ pub fn run(
                     }
                     dirty = true;
                 }
-                Command::HardwareDecode(enabled) => {
-                    if hardware_decode != enabled {
-                        hardware_decode = enabled;
-                        player = None;
-                        rebuild = true;
-                    }
-                }
             }
         }
 
@@ -358,7 +349,7 @@ pub fn run(
                             Some(player) => player
                                 .set_scene(next_scene.clone(), overlays, duration)
                                 .map(|_| ()),
-                            None => new_engine(canvas, hardware_decode)
+                            None => new_engine(canvas)
                                 .ok_or(bush::PlayerError::InvalidDuration(duration))
                                 .and_then(|engine| {
                                     Player::new(engine, next_scene.clone(), duration)
