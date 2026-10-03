@@ -249,3 +249,7 @@ fn display(path: &Path) -> String {
 fn emit<R: Runtime>(app: &AppHandle<R>, payload: WatchFolderEventPayload) {
     let _ = app.emit(WATCH_FOLDER_EVENT, payload);
 }
+
+#[cfg(test)]
+#[path = "watch_folder_test.rs"]
+mod tests;
