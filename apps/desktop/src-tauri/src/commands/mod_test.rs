@@ -1,23 +1,10 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use avcore::{ExportAspectRatio, MarkerKind};
-use tauri::Listener;
 
 use super::*;
 use crate::preview_engine::Command;
-use crate::state::SESSION_CHANGED;
 use crate::testing::{harness, path_in};
-
-/// Counts `session-changed` events on the harness's app.
-fn count_session_events(app: &tauri::App<tauri::test::MockRuntime>) -> Arc<AtomicUsize> {
-    let seen = Arc::new(AtomicUsize::new(0));
-    let counter = Arc::clone(&seen);
-    app.listen(SESSION_CHANGED, move |_| {
-        counter.fetch_add(1, Ordering::SeqCst);
-    });
-    seen
-}
 
 #[test]
 fn get_session_serializes_the_current_view() {
@@ -85,7 +72,7 @@ fn a_new_project_takes_its_loudness_target_from_the_preferred_profile() {
 #[test]
 fn publishing_emits_the_session_and_hands_the_project_to_the_preview() {
     let h = harness();
-    let events = count_session_events(&h.app);
+    let events = h.count_session_events();
     new_project(h.handle(), "Show".into(), "Cut".into()).unwrap();
     assert_eq!(events.load(Ordering::SeqCst), 1);
     let sent = h.drain_preview();
@@ -112,7 +99,7 @@ fn an_undoable_edit_can_be_undone_and_redone() {
 #[test]
 fn an_edit_that_changes_nothing_leaves_no_undo_step_and_no_event() {
     let h = harness();
-    let events = count_session_events(&h.app);
+    let events = h.count_session_events();
     undoable(&h.handle(), |_| false).unwrap();
     assert_eq!(events.load(Ordering::SeqCst), 0);
     assert!(!h.session().view().can_undo);
@@ -132,7 +119,7 @@ fn an_undoable_edit_reads_the_live_playhead() {
 #[test]
 fn a_failing_session_change_publishes_nothing() {
     let h = harness();
-    let events = count_session_events(&h.app);
+    let events = h.count_session_events();
     let result: Result<(), String> = with_session(&h.handle(), |_| Err("nope".to_string()));
     assert_eq!(result, Err("nope".to_string()));
     assert_eq!(events.load(Ordering::SeqCst), 0);

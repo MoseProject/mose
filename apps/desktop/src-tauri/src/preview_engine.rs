@@ -98,6 +98,12 @@ impl PreviewEngine {
         (engine, rx)
     }
 
+    /// Pretends playback reached `secs`, which is what edits read as the live playhead.
+    #[cfg(test)]
+    pub(crate) fn set_playhead(&self, secs: f64) {
+        self.playhead_bits.store(secs.to_bits(), Ordering::Release);
+    }
+
     pub fn set_content(&self, project: Project) {
         let _ = self.tx.send(Command::Content {
             project: Box::new(project),

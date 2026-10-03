@@ -3,17 +3,17 @@
 //! and every user directory pointed at a scratch folder, so no test touches real preferences.
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, MutexGuard, Once};
 
 use tauri::test::{mock_app, MockRuntime};
-use tauri::{App, AppHandle, Manager, State};
+use tauri::{App, AppHandle, Listener, Manager, State};
 
 use crate::export::ExportQueue;
 use crate::prefs::PrefsDocument;
 use crate::preview_engine::{Command, PreviewEngine};
-use crate::state::{AppState, Session};
+use crate::state::{AppState, Session, SESSION_CHANGED};
 
 static ISOLATE: Once = Once::new();
 static NEXT_DIR: AtomicU32 = AtomicU32::new(0);
@@ -59,6 +59,22 @@ impl Harness {
 
     pub fn prefs(&self) -> MutexGuard<'_, PrefsDocument> {
         self.state().inner().prefs()
+    }
+
+    /// Counts the `session-changed` events published from now on: one per command that
+    /// changed the session, none for a rejected or no-op edit.
+    pub fn count_session_events(&self) -> Arc<AtomicUsize> {
+        let seen = Arc::new(AtomicUsize::new(0));
+        let counter = Arc::clone(&seen);
+        self.app.listen(SESSION_CHANGED, move |_| {
+            counter.fetch_add(1, Ordering::SeqCst);
+        });
+        seen
+    }
+
+    /// Moves the preview engine's live playhead, the one edits such as split-at-playhead read.
+    pub fn set_playhead(&self, secs: f64) {
+        self.state().preview.set_playhead(secs);
     }
 
     /// The preview commands sent so far, draining the channel.
