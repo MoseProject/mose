@@ -191,3 +191,62 @@ fn opening_a_missing_project_reports_the_error() {
     assert!(result.is_err());
     assert_eq!(h.session().project.name, "Untitled");
 }
+
+#[test]
+fn opening_asks_for_a_project_and_a_cancelled_dialog_opens_nothing() {
+    let h = harness();
+    let path = path_in(&h.dir, "dialog.ocproj");
+    new_project(h.handle(), "Chosen".into(), "Cut".into()).unwrap();
+    h.session().project.file_path = Some(path.clone());
+    tauri::async_runtime::block_on(save_project(h.handle(), false)).unwrap();
+    new_project(h.handle(), "Other".into(), "Cut".into()).unwrap();
+
+    crate::dialogs::scripted::answer(None);
+    assert_eq!(
+        tauri::async_runtime::block_on(open_project(h.handle())),
+        Ok(false)
+    );
+    assert_eq!(h.session().project.name, "Other");
+
+    crate::dialogs::scripted::answer(Some(vec![path]));
+    assert_eq!(
+        tauri::async_runtime::block_on(open_project(h.handle())),
+        Ok(true)
+    );
+    assert_eq!(h.session().project.name, "Chosen");
+}
+
+#[test]
+fn saving_an_unsaved_project_asks_where_and_saving_as_asks_again() {
+    let h = harness();
+    let first = path_in(&h.dir, "first.ocproj");
+    let second = path_in(&h.dir, "second.ocproj");
+
+    crate::dialogs::scripted::answer(None);
+    assert_eq!(
+        tauri::async_runtime::block_on(save_project(h.handle(), false)),
+        Ok(false)
+    );
+    assert!(h.session().project.file_path.is_none());
+
+    crate::dialogs::scripted::answer(Some(vec![first.clone()]));
+    assert_eq!(
+        tauri::async_runtime::block_on(save_project(h.handle(), false)),
+        Ok(true)
+    );
+    assert_eq!(
+        h.session().project.file_path.as_deref(),
+        Some(first.as_path())
+    );
+
+    crate::dialogs::scripted::answer(Some(vec![second.clone()]));
+    assert_eq!(
+        tauri::async_runtime::block_on(save_project(h.handle(), true)),
+        Ok(true)
+    );
+    assert_eq!(
+        h.session().project.file_path.as_deref(),
+        Some(second.as_path())
+    );
+    assert!(first.exists() && second.exists());
+}
