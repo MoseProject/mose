@@ -393,3 +393,17 @@ fn position_and_crop_tracks_are_evaluated_at_the_playhead() {
     assert!((crop.x - 0.25).abs() < 1e-6 && (crop.y - 0.125).abs() < 1e-6);
     assert_eq!((crop.width, crop.height), (0.5, 0.5));
 }
+
+#[test]
+fn an_empty_media_path_is_rejected() {
+    let mut clip = media(1, 0, true, true);
+    clip.content = ContributorContent::Media(MediaSource {
+        path: PathBuf::new(),
+        range: SourceRange::new(0.0, 1.0).unwrap(),
+        version: Version(1),
+    });
+    assert_eq!(
+        SceneSnapshot::new(SceneVersions::default(), vec![clip]).unwrap_err(),
+        SceneError::EmptyMediaPath
+    );
+}
