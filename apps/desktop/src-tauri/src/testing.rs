@@ -80,6 +80,40 @@ impl Harness {
         self.state().preview.set_playhead(secs);
     }
 
+    /// Puts `video.mp4` in the library and one clip of it on the timeline. Returns the asset
+    /// and clip ids.
+    pub fn add_fixture_clip(&self) -> (u64, u64) {
+        let path = fixture("video.mp4");
+        let probed = avcore::probe_media(&path).expect("probing the shipped fixture");
+        let asset_id = {
+            let mut session = self.session();
+            let id = session
+                .project
+                .media_library
+                .iter()
+                .map(|a| a.id)
+                .max()
+                .unwrap_or(0)
+                + 1;
+            let asset = probed.into_media_asset(id, "video.mp4".into(), path);
+            session.project.media_library.push(asset);
+            id
+        };
+        crate::commands::timeline::add_asset_to_timeline(self.handle(), asset_id, None, None)
+            .expect("adding the fixture clip");
+        let clip_id = self
+            .session()
+            .project
+            .timeline()
+            .tracks
+            .iter()
+            .flat_map(|t| &t.clips)
+            .map(|c| c.id)
+            .max()
+            .expect("the clip was added");
+        (asset_id, clip_id)
+    }
+
     /// Polls until `done` holds for the session, for work that finishes on a background thread.
     /// Panics with `what` after `WAIT` so a stuck worker fails the test instead of hanging it.
     pub fn wait_until(&self, what: &str, done: impl Fn(&Session) -> bool) {

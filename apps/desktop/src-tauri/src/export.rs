@@ -399,3 +399,7 @@ impl ExportQueue {
         self.pump(app)
     }
 }
+
+#[cfg(test)]
+#[path = "export/export_test.rs"]
+mod tests;
