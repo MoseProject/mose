@@ -171,7 +171,17 @@ fn renderer_choice() -> RendererChoice {
     }
 }
 
+/// Software decode unless `OCA_BUSH_DECODE=hardware`. The app's hardware-decode preference
+/// defaults to on for GStreamer, but on the development machine Bush's hardware path is slower
+/// (first frame 406 ms against 93 ms, render p50 6.1 ms against 4.3 ms at 1080p), so the
+/// preference is deliberately not applied here until a zero-copy path exists.
+fn effective_hardware_decode(_preference: bool) -> bool {
+    matches!(std::env::var("OCA_BUSH_DECODE").as_deref(), Ok("hardware"))
+}
+
 fn new_engine(canvas: (u32, u32), hardware_decode: bool) -> Option<Engine> {
+    let hardware_decode = effective_hardware_decode(hardware_decode);
+    tracing::info!(hardware_decode, "bush engine decode policy");
     Engine::new(EngineConfig {
         canvas_width: canvas.0,
         canvas_height: canvas.1,
