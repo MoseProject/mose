@@ -88,7 +88,7 @@ fn main() {
                 error_reporter,
                 pending_crash_review,
                 telemetry_enabled,
-                Arc::new(services::SystemServices),
+                Arc::new(services::SystemServices::new(handle.clone())),
             ));
             autosave::spawn(handle);
             Ok(())

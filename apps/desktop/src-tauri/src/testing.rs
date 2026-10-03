@@ -47,6 +47,7 @@ pub(crate) struct FakeServices {
     pub update: Mutex<Option<Result<avcore::ApplyUpdateOutcome, avcore::ApplyUpdateError>>>,
     pub restart: Mutex<Option<Result<(), avcore::ApplyUpdateError>>>,
     pub restarts: AtomicUsize,
+    pub exits: Mutex<Vec<i32>>,
     pub speech: Mutex<Option<Result<Vec<f32>, avcore::TtsError>>>,
 }
 
@@ -73,6 +74,10 @@ impl Services for FakeServices {
     fn restart_application(&self) -> Result<(), avcore::ApplyUpdateError> {
         self.restarts.fetch_add(1, Ordering::SeqCst);
         self.restart.lock().unwrap().take().unwrap_or(Ok(()))
+    }
+
+    fn exit(&self, code: i32) {
+        self.exits.lock().unwrap().push(code);
     }
 
     fn synthesize(

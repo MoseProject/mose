@@ -83,10 +83,12 @@ pub fn install_available_update<R: Runtime>(app: AppHandle<R>, version: String) 
 /// process -- what the About screen's "Restart" button does once an update is installed.
 #[tauri::command]
 pub fn restart_after_update<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
-    app.state::<AppState>()
-        .services
-        .restart_application()
-        .map_err(|e| e.to_string())?;
-    app.exit(0);
+    let services = app.state::<AppState>().services.clone();
+    services.restart_application().map_err(|e| e.to_string())?;
+    services.exit(0);
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "update_check_test.rs"]
+mod tests;

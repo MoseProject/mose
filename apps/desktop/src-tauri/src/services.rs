@@ -16,6 +16,8 @@ pub trait Services: Send + Sync {
     fn fetch_latest_release(&self) -> Result<LatestRelease, UpdateCheckError>;
     fn apply_update(&self, version: &str) -> Result<ApplyUpdateOutcome, ApplyUpdateError>;
     fn restart_application(&self) -> Result<(), ApplyUpdateError>;
+    /// Closes the app gracefully, once a restarted copy is running.
+    fn exit(&self, code: i32);
     fn synthesize(
         &self,
         model_path: &Path,
@@ -25,7 +27,15 @@ pub trait Services: Send + Sync {
 }
 
 /// The real implementations.
-pub struct SystemServices;
+pub struct SystemServices {
+    app: tauri::AppHandle,
+}
+
+impl SystemServices {
+    pub fn new(app: tauri::AppHandle) -> Self {
+        Self { app }
+    }
+}
 
 impl Services for SystemServices {
     fn fetch_latest_release(&self) -> Result<LatestRelease, UpdateCheckError> {
@@ -38,6 +48,10 @@ impl Services for SystemServices {
 
     fn restart_application(&self) -> Result<(), ApplyUpdateError> {
         avcore::restart_application()
+    }
+
+    fn exit(&self, code: i32) {
+        self.app.exit(code);
     }
 
     fn synthesize(
