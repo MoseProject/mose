@@ -109,8 +109,13 @@ the real default device.
 - [x] Long-run A/V soak on the real device (`long_run_*`, ignored by default, `BUSH_SOAK_SECS`):
       60 s run, audio clock within 7 ms of wall time at every 10 s report (relative rate error
       -42 ppm), video never led the audio clock, one underflow callback (startup).
-- [ ] Device-loss recovery on real hardware (the fake sink covers the contract; a real unplug
-      was not exercised).
+- [x] Audio device recovery: DeviceSink::is_failed/ecover/ecoveries reopen the stream on
+      the current default device (queue emptied, clock keeps counting, format change reported as
+      FormatChanged). Verified on the real device by an on-demand reopen; a physical unplug was
+      not exercised.
+- [x] GPU loss: GpuRenderer flags device loss instead of panicking; the engine switches to the
+      CPU compositor mid-session and retries the frame (EngineStats::gpu_fallbacks). Tests:
+      gpu_loss_test (simulated loss and a destroyed wgpu device).
 
 ## Hardware decode
 
