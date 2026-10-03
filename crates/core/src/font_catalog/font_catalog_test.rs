@@ -572,3 +572,97 @@ fn license_and_source_paths_exist_on_disk_and_never_traverse() {
         }
     }
 }
+
+const GOOD_HASH: &str = "d636e4683231f931eda222d588e944d082bfd3bdba02f928bee461c0f185b251";
+
+fn broken_entry() -> FontFamilyEntry {
+    FontFamilyEntry {
+        family_id: "good-id",
+        display_name: "Good",
+        category: FontCategory::Sans,
+        tags: &[],
+        license_path: "good/OFL.txt",
+        license_id: "OFL-1.1",
+        source_kind: FontSourceKind::Static,
+        faces: &[FontFace {
+            weight: 400,
+            source_path: "good/Good-Regular.ttf",
+            sha256: GOOD_HASH,
+            size_bytes: 1,
+        }],
+        default_weight: 400,
+        fallback_family_id: None,
+        glyphset_guarantees: &[],
+    }
+}
+
+fn errors_for(entries: &[FontFamilyEntry]) -> String {
+    validate_catalog(entries).unwrap_err().join("\n")
+}
+
+#[test]
+fn a_consistent_catalog_validates() {
+    assert!(validate_catalog(&[broken_entry()]).is_ok());
+}
+
+#[test]
+fn every_catalog_inconsistency_is_reported() {
+    let bad_slug = FontFamilyEntry {
+        family_id: "Bad Slug",
+        ..broken_entry()
+    };
+    assert!(errors_for(&[bad_slug]).contains("lowercase ASCII slug"));
+    let empty_slug = FontFamilyEntry {
+        family_id: "",
+        ..broken_entry()
+    };
+    assert!(errors_for(&[empty_slug]).contains("lowercase ASCII slug"));
+
+    // The same id twice, which also reuses the same face file.
+    let duplicates = errors_for(&[broken_entry(), broken_entry()]);
+    assert!(duplicates.contains("duplicate family_id"));
+    assert!(duplicates.contains("duplicate source_path"));
+
+    let no_faces = FontFamilyEntry {
+        faces: &[],
+        ..broken_entry()
+    };
+    let message = errors_for(&[no_faces]);
+    assert!(message.contains("declares no faces"));
+    assert!(message.contains("default_weight"));
+
+    let wrong_default = FontFamilyEntry {
+        default_weight: 900,
+        ..broken_entry()
+    };
+    assert!(errors_for(&[wrong_default]).contains("default_weight 900"));
+
+    let no_license = FontFamilyEntry {
+        license_id: "",
+        ..broken_entry()
+    };
+    assert!(errors_for(&[no_license]).contains("missing license metadata"));
+
+    let own_fallback = FontFamilyEntry {
+        fallback_family_id: Some("good-id"),
+        ..broken_entry()
+    };
+    assert!(errors_for(&[own_fallback]).contains("its own fallback"));
+    let unknown_fallback = FontFamilyEntry {
+        fallback_family_id: Some("nowhere"),
+        ..broken_entry()
+    };
+    assert!(errors_for(&[unknown_fallback]).contains("unknown fallback_family_id"));
+
+    const SHORT_HASH_FACE: &[FontFace] = &[FontFace {
+        weight: 400,
+        source_path: "good/Short.ttf",
+        sha256: "abc",
+        size_bytes: 1,
+    }];
+    let bad_hash = FontFamilyEntry {
+        faces: SHORT_HASH_FACE,
+        ..broken_entry()
+    };
+    assert!(errors_for(&[bad_hash]).contains("malformed sha256"));
+}
