@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from conftest import poll_until
-from helpers import goto_editor, import_and_add_to_timeline, invoke
+from helpers import FIXTURE_VIDEO, goto_editor, import_and_add_to_timeline, invoke
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("OCA_PREVIEW_ENGINE", "").lower() != "bush",
@@ -50,7 +50,8 @@ def screenshot(driver, name):
 
 def test_bush_plays_a_clip_and_reacts_to_seeks(oca_driver):
     goto_editor(oca_driver)
-    import_and_add_to_timeline(oca_driver)
+    video = Path(os.environ.get("OCA_BUSH_E2E_VIDEO", FIXTURE_VIDEO))
+    import_and_add_to_timeline(oca_driver, video)
 
     first = poll_until(lambda: latest_frame(oca_driver), timeout_secs=15.0, interval_secs=0.2)
     assert first and first[0] > 1000, "Bush never produced a first preview frame"
@@ -77,7 +78,7 @@ def test_bush_plays_a_clip_and_reacts_to_seeks(oca_driver):
     time.sleep(0.3)
     invoke(oca_driver, "preview_set_playing", {"playing": True})
     seen = set()
-    deadline = time.monotonic() + 0.8
+    deadline = time.monotonic() + float(os.environ.get("OCA_BUSH_E2E_PLAY_SECS", "0.8"))
     started = time.monotonic()
     while time.monotonic() < deadline:
         frame = latest_frame(oca_driver)
