@@ -294,9 +294,6 @@ export const api = {
   seek: (positionSecs: number) => invoke<void>("preview_seek", { positionSecs }),
   step: (deltaFrames: number) => invoke<void>("preview_step", { deltaFrames }),
   setPlaying: (playing: boolean) => invoke<void>("preview_set_playing", { playing }),
-  setHardwareDecode: (enabled: boolean) =>
-    invoke<void>("preview_set_hardware_decode", { enabled }),
-  previewEngines: () => invoke<string[]>("preview_engines"),
 
   setExportSettings: (targetLufs: number, aspectRatio: ExportAspectRatio) =>
     invoke<void>("set_export_settings", { targetLufs, aspectRatio }),
