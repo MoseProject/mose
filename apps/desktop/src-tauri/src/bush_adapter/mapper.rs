@@ -16,11 +16,15 @@
 //! stabilization) are provisional constants until side-by-side frames against the GStreamer
 //! preview fix them (RFC gap 9).
 
-use std::collections::BTreeSet;
+use std::collections::hash_map::DefaultHasher;
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use avcore::keyframe::{evaluate_keyframes, Keyframe as CoreKeyframe, Position};
+use avcore::overlay_render::{render_shape_clip_rgba, render_text_segment_rgba};
+use avcore::render::resolve_timeline_text_segments;
 use avcore::timeline::{
     BlendMode as CoreBlend, ClipInstance, ColorFilter, MaskShape as CoreMask, Timeline, TrackKind,
     TransitionType,
@@ -29,8 +33,8 @@ use avcore::{MediaAsset, MediaKind};
 use bush::{
     Animation, BlendMode, ChromaKey, Contributor, ContributorContent, ContributorId, CropRect,
     Easing, Fade, Keyframe, KeyframeTrack, LayerEffects, LayerMask, LayerTransform, Lut3D,
-    MaskShape, MediaSource, Placement, SceneError, SceneSnapshot, SceneVersions, SourceRange,
-    Version, MAX_BLUR_SIGMA,
+    MaskShape, MediaSource, PixelFormat, Placement, RasterOverlay, SceneError, SceneSnapshot,
+    SceneVersions, SourceRange, Version, VideoFrame, MAX_BLUR_SIGMA,
 };
 
 /// Source span a frozen clip advances over its whole window; the decoder keeps serving the same
@@ -77,9 +81,146 @@ pub enum Approximation {
     Matte,
 }
 
+/// Rasters Bush composites for the scene's overlay contributors, by contributor id.
+pub type Overlays = Vec<(ContributorId, Arc<VideoFrame>)>;
+
 pub struct Mapped {
     pub scene: SceneSnapshot,
+    pub overlays: Overlays,
     pub approximations: BTreeSet<Approximation>,
+}
+
+/// Overlay ids live above any clip id so they cannot collide with media contributors.
+const TEXT_OVERLAY_ID_BASE: u64 = 1 << 40;
+const SHAPE_OVERLAY_ID_BASE: u64 = 1 << 41;
+/// Overlays always paint above video; text above shapes.
+const SHAPE_LAYER_BASE: i32 = 1_000;
+const TEXT_LAYER_BASE: i32 = 2_000;
+
+/// Full-canvas overlay rasters keyed by a hash of what they depict, so an edit that does not touch
+/// a caption or shape does not re-rasterize it.
+#[derive(Default)]
+pub struct OverlayCache {
+    frames: HashMap<u64, Arc<VideoFrame>>,
+}
+
+impl OverlayCache {
+    fn raster(
+        &mut self,
+        key: u64,
+        canvas: (u32, u32),
+        used: &mut HashSet<u64>,
+        render: impl FnOnce() -> Vec<u8>,
+    ) -> Option<Arc<VideoFrame>> {
+        used.insert(key);
+        if let Some(frame) = self.frames.get(&key) {
+            return Some(Arc::clone(frame));
+        }
+        let frame = Arc::new(
+            VideoFrame::new(
+                PixelFormat::Rgba8,
+                canvas.0,
+                canvas.1,
+                canvas.0 as usize * 4,
+                0.0,
+                render(),
+            )
+            .ok()?,
+        );
+        self.frames.insert(key, Arc::clone(&frame));
+        Some(frame)
+    }
+}
+
+fn content_key(description: &str, canvas: (u32, u32)) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    description.hash(&mut hasher);
+    canvas.hash(&mut hasher);
+    hasher.finish()
+}
+
+/// Text segments (one per caption, plus one per highlighted word) and shape clips as timed
+/// raster contributors.
+fn map_overlays(
+    timeline: &Timeline,
+    canvas: (u32, u32),
+    cache: &mut OverlayCache,
+) -> (Vec<Contributor>, Overlays) {
+    let mut contributors = Vec::new();
+    let mut overlays = Overlays::new();
+    let mut used = HashSet::new();
+    let mut push =
+        |id: u64, layer: i32, start: f64, duration: f64, key: u64, frame: Arc<VideoFrame>| {
+            let id = ContributorId(id);
+            contributors.push(Contributor {
+                id,
+                layer,
+                visible: true,
+                audible: false,
+                content: ContributorContent::RasterOverlay(RasterOverlay {
+                    width: canvas.0,
+                    height: canvas.1,
+                    version: Version(key),
+                }),
+                placement: Placement {
+                    timeline_start_secs: start,
+                    duration_secs: Some(duration),
+                    ..Placement::default()
+                },
+            });
+            overlays.push((id, frame));
+        };
+
+    for (index, track) in timeline
+        .tracks
+        .iter()
+        .enumerate()
+        .filter(|(_, track)| track.visible && track.kind == TrackKind::Shape)
+    {
+        for clip in &track.shape_clips {
+            if !clip.duration_secs.is_finite() || clip.duration_secs <= 0.0 {
+                continue;
+            }
+            let key = content_key(&format!("{clip:?}"), canvas);
+            let Some(frame) = cache.raster(key, canvas, &mut used, || {
+                render_shape_clip_rgba(clip, canvas.0, canvas.1)
+            }) else {
+                continue;
+            };
+            push(
+                SHAPE_OVERLAY_ID_BASE + clip.id,
+                SHAPE_LAYER_BASE + i32::try_from(index).unwrap_or(0),
+                clip.start_secs,
+                clip.duration_secs,
+                key,
+                frame,
+            );
+        }
+    }
+    for (number, segment) in resolve_timeline_text_segments(timeline, canvas.0, canvas.1)
+        .into_iter()
+        .enumerate()
+    {
+        if !segment.duration_secs.is_finite() || segment.duration_secs <= 0.0 {
+            continue;
+        }
+        let key = content_key(&format!("{segment:?}"), canvas);
+        let Some(frame) = cache.raster(key, canvas, &mut used, || {
+            render_text_segment_rgba(&segment, canvas.0, canvas.1)
+        }) else {
+            continue;
+        };
+        push(
+            TEXT_OVERLAY_ID_BASE + number as u64,
+            TEXT_LAYER_BASE + i32::try_from(number).unwrap_or(0),
+            segment.start_secs,
+            segment.duration_secs,
+            key,
+            frame,
+        );
+    }
+    cache.frames.retain(|key, _| used.contains(key));
+    (contributors, overlays)
 }
 
 struct MappedClip {
@@ -93,6 +234,7 @@ pub fn map_timeline(
     media: &[MediaAsset],
     canvas: (u32, u32),
     resolver: &mut dyn SourceResolver,
+    overlay_cache: &mut OverlayCache,
     versions: SceneVersions,
 ) -> Result<Mapped, SceneError> {
     let mut approximations = BTreeSet::new();
@@ -135,8 +277,11 @@ pub fn map_timeline(
             });
         }
     }
+    let (overlay_contributors, overlays) = map_overlays(timeline, canvas, overlay_cache);
+    contributors.extend(overlay_contributors);
     Ok(Mapped {
         scene: SceneSnapshot::new(versions, contributors)?,
+        overlays,
         approximations,
     })
 }

@@ -33,7 +33,7 @@ use bush::{
 };
 use tauri::{AppHandle, Emitter};
 
-use super::mapper::{map_timeline, Approximation, SourceResolver};
+use super::mapper::{map_timeline, Approximation, OverlayCache, SourceResolver};
 use crate::frames::{encode_jpeg_rgba, PREVIEW_MAX_DIM};
 use crate::preview_engine::{
     preview_source_path, Command, LatestFrame, PreviewTick, FALLBACK_FPS, POLL_INTERVAL,
@@ -190,6 +190,7 @@ pub fn run(
 ) {
     let started = Instant::now();
     let mut resolver = AppResolver::default();
+    let mut overlay_cache = OverlayCache::default();
     let mut timeline = Timeline {
         tracks: Vec::new(),
         playhead_secs: 0.0,
@@ -317,13 +318,21 @@ pub fn run(
                 scene: Version(revision),
                 presentation: Version(revision),
             };
-            match map_timeline(&timeline, &media, next_canvas, &mut resolver, versions) {
+            match map_timeline(
+                &timeline,
+                &media,
+                next_canvas,
+                &mut resolver,
+                &mut overlay_cache,
+                versions,
+            ) {
                 Ok(mapped) => {
                     if mapped.approximations != approximations {
                         tracing::info!(approximations = ?mapped.approximations, "bush scene approximations");
                         approximations = mapped.approximations;
                     }
                     let next_scene = mapped.scene;
+                    let overlays = mapped.overlays;
                     if duration > 0.0 && !next_scene.contributors().is_empty() {
                         if next_canvas != canvas {
                             player = None;
@@ -331,7 +340,7 @@ pub fn run(
                         }
                         let result = match player.as_mut() {
                             Some(player) => player
-                                .set_scene(next_scene.clone(), Vec::new(), duration)
+                                .set_scene(next_scene.clone(), overlays, duration)
                                 .map(|_| ()),
                             None => new_engine(canvas, hardware_decode)
                                 .ok_or(bush::PlayerError::InvalidDuration(duration))
@@ -339,6 +348,7 @@ pub fn run(
                                     Player::new(engine, next_scene.clone(), duration)
                                 })
                                 .and_then(|mut created| {
+                                    created.set_scene(next_scene.clone(), overlays, duration)?;
                                     created.seek(timeline.playhead_secs.clamp(0.0, duration))?;
                                     player = Some(created);
                                     Ok(())
