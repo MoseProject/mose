@@ -18,6 +18,22 @@ const SHARPEN_NOISE_FLOOR: f32 = 2.0;
 const PARALLEL_MIN_PIXELS: usize = 128 * 128;
 const MAX_WORKERS: usize = 8;
 
+/// Blur radius of the unsharp mask behind `sharpen`, in source pixels.
+pub const SHARPEN_SIGMA: f32 = 1.5;
+
+/// The frame with `blur_sigma` blur then `sharpen` unsharp mask applied; `None` when both are
+/// off. Shared by the CPU renderer (and mirrored by the GPU shaders).
+pub(crate) fn apply_effects(
+    frame: &VideoFrame,
+    blur_sigma: f32,
+    sharpen_amount: f32,
+) -> Option<VideoFrame> {
+    let blurred = (blur_sigma > 0.0).then(|| gaussian_blur(frame, blur_sigma));
+    let source = blurred.as_ref().unwrap_or(frame);
+    let sharpened = (sharpen_amount > 0.0).then(|| sharpen(source, sharpen_amount, SHARPEN_SIGMA));
+    sharpened.or(blurred)
+}
+
 /// Gaussian blur with standard deviation `sigma` pixels. `sigma <= 0` returns the frame as is.
 pub fn gaussian_blur(frame: &VideoFrame, sigma: f32) -> VideoFrame {
     if sigma.is_nan() || sigma <= 0.0 {

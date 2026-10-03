@@ -14,7 +14,8 @@ use std::time::{Duration, Instant};
 
 use crate::{
     ByteCache, ContributorContent, ContributorId, CpuRenderer, DecodePolicy, DecodeSource,
-    Generation, LatestIntent, LayerFrame, Placement, Renderer, SceneSnapshot, VideoFrame,
+    Generation, LatestIntent, LayerEffects, LayerFrame, Placement, Renderer, SceneSnapshot,
+    VideoFrame,
 };
 
 /// Fixed engine limits. Every field is validated by [`Engine::new`].
@@ -369,9 +370,6 @@ fn canvas_budget(config: &EngineConfig) -> Option<usize> {
         .checked_mul(4)
 }
 
-/// Blur radius of the unsharp mask behind Placement::sharpen, in source pixels.
-const SHARPEN_SIGMA: f32 = 1.5;
-
 type CacheKey = (PathBuf, u64, i64);
 
 type DecodeResult = Result<Option<Arc<VideoFrame>>, crate::DecodeSourceError>;
@@ -575,23 +573,11 @@ impl EngineThread {
                     frame
                 }
             };
-            // Neighbourhood effects work on the frame before compositing, so the CPU and GPU
-            // renderers share them.
+            // Glitch distorts the decoded frame; blur and sharpen are compositor effects (below).
             let frame = if matches!(contributor.content, ContributorContent::Media(_))
-                && (placement.blur_sigma > 0.0 || placement.sharpen > 0.0 || placement.glitch > 0.0)
+                && placement.glitch > 0.0
             {
-                let mut processed = frame;
-                if placement.blur_sigma > 0.0 {
-                    processed = Arc::new(crate::gaussian_blur(&processed, placement.blur_sigma));
-                }
-                if placement.sharpen > 0.0 {
-                    processed =
-                        Arc::new(crate::sharpen(&processed, placement.sharpen, SHARPEN_SIGMA));
-                }
-                if placement.glitch > 0.0 {
-                    processed = Arc::new(crate::glitch(&processed, placement.glitch, playhead));
-                }
-                processed
+                Arc::new(crate::glitch(&frame, placement.glitch, playhead))
             } else {
                 frame
             };
@@ -610,7 +596,11 @@ impl EngineThread {
                 opacity: placement.opacity,
                 transform: placement.transform,
                 blend: placement.blend,
-                effects: placement.effects,
+                effects: LayerEffects {
+                    blur_sigma: placement.blur_sigma,
+                    sharpen: placement.sharpen,
+                    ..placement.effects
+                },
                 lut: placement.lut.as_deref(),
             })
             .collect();

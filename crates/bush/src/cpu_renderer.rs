@@ -229,6 +229,11 @@ pub struct LayerEffects {
     pub vignette: f32,
     /// Sepia tone mix, `0.0..=1.0` (`0` is off).
     pub sepia: f32,
+    /// Gaussian blur sigma in source pixels, `0.0..=64.0` (`0` is off), applied to the layer
+    /// frame before it is composited.
+    pub blur_sigma: f32,
+    /// Unsharp-mask amount, `0.0..=4.0` (`0` is off), applied after the blur.
+    pub sharpen: f32,
     /// Mosaic block edge in source pixels; `0` and `1` are off. At most 512.
     pub pixelize_block: u32,
     pub chroma_key: Option<ChromaKey>,
@@ -243,6 +248,8 @@ impl Default for LayerEffects {
             saturation: 1.0,
             vignette: 0.0,
             sepia: 0.0,
+            blur_sigma: 0.0,
+            sharpen: 0.0,
             pixelize_block: 0,
             chroma_key: None,
             mask: None,
@@ -271,6 +278,8 @@ impl LayerEffects {
             && (0.0..=4.0).contains(&self.saturation)
             && (0.0..=1.0).contains(&self.vignette)
             && (0.0..=1.0).contains(&self.sepia)
+            && (0.0..=crate::MAX_BLUR_SIGMA).contains(&self.blur_sigma)
+            && (0.0..=4.0).contains(&self.sharpen)
             && self.pixelize_block <= 512
             && self.chroma_key.is_none_or(|key| key.is_valid())
             && self.mask.is_none_or(|mask| mask.is_valid())
@@ -385,6 +394,27 @@ impl CpuRenderer {
     ) -> Result<VideoFrame, RenderError> {
         let (stride, bytes) =
             validate_render_input(width, height, timestamp_secs, layers, self.max_output_bytes)?;
+
+        // Neighbourhood effects (blur, sharpen) produce a new frame per affected layer first.
+        let processed: Vec<Option<VideoFrame>> = layers
+            .iter()
+            .map(|layer| {
+                crate::blur::apply_effects(
+                    layer.frame,
+                    layer.effects.blur_sigma,
+                    layer.effects.sharpen,
+                )
+            })
+            .collect();
+        let adjusted: Vec<LayerFrame<'_>> = layers
+            .iter()
+            .zip(&processed)
+            .map(|(layer, frame)| LayerFrame {
+                frame: frame.as_ref().unwrap_or(layer.frame),
+                ..*layer
+            })
+            .collect();
+        let layers = adjusted.as_slice();
 
         let mut pixels = vec![0; bytes];
         let row_bytes = width as usize * 4;
