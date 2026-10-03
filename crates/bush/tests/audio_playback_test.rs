@@ -242,6 +242,31 @@ fn player_fills_the_sink_to_its_target_and_continues_without_gaps() {
 }
 
 #[test]
+fn peaks_follow_the_rendered_block_and_reset_on_seek() {
+    let cancel = AtomicBool::new(false);
+    let scene = scene(vec![clip(1, true, Placement::default())]);
+    let mut player = AudioPlayer::new(renderer(), scene, 1024, 4096);
+    let mut sink = FakeSink::new(8192, 1);
+    player.pump(&mut sink, &cancel).unwrap();
+
+    // Frames 0..4096 were rendered in four blocks of 1024; the fixture is not silent.
+    let first = player.peaks_at(0);
+    assert!(first.0 > 0.0, "silent first block");
+    assert_eq!(first.0, first.1, "mono reports the same peak on both sides");
+    assert_eq!(player.peaks_at(1023), first, "one block, one peak");
+    assert!(player.peaks_at(1024).0 > 0.0);
+    // Nothing rendered there yet.
+    assert_eq!(player.peaks_at(100_000), (0.0, 0.0));
+    // The peak is the block's real maximum, bounded by full scale.
+    assert!(first.0 <= 1.0);
+
+    player.seek(50_000, &mut sink);
+    assert_eq!(player.peaks_at(0), (0.0, 0.0));
+    player.pump(&mut sink, &cancel).unwrap();
+    assert!(player.peaks_at(50_000).0 >= 0.0);
+}
+
+#[test]
 fn seek_and_scene_edit_discard_queued_audio() {
     let cancel = AtomicBool::new(false);
     let loud = scene(vec![clip(1, true, Placement::default())]);
