@@ -75,6 +75,8 @@ pub struct Placement {
     pub transform: LayerTransform,
     pub blend: BlendMode,
     pub effects: LayerEffects,
+    /// Linear audio gain for audible contributors, `0.0..=4.0`.
+    pub gain: f32,
 }
 
 impl Default for Placement {
@@ -89,6 +91,7 @@ impl Default for Placement {
             transform: LayerTransform::default(),
             blend: BlendMode::Normal,
             effects: LayerEffects::default(),
+            gain: 1.0,
         }
     }
 }
@@ -107,6 +110,7 @@ impl Placement {
             || !(0.0..=1.0).contains(&self.opacity)
             || !self.transform.is_valid()
             || !self.effects.is_valid()
+            || !(0.0..=4.0).contains(&self.gain)
         {
             return Err(SceneError::InvalidPlacement);
         }

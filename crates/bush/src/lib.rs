@@ -6,6 +6,8 @@
 
 mod audio_block;
 mod audio_mixer;
+mod audio_playback;
+mod audio_source;
 mod byte_cache;
 mod cpu_renderer;
 mod decode_source;
@@ -23,6 +25,10 @@ mod video_frame;
 
 pub use audio_block::{AudioBlock, AudioBlockError};
 pub use audio_mixer::{AudioMixer, MixError, MixInput};
+pub use audio_playback::{
+    AudioPlayer, AudioPlayerError, AudioRenderError, AudioRenderer, AudioSink, FakeSink, SinkError,
+};
+pub use audio_source::{AudioSource, AudioSourceError};
 pub use byte_cache::{ByteCache, CacheError, CacheInsert};
 pub use cpu_renderer::{
     BlendMode, CpuRenderer, CropRect, LayerEffects, LayerFrame, LayerTransform, RenderError,
