@@ -31,10 +31,12 @@ for the original plan's own wording before assuming a Fase-4+ feature is live �
 ## Commands
 
 Requires Rust (stable) via rustup. `avbridge` needs `FFMPEG_DIR` set to an FFmpeg dev
-build (`include/`+`lib/`); its DLLs must be on `PATH` at runtime. `core`'s `preview`
-module needs GStreamer discoverable via `PKG_CONFIG_PATH`. `core`'s `whisper-rs` dependency
-needs `LIBCLANG_PATH` pointing at a libclang install (bindgen) and a build directory that
-isn't under `%TEMP%` on Windows (MSVC's FileTracker fails there — `FTK1011`).
+build (`include/`+`lib/`); its DLLs must be on `PATH` at runtime. There is no GStreamer
+dependency anymore: the preview is `bush`, and the only extra system library is the ALSA
+development package on Linux (`libasound2-dev`, for `cpal`'s audio output). `core`'s
+`whisper-rs` dependency needs `LIBCLANG_PATH` pointing at a libclang install (bindgen) and a
+build directory that isn't under `%TEMP%` on Windows (MSVC's FileTracker fails there —
+`FTK1011`).
 
 **Ubuntu 24.04's packaged FFmpeg (6.1.1, via `apt install libavformat-dev` etc.) is too old
 to build `avbridge`.** `csrc/filters.c` calls `avcodec_get_supported_config`/
@@ -54,17 +56,14 @@ headers *that file* includes, so it stays clean for every file except `filters.c
 on Ubuntu's too-old packaged FFmpeg. It won't catch link-time or runtime/filtergraph-semantic
 issues, but it does catch real syntax/type errors no amount of manual review guarantees.
 
-**Two of this gap's usual co-blockers are actually fixable in a sandboxed session, worth trying
+**One of this gap's usual co-blockers is actually fixable in a sandboxed session, worth trying
 before assuming a full build is out of reach**: a too-old bundled `rustc` (this repo's
 `Cargo.lock` can need a newer one than a session starts with) — try `rustup update stable` first,
-it may just work with no network restrictions beyond crates.io/static.rust-lang.org; and a
-missing `gstreamer-1.0` pkg-config file (`core`'s `preview` module) — `apt-get install
-libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev
-libgstreamer-plugins-good1.0-dev` (then `export PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/
-pkgconfig`) resolved it in one session where apt had a working mirror. Neither fixes the
-FFmpeg-too-old `filters.c` gap itself, but both get a `cargo check -p core` past every *other*
-failure first, so the one true remaining blocker is confirmed in isolation rather than assumed.
-A pure-logic module with no `avbridge`/GStreamer dependency can still be fully verified despite
+it may just work with no network restrictions beyond crates.io/static.rust-lang.org. It does not
+fix the FFmpeg-too-old `filters.c` gap itself, but it gets a `cargo check -p core` past every
+*other* failure first, so the one true remaining blocker is confirmed in isolation rather than
+assumed.
+A pure-logic module with no `avbridge` dependency can still be fully verified despite
 all of this: copy just that file (plus its `#[cfg(test)]` module) into a throwaway scratch crate
 with no dependencies and `cargo test` it there — real execution, not just a parse check.
 
@@ -79,9 +78,10 @@ genuine FFmpeg-version-aware implementation, not this), and `cargo test`'s final
 separately needs `libonnxruntime` (`ort`'s `download-binaries` feature needs `cdn.pyke.io`,
 blocked in this sandbox same as before) — so tests still can't *run* here, only type-check.
 
-**Do not remove `avbridge/build.rs`'s import-lib-renaming step.** GStreamer bundles its
-own FFmpeg (gst-libav) with identically named import libs — `build.rs` copies them into
-`OUT_DIR` under unique names to prevent silent ABI-mismatch linking at runtime.
+`avbridge/build.rs` copies FFmpeg's Windows import libs into `OUT_DIR` under unique names. That
+step existed because GStreamer's SDK bundled its own FFmpeg (gst-libav) with identically named
+import libs; GStreamer is gone, and the step is kept because it is harmless and keeps the link
+independent of whatever else is on the linker search path.
 
 ```bash
 make build     # debug build, whole workspace (core, avbridge, ytbridge, desktop, xtask)
@@ -113,8 +113,7 @@ the Tauri CLI, never plain `cargo build`**: `cd apps/desktop && npm run tauri bu
 no dev server running; this was a real ship-blocking bug in `release.yml` until diagnosed (see
 `spec/architecture/tauri-migration.md` gap 7). `OCA_DESKTOP_EXE` (`e2e/conftest.py`) picks which
 built binary to launch, `TAURI_NATIVE_DRIVER` points at a specific `msedgedriver.exe` when
-needed, and both plus FFmpeg/GStreamer DLL dirs must be on `PATH` for the launched process
-(`make test-e2e` exports the DLL dirs). All commands are invoked directly through
+needed, and both plus the FFmpeg DLL dir must be on `PATH` for the launched process. All commands are invoked directly through
 `window.__TAURI_INTERNALS__.invoke` (`e2e/helpers.py`) rather than fighting native OS dialogs
 WebDriver can't reach. **Use a real Python, not a Windows Store alias** — a Store-packaged
 `python.exe` carries MSIX package identity that breaks DLL loading for spawned child processes
@@ -123,23 +122,25 @@ works fine.
 
 ## Architecture
 
-Dependency direction: `avbridge` → `core` → `desktop` (`apps/desktop`), plus an isolated
-`ytbridge` and `bush` (standalone preview engine, depends only on `avbridge`, no caller yet —
-see [`spec/matrix/bush.md`](spec/matrix/bush.md); `make test-bush`).
+Dependency direction: `avbridge` → `bush` → `core` → `desktop` (`apps/desktop`), plus an isolated
+`ytbridge`. `bush` is the native preview engine (decode, composite, audio) and depends only on
+`avbridge`; `core` uses its decoder for frame sampling and `desktop` runs its playback loop —
+see [`spec/matrix/bush.md`](spec/matrix/bush.md); `make test-bush`.
 
 - **`avbridge`** — thin C bridge (`csrc/bridge.c`) over libavformat/libavcodec/libavfilter/
   libavutil, called via FFI. Exposes probing, timeline export rendering, loudness
   measurement, proxy generation, and waveform extraction.
 - **`core`** — package name `core`, `[lib] name = "avcore"` (Rust code imports it as `avcore`,
   never `core`, since that would shadow libcore). Project/timeline/media data model plus
-  wrappers (`probe`, `render`, `loudness`, `proxy`, `waveform`), GStreamer playback pipeline
-  (`preview`/`preview_worker`), and `.ocproj` save/load (`persistence`) — gzip-compressed
+  wrappers (`probe`, `render`, `loudness`, `proxy`, `waveform`), a frame sampler over Bush's
+  decoder (`frame_sampler`), and `.ocproj` save/load (`persistence`) — gzip-compressed
   MessagePack (struct-map mode, so `#[serde(default)]` still lets an older-saved project load
   after a new field is added). Locale-neutral — stores enums, never pre-formatted strings. No
   mock/sample data anywhere.
 - **`apps/desktop`** — the app itself: a Tauri 2 shell, React/TypeScript webview (`src/`, Vite)
-  over a Rust crate `desktop` (`src-tauri/`, bin `oca-desktop`) that owns the session, preview
-  engine, import and export via `core`. Webview talks to Rust only through `src/ipc.ts`. `tokio`
+  over a Rust crate `desktop` (`src-tauri/`, bin `oca-desktop`) that owns the session, the Bush
+  preview (`bush_adapter/`: timeline-to-scene mapper and playback loop), import and export via
+  `core`. Webview talks to Rust only through `src/ipc.ts`. `tokio`
   is used with only the `sync` feature (channel primitives, not a task runtime — background work
   is plain `std::thread::spawn`). Design history, decisions, and the now-closed migration gaps
   that got it here: [`spec/architecture/tauri-migration.md`](spec/architecture/tauri-migration.md).

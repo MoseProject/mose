@@ -18,7 +18,7 @@ make check     # cargo check --workspace --all-targets (fast compile-only loop)
 Single test: `cargo test -p core --test probe_test measure_loudness` or
 `cargo test -p ui i18n::tests`.
 
-Requires `FFMPEG_DIR`, `PKG_CONFIG_PATH` (GStreamer), and (for `whisper-rs`) `LIBCLANG_PATH` set
+Requires `FFMPEG_DIR` and (for `whisper-rs`) `LIBCLANG_PATH` set
 per-shell — not persistent env vars on most dev machines. Do not assume a clean shell already has
 these; export them in the same command chain as the `cargo`/`make` invocation.
 

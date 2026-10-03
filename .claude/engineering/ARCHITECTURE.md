@@ -63,7 +63,7 @@ and others:
    calls listed at the top of `ui()`), drains `rx.try_recv()`, and applies results to `App` state
    (toasts, mutating the project, closing a modal).
 
-Reuse this pattern for any new FFmpeg/GStreamer/Whisper/network-bound work. Do not block inside
+Reuse this pattern for any new FFmpeg/Whisper/network-bound work. Do not block inside
 `update()`/`ui()`, and do not reach for `tokio::spawn` — it will not compile without adding the
 `rt` feature, which would be a real, deliberate dependency change, not a drop-in fix.
 

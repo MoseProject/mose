@@ -8,8 +8,8 @@ filed."
 
 1. Run the suite (or the targeted subset relevant to the changed area):
    - `make test-core` or `cargo test -p core --test <file> <name>` for a single case;
-   - `make test-e2e` for the pywinauto suite (needs a debug build + FFmpeg/GStreamer DLLs on
-     `PATH` — the Makefile target already exports both; needs a real Python, not a Windows Store
+   - `make test-e2e` for the pywinauto suite (needs a debug build + FFmpeg DLLs on
+     `PATH` — the Makefile target already exports it; needs a real Python, not a Windows Store
      alias, per `project_computer_use_cant_reach_dev_exe` — a Store-packaged interpreter breaks
      child-process DLL loading with `STATUS_DLL_NOT_FOUND`).
 2. Classify every failure before touching anything:

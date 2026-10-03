@@ -28,17 +28,17 @@ Dependency direction: `avbridge -> core -> desktop` (`apps/desktop`), plus an is
   `csrc/*.c` (`export.c`, `filters.c`, `probe.c`, `proxy.c`, `timeline_export.c`,
   `timeline_export_multi.c`, `audio_mix.c`, `loudness.c`, `waveform.c`, `text_overlay.c`,
   `shape_overlay.c`, `matte_encode.c`, `gpu_encoder.c`), which call libavformat/libavcodec/
-  libavfilter/libavutil directly. `build.rs` locates FFmpeg via `FFMPEG_DIR` and renames
-  Windows import libs to avoid a link collision with GStreamer's bundled `gst-libav`.
+  libavfilter/libavutil directly. `build.rs` locates FFmpeg via `FFMPEG_DIR` and gives
+  Windows import libs unique names so the link cannot pick another FFmpeg's copies.
 - **`core`** — package name `core`, **`[lib] name = "avcore"`** (Rust code imports it as
   `avcore`, never `core`, since that would shadow libcore). ~35 top-level modules: domain
   (`project.rs`, `timeline.rs`, `undo.rs`), persistence (`persistence.rs` — `.ocproj`/`.ocqueue`/
-  `.octr` framing), media (`probe.rs`, `media.rs`), GStreamer real-time preview
-  (`preview_worker.rs`), FFmpeg export rendering (`render.rs`, `export.rs`, delegating to
+  `.octr` framing), media (`probe.rs`, `media.rs`), a frame sampler over Bush's decoder
+  (`frame_sampler.rs`), FFmpeg export rendering (`render.rs`, `export.rs`, delegating to
   `avbridge`), plus one module per AI/analysis feature (`transcribe.rs`/`transcript.rs`,
   `scene_detection.rs`, `background_removal.rs`, `motion_tracking.rs`, `auto_reframe.rs`,
   `highlight_detection.rs`, `silence_detection.rs`, `nested_sequence.rs`, etc). Depends on
-  `gstreamer`/`gstreamer-app`/`gstreamer-video`, `whisper-rs` (CPU), `ort` (ONNX Runtime),
+  `bush` (decoder), `whisper-rs` (CPU), `ort` (ONNX Runtime),
   `espeak-rs` (TTS), `rmp-serde`+`flate2` (MessagePack+gzip persistence). Logic the desktop
   shell needs belongs here, never duplicated in `apps/desktop` itself.
 - **`apps/desktop`** — the app itself. `src-tauri/` (Rust crate `desktop`, bin `oca-desktop`):
@@ -47,7 +47,7 @@ Dependency direction: `avbridge -> core -> desktop` (`apps/desktop`), plus an is
   `session-changed` and feeding `PreviewEngine`); `commands/` is one file per feature area
   (`timeline.rs`, `overlays.rs`, `export.rs`, `sequences.rs`, ...), each `#[tauri::command]`
   either read-only or wrapped in `commands::mod::undoable`/`with_session`; `preview_engine.rs` is
-  the dedicated playback thread driving `avcore::preview_worker::PreviewWorker`. `src/`
+  the dedicated playback thread driving the `bush` engine through `bush_adapter/`. `src/`
   (React/TypeScript, Vite): `store.ts` (`uiStore` transient/frontend-only state, `sessionStore`
   the backend's published `SessionView`, `previewStore` the playback tick), `ipc.ts` (the *only*
   module calling `invoke()` — every Rust command has one typed wrapper here), `editor/` (one
@@ -65,7 +65,7 @@ Dependency direction: `avbridge -> core -> desktop` (`apps/desktop`), plus an is
 Use `make build`/`make test`/`make test-core`/`make desktop-dev`/`make test-desktop`/
 `make test-e2e`/`make lint`/`make fmt`/`make check` exactly as documented in the repo-root
 `CLAUDE.md` — do not invent alternative cargo/npm invocations. Requires `FFMPEG_DIR`,
-`PKG_CONFIG_PATH` (GStreamer pkg-config dir), and for `whisper-rs` `LIBCLANG_PATH` set per-shell
+and for `whisper-rs` `LIBCLANG_PATH` set per-shell
 (not persistent on most dev machines — see repo `CLAUDE.md`'s "Commands" section and, if
 present, this machine's own build-env memory notes). **Never build a release binary with a bare
 `cargo build -p desktop`** — it embeds the Vite dev-server URL instead of the built frontend;
@@ -143,7 +143,7 @@ Then implement.
   `Timeline.tsx`'s `draw()`/pointer-move handlers are the two per-frame call sites; match the
   discipline already there (e.g. `resolve_layers` borrows from `media`/`timeline` rather than
   cloning) in new per-frame code.
-- Do not block the UI/webview thread — dispatch anything FFmpeg/GStreamer/Whisper/network-bound
+- Do not block the UI/webview thread — dispatch anything FFmpeg/Whisper/network-bound
   through a dedicated `std::thread::spawn` + a single-flight `AppState` guard + a Tauri event
   the frontend listens for, matching every existing AI-feature command
   (`transcribing_asset_id`, `scene_cut_detection_clip_id`, etc. on `AppState`) — never

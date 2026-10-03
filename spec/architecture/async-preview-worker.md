@@ -1,5 +1,7 @@
 # Async preview worker
 
+> **Historical:** describes the removed GStreamer `PreviewWorker`. The preview now runs on Bush (`crates/bush`), see [gstreamer-removal-plan.md](gstreamer-removal-plan.md).
+
 ## Goal
 
 Keep every GStreamer operation off eframe's UI thread while preserving immediate timeline

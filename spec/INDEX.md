@@ -37,7 +37,8 @@ Read **[architecture/complex-text-shaping.md](architecture/complex-text-shaping.
 working on bidi, ligatures, Unicode line breaking, timed highlight clusters, or international
 fallback.
 
-For the standalone replacement of GStreamer preview playback, read
+For the standalone replacement of GStreamer preview playback (done, GStreamer removed; plan in
+[`architecture/gstreamer-removal-plan.md`](architecture/gstreamer-removal-plan.md)), read
 **[architecture/preview-engine-replacement.md](architecture/preview-engine-replacement.md)**.
 It intentionally stops before any `core` or UI integration. Current status, verification
 and measured numbers: **[matrix/bush.md](matrix/bush.md)**.
@@ -58,7 +59,7 @@ spec/
 │   ├── timeline-and-editing.md       (timeline model, editing ops, sequences, undo/snap gaps)
 │   ├── effects-and-color.md          (visual effects, keyframes, masks, transitions, LUTs)
 │   ├── ai-features.md                (bg removal, auto-reframe, motion tracking, TTS, Whisper)
-│   ├── preview-pipeline.md           (GStreamer real-time playback/compositing)
+│   ├── preview-pipeline.md           (historical: GStreamer pipeline, replaced by Bush)
 │   ├── bush.md                       (Bush native preview engine: status, tests, benchmarks)
 │   ├── robustness.md                 (autosave, crash recovery, logs, prefs, export queue)
 │   ├── performance.md                (proxy, filmstrip, hw decode, telemetry)

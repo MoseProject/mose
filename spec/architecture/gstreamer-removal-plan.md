@@ -71,45 +71,45 @@ effect: `core` now depends on `bush` (default features, no GPU or audio device).
 
 ## Phase 3: `core` drops the GStreamer preview
 
-- [ ] Move `Lut3D` (`parse`, `load`, `size`, `entries`) out of `preview_effects.rs` into `lut.rs`
-- [ ] Delete `preview.rs`, `preview_worker.rs`, `preview_live_updates.rs` and the rest of
+- [x] Move `Lut3D` (`parse`, `load`, `size`, `entries`) out of `preview_effects.rs` into `lut.rs`
+- [x] Delete `preview.rs`, `preview_worker.rs`, `preview_live_updates.rs` and the rest of
       `preview_effects.rs`; fix `lib.rs` exports
-- [ ] Delete `tests/preview_test.rs`, `tests/preview_live_updates_test.rs`,
+- [x] Delete `tests/preview_test.rs`, `tests/preview_live_updates_test.rs`,
       `tests/gstreamer_link_test.rs`
-- [ ] Remove `gstreamer`, `gstreamer-app`, `gstreamer-video` from `crates/core/Cargo.toml`
-- [ ] `error_reporting.rs`: drop the linked GStreamer version; keep the report field optional so
+- [x] Remove `gstreamer`, `gstreamer-app`, `gstreamer-video` from `crates/core/Cargo.toml`
+- [x] `error_reporting.rs`: drop the linked GStreamer version; keep the report field optional so
       stored and queued reports still parse
-- [ ] `bundle.rs`: remove the `GST_PLUGIN_*` and scanner setup
-- [ ] Update the doc comments that point at the removed functions (`timeline/clip.rs`,
+- [x] `bundle.rs`: remove the `GST_PLUGIN_*` and scanner setup
+- [x] Update the doc comments that point at the removed functions (`timeline/clip.rs`,
       `text_clip.rs`, `overlay_render.rs`, `motion_tracking.rs`, `scopes.rs`)
-- [ ] `cargo check --workspace --all-targets` and `cargo clippy` without GStreamer in the
+- [x] `cargo check --workspace --all-targets` and `cargo clippy` without GStreamer in the
       environment (unset `PKG_CONFIG_PATH`)
-- [ ] `cargo test -p core` in debug (the mingw GStreamer crash should be gone)
-- [ ] Commits: core code, core tests, error reporting/bundle
+- [x] `cargo test -p core` in debug (the mingw GStreamer crash should be gone)
+- [x] Commits: core code, core tests, error reporting/bundle
 
 ## Phase 4: build, CI and packaging
 
-- [ ] `.github/workflows/ci.yml`: remove GStreamer from the three jobs; Linux installs the ALSA
+- [x] `.github/workflows/ci.yml`: remove GStreamer from the three jobs; Linux installs the ALSA
       development package for `cpal`
-- [ ] `.github/workflows/release.yml`: remove GStreamer install and packaging on Windows, Linux
+- [x] `.github/workflows/release.yml`: remove GStreamer install and packaging on Windows, Linux
       and macOS
-- [ ] `.circleci/config.yml`: remove the GStreamer packages, add ALSA development
-- [ ] `packaging/assemble_windows.ps1`, `assemble_linux.sh`, `assemble_macos.sh`,
+- [x] `.circleci/config.yml`: remove the GStreamer packages, add ALSA development
+- [x] `packaging/assemble_windows.ps1`, `assemble_linux.sh`, `assemble_macos.sh`,
       `bundle-manifest.json`: remove GStreamer
-- [ ] `Makefile` and `e2e/conftest.py` / `make test-e2e`: remove GStreamer paths
-- [ ] `docs/dependency-bundle.md`: rewrite without GStreamer
-- [ ] Decide on `avbridge/build.rs` import-lib renaming (kept for now); verify then remove or
+- [x] `Makefile` and `e2e/conftest.py` / `make test-e2e`: remove GStreamer paths
+- [x] `docs/dependency-bundle.md`: rewrite without GStreamer
+- [x] Decide on `avbridge/build.rs` import-lib renaming (kept for now); verify then remove or
       keep, in its own commit
 - [ ] Clean build of the desktop app through the Tauri CLI with no GStreamer in the environment
 - [ ] Compare binary and bundle size before and after
 
 ## Phase 5: docs and specs
 
-- [ ] `CLAUDE.md`, `AGENTS.md`, `.claude/CLAUDE.md` and the `.claude/*` files that mention GStreamer
-- [ ] `README.md`
-- [ ] `spec/matrix/bush.md`, `spec/architecture/bush-adapter-rfc.md` (removal done, criteria
+- [x] `CLAUDE.md`, `AGENTS.md`, `.claude/CLAUDE.md` and the `.claude/*` files that mention GStreamer
+- [x] `README.md`
+- [x] `spec/matrix/bush.md`, `spec/architecture/bush-adapter-rfc.md` (removal done, criteria
       waived, what remains), `preview-engine-replacement.md`, `spec/INDEX.md` link to this plan
-- [ ] Project memory notes
+- [x] Project memory notes
 
 ## Phase 6: final verification
 

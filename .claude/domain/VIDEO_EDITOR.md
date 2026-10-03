@@ -77,7 +77,7 @@ fn evaluate_keyframes<T: Lerp + Copy>(keyframes: &[Keyframe<T>], time_fraction: 
 ```
 Individual animatable properties are plain typed fields on `ClipInstance`
 (`crop_x_keyframes: Vec<Keyframe<f32>>`, etc.), not entries in one shared effect list. **Keyframes
-currently drive export only** — GStreamer live preview does not animate them yet (this is a real,
+currently drive export only** — the Bush live preview animates most of them (intensity curves, gain keyframes and mattes are still approximations or missing, see `spec/matrix/bush.md`) (this is a real,
 documented gap, not an oversight to silently work around).
 
 ### Markers (`timeline.rs`)
@@ -97,8 +97,9 @@ keep it that way when adding new selection-like state (don't add a "selected" fi
 struct).
 
 ### Preview vs. export — two independent rendering paths
-- `crates/core/src/preview.rs` — GStreamer `playbin`-based real-time playback pipeline for the
-  Editor screen; pulls decoded RGBA frames on demand.
+- `crates/core/src/preview.rs` — removed (GStreamer is gone). Real-time preview is `crates/bush`
+  (FFmpeg decode, CPU/GPU compositor, cpal audio), driven from
+  `apps/desktop/src-tauri/src/bush_adapter/`, streaming JPEG frames to the webview.
 - `crates/core/src/render.rs`/`export.rs` — calls into `avbridge`'s FFmpeg/avfilter chain
   (`csrc/export.c`, `filters.c`, `timeline_export.c`) for the actual export, with `loudnorm`
   normalization.
