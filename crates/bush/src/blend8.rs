@@ -201,3 +201,14 @@ pub(crate) fn blend8(mode: BlendMode, a: u8, b: u8) -> u8 {
 pub(crate) fn softlight_table() -> &'static [u8; 65536] {
     SOFTLIGHT
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_softlight_table_is_a_full_256_by_256_lookup() {
+        let table = super::softlight_table();
+        assert_eq!(table.len(), 256 * 256);
+        // Measured from FFmpeg: mid-grey over mid-grey comes out two levels darker.
+        assert_eq!(table[128 * 256 + 128], 126);
+    }
+}
