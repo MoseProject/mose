@@ -1,5 +1,7 @@
 //! Validated decoded-video output passed from a decoder to Bush's renderer.
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
 /// The pixel layout currently accepted by Bush's renderer boundary.
 ///
 /// Starting with one owned format avoids implicit per-frame conversions. Additional formats must
@@ -17,15 +19,32 @@ impl PixelFormat {
     }
 }
 
+static NEXT_FRAME_ID: AtomicU64 = AtomicU64::new(1);
+
 /// An owned decoded video frame safe to retain in Bush's bounded resource cache.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct VideoFrame {
+    /// Identifies the pixel content: clones share it, every newly built frame gets a fresh one.
+    /// Pixels are immutable, so a renderer can skip re-uploading a frame it already holds.
+    id: u64,
     format: PixelFormat,
     width: u32,
     height: u32,
     stride_bytes: usize,
     timestamp_secs: f64,
     pixels: Vec<u8>,
+}
+
+impl PartialEq for VideoFrame {
+    /// Compares content only; the id is an identity, not part of the value.
+    fn eq(&self, other: &Self) -> bool {
+        self.format == other.format
+            && self.width == other.width
+            && self.height == other.height
+            && self.stride_bytes == other.stride_bytes
+            && self.timestamp_secs == other.timestamp_secs
+            && self.pixels == other.pixels
+    }
 }
 
 impl VideoFrame {
@@ -65,6 +84,7 @@ impl VideoFrame {
         }
 
         Ok(Self {
+            id: NEXT_FRAME_ID.fetch_add(1, Ordering::Relaxed),
             format,
             width,
             height,
@@ -74,6 +94,10 @@ impl VideoFrame {
         })
     }
 
+    /// Content identity; equal ids guarantee equal pixels.
+    pub const fn id(&self) -> u64 {
+        self.id
+    }
     pub const fn format(&self) -> PixelFormat {
         self.format
     }
