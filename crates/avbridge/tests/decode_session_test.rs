@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 
-use avbridge::{DecodeError, DecodePolicy, DecodeSession};
+use avbridge::{Advance, DecodeError, DecodePolicy, DecodeSession, FrameSlot};
 
 const VIDEO: &str = "tests/fixtures/video.mp4";
 
@@ -148,4 +148,71 @@ fn shared_hardware_device_is_reused_released_and_recreated() {
     avbridge::release_cached_hardware_devices();
     let (mut third, _) = open();
     assert!(third.next_rgba(&cancel).unwrap().is_some());
+}
+
+#[test]
+fn advance_defers_conversion_and_matches_sequential_decode() {
+    let cancel = AtomicBool::new(false);
+    let (mut sequential, _) = DecodeSession::open(Path::new(VIDEO)).unwrap();
+    let frames: Vec<_> = (0..4)
+        .map(|_| sequential.next_rgba(&cancel).unwrap().unwrap())
+        .collect();
+
+    let (mut lazy, _) = DecodeSession::open(Path::new(VIDEO)).unwrap();
+    let mut timestamps = Vec::new();
+    for _ in 0..3 {
+        match lazy.advance(&cancel).unwrap() {
+            Advance::Frame(timestamp) => timestamps.push(timestamp),
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+    assert!(timestamps.windows(2).all(|pair| pair[1] > pair[0]));
+    assert!(lazy.has_held_frame());
+
+    // The held frame is the second one, the newest the third; conversion matches next_rgba.
+    let held = lazy.take_rgba(FrameSlot::Held).unwrap().unwrap();
+    let newest = lazy.take_rgba(FrameSlot::Newest).unwrap().unwrap();
+    assert_eq!(held, frames[1]);
+    assert_eq!(newest, frames[2]);
+    assert!(!lazy.has_held_frame());
+    assert!(lazy.take_rgba(FrameSlot::Held).unwrap().is_none());
+    assert_eq!(timestamps[1], held.timestamp_secs);
+
+    // Decoding continues in stream order after the takes.
+    assert_eq!(lazy.next_rgba(&cancel).unwrap().unwrap(), frames[3]);
+}
+
+#[test]
+fn an_unconverted_frame_is_returned_by_the_next_rgba_call() {
+    let cancel = AtomicBool::new(false);
+    let (mut sequential, _) = DecodeSession::open(Path::new(VIDEO)).unwrap();
+    let first = sequential.next_rgba(&cancel).unwrap().unwrap();
+    let second = sequential.next_rgba(&cancel).unwrap().unwrap();
+
+    let (mut lazy, _) = DecodeSession::open(Path::new(VIDEO)).unwrap();
+    lazy.advance(&cancel).unwrap();
+    assert_eq!(lazy.next_rgba(&cancel).unwrap().unwrap(), first);
+    assert_eq!(lazy.next_rgba(&cancel).unwrap().unwrap(), second);
+}
+
+#[test]
+fn advance_reports_end_of_stream_cancellation_and_seek_resets_pending_frames() {
+    let (mut session, _) = DecodeSession::open(Path::new(VIDEO)).unwrap();
+    assert_eq!(
+        session.advance(&AtomicBool::new(true)).unwrap(),
+        Advance::Cancelled
+    );
+
+    let cancel = AtomicBool::new(false);
+    let mut count = 0;
+    while let Advance::Frame(_) = session.advance(&cancel).unwrap() {
+        count += 1;
+    }
+    assert!(count > 3);
+    // At end of stream the newest frame is still available for conversion.
+    assert!(session.take_rgba(FrameSlot::Newest).unwrap().is_some());
+
+    session.seek(0.0).unwrap();
+    assert!(!session.has_held_frame());
+    assert!(session.take_rgba(FrameSlot::Newest).unwrap().is_none());
 }
