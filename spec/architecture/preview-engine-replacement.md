@@ -337,6 +337,17 @@ of the engine build plan. Do not call the engine from `core` before that approva
 **Exit:** a reviewed integration plan shows measurable parity and an immediate rollback path;
 GStreamer remains untouched until a controlled migration begins.
 
+## Implementation status
+
+Phases 0-6 are implemented in `crates/bush` (plus the audio/hardware decode surface in
+`crates/avbridge`) and verified against real media; phase 7 (the `core` adapter) is deliberately
+not started and needs its own approval. The per-capability checklist, what is intentionally
+missing (GPU compositor, stabilization, audio time-stretch, non-Windows hardware decode),
+the measured performance numbers and how to reproduce them live in
+[../matrix/bush.md](../matrix/bush.md). Two measured results changed the plan: hardware decode
+was slower than threaded software decode on every tested stream (so it stays opt-in), and the
+CPU compositor needed exact fast paths plus banded threading to reach the 1080p budget.
+
 ## Validation and release gates
 
 - Unit tests: state transitions, version/cache keys, bounds, scheduling, conversion validation,

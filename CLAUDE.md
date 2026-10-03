@@ -124,7 +124,8 @@ works fine.
 ## Architecture
 
 Dependency direction: `avbridge` → `core` → `desktop` (`apps/desktop`), plus an isolated
-`ytbridge`.
+`ytbridge` and `bush` (standalone preview engine, depends only on `avbridge`, no caller yet —
+see [`spec/matrix/bush.md`](spec/matrix/bush.md); `make test-bush`).
 
 - **`avbridge`** — thin C bridge (`csrc/bridge.c`) over libavformat/libavcodec/libavfilter/
   libavutil, called via FFI. Exposes probing, timeline export rendering, loudness

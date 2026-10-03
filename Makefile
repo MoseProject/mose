@@ -53,7 +53,7 @@ else
   endif
 endif
 
-.PHONY: build release test test-core test-xtask test-e2e bench bench-bush fmt fmt-check lint graph docs check clean desktop-install desktop-dev desktop-build test-desktop
+.PHONY: build release test test-core test-bush test-xtask test-e2e bench bench-bush fmt fmt-check lint graph docs check clean desktop-install desktop-dev desktop-build test-desktop
 
 # Debug build of the whole workspace (core, avbridge, ytbridge, desktop, xtask).
 build:
@@ -108,10 +108,15 @@ test-e2e:
 bench:
 	cargo bench -p core
 
-# Runs Bush's dependency-free editor workload benchmarks. These cover the engine's scheduling and
-# bounded-cache primitives without requiring FFmpeg or GStreamer development environments.
+# Runs every Bush benchmark: scheduling/cache primitives plus the FFmpeg-backed engine workloads.
+# Set BUSH_BENCH_MEDIA_DIR to a directory holding h264_1080p.mp4 / hevc_2160p.mp4 to include the
+# large-media and multicam cases (see spec/matrix/bush.md).
 bench-bush:
 	cargo bench -p bush
+
+# Bush test suite (needs FFMPEG_DIR, no GStreamer). Add --features cpal for the device tests.
+test-bush:
+	cargo test -p bush
 
 fmt:
 	cargo fmt --all

@@ -39,7 +39,8 @@ fallback.
 
 For the standalone replacement of GStreamer preview playback, read
 **[architecture/preview-engine-replacement.md](architecture/preview-engine-replacement.md)**.
-It intentionally stops before any `core` or UI integration.
+It intentionally stops before any `core` or UI integration. Current status, verification
+and measured numbers: **[matrix/bush.md](matrix/bush.md)**.
 
 Do not read every file here for one task. Read `matrix/changelog.md` only when you need the
 historical "why was it built this way" detail (verification caveats, real bugs found, empirical
@@ -58,6 +59,7 @@ spec/
 │   ├── effects-and-color.md          (visual effects, keyframes, masks, transitions, LUTs)
 │   ├── ai-features.md                (bg removal, auto-reframe, motion tracking, TTS, Whisper)
 │   ├── preview-pipeline.md           (GStreamer real-time playback/compositing)
+│   ├── bush.md                       (Bush native preview engine: status, tests, benchmarks)
 │   ├── robustness.md                 (autosave, crash recovery, logs, prefs, export queue)
 │   ├── performance.md                (proxy, filmstrip, hw decode, telemetry)
 │   ├── packaging.md                  (installers, bundling, auto-update)
