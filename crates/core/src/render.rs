@@ -28,7 +28,7 @@ use crate::keyframe;
 use crate::media::MediaAsset;
 use crate::project::Sequence;
 use crate::timeline::{
-    ClipInstance, ShapeClip, TextClip, TextFontFamily, TextFontStyle, TrackKind,
+    ClipInstance, ShapeClip, TextClip, TextFontFamily, TextFontStyle, Timeline, TrackKind,
 };
 
 /// Overrides `canvas` width/height to match `ratio`, keeping fps and bitrate unchanged.
@@ -1057,8 +1057,17 @@ pub fn resolve_text_segments(
     canvas_width: u32,
     canvas_height: u32,
 ) -> Vec<TextSegment> {
-    let mut segments: Vec<TextSegment> = sequence
-        .timeline
+    resolve_timeline_text_segments(&sequence.timeline, canvas_width, canvas_height)
+}
+
+/// [`resolve_text_segments`] for a bare [`Timeline`], for callers (the preview) that have no
+/// [`Sequence`] around the timeline they are showing.
+pub fn resolve_timeline_text_segments(
+    timeline: &Timeline,
+    canvas_width: u32,
+    canvas_height: u32,
+) -> Vec<TextSegment> {
+    let mut segments: Vec<TextSegment> = timeline
         .tracks
         .iter()
         .filter(|t| t.kind == TrackKind::Text)
