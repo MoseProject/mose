@@ -183,3 +183,7 @@ fn generate_matte_one(
 
     Ok(mask_path.to_path_buf())
 }
+
+#[cfg(test)]
+#[path = "background_removal_test.rs"]
+mod tests;
