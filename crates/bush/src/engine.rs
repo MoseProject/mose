@@ -519,6 +519,28 @@ impl EngineThread {
             Ok(None) => return RenderOutcome::Cancelled,
             Err(message) => return RenderOutcome::Failed(message),
         };
+        // Alpha mattes (background removal) in layer order. A missing or unreadable matte
+        // degrades to the unmasked layer, like the exporter.
+        let alpha_needs: Vec<MediaNeed<'_>> = request
+            .scene
+            .visible_contributors()
+            .filter(|contributor| contributor.is_active_at(playhead))
+            .filter_map(|contributor| {
+                let matte = contributor.placement.alpha_matte.as_ref()?;
+                contributor
+                    .alpha_matte_time_at(playhead)
+                    .map(|time| MediaNeed {
+                        path: &matte.path,
+                        version: matte.version.0,
+                        time,
+                    })
+            })
+            .collect();
+        let mut alpha_frames = match self.fetch_media(&alpha_needs, cancel) {
+            Ok(Some(frames)) => frames.into_iter(),
+            Ok(None) => return RenderOutcome::Cancelled,
+            Err(_) => Vec::new().into_iter(),
+        };
         let mut layers: Vec<(Arc<VideoFrame>, Placement)> = Vec::new();
         for contributor in request.scene.visible_contributors() {
             if !contributor.is_active_at(playhead) {
@@ -549,6 +571,14 @@ impl EngineThread {
                         }
                     }
                 }
+            };
+            let frame = if contributor.alpha_matte_time_at(playhead).is_some() {
+                match alpha_frames.next() {
+                    Some(matte) => Arc::new(crate::matte::apply_alpha_matte(&frame, &matte)),
+                    None => frame,
+                }
+            } else {
+                frame
             };
             let mut placement = contributor.placement_at(playhead);
             if let (Some(smoothing), ContributorContent::Media(_)) =
@@ -654,7 +684,30 @@ impl EngineThread {
             }
         }
         match result {
-            Ok(frame) => RenderOutcome::Frame(frame),
+            Ok(mut frame) => {
+                // Privacy blur runs on the finished canvas, after every layer, like the export.
+                for contributor in request.scene.visible_contributors() {
+                    let (Some(blur), Some(time)) = (
+                        &contributor.placement.privacy_blur,
+                        contributor.privacy_matte_time_at(playhead),
+                    ) else {
+                        continue;
+                    };
+                    let need = MediaNeed {
+                        path: &blur.matte.path,
+                        version: blur.matte.version.0,
+                        time,
+                    };
+                    match self.fetch_media(std::slice::from_ref(&need), cancel) {
+                        Ok(Some(matte)) => {
+                            frame = crate::matte::blur_through_matte(&frame, &matte[0], blur.sigma)
+                        }
+                        Ok(None) => return RenderOutcome::Cancelled,
+                        Err(_) => {}
+                    }
+                }
+                RenderOutcome::Frame(frame)
+            }
             Err(error) => RenderOutcome::Failed(format!("render failed: {error:?}")),
         }
     }

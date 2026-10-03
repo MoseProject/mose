@@ -47,6 +47,22 @@ pub struct MediaSource {
     pub version: Version,
 }
 
+/// A precomputed matte video (grayscale luma, white is inside) covering a clip's source range
+/// from its first second; see [`Placement::alpha_matte`] and [`Placement::privacy_blur`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct MatteSource {
+    pub path: PathBuf,
+    pub version: Version,
+}
+
+/// Blur of the composited canvas wherever a matte is set.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PrivacyBlur {
+    pub matte: MatteSource,
+    /// Gaussian standard deviation in canvas pixels, `0 < sigma <= MAX_BLUR_SIGMA`.
+    pub sigma: f32,
+}
+
 /// A pre-rasterized text, shape, or other overlay prepared outside Bush.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RasterOverlay {
@@ -108,6 +124,11 @@ pub struct Placement {
     /// `x`/`y` as an offset from the centred position. Off keeps the decoded size and `x`/`y` as
     /// the top-left corner. The decoded size can be a proxy's, so only the engine knows it.
     pub fit_canvas: bool,
+    /// Multiplies the layer's alpha by this matte (matte time is the clip-local source time).
+    pub alpha_matte: Option<MatteSource>,
+    /// Blurs the composited canvas through this matte, after every layer is composed (matte
+    /// time is the clip-local timeline time stretched over the matte's length).
+    pub privacy_blur: Option<PrivacyBlur>,
 }
 
 impl Default for Placement {
@@ -134,6 +155,8 @@ impl Default for Placement {
             shake: 0.0,
             stabilize: None,
             fit_canvas: false,
+            alpha_matte: None,
+            privacy_blur: None,
         }
     }
 }
@@ -193,6 +216,14 @@ impl Placement {
             || self
                 .deflicker
                 .is_some_and(|weight| !(weight > 0.0 && weight <= 1.0))
+            || self
+                .alpha_matte
+                .as_ref()
+                .is_some_and(|matte| matte.path.as_os_str().is_empty())
+            || self.privacy_blur.as_ref().is_some_and(|blur| {
+                blur.matte.path.as_os_str().is_empty()
+                    || !(blur.sigma > 0.0 && blur.sigma <= crate::MAX_BLUR_SIGMA)
+            })
         {
             return Err(SceneError::InvalidPlacement);
         }
@@ -358,6 +389,29 @@ impl Contributor {
             (Some(end), Some(length)) => ramp_source_offset(local_secs, length, start_speed, end),
             _ => start_speed * local_secs,
         }
+    }
+
+    /// Clip-local source seconds at `playhead_secs`: the time inside an alpha matte video.
+    pub fn alpha_matte_time_at(&self, playhead_secs: f64) -> Option<f64> {
+        self.placement.alpha_matte.as_ref()?;
+        let ContributorContent::Media(source) = &self.content else {
+            return None;
+        };
+        self.source_time_at(playhead_secs)
+            .map(|time| time - source.range.in_secs)
+    }
+
+    /// Time inside a privacy-blur matte video: the matte spans the clip's whole timeline window
+    /// evenly, whatever its speed.
+    pub fn privacy_matte_time_at(&self, playhead_secs: f64) -> Option<f64> {
+        self.placement.privacy_blur.as_ref()?;
+        if !self.is_active_at(playhead_secs) {
+            return None;
+        }
+        let length = self.source_length_secs()?;
+        let duration = self.timeline_duration_secs()?;
+        let local = playhead_secs - self.placement.timeline_start_secs;
+        Some((local / duration).clamp(0.0, 1.0) * length)
     }
 
     /// Trimmed source length of a media contributor.

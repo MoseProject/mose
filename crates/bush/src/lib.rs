@@ -27,6 +27,7 @@ mod gpu_renderer;
 mod keyframes;
 mod latest_intent;
 mod layer_mods;
+mod matte;
 mod player;
 mod preview_worker;
 mod scene;
@@ -72,8 +73,8 @@ pub use preview_worker::{
     PreviewCommand, PreviewWorker, WorkerFailure, WorkerOperation, WorkerSubmitError,
 };
 pub use scene::{
-    Contributor, ContributorContent, ContributorId, MediaSource, Placement, RasterOverlay,
-    SceneError, SceneSnapshot, SourceRange,
+    Contributor, ContributorContent, ContributorId, MatteSource, MediaSource, Placement,
+    PrivacyBlur, RasterOverlay, SceneError, SceneSnapshot, SourceRange,
 };
 pub use scene_scheduler::{SceneScheduler, ScheduleError, ScheduledScene, Submission};
 pub use scene_versions::{invalidation_scope, InvalidationScope, SceneVersions, Version};
