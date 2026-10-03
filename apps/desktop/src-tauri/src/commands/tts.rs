@@ -7,6 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
+use crate::services::Services;
 use crate::state::AppState;
 
 pub const TTS_EVENT: &str = "tts-event";
@@ -47,10 +48,11 @@ pub fn generate_tts<R: Runtime>(app: AppHandle<R>, text: String) -> Result<(), S
     }
     let model_path = PathBuf::from(model_path);
     let out_dir = tts_output_dir();
+    let services = state.services.clone();
 
     let worker_app = app.clone();
     std::thread::spawn(move || {
-        let result = generate_tts_one(&model_path, &text, &out_dir);
+        let result = generate_tts_one(services.as_ref(), &model_path, &text, &out_dir);
         {
             let state = worker_app.state::<AppState>();
             *state
@@ -83,10 +85,17 @@ fn tts_output_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("tts_output"))
 }
 
-fn generate_tts_one(model_path: &Path, text: &str, out_dir: &Path) -> Result<PathBuf, String> {
+fn generate_tts_one(
+    services: &dyn Services,
+    model_path: &Path,
+    text: &str,
+    out_dir: &Path,
+) -> Result<PathBuf, String> {
     let config_path = PathBuf::from(format!("{}.json", model_path.display()));
     let config = avcore::load_voice_config(&config_path).map_err(|e| e.to_string())?;
-    let samples = avcore::synthesize(model_path, &config, text).map_err(|e| e.to_string())?;
+    let samples = services
+        .synthesize(model_path, &config, text)
+        .map_err(|e| e.to_string())?;
 
     std::fs::create_dir_all(out_dir).map_err(|e| e.to_string())?;
     let timestamp = SystemTime::now()
