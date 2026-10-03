@@ -242,6 +242,67 @@ fn bench_large_media(c: &mut Criterion) {
     group.finish();
 }
 
+/// B05: three 1080p angles visible at once (worst case: every angle decodes each frame).
+fn bench_multicam(c: &mut Criterion) {
+    let Some(dir) = std::env::var_os("BUSH_BENCH_MEDIA_DIR").map(PathBuf::from) else {
+        return;
+    };
+    let source = dir.join("h264_1080p.mp4");
+    if !source.exists() {
+        return;
+    }
+    let angles: Vec<PathBuf> = (0..3)
+        .map(|index| {
+            let path = dir.join(format!("multicam-angle-{index}.mp4"));
+            if !path.exists() {
+                std::fs::copy(&source, &path).unwrap();
+            }
+            path
+        })
+        .collect();
+    let contributors: Vec<Contributor> = angles
+        .iter()
+        .enumerate()
+        .map(|(index, path)| Contributor {
+            id: ContributorId(index as u64 + 1),
+            layer: index as i32,
+            visible: true,
+            audible: false,
+            content: ContributorContent::Media(MediaSource {
+                path: path.clone(),
+                range: SourceRange::new(0.0, 0.9).unwrap(),
+                version: Version(1),
+            }),
+            placement: Placement::default(),
+        })
+        .collect();
+    let scene = SceneSnapshot::new(SceneVersions::default(), contributors).unwrap();
+
+    let mut group = c.benchmark_group("multicam");
+    group.sample_size(10);
+    group.bench_function("three_1080p_angles_24_frames", |b| {
+        b.iter_batched(
+            || {
+                Engine::new(EngineConfig {
+                    canvas_width: 1920,
+                    canvas_height: 1080,
+                    max_open_sources: 3,
+                    frame_cache_bytes: 256 * 1024 * 1024,
+                    decode_policy: DecodePolicy::Software,
+                })
+                .unwrap()
+            },
+            |engine| {
+                for frame in 0..24 {
+                    black_box(present(&engine, &scene, f64::from(frame) / 30.0));
+                }
+            },
+            BatchSize::PerIteration,
+        );
+    });
+    group.finish();
+}
+
 criterion_group!(
     engine_workloads,
     bench_composite_1080p,
@@ -249,6 +310,7 @@ criterion_group!(
     bench_live_edit,
     bench_playback,
     bench_decode_policy,
-    bench_large_media
+    bench_large_media,
+    bench_multicam
 );
 criterion_main!(engine_workloads);

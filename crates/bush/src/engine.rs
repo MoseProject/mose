@@ -332,6 +332,25 @@ fn canvas_budget(config: &EngineConfig) -> Option<usize> {
 
 type CacheKey = (PathBuf, u64, i64);
 
+type DecodeResult = Result<Option<Arc<VideoFrame>>, crate::DecodeSourceError>;
+
+/// One source frame a render needs: which media, and the source time to present.
+struct MediaNeed<'a> {
+    path: &'a Path,
+    version: u64,
+    time: f64,
+}
+
+impl MediaNeed<'_> {
+    fn cache_key(&self) -> CacheKey {
+        (
+            self.path.to_path_buf(),
+            self.version,
+            (self.time * 1e6).round() as i64,
+        )
+    }
+}
+
 struct EngineThread {
     shared: Arc<Shared>,
     config: EngineConfig,
@@ -421,20 +440,40 @@ impl EngineThread {
 
     fn render(&mut self, request: &EngineRequest, cancel: &AtomicBool) -> RenderOutcome {
         let playhead = request.playhead_secs;
+        // Decode every needed source frame up front so independent sources run in parallel.
+        let needs: Vec<MediaNeed<'_>> = request
+            .scene
+            .visible_contributors()
+            .filter(|contributor| contributor.is_active_at(playhead))
+            .filter_map(|contributor| match &contributor.content {
+                ContributorContent::Media(source) => {
+                    contributor.source_time_at(playhead).map(|time| MediaNeed {
+                        path: &source.path,
+                        version: source.version.0,
+                        time,
+                    })
+                }
+                ContributorContent::RasterOverlay(_) => None,
+            })
+            .collect();
+        let mut fetched = match self.fetch_media(&needs, cancel) {
+            Ok(Some(frames)) => frames.into_iter(),
+            Ok(None) => return RenderOutcome::Cancelled,
+            Err(message) => return RenderOutcome::Failed(message),
+        };
         let mut layers: Vec<(Arc<VideoFrame>, Placement)> = Vec::new();
         for contributor in request.scene.visible_contributors() {
             if !contributor.is_active_at(playhead) {
                 continue;
             }
             let frame = match &contributor.content {
-                ContributorContent::Media(source) => {
-                    let Some(source_time) = contributor.source_time_at(playhead) else {
+                ContributorContent::Media(_) => {
+                    if contributor.source_time_at(playhead).is_none() {
                         continue;
-                    };
-                    match self.source_frame(&source.path, source.version.0, source_time, cancel) {
-                        Ok(Some(frame)) => frame,
-                        Ok(None) => return RenderOutcome::Cancelled,
-                        Err(message) => return RenderOutcome::Failed(message),
+                    }
+                    match fetched.next() {
+                        Some(frame) => frame,
+                        None => return RenderOutcome::Failed("media plan out of sync".into()),
                     }
                 }
                 ContributorContent::RasterOverlay(_) => {
@@ -507,42 +546,138 @@ impl EngineThread {
         self.deflickers.get_mut(&id)
     }
 
-    /// The decoded frame for `source_time`, from the cache or a (reused) decode session.
-    /// `Ok(None)` means the decode was cancelled.
-    fn source_frame(
+    /// Source frames for every need, in order: from the cache where possible, otherwise decoded
+    /// now. Misses on different sources decode on parallel threads (multicam, layered clips);
+    /// misses on one source decode in sequence because a session is single-threaded.
+    /// `Ok(None)` means the work was cancelled.
+    fn fetch_media(
         &mut self,
-        path: &Path,
-        version: u64,
-        source_time: f64,
+        needs: &[MediaNeed<'_>],
         cancel: &AtomicBool,
-    ) -> Result<Option<Arc<VideoFrame>>, String> {
-        let key: CacheKey = (
-            path.to_path_buf(),
-            version,
-            (source_time * 1e6).round() as i64,
-        );
-        if let Some(frame) = self.cache.get(&key) {
-            self.shared
-                .counters
-                .cache_hits
-                .fetch_add(1, Ordering::Relaxed);
-            return Ok(Some(Arc::clone(frame)));
+    ) -> Result<Option<Vec<Arc<VideoFrame>>>, String> {
+        let mut frames: Vec<Option<Arc<VideoFrame>>> = vec![None; needs.len()];
+        let mut misses: Vec<usize> = Vec::new();
+        for (index, need) in needs.iter().enumerate() {
+            if let Some(frame) = self.cache.get(&need.cache_key()) {
+                self.shared
+                    .counters
+                    .cache_hits
+                    .fetch_add(1, Ordering::Relaxed);
+                frames[index] = Some(Arc::clone(frame));
+            } else {
+                self.shared
+                    .counters
+                    .cache_misses
+                    .fetch_add(1, Ordering::Relaxed);
+                misses.push(index);
+            }
         }
-        self.shared
-            .counters
-            .cache_misses
-            .fetch_add(1, Ordering::Relaxed);
 
-        let slot = self.open_source(path, version)?;
-        let frame = match self.sources[slot].1.frame_at(source_time, cancel) {
-            Ok(Some(frame)) => frame,
-            Ok(None) if cancel.load(Ordering::Acquire) => return Ok(None),
-            Ok(None) => return Err(format!("{} produced no frame", display_name(path))),
-            Err(error) => return Err(format!("{}: {error:?}", display_name(path))),
-        };
-        let bytes = frame.retained_bytes();
-        let _ = self.cache.insert(key, Arc::clone(&frame), bytes);
-        Ok(Some(frame))
+        if !misses.is_empty() {
+            let decoded = self.decode_misses(needs, &misses, cancel)?;
+            for (index, result) in decoded {
+                let need = &needs[index];
+                let frame = match result {
+                    Ok(Some(frame)) => frame,
+                    Ok(None) if cancel.load(Ordering::Acquire) => return Ok(None),
+                    Ok(None) => {
+                        return Err(format!("{} produced no frame", display_name(need.path)))
+                    }
+                    Err(error) => return Err(format!("{}: {error:?}", display_name(need.path))),
+                };
+                let bytes = frame.retained_bytes();
+                let _ = self
+                    .cache
+                    .insert(need.cache_key(), Arc::clone(&frame), bytes);
+                frames[index] = Some(frame);
+            }
+        }
+        Ok(Some(
+            frames
+                .into_iter()
+                .map(|frame| frame.expect("every need was resolved"))
+                .collect(),
+        ))
+    }
+
+    /// Decodes the frames for `misses`, grouped per source session, in parallel across sessions.
+    fn decode_misses(
+        &mut self,
+        needs: &[MediaNeed<'_>],
+        misses: &[usize],
+        cancel: &AtomicBool,
+    ) -> Result<Vec<(usize, DecodeResult)>, String> {
+        let mut distinct: Vec<(&Path, u64)> = Vec::new();
+        for &index in misses {
+            let key = (needs[index].path, needs[index].version);
+            if !distinct.contains(&key) {
+                distinct.push(key);
+            }
+        }
+        // More distinct sources than session slots: decode one at a time, reopening as needed.
+        if distinct.len() > self.config.max_open_sources {
+            let mut results = Vec::with_capacity(misses.len());
+            for &index in misses {
+                let need = &needs[index];
+                let slot = self.open_source(need.path, need.version)?;
+                results.push((index, self.sources[slot].1.frame_at(need.time, cancel)));
+            }
+            return Ok(results);
+        }
+        for (path, version) in &distinct {
+            self.open_source(path, *version)?;
+        }
+
+        let mut jobs: Vec<(usize, Vec<usize>)> = Vec::new();
+        for &index in misses {
+            let need = &needs[index];
+            let position = self
+                .sources
+                .iter()
+                .position(|((path, version), _)| path == need.path && *version == need.version)
+                .ok_or_else(|| "decode session was evicted mid-frame".to_string())?;
+            match jobs
+                .iter_mut()
+                .find(|(candidate, _)| *candidate == position)
+            {
+                Some((_, indices)) => indices.push(index),
+                None => jobs.push((position, vec![index])),
+            }
+        }
+
+        if jobs.len() == 1 {
+            let (position, indices) = &jobs[0];
+            let source = &mut self.sources[*position].1;
+            return Ok(indices
+                .iter()
+                .map(|&index| (index, source.frame_at(needs[index].time, cancel)))
+                .collect());
+        }
+
+        let mut slots: Vec<Option<&mut DecodeSource>> = self
+            .sources
+            .iter_mut()
+            .map(|(_, source)| Some(source))
+            .collect();
+        let mut results = Vec::with_capacity(misses.len());
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = jobs
+                .iter()
+                .map(|(position, indices)| {
+                    let source = slots[*position].take().expect("one job per session");
+                    scope.spawn(move || {
+                        indices
+                            .iter()
+                            .map(|&index| (index, source.frame_at(needs[index].time, cancel)))
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect();
+            for handle in handles {
+                results.extend(handle.join().expect("decode thread panicked"));
+            }
+        });
+        Ok(results)
     }
 
     /// Index of the open session for `(path, version)`, opening and evicting as needed. The

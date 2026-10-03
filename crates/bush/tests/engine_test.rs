@@ -429,3 +429,90 @@ fn deflicker_runs_in_the_engine_and_is_stable_when_a_frame_repeats() {
     )
     .is_err());
 }
+
+fn copies(count: usize, tag: &str) -> Vec<PathBuf> {
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("bush-multicam");
+    std::fs::create_dir_all(&dir).unwrap();
+    (0..count)
+        .map(|index| {
+            let path = dir.join(format!("{tag}-angle-{index}.mp4"));
+            std::fs::copy(fixture(), &path).unwrap();
+            path
+        })
+        .collect()
+}
+
+fn multicam_scene(paths: &[PathBuf], visible: &[usize]) -> SceneSnapshot {
+    scene(
+        paths
+            .iter()
+            .enumerate()
+            .map(|(index, path)| {
+                let mut angle = clip(
+                    index as u64 + 1,
+                    index as i32,
+                    path.clone(),
+                    Placement::default(),
+                );
+                angle.visible = visible.contains(&index);
+                angle
+            })
+            .collect(),
+    )
+}
+
+#[test]
+fn layers_from_different_sources_decode_in_parallel_and_composite_in_order() {
+    let paths = copies(3, "parallel");
+    let engine = Engine::new(config(3)).unwrap();
+
+    for round in 0..10 {
+        let playhead = f64::from(round) / 12.0;
+        engine
+            .submit(request(multicam_scene(&paths, &[0, 1, 2]), playhead))
+            .unwrap();
+        let (_, frame) = expect_frame(&engine);
+        // All layers are opaque identical media: the top layer wins and matches the reference.
+        assert_eq!(frame.pixels(), reference_frame(playhead).pixels());
+    }
+    let stats = engine.stats();
+    assert_eq!(stats.failures, 0);
+    assert_eq!(stats.cache_misses, 30);
+}
+
+#[test]
+fn angle_switch_reuses_open_sessions_and_cached_frames() {
+    let paths = copies(2, "switch");
+    let engine = Engine::new(config(2)).unwrap();
+    let playhead = 0.4;
+
+    engine
+        .submit(request(multicam_scene(&paths, &[0]), playhead))
+        .unwrap();
+    expect_frame(&engine);
+    // Switching the visible angle opens the second source once.
+    engine
+        .submit(request(multicam_scene(&paths, &[1]), playhead))
+        .unwrap();
+    expect_frame(&engine);
+    // Switching back is served from the cache without decoding.
+    engine
+        .submit(request(multicam_scene(&paths, &[0]), playhead))
+        .unwrap();
+    expect_frame(&engine);
+
+    let stats = engine.stats();
+    assert_eq!(stats.cache_misses, 2);
+    assert_eq!(stats.cache_hits, 1);
+}
+
+#[test]
+fn more_sources_than_session_slots_still_render_correctly() {
+    let paths = copies(3, "slots");
+    let engine = Engine::new(config(1)).unwrap();
+    engine
+        .submit(request(multicam_scene(&paths, &[0, 1, 2]), 0.3))
+        .unwrap();
+    let (_, frame) = expect_frame(&engine);
+    assert_eq!(frame.pixels(), reference_frame(0.3).pixels());
+}

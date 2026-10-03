@@ -460,6 +460,10 @@ pub struct DecodeSession {
     raw: *mut RawDecodeSession,
 }
 
+// SAFETY: the native session has no thread affinity; it may move between threads as long as one
+// thread uses it at a time, which `&mut self` on every operation enforces.
+unsafe impl Send for DecodeSession {}
+
 /// Failure reported by the narrow decode-session C surface.
 #[derive(Debug, thiserror::Error)]
 pub enum DecodeError {
