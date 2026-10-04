@@ -51,8 +51,11 @@ export function Inspector({ session }: { session: SessionView }) {
       <div className="inspector-body">
         {clip ? (
           <div data-testid="inspector-clip">
-            <div className="muted" title={asset?.source_path}>
-              {t("source")}: {asset?.file_name ?? "—"}
+            <div className="clip-head" title={asset?.source_path}>
+              <span className="clip-name">{asset?.file_name ?? "—"}</span>
+              <span className="muted">
+                {[t("source"), asset?.resolution ? `${asset.resolution[0]}×${asset.resolution[1]}` : null, asset?.fps ? `${Math.round(asset.fps)} fps` : null].filter(Boolean).join(" · ")}
+              </span>
             </div>
             <ClipControls key={clip.id} clip={clip} />
           </div>
@@ -419,10 +422,8 @@ function ClipControls({ clip }: { clip: ClipInstance }) {
       />
       </Section>
 
-      <div className="field">
-        <label>{t("aiActions")}</label>
-      </div>
-      <div className="modal-row">
+      <Section label={t("aiActions")} defaultOpen={false}>
+      <div className="region-row">
         <input
           type="number"
           step={0.05}
@@ -461,7 +462,6 @@ function ClipControls({ clip }: { clip: ClipInstance }) {
         />
       </div>
       <button
-        className="icon"
         onClick={() =>
           run(
             api.motionTrackClip(
@@ -477,17 +477,16 @@ function ClipControls({ clip }: { clip: ClipInstance }) {
       >
         {t("trackMotion")}
       </button>
-      <button className="icon" onClick={() => run(api.autoReframeClip(clip.id))}>
+      <button onClick={() => run(api.autoReframeClip(clip.id))}>
         {t("autoReframe")}
       </button>
-      <button className="icon" onClick={() => run(api.dynamicAutoReframeClip(clip.id))}>
+      <button onClick={() => run(api.dynamicAutoReframeClip(clip.id))}>
         {t("dynamicAutoReframe")}
       </button>
-      <button className="icon" onClick={() => run(api.generateMatteForClip(clip.id))}>
+      <button onClick={() => run(api.generateMatteForClip(clip.id))}>
         {t("generateMatte")}
       </button>
       <button
-        className="icon"
         onClick={() =>
           run(
             api.applyPrivacyBlurToClip(
@@ -502,6 +501,7 @@ function ClipControls({ clip }: { clip: ClipInstance }) {
       >
         {t("applyPrivacyBlur")}
       </button>
+      </Section>
     </>
   );
 }

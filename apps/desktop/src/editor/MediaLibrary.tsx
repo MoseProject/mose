@@ -208,7 +208,10 @@ export function MediaLibrary({ session }: { session: SessionView }) {
     <section className="panel library">
       <div className="panel-title">
         <span>{t("mediaLibrary")}</span>
-        <button className="icon" onClick={() => run(api.importMediaDialog())}>
+        <span className="count">{assets.length}</span>
+      </div>
+      <div className="library-actions">
+        <button onClick={() => run(api.importMediaDialog())}>
           {t("importFiles")}
         </button>
         <TtsButton />
@@ -257,7 +260,6 @@ function AssetRow({ asset }: { asset: MediaAsset }) {
   };
 
   const meta = [
-    formatTime(asset.duration_secs),
     asset.resolution ? `${asset.resolution[0]}×${asset.resolution[1]}` : null,
     asset.fps ? `${asset.fps.toFixed(0)} fps` : null,
     asset.loudness ? `${asset.loudness.integrated_lufs.toFixed(1)} LUFS` : t("analyzing"),
@@ -272,43 +274,46 @@ function AssetRow({ asset }: { asset: MediaAsset }) {
       onPointerDown={onPointerDown}
       onDoubleClick={() => run(api.addAssetToTimeline(asset.id))}
     >
-      {asset.kind === "Video" && !thumbFailed ? (
-        <img
-          className="thumb"
-          src={thumbnailUrl(asset.id)}
-          alt=""
-          draggable={false}
-          onError={() => setThumbFailed(true)}
-        />
-      ) : (
-        <div className="thumb">{asset.kind === "Audio" ? "♪" : "▶"}</div>
-      )}
-      <div>
-        <div className="name">{asset.file_name}</div>
-        <div className="meta">{meta}</div>
+      <div className="thumb-wrap">
+        {asset.kind === "Video" && !thumbFailed ? (
+          <img
+            className="thumb"
+            src={thumbnailUrl(asset.id)}
+            alt=""
+            draggable={false}
+            onError={() => setThumbFailed(true)}
+          />
+        ) : (
+          <div className="thumb"><Icon name={asset.kind === "Audio" ? "music" : "film"} size={22} /></div>
+        )}
+        <span className="duration mono">{formatTime(asset.duration_secs)}</span>
+        <div className="asset-actions">
+          {asset.has_audio && (
+            <button
+              className="icon"
+              title={transcribing ? t("transcribing") : t("transcribe")}
+              aria-label={transcribing ? t("transcribing") : t("transcribe")}
+              disabled={transcribingAssetId !== null}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => run(api.transcribeAsset(asset.id))}
+            >
+              {transcribing ? "…" : <Icon name="document" />}
+            </button>
+          )}
+          <button
+            className={`icon ${asset.favorited ? "active" : ""}`}
+            title={t("favorite")}
+            aria-label={t("favorite")}
+            aria-pressed={asset.favorited}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => run(api.toggleFavorite(asset.id))}
+          >
+            <Icon name="star" filled={asset.favorited} />
+          </button>
+        </div>
       </div>
-      {asset.has_audio && (
-        <button
-          className="icon"
-          title={transcribing ? t("transcribing") : t("transcribe")}
-          aria-label={transcribing ? t("transcribing") : t("transcribe")}
-          disabled={transcribingAssetId !== null}
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={() => run(api.transcribeAsset(asset.id))}
-        >
-          {transcribing ? "…" : <Icon name="document" />}
-        </button>
-      )}
-      <button
-        className={`icon ${asset.favorited ? "active" : ""}`}
-        title={t("favorite")}
-        aria-label={t("favorite")}
-        aria-pressed={asset.favorited}
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={() => run(api.toggleFavorite(asset.id))}
-      >
-        <Icon name="star" filled={asset.favorited} />
-      </button>
+      <div className="name">{asset.file_name}</div>
+      <div className="meta">{meta}</div>
     </div>
   );
 }

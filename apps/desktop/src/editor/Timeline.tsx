@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { formatTime, t } from "../i18n";
-import { api } from "../ipc";
+import { api, thumbnailUrl } from "../ipc";
 import { Icon } from "./Icon";
 import { Menu } from "./Menu";
 import { LayerTemplates } from "./LayerTemplates";
@@ -46,13 +46,6 @@ import {
 
 /** Seeks sent while scrubbing the ruler are coalesced to preview cadence (egui: 33 ms). */
 const SCRUB_SEEK_INTERVAL_MS = 33;
-const TOOLS: [EditorTool, "toolSelect" | "toolRoll" | "toolSlip" | "toolSlide" | "toolText"][] = [
-  ["select", "toolSelect"],
-  ["roll", "toolRoll"],
-  ["slip", "toolSlip"],
-  ["slide", "toolSlide"],
-  ["text", "toolText"],
-];
 const UI_FONT = "11px 'Segoe UI', system-ui, sans-serif";
 const MONO_FONT = "11px 'Cascadia Mono', Consolas, monospace";
 
@@ -304,6 +297,11 @@ export function Timeline({ session }: { session: SessionView }) {
     return () => observer.disconnect();
   }, [scheduleDraw]);
 
+  useEffect(() => {
+    window.addEventListener(THUMB_EVENT, scheduleDraw);
+    return () => window.removeEventListener(THUMB_EVENT, scheduleDraw);
+  }, [scheduleDraw]);
+
   // Playhead ticks and library drags repaint without re-rendering React.
   useEffect(() => {
     const stopPreview = previewStore.subscribe(scheduleDraw);
@@ -540,19 +538,6 @@ export function Timeline({ session }: { session: SessionView }) {
         <span className="panel-title" style={{ border: 0, padding: "0 8px 0 0" }}>
           {t("timeline")}
         </span>
-        {TOOLS.map(([tool, label]) => (
-          <button
-            key={tool}
-            className={`icon ${ui.tool === tool ? "active" : ""}`}
-            title={t(label)}
-            onClick={() => patchUi({ tool })}
-          >
-            {t(label)}
-          </button>
-        ))}
-        <button className="icon" onClick={() => run(api.splitAtPlayhead(selected))}>
-          {t("split")}
-        </button>
         <button
           className="icon"
           disabled={selected.length === 0}
@@ -685,6 +670,27 @@ function TrackHeader({ track }: { track: Track }) {
   );
 }
 
+/** One poster frame per video asset, tiled across the clip body. Loaded lazily; a finished load
+ *  asks every timeline to repaint. A missing thumbnail (audio, probe failure) is remembered. */
+const thumbCache = new Map<number, HTMLImageElement | null>();
+function thumbFor(assetId: number): HTMLImageElement | null {
+  if (thumbCache.has(assetId)) {
+    const cached = thumbCache.get(assetId)!;
+    return cached && cached.complete && cached.naturalWidth > 0 ? cached : null;
+  }
+  try {
+    const image = new Image();
+    image.onload = () => window.dispatchEvent(new Event(THUMB_EVENT));
+    image.onerror = () => thumbCache.set(assetId, null);
+    image.src = thumbnailUrl(assetId);
+    thumbCache.set(assetId, image);
+  } catch {
+    thumbCache.set(assetId, null);
+  }
+  return null;
+}
+const THUMB_EVENT = "oca-thumbnail-loaded";
+
 function drawClip(
   ctx: CanvasRenderingContext2D,
   palette: Palette,
@@ -702,16 +708,37 @@ function drawClip(
   const height = TRACK_HEIGHT - 9;
   const width = Math.max(1, right - left);
   ctx.globalAlpha = alpha;
-  ctx.fillStyle = clip.color_label
+  const body = clip.color_label
     ? `rgb(${clip.color_label.join(",")})`
     : track.kind === "Audio"
       ? palette.audio
       : palette.video;
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(left, top, width, height, 4);
+  ctx.clip();
+  ctx.fillStyle = body;
   ctx.fillRect(left, top, width, height);
+  const thumb = track.kind === "Video" && asset ? thumbFor(asset.id) : null;
+  if (thumb) {
+    const tile = Math.max(24, Math.round((height * thumb.naturalWidth) / thumb.naturalHeight));
+    const from = Math.max(left, 0);
+    const to = Math.min(left + width, viewWidth);
+    for (let x = left + Math.floor((from - left) / tile) * tile; x < to; x += tile) {
+      ctx.drawImage(thumb, x, top, tile, height);
+    }
+    ctx.fillStyle = body;
+    ctx.globalAlpha = alpha * 0.45;
+    ctx.fillRect(left, top, width, height);
+    ctx.globalAlpha = alpha;
+  }
 
   if (asset && asset.waveform_peaks && asset.waveform_peaks.length > 0) {
     drawWaveform(ctx, asset, clip, left, width, top, height, viewWidth);
   }
+  ctx.fillStyle = "rgba(0,0,0,0.38)";
+  ctx.fillRect(left, top, width, 16);
+  ctx.restore();
 
   if (width > 24) {
     ctx.save();
@@ -725,7 +752,7 @@ function drawClip(
     const badges = [clip.speed_factor !== 1 ? `${clip.speed_factor.toFixed(2)}×` : "", clip.frozen ? "❄" : ""]
       .filter(Boolean)
       .join(" ");
-    ctx.fillText(badges ? `${label}  ${badges}` : label, Math.max(left, 0) + 5, top + 4);
+    ctx.fillText(badges ? `${label}  ${badges}` : label, Math.max(left, 0) + 5, top + 3);
     ctx.restore();
   }
 

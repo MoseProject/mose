@@ -255,27 +255,42 @@ export function PreviewPanel() {
         {drawingOverlay}
       </div>
       <div className="transport">
-        <button className="icon" title={t("stepBack")} aria-label={t("stepBack")} onClick={() => run(api.step(-1))}>
-          <Icon name="skipBack" />
-        </button>
-        <button
-          className="icon"
-          title={tick.playing ? t("pause") : t("play")}
-          aria-label={tick.playing ? t("pause") : t("play")}
-          onClick={() => run(api.setPlaying(!tick.playing))}
-        >
-          <Icon name={tick.playing ? "pause" : "play"} filled={!tick.playing} />
-        </button>
-        <button className="icon" title={t("stepForward")} aria-label={t("stepForward")} onClick={() => run(api.step(1))}>
-          <Icon name="skipForward" />
-        </button>
-        <span className="mono">
-          {formatTime(tick.playheadSecs)} <span className="muted">/ {formatTime(duration)}</span>
-        </span>
-        <span style={{ flex: 1 }} />
-        <div className="meter" aria-hidden>
-          <div style={{ width: meterWidth(tick.peakL) }} />
-          <div style={{ width: meterWidth(tick.peakR) }} />
+        <input
+          type="range"
+          className="scrubber"
+          aria-label={t("seek")}
+          min={0}
+          max={Math.max(duration, 0.01)}
+          step={0.01}
+          value={Math.min(tick.playheadSecs, Math.max(duration, 0.01))}
+          style={{ "--fill": `${duration > 0 ? Math.min(100, (tick.playheadSecs / duration) * 100) : 0}%` } as React.CSSProperties}
+          onChange={(e) => void run(api.seek(Number(e.target.value)))}
+        />
+        <div className="transport-row">
+          <span className="mono time-now">{formatTime(tick.playheadSecs)}</span>
+          <div className="transport-controls">
+            <button className="icon" title={t("stepBack")} aria-label={t("stepBack")} onClick={() => run(api.step(-1))}>
+              <Icon name="skipBack" size={16} />
+            </button>
+            <button
+              className="play"
+              title={tick.playing ? t("pause") : t("play")}
+              aria-label={tick.playing ? t("pause") : t("play")}
+              onClick={() => run(api.setPlaying(!tick.playing))}
+            >
+              <Icon name={tick.playing ? "pause" : "play"} filled={!tick.playing} size={16} />
+            </button>
+            <button className="icon" title={t("stepForward")} aria-label={t("stepForward")} onClick={() => run(api.step(1))}>
+              <Icon name="skipForward" size={16} />
+            </button>
+          </div>
+          <div className="transport-right">
+            <span className="mono muted time-total">{formatTime(duration)}</span>
+            <div className="meter" aria-hidden>
+              <div style={{ width: meterWidth(tick.peakL) }} />
+              <div style={{ width: meterWidth(tick.peakR) }} />
+            </div>
+          </div>
         </div>
       </div>
     </section>

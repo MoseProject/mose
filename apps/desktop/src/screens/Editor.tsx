@@ -1,5 +1,6 @@
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useEffect, useRef, useState } from "react";
+import { ToolRail } from "../editor/ToolRail";
 import { Inspector } from "../editor/Inspector";
 import { MediaLibrary } from "../editor/MediaLibrary";
 import { PreviewPanel } from "../editor/PreviewPanel";
@@ -172,6 +173,7 @@ export function Editor({ session }: { session: SessionView }) {
         "--timeline-height": `${layout.timelineHeight}px`,
       } as React.CSSProperties}
     >
+      <ToolRail />
       <MediaLibrary session={session} />
       <div className="panel-splitter library-splitter" onPointerDown={startPanelResize("library")} />
       <PreviewPanel />

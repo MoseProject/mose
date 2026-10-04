@@ -20,6 +20,14 @@ const PATHS = {
   more: "M5 12h.01M12 12h.01M19 12h.01",
   close: "M6 6l12 12M18 6L6 18",
   queue: "M4 6h16M4 12h16M4 18h10",
+  cursor: "M5 3l14 8-6 2-3 6z",
+  roll: "M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4",
+  slip: "M4 7h16v10H4zM9 12h6M12 9v6",
+  slide: "M3 8h7v8H3zM14 8h7v8h-7zM10 12h4",
+  text: "M5 6V4h14v2M12 4v16M9 20h6",
+  scissors: "M6 6a3 3 0 100 .01M6 18a3 3 0 100 .01M8.1 8.1L20 20M8.1 15.9L20 4",
+  music: "M9 18V5l11-2v13M9 18a3 3 0 11-6 0 3 3 0 016 0zM20 16a3 3 0 11-6 0 3 3 0 016 0z",
+  film: "M4 4h16v16H4zM8 4v16M16 4v16M4 9h4M4 15h4M16 9h4M16 15h4",
 } as const;
 
 export type IconName = keyof typeof PATHS;
