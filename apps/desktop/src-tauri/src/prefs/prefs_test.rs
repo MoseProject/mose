@@ -148,3 +148,28 @@ fn a_path_without_a_parent_folder_fails_to_save_but_does_not_panic() {
     let mut document = PrefsDocument::default();
     assert!(document.save_to(std::path::Path::new("")).is_err());
 }
+
+#[test]
+fn custom_keybindings_survive_a_save_and_load_and_default_to_none() {
+    let dir = std::env::temp_dir().join(format!("oca_prefs_kb_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("prefs.oc");
+
+    assert!(PrefsDocument::load_from(&path).view.keybindings.is_empty());
+
+    let mut document = PrefsDocument::default();
+    document
+        .view
+        .keybindings
+        .insert("split".into(), vec!["Alt+S".into()]);
+    document.view.keybindings.insert("undo".into(), Vec::new());
+    document.save_to(&path).unwrap();
+
+    let loaded = PrefsDocument::load_from(&path);
+    assert_eq!(
+        loaded.view.keybindings.get("split"),
+        Some(&vec!["Alt+S".to_string()])
+    );
+    assert_eq!(loaded.view.keybindings.get("undo"), Some(&Vec::new()));
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -58,6 +58,12 @@ pub struct PrefsView {
     /// key, same default-on (it's local-only, not remote) behavior.
     #[serde(default = "default_telemetry_enabled")]
     pub telemetry_enabled: bool,
+    /// Keyboard shortcuts the user changed: command id to its bindings (`Ctrl+Shift+Z`-style
+    /// strings, see the webview's `keymap.ts`). A command absent here keeps its default
+    /// bindings; an empty list means the user unbound it. Desktop-only, so the egui shell
+    /// ignores the key and `PrefsDocument` keeps it intact.
+    #[serde(default)]
+    pub keybindings: BTreeMap<String, Vec<String>>,
 }
 
 fn default_telemetry_enabled() -> bool {
@@ -97,6 +103,8 @@ struct DiskPrefs {
     last_reviewed_crash_unix: u64,
     #[serde(default = "default_telemetry_enabled")]
     telemetry_enabled: bool,
+    #[serde(default)]
+    keybindings: BTreeMap<String, Vec<String>>,
 }
 
 fn default_hardware_decode() -> bool {
@@ -130,6 +138,7 @@ impl From<DiskPrefs> for PrefsView {
             error_reporting_consent: value.error_reporting_consent,
             last_reviewed_crash_unix: value.last_reviewed_crash_unix,
             telemetry_enabled: value.telemetry_enabled,
+            keybindings: value.keybindings,
         }
     }
 }
@@ -152,6 +161,7 @@ impl From<&PrefsView> for DiskPrefs {
             error_reporting_consent: value.error_reporting_consent,
             last_reviewed_crash_unix: value.last_reviewed_crash_unix,
             telemetry_enabled: value.telemetry_enabled,
+            keybindings: value.keybindings.clone(),
         }
     }
 }
@@ -174,6 +184,7 @@ impl Default for PrefsView {
             error_reporting_consent: ErrorReportingConsent::default(),
             last_reviewed_crash_unix: 0,
             telemetry_enabled: true,
+            keybindings: BTreeMap::new(),
         }
     }
 }
@@ -243,7 +254,7 @@ impl PrefsDocument {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
         }
-        std::fs::write(path, bytes).map_err(|error| error.to_string())
+        avcore::write_atomic(path, &bytes).map_err(|error| error.to_string())
     }
 }
 

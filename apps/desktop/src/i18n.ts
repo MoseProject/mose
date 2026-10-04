@@ -106,7 +106,7 @@ const strings = {
     "pt-BR": "Inserir como clipe composto",
     en: "Insert as compound clip",
   },
-  templates: { "pt-BR": "📋 Templates", en: "📋 Templates" },
+  templates: { "pt-BR": "Templates", en: "Templates" },
   saveTemplateTitle: { "pt-BR": "Salvar template", en: "Save template" },
   saveTemplateConfirm: { "pt-BR": "Salvar", en: "Save" },
   noSavedTemplates: { "pt-BR": "Nenhum template salvo ainda.", en: "No saved templates yet." },
@@ -161,7 +161,8 @@ const strings = {
   shapeStrokeHint: { "pt-BR": "0 = preenchido", en: "0 = filled" },
   shapeVertices: { "pt-BR": "Vértices", en: "Vertices" },
   shapeVerticesHint: {
-    "pt-BR": "arraste os valores X/Y para desenhar uma forma personalizada — funciona em qualquer predefinição, já que todas são polígonos por baixo dos panos (exceto elipse/círculo).",
+    "pt-BR":
+      "arraste os valores X/Y para desenhar uma forma personalizada — funciona em qualquer predefinição, já que todas são polígonos por baixo dos panos (exceto elipse/círculo).",
     en: "drag the X/Y values to draw a custom shape — works on any preset, since they're all polygons underneath (except ellipse/circle).",
   },
   gainKeyframes: { "pt-BR": "Keyframes de ganho", en: "Gain keyframes" },
@@ -177,16 +178,22 @@ const strings = {
   transcribing: { "pt-BR": "Transcrevendo…", en: "Transcribing…" },
   transcribeNoSpeechFound: { "pt-BR": "Nenhuma fala encontrada.", en: "No speech found." },
   transcriptPanelTitle: { "pt-BR": "Transcrição", en: "Transcript" },
-  transcriptPanelSearchHint: { "pt-BR": "Buscar nesta transcrição…", en: "Search this transcript…" },
+  transcriptPanelSearchHint: {
+    "pt-BR": "Buscar nesta transcrição…",
+    en: "Search this transcript…",
+  },
   transcriptProjectSearchHint: { "pt-BR": "Buscar no projeto…", en: "Search the project…" },
   transcriptSearchProject: { "pt-BR": "Buscar no projeto", en: "Search project" },
   transcriptProjectEmpty: { "pt-BR": "Nenhum resultado.", en: "No results." },
   transcriptPanelEmpty: { "pt-BR": "Nenhuma palavra encontrada.", en: "No words found." },
   transcriptPanelNoTranscript: {
-    "pt-BR": "Este clipe ainda não tem transcrição. Use \"Transcrever\" na biblioteca de mídia.",
-    en: "This clip has no transcript yet. Use \"Transcribe\" in the media library.",
+    "pt-BR": 'Este clipe ainda não tem transcrição. Use "Transcrever" na biblioteca de mídia.',
+    en: 'This clip has no transcript yet. Use "Transcribe" in the media library.',
   },
-  transcriptPanelNoClip: { "pt-BR": "Selecione um clipe de vídeo ou áudio.", en: "Select a video or audio clip." },
+  transcriptPanelNoClip: {
+    "pt-BR": "Selecione um clipe de vídeo ou áudio.",
+    en: "Select a video or audio clip.",
+  },
   whisperModelPath: { "pt-BR": "Modelo Whisper (.bin)", en: "Whisper model (.bin)" },
   reframeModelPath: { "pt-BR": "Modelo de reenquadramento (.onnx)", en: "Reframe model (.onnx)" },
   backgroundRemovalModelPath: {
@@ -210,7 +217,10 @@ const strings = {
     en: "No files detected yet.",
   },
   watchFolderAddToProject: { "pt-BR": "Adicionar ao projeto", en: "Add to project" },
-  watchFolderStabilizing: { "pt-BR": "Aguardando gravação terminar…", en: "Waiting for recording to finish…" },
+  watchFolderStabilizing: {
+    "pt-BR": "Aguardando gravação terminar…",
+    en: "Waiting for recording to finish…",
+  },
   watchFolderProcessing: { "pt-BR": "Processando…", en: "Processing…" },
   watchFolderDone: { "pt-BR": "Concluído", en: "Done" },
   watchFolderError: { "pt-BR": "Erro", en: "Error" },
@@ -225,8 +235,10 @@ const strings = {
     en: "yt-dlp is not installed.",
   },
 
+  crashReviewTitle: { "pt-BR": "O oca fechou inesperadamente", en: "oca closed unexpectedly" },
   crashReviewOffer: {
-    "pt-BR": "O oca fechou inesperadamente na última vez. Você quer enviar um relatório para ajudar a corrigir isso?",
+    "pt-BR":
+      "O oca fechou inesperadamente na última vez. Você quer enviar um relatório para ajudar a corrigir isso?",
     en: "oca closed unexpectedly last time. Would you like to send a report to help fix this?",
   },
   crashReviewShowPayload: { "pt-BR": "Ver dados do relatório", en: "Show report payload" },
@@ -234,14 +246,26 @@ const strings = {
   crashReviewAlwaysSend: { "pt-BR": "Sempre enviar relatórios", en: "Always send error reports" },
   crashReviewDoNotSend: { "pt-BR": "Não enviar", en: "Do not send" },
 
-  telemetryEnabled: { "pt-BR": "Telemetria local (nunca enviada)", en: "Local telemetry (never sent)" },
-  errorReportingConsent: { "pt-BR": "Sempre enviar relatórios de erro", en: "Always send error reports" },
+  telemetryEnabled: {
+    "pt-BR": "Telemetria local (nunca enviada)",
+    en: "Local telemetry (never sent)",
+  },
+  errorReportingConsent: {
+    "pt-BR": "Sempre enviar relatórios de erro",
+    en: "Always send error reports",
+  },
   queuedReports: { "pt-BR": "relatórios na fila", en: "queued reports" },
   deleteQueuedReports: { "pt-BR": "Excluir relatórios na fila", en: "Delete queued reports" },
 
   checkForUpdate: { "pt-BR": "Verificar atualizações", en: "Check for updates" },
-  updateCheckUpToDate: { "pt-BR": "Você está usando a versão mais recente.", en: "You're up to date." },
-  updateCheckFailed: { "pt-BR": "Falha ao verificar atualizações.", en: "Failed to check for updates." },
+  updateCheckUpToDate: {
+    "pt-BR": "Você está usando a versão mais recente.",
+    en: "You're up to date.",
+  },
+  updateCheckFailed: {
+    "pt-BR": "Falha ao verificar atualizações.",
+    en: "Failed to check for updates.",
+  },
   updateAvailable: { "pt-BR": "Nova versão disponível", en: "New version available" },
   updateInstall: { "pt-BR": "Instalar", en: "Install" },
   updateOpenRelease: { "pt-BR": "Abrir página de lançamento", en: "Open release page" },
@@ -249,7 +273,10 @@ const strings = {
     "pt-BR": "Atualização instalada. Reinicie para aplicar.",
     en: "Update installed. Restart to apply.",
   },
-  updateInstallFailed: { "pt-BR": "Falha ao instalar atualização.", en: "Failed to install update." },
+  updateInstallFailed: {
+    "pt-BR": "Falha ao instalar atualização.",
+    en: "Failed to install update.",
+  },
   updateRestart: { "pt-BR": "Reiniciar", en: "Restart" },
 
   silenceReview: { "pt-BR": "Revisar silêncio", en: "Review silence" },
@@ -373,6 +400,253 @@ const strings = {
   statusFailed: { "pt-BR": "Falhou", en: "Failed" },
   statusCancelled: { "pt-BR": "Cancelado", en: "Cancelled" },
   cancel: { "pt-BR": "Cancelar", en: "Cancel" },
+  watchFolderNone: { "pt-BR": "Nenhuma pasta selecionada", en: "No folder selected" },
+  tools: { "pt-BR": "Ferramentas", en: "Tools" },
+  timecode: { "pt-BR": "Posição do cursor", en: "Playhead position" },
+  seek: { "pt-BR": "Posição de reprodução", en: "Playback position" },
+  zoomFit: { "pt-BR": "Ajustar a timeline à janela", en: "Fit timeline to window" },
+  removeVertex: { "pt-BR": "Remover vértice", en: "Remove vertex" },
+  goToGap: { "pt-BR": "Ir para o trecho", en: "Go to gap" },
+  menuFile: { "pt-BR": "Arquivo", en: "File" },
+  menuEdit: { "pt-BR": "Editar", en: "Edit" },
+  menuView: { "pt-BR": "Exibir", en: "View" },
+  menuSequence: { "pt-BR": "Sequência", en: "Sequence" },
+  menuGraphics: { "pt-BR": "Gráficos", en: "Graphics" },
+  menuCopy: { "pt-BR": "Copiar", en: "Copy" },
+  menuCut: { "pt-BR": "Recortar", en: "Cut" },
+  menuPaste: { "pt-BR": "Colar", en: "Paste" },
+  projectLabel: { "pt-BR": "Projeto", en: "Project" },
+  programMonitor: { "pt-BR": "MONITOR DE PROGRAMA", en: "PROGRAM MONITOR" },
+  meterTarget: { "pt-BR": "alvo", en: "target" },
+  meterLoudness: { "pt-BR": "Loudness momentâneo", en: "Momentary loudness" },
+  audioMeter: { "pt-BR": "Medidor de áudio", en: "Audio meter" },
+  goToStart: { "pt-BR": "Ir para o início", en: "Go to start" },
+  goToEnd: { "pt-BR": "Ir para o fim", en: "Go to end" },
+  libraryTabMedia: { "pt-BR": "MÍDIA", en: "MEDIA" },
+  libraryTabFavorites: { "pt-BR": "FAVORITOS", en: "FAVORITES" },
+  libraryTabRecent: { "pt-BR": "RECENTES", en: "RECENT" },
+  searchMedia: { "pt-BR": "Buscar mídia…", en: "Search media…" },
+  viewGrid: { "pt-BR": "Exibir em grade", en: "Grid view" },
+  viewList: { "pt-BR": "Exibir em lista", en: "List view" },
+  projectMedia: { "pt-BR": "Mídia do projeto", en: "Project media" },
+  items: { "pt-BR": "itens", en: "items" },
+  libraryNoMatches: { "pt-BR": "Nada encontrado.", en: "Nothing found." },
+  inspectorEffects: { "pt-BR": "EFEITOS", en: "EFFECTS" },
+  inspectorAudio: { "pt-BR": "ÁUDIO", en: "AUDIO" },
+  exportDialogTitle: { "pt-BR": "Exportar sequência", en: "Export sequence" },
+  exportChooseFile: { "pt-BR": "Escolher arquivo e exportar", en: "Choose file and export" },
+  loudnessTarget: { "pt-BR": "Loudness alvo", en: "Loudness target" },
+  loudnessCustom: { "pt-BR": "Personalizado", en: "Custom" },
+  loudnessRange: {
+    "pt-BR": "Use um valor entre -40 e -5 LUFS.",
+    en: "Use a value between -40 and -5 LUFS.",
+  },
+  loudnessMeasured: { "pt-BR": "Medido no primeiro clipe", en: "Measured on the first clip" },
+  exportKeepsBitrate: {
+    "pt-BR": "O vídeo é exportado com o bitrate da fonte.",
+    en: "Video is exported at the source bitrate.",
+  },
+  groupPlayback: { "pt-BR": "Reprodução", en: "Playback" },
+  groupEdit: { "pt-BR": "Edição", en: "Editing" },
+  groupTimeline: { "pt-BR": "Timeline", en: "Timeline" },
+  groupTools: { "pt-BR": "Ferramentas", en: "Tools" },
+  groupFile: { "pt-BR": "Arquivo", en: "File" },
+  groupView: { "pt-BR": "Exibição", en: "View" },
+  cmdPlayPause: { "pt-BR": "Reproduzir / pausar", en: "Play / pause" },
+  cmdPlay: { "pt-BR": "Reproduzir (repetir acelera)", en: "Play (repeat to speed up)" },
+  cmdShuttleBack: {
+    "pt-BR": "Voltar (repetir acelera)",
+    en: "Reverse (repeat to speed up)",
+  },
+  cmdPause: { "pt-BR": "Pausar", en: "Pause" },
+  shuttleBadge: { "pt-BR": "Shuttle", en: "Shuttle" },
+  cmdBack1s: { "pt-BR": "Voltar 1 segundo", en: "Back 1 second" },
+  cmdForward1s: { "pt-BR": "Avançar 1 segundo", en: "Forward 1 second" },
+  cmdBack10s: { "pt-BR": "Voltar 10 segundos", en: "Back 10 seconds" },
+  cmdForward10s: { "pt-BR": "Avançar 10 segundos", en: "Forward 10 seconds" },
+  cmdStepBack10: { "pt-BR": "Voltar 10 quadros", en: "Back 10 frames" },
+  cmdStepForward10: { "pt-BR": "Avançar 10 quadros", en: "Forward 10 frames" },
+  cmdPrevEdit: { "pt-BR": "Ponto de corte anterior", en: "Previous cut point" },
+  cmdNextEdit: { "pt-BR": "Próximo ponto de corte", en: "Next cut point" },
+  cmdMarkIn: { "pt-BR": "Marcar entrada", en: "Mark in" },
+  cmdMarkOut: { "pt-BR": "Marcar saída", en: "Mark out" },
+  cmdClearMarks: { "pt-BR": "Limpar entrada e saída", en: "Clear in and out" },
+  cmdDeleteRange: {
+    "pt-BR": "Excluir trecho entre entrada e saída",
+    en: "Delete the range between in and out",
+  },
+  cmdLiftRange: {
+    "pt-BR": "Remover trecho entre entrada e saída (deixa o vão)",
+    en: "Lift the range between in and out (leaves the gap)",
+  },
+  cmdGoToMarkIn: { "pt-BR": "Ir para a entrada", en: "Go to in" },
+  cmdGoToMarkOut: { "pt-BR": "Ir para a saída", en: "Go to out" },
+  cmdPlayRange: { "pt-BR": "Reproduzir de entrada a saída", en: "Play from in to out" },
+  cmdSelectAll: { "pt-BR": "Selecionar tudo", en: "Select all" },
+  cmdDeselect: { "pt-BR": "Limpar seleção", en: "Clear selection" },
+  cmdDuplicate: { "pt-BR": "Duplicar clipe", en: "Duplicate clip" },
+  cmdCopyFormat: { "pt-BR": "Copiar formatação", en: "Copy formatting" },
+  cmdPasteFormat: { "pt-BR": "Colar formatação", en: "Paste formatting" },
+  cmdRenameSequence: { "pt-BR": "Renomear sequência", en: "Rename sequence" },
+  cmdToggleSnap: { "pt-BR": "Ligar ou desligar o ímã", en: "Toggle snapping" },
+  cmdShortcuts: { "pt-BR": "Atalhos de teclado", en: "Keyboard shortcuts" },
+  cmdPalette: { "pt-BR": "Paleta de comandos", en: "Command palette" },
+  cmdSettings: { "pt-BR": "Ajustes", en: "Settings" },
+  cmdScrollToPlayhead: { "pt-BR": "Mostrar o cursor na timeline", en: "Show the playhead" },
+  cmdSplit: { "pt-BR": "Dividir no cursor", en: "Split at playhead" },
+  cmdToolSelect: { "pt-BR": "Ferramenta Selecionar", en: "Select tool" },
+  cmdToolRoll: { "pt-BR": "Ferramenta Rolar", en: "Roll tool" },
+  cmdToolSlip: { "pt-BR": "Ferramenta Deslizar origem", en: "Slip tool" },
+  cmdToolSlide: { "pt-BR": "Ferramenta Deslizar", en: "Slide tool" },
+  cmdToolText: { "pt-BR": "Ferramenta Texto", en: "Text tool" },
+  cmdToggleGuides: { "pt-BR": "Mostrar guias no monitor", en: "Show monitor guides" },
+  shortcutsSearch: { "pt-BR": "Buscar atalho…", en: "Search shortcuts…" },
+  shortcutsNone: { "pt-BR": "Nenhum atalho encontrado.", en: "No shortcuts found." },
+  paletteSearch: { "pt-BR": "Digite um comando…", en: "Type a command…" },
+  paletteNone: { "pt-BR": "Nenhum comando encontrado.", en: "No commands found." },
+  keySpace: { "pt-BR": "Espaço", en: "Space" },
+  muteTrack: { "pt-BR": "Silenciar faixa", en: "Mute track" },
+  unmuteTrack: { "pt-BR": "Reativar o som da faixa", en: "Unmute track" },
+  soloTrack: { "pt-BR": "Ouvir só esta faixa", en: "Solo track" },
+  unsoloTrack: { "pt-BR": "Desfazer o solo", en: "Clear solo" },
+  audioRoleLabel: { "pt-BR": "Papel do áudio", en: "Audio role" },
+  roleUnspecified: { "pt-BR": "Sem papel", en: "No role" },
+  roleGame: { "pt-BR": "Jogo", en: "Game" },
+  roleMic: { "pt-BR": "Microfone", en: "Mic" },
+  roleMusic: { "pt-BR": "Música", en: "Music" },
+  timelineCanvas: {
+    "pt-BR": "Timeline. Use as setas para trocar de clipe e Enter para ir até ele.",
+    en: "Timeline. Use the arrow keys to change clip and Enter to go to it.",
+  },
+  timelineClips: { "pt-BR": "Clipes da timeline", en: "Timeline clips" },
+  timelineOverview: { "pt-BR": "Visão geral da timeline", en: "Timeline overview" },
+  notifications: { "pt-BR": "Notificações", en: "Notifications" },
+  confirmOverwriteTitle: { "pt-BR": "Substituir o arquivo?", en: "Replace the file?" },
+  confirmOverwriteAction: { "pt-BR": "Substituir", en: "Replace" },
+  confirmKeepBoth: { "pt-BR": "Salvar com outro nome", en: "Save under another name" },
+  etaRemaining: { "pt-BR": "restantes", en: "left" },
+  openExportFolder: { "pt-BR": "Mostrar na pasta", en: "Show in folder" },
+  exportOutputIsSource: {
+    "pt-BR": "Esse arquivo é uma mídia do projeto. Escolha outro nome para a exportação.",
+    en: "That file is a media file of the project. Pick another name for the export.",
+  },
+  exportOutputInQueue: {
+    "pt-BR": "Já existe uma exportação para esse arquivo na fila.",
+    en: "An export to that file is already in the queue.",
+  },
+  confirmQuitTitle: { "pt-BR": "Sair do oca?", en: "Quit oca?" },
+  confirmQuitAction: { "pt-BR": "Sair mesmo assim", en: "Quit anyway" },
+  confirmQuitDirty: {
+    "pt-BR": "O projeto tem alterações que não foram salvas.",
+    en: "The project has changes that were not saved.",
+  },
+  confirmQuitExporting: {
+    "pt-BR": "Há exportações na fila ou em andamento que serão perdidas.",
+    en: "There are exports queued or running that would be lost.",
+  },
+  projectMissing: {
+    "pt-BR": "O arquivo do projeto não existe mais. Ele foi tirado da lista de recentes.",
+    en: "The project file no longer exists. It was removed from the recent list.",
+  },
+  importFailed: {
+    "pt-BR": "Não foi possível importar o arquivo",
+    en: "Could not import the file",
+  },
+  removeFromLibrary: { "pt-BR": "Remover da biblioteca", en: "Remove from library" },
+  removeFromLibraryTitle: { "pt-BR": "Remover da biblioteca?", en: "Remove from library?" },
+  removeFromLibraryMessage: {
+    "pt-BR": "O arquivo original não é apagado. Só sai desta biblioteca.",
+    en: "The original file is not deleted. It only leaves this library.",
+  },
+  assetInUse: {
+    "pt-BR": "Esta mídia está em uso na timeline. Remova os clipes antes.",
+    en: "This media is used on the timeline. Remove its clips first.",
+  },
+  confirmDiscardTitle: { "pt-BR": "Descartar alterações?", en: "Discard changes?" },
+  confirmDiscardAction: { "pt-BR": "Descartar", en: "Discard" },
+  taskAnalyzing: { "pt-BR": "Analisando", en: "Analyzing" },
+  tasks: { "pt-BR": "Tarefas em andamento", en: "Running tasks" },
+  settingsGeneral: { "pt-BR": "Geral", en: "General" },
+  settingsExport: { "pt-BR": "Exportação", en: "Export" },
+  settingsModels: { "pt-BR": "IA e modelos", en: "AI and models" },
+  settingsPrivacy: { "pt-BR": "Privacidade", en: "Privacy" },
+  settingsUpdates: { "pt-BR": "Atualizações", en: "Updates" },
+  browse: { "pt-BR": "Procurar…", en: "Browse…" },
+  pathOk: { "pt-BR": "Encontrado", en: "Found" },
+  pathMissing: { "pt-BR": "Não encontrado", en: "Not found" },
+  pathWrongKind: { "pt-BR": "Tipo de caminho inesperado", en: "Unexpected kind of path" },
+  settingsSaved: { "pt-BR": "Salvo", en: "Saved" },
+  trimTools: { "pt-BR": "Ferramentas de aparo", en: "Trim tools" },
+  monitorPanHint: {
+    "pt-BR": "Arraste para mover a imagem. Clique duplo centraliza.",
+    en: "Drag to move the image. Double-click to center it.",
+  },
+  monitorZoom: { "pt-BR": "Zoom do monitor", en: "Monitor zoom" },
+  zoomFitShort: { "pt-BR": "Ajustar", en: "Fit" },
+  moreSources: { "pt-BR": "Mais fontes de mídia", en: "More media sources" },
+  transform: { "pt-BR": "Transformar", en: "Transform" },
+  scale: { "pt-BR": "Escala", en: "Scale" },
+  rotation: { "pt-BR": "Rotação", en: "Rotation" },
+  transformAnimated: {
+    "pt-BR": "Valor animado: edite nos keyframes.",
+    en: "Animated value: edit it in the keyframes.",
+  },
+  transformHint: {
+    "pt-BR": "Também dá para arrastar a camada no monitor.",
+    en: "You can also drag the layer in the monitor.",
+  },
+  textTypography: { "pt-BR": "Tipografia", en: "Typography" },
+  textBackground: { "pt-BR": "Fundo", en: "Background" },
+  textPosition: { "pt-BR": "Posição", en: "Position" },
+  textHighlight: { "pt-BR": "Destaque", en: "Highlight" },
+  textTiming: { "pt-BR": "Tempo", en: "Timing" },
+  keyframeToggle: { "pt-BR": "Keyframe no cursor", en: "Keyframe at the playhead" },
+  keyframeOutside: {
+    "pt-BR": "Posicione o cursor dentro do clipe para criar um keyframe.",
+    en: "Move the playhead inside the clip to add a keyframe.",
+  },
+  resetSection: { "pt-BR": "Restaurar padrão", en: "Reset to default" },
+  clipsSelected: { "pt-BR": "clipes selecionados", en: "clips selected" },
+  keymapReserved: {
+    "pt-BR": "Esse atalho é reservado pelo sistema ou pelos campos de texto.",
+    en: "That shortcut is reserved by the system or by text fields.",
+  },
+  keymapDuplicate: {
+    "pt-BR": "Esse comando já usa esse atalho.",
+    en: "That command already uses this shortcut.",
+  },
+  keymapFull: {
+    "pt-BR": "Cada comando aceita no máximo 4 atalhos.",
+    en: "Each command takes at most 4 shortcuts.",
+  },
+  keymapUsedBy: { "pt-BR": "já é usado por", en: "is already used by" },
+  keymapReplace: { "pt-BR": "Substituir", en: "Replace" },
+  keymapUnbound: { "pt-BR": "Sem atalho", en: "No shortcut" },
+  keymapRemove: { "pt-BR": "Remover atalho", en: "Remove shortcut" },
+  keymapAdd: { "pt-BR": "Adicionar atalho", en: "Add shortcut" },
+  keymapReset: { "pt-BR": "Restaurar o atalho padrão", en: "Restore the default shortcut" },
+  keymapPress: {
+    "pt-BR": "Pressione as teclas… (Esc cancela)",
+    en: "Press the keys… (Esc cancels)",
+  },
+  keymapResetAll: { "pt-BR": "Restaurar todos os padrões", en: "Restore all defaults" },
+  keymapResetAllTitle: {
+    "pt-BR": "Restaurar os atalhos padrão?",
+    en: "Restore the default shortcuts?",
+  },
+  keymapResetAllMessage: {
+    "pt-BR": "Todos os atalhos que você alterou voltam ao padrão. Isso não pode ser desfeito.",
+    en: "Every shortcut you changed goes back to its default. This cannot be undone.",
+  },
+  close: { "pt-BR": "Fechar", en: "Close" },
+  menuAdd: { "pt-BR": "Adicionar", en: "Add" },
+  menuClip: { "pt-BR": "Clipe", en: "Clip" },
+  menuAnalyze: { "pt-BR": "Analisar", en: "Analyze" },
+  sequenceActions: { "pt-BR": "Ações da sequência", en: "Sequence actions" },
+  gpuEncoderHint: {
+    "pt-BR": "Usado em todas as exportações. Auto escolhe o melhor disponível.",
+    en: "Used for every export. Auto picks the best available.",
+  },
   exportOverwriteConfirm: {
     "pt-BR": "O arquivo já existe. Substituir? (Cancelar cria uma cópia com novo nome.)",
     en: "The file already exists. Overwrite it? (Cancel creates a renamed copy.)",
@@ -388,7 +662,10 @@ const strings = {
   removeRecent: { "pt-BR": "Remover da lista", en: "Remove from list" },
   recoverAutosave: { "pt-BR": "Recuperar salvamento automático", en: "Recover autosave" },
   discardAutosave: { "pt-BR": "Descartar salvamento automático", en: "Discard autosave" },
-  unsavedConfirm: { "pt-BR": "Há alterações não salvas. Deseja continuar?", en: "You have unsaved changes. Continue?" },
+  unsavedConfirm: {
+    "pt-BR": "Há alterações não salvas. Deseja continuar?",
+    en: "You have unsaved changes. Continue?",
+  },
   exportSrt: { "pt-BR": "Exportar SRT", en: "Export SRT" },
   gpuEncoder: { "pt-BR": "Codificador GPU", en: "GPU encoder" },
   matchLoudness: { "pt-BR": "Igualar loudness", en: "Match loudness" },
@@ -408,9 +685,16 @@ let current: Locale = typeof navigator === "undefined" ? "en" : detectLocale();
 const localeListeners = new Set<() => void>();
 
 export function setLocale(locale: Locale) {
-  if (current === locale) return;
+  if (current === locale) {
+    return;
+  }
   current = locale;
-  localeListeners.forEach((listener) => listener());
+  if (typeof document !== "undefined") {
+    document.documentElement.lang = locale;
+  }
+  localeListeners.forEach((listener) => {
+    return listener();
+  });
 }
 
 export function localeFromPrefs(locale: string): Locale {
@@ -419,7 +703,9 @@ export function localeFromPrefs(locale: string): Locale {
 
 export function subscribeLocale(listener: () => void) {
   localeListeners.add(listener);
-  return () => localeListeners.delete(listener);
+  return () => {
+    return localeListeners.delete(listener);
+  };
 }
 
 export function localeSnapshot() {
@@ -431,11 +717,30 @@ export function t(key: TextKey): string {
 }
 
 /** `mm:ss.hh` for timeline/transport readouts (hundredths, not frames: fps varies per clip). */
+/** `HH:MM:SS:FF` at `fps` frames per second (the usual editing timecode). */
+export function formatTimecode(secs: number, fps: number): string {
+  const rate = fps > 0 ? Math.round(fps) : 30;
+  const totalFrames = Math.round(Math.max(0, secs) * rate);
+  const frames = totalFrames % rate;
+  const totalSecs = Math.floor(totalFrames / rate);
+  const pad = (n: number) => {
+    return n.toString().padStart(2, "0");
+  };
+  return [
+    pad(Math.floor(totalSecs / 3600)),
+    pad(Math.floor((totalSecs % 3600) / 60)),
+    pad(totalSecs % 60),
+    pad(frames),
+  ].join(":");
+}
+
 export function formatTime(secs: number): string {
   const totalHundredths = Math.round(Math.max(0, secs) * 100);
   const minutes = Math.floor(totalHundredths / 6000);
   const seconds = Math.floor((totalHundredths % 6000) / 100);
   const hundredths = totalHundredths % 100;
-  const pad = (n: number) => n.toString().padStart(2, "0");
+  const pad = (n: number) => {
+    return n.toString().padStart(2, "0");
+  };
   return `${pad(minutes)}:${pad(seconds)}.${pad(hundredths)}`;
 }

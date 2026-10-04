@@ -243,6 +243,23 @@ fn player_fills_the_sink_to_its_target_and_continues_without_gaps() {
 }
 
 #[test]
+fn momentary_loudness_follows_rendered_audio_and_resets_on_seek() {
+    let cancel = AtomicBool::new(false);
+    let scene = scene(vec![clip(1, true, Placement::default())]);
+    let mut player = AudioPlayer::new(renderer(), scene, 1024, 4096);
+    let mut sink = FakeSink::new(8192, 1);
+    assert_eq!(player.momentary_lufs_at(0), None, "nothing rendered yet");
+    player.pump(&mut sink, &cancel).unwrap();
+
+    let lufs = player.momentary_lufs_at(2048).expect("audible fixture");
+    assert!(lufs.is_finite() && lufs < 3.0, "implausible reading {lufs}");
+    assert_eq!(player.momentary_lufs_at(100_000), None);
+
+    player.seek(50_000, &mut sink);
+    assert_eq!(player.momentary_lufs_at(2048), None);
+}
+
+#[test]
 fn peaks_follow_the_rendered_block_and_reset_on_seek() {
     let cancel = AtomicBool::new(false);
     let scene = scene(vec![clip(1, true, Placement::default())]);

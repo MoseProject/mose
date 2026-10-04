@@ -48,3 +48,26 @@ pub const WAVEFORM_BUCKET_COUNT: usize = 2000;
 pub fn generate_waveform(path: &Path) -> Result<Vec<(f32, f32)>, WaveformError> {
     avbridge::generate_waveform(path, WAVEFORM_BUCKET_COUNT).map_err(WaveformError::Bridge)
 }
+
+/// Detail waveform resolution: buckets per second of audio. High enough that a clip zoomed to
+/// the timeline's maximum scale still has several buckets per pixel's worth of time.
+pub const WAVEFORM_DETAIL_BUCKETS_PER_SEC: f64 = 50.0;
+/// Upper bound on [`generate_detailed_waveform`]'s bucket count, so a very long recording cannot
+/// ask for an unbounded array (about 12 MB of `f32` pairs).
+pub const WAVEFORM_DETAIL_MAX_BUCKETS: usize = 1_500_000;
+
+/// Like [`generate_waveform`] but with [`WAVEFORM_DETAIL_BUCKETS_PER_SEC`] buckets per second of
+/// `duration_secs` (never fewer than [`WAVEFORM_BUCKET_COUNT`]), for drawing zoomed-in clips.
+pub fn generate_detailed_waveform(
+    path: &Path,
+    duration_secs: f64,
+) -> Result<Vec<(f32, f32)>, WaveformError> {
+    avbridge::generate_waveform(path, detailed_bucket_count(duration_secs))
+        .map_err(WaveformError::Bridge)
+}
+
+/// The bucket count [`generate_detailed_waveform`] asks for.
+pub fn detailed_bucket_count(duration_secs: f64) -> usize {
+    let wanted = (duration_secs.max(0.0) * WAVEFORM_DETAIL_BUCKETS_PER_SEC).ceil() as usize;
+    wanted.clamp(WAVEFORM_BUCKET_COUNT, WAVEFORM_DETAIL_MAX_BUCKETS)
+}

@@ -114,6 +114,8 @@ mod tests {
                 shape_clips: Vec::new(),
                 visible: true,
                 audio_role: AudioRole::Unspecified,
+                muted: false,
+                solo: false,
                 locked: false,
                 color_label: None,
             }],
@@ -189,6 +191,8 @@ mod tests {
             shape_clips: Vec::new(),
             visible: true,
             audio_role: AudioRole::Unspecified,
+            muted: false,
+            solo: false,
             locked: false,
             color_label: None,
         });

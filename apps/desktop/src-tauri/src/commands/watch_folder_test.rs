@@ -174,7 +174,13 @@ fn a_cancelled_normalization_reports_nothing_and_the_file_is_not_retried_as_fail
     std::fs::write(dir.join("a.mp4"), b"x").unwrap();
     *h.services.watch_result.lock().unwrap() = Some(Ok(None));
     let events = collect_events(&h);
-    start_watching(h.handle(), dir, FAST);
+    // A long poll: the fake answers only once, so a second pass would run the real normalizer
+    // on the placeholder file and fail. The test stops the watcher before that pass.
+    let slow = WatchTiming {
+        poll: Duration::from_secs(5),
+        stable_for: Duration::ZERO,
+    };
+    start_watching(h.handle(), dir, slow);
     wait_for(&events, "\"type\":\"processing\"");
     std::thread::sleep(Duration::from_millis(100));
     stop_watching_folder(h.state());

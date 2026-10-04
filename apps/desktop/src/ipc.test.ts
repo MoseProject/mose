@@ -11,19 +11,31 @@ const listen = vi.fn(async (name: string, handler: (event: { payload: unknown })
   return unlisten;
 });
 
-vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => invoke(...args) }));
-vi.mock("@tauri-apps/api/event", () => ({
-  listen: (...args: Parameters<typeof listen>) => listen(...args),
-}));
+vi.mock("@tauri-apps/api/core", () => {
+  return {
+    invoke: (...args: unknown[]) => {
+      return invoke(...args);
+    },
+  };
+});
+vi.mock("@tauri-apps/api/event", () => {
+  return {
+    listen: (...args: Parameters<typeof listen>) => {
+      return listen(...args);
+    },
+  };
+});
 
 const ipc = await import("./ipc");
 
 /** Every command name registered with `generate_handler!` in the Rust shell. */
 function registeredCommands(): Set<string> {
-  const main = readFileSync(resolve(__dirname, "../src-tauri/src/main.rs"), "utf8");
+  const main = readFileSync(resolve(__dirname, "../src-tauri/src/handler.rs"), "utf8");
   const block = main.slice(main.indexOf("generate_handler!["));
   const body = block.slice(0, block.indexOf("])"));
-  const names = [...body.matchAll(/commands::(?:\w+::)*(\w+)/g)].map((match) => match[1]);
+  const names = [...body.matchAll(/\$crate::(?:\w+::)*(\w+)/g)].map((match) => {
+    return match[1];
+  });
   return new Set(names);
 }
 
@@ -46,14 +58,20 @@ describe("api wrappers", () => {
       expect(invoke, name).toHaveBeenCalledTimes(1);
       const command = invoke.mock.calls[0][0] as string;
       expect(command, name).toMatch(/^[a-z][a-z0-9_]*$/);
-      if (!registered.has(command)) unknown.push(`${name} -> ${command}`);
+      if (!registered.has(command)) {
+        unknown.push(`${name} -> ${command}`);
+      }
     }
     expect(unknown).toEqual([]);
   });
 
   it("forward their arguments under camelCase keys and fill optional ones with null", async () => {
     await ipc.api.moveClip(7, 3, 12.5);
-    expect(invoke).toHaveBeenLastCalledWith("move_clip", { clipId: 7, trackId: 3, startSecs: 12.5 });
+    expect(invoke).toHaveBeenLastCalledWith("move_clip", {
+      clipId: 7,
+      trackId: 3,
+      startSecs: 12.5,
+    });
 
     await ipc.api.addAssetToTimeline(4);
     expect(invoke).toHaveBeenLastCalledWith("add_asset_to_timeline", {
@@ -122,17 +140,39 @@ describe("event subscriptions", () => {
   });
 });
 
+describe("import failures and media commands", () => {
+  it("hands only the file name of a failed import to the handler", async () => {
+    const handler = vi.fn();
+    await ipc.onImportFailed(handler);
+    listeners.get(ipc.events.importFailed)!({ payload: { fileName: "broken.mp4" } });
+    expect(handler).toHaveBeenCalledWith("broken.mp4");
+  });
+
+  it("calls the commands that remove media, reveal a path and lift a range", async () => {
+    await ipc.api.removeAsset(4);
+    expect(invoke).toHaveBeenLastCalledWith("remove_asset", { assetId: 4 });
+    await ipc.api.revealInFolder("C:/out/a.mp4");
+    expect(invoke).toHaveBeenLastCalledWith("reveal_in_folder", { path: "C:/out/a.mp4" });
+    await ipc.api.liftRange(2, 6);
+    expect(invoke).toHaveBeenLastCalledWith("lift_range", { startSecs: 2, endSecs: 6 });
+  });
+});
+
 describe("export helper", () => {
   it("does nothing when the save dialog is dismissed", async () => {
     invoke.mockResolvedValueOnce(null);
-    await ipc.exportActiveSequence(() => true);
+    await ipc.exportActiveSequence(() => {
+      return true;
+    });
     expect(invoke).toHaveBeenCalledTimes(1);
     expect(invoke).toHaveBeenCalledWith("pick_export_path");
   });
 
   it("starts a plain export for a new file", async () => {
     invoke.mockResolvedValueOnce({ path: "a.mp4", exists: false });
-    const confirm = vi.fn(() => true);
+    const confirm = vi.fn(() => {
+      return true;
+    });
     await ipc.exportActiveSequence(confirm);
     expect(confirm).not.toHaveBeenCalled();
     expect(invoke).toHaveBeenLastCalledWith("start_export", { path: "a.mp4", rename: false });
@@ -140,11 +180,15 @@ describe("export helper", () => {
 
   it("overwrites an existing file only after confirmation, otherwise renames", async () => {
     invoke.mockResolvedValueOnce({ path: "a.mp4", exists: true });
-    await ipc.exportActiveSequence(() => true);
+    await ipc.exportActiveSequence(() => {
+      return true;
+    });
     expect(invoke).toHaveBeenLastCalledWith("start_export", { path: "a.mp4", rename: false });
 
     invoke.mockResolvedValueOnce({ path: "a.mp4", exists: true });
-    await ipc.exportActiveSequence(() => false);
+    await ipc.exportActiveSequence(() => {
+      return false;
+    });
     expect(invoke).toHaveBeenLastCalledWith("start_export", { path: "a.mp4", rename: true });
   });
 });
@@ -162,5 +206,17 @@ describe("media urls", () => {
     expect(windows.frameUrl(3)).toBe("http://oca.localhost/frame/3");
     expect(windows.thumbnailUrl(9)).toBe("http://oca.localhost/thumb/9");
     vi.unstubAllGlobals();
+  });
+});
+
+describe("window close", () => {
+  it("passes the reasons of a held-back close to the handler and quits on request", async () => {
+    const handler = vi.fn();
+    await ipc.onCloseRequested(handler);
+    listeners.get(ipc.events.closeRequested)!({ payload: { dirty: true, exporting: false } });
+    expect(handler).toHaveBeenCalledWith({ dirty: true, exporting: false });
+
+    await ipc.api.quitApp();
+    expect(invoke).toHaveBeenLastCalledWith("quit_app");
   });
 });

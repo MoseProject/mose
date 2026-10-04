@@ -7,28 +7,34 @@ import type { PrefsView, UpdateCheckEvent } from "../types";
 let emitUpdate: (event: UpdateCheckEvent) => void = () => {};
 const stopListening = vi.fn();
 
-vi.mock("../ipc", () => ({
-  api: {
-    getPrefs: vi.fn(),
-    getQueuedReportCount: vi.fn(),
-    setPrefs: vi.fn().mockResolvedValue(undefined),
-    setErrorReportingConsent: vi.fn().mockResolvedValue(undefined),
-    deleteQueuedReports: vi.fn().mockResolvedValue(undefined),
-    checkForUpdate: vi.fn().mockResolvedValue(undefined),
-    installAvailableUpdate: vi.fn().mockResolvedValue(undefined),
-    restartAfterUpdate: vi.fn().mockResolvedValue(undefined),
-  },
-  onUpdateCheck: vi.fn((handler: (event: UpdateCheckEvent) => void) => {
-    emitUpdate = handler;
-    return Promise.resolve(stopListening);
-  }),
-}));
+vi.mock("../ipc", () => {
+  return {
+    api: {
+      getPrefs: vi.fn(),
+      getQueuedReportCount: vi.fn(),
+      getGpuEncoderPreference: vi.fn().mockResolvedValue("auto"),
+      checkPath: vi.fn().mockResolvedValue("file"),
+      pickPath: vi.fn().mockResolvedValue(null),
+      setGpuEncoderPreference: vi.fn().mockResolvedValue(undefined),
+      setPrefs: vi.fn().mockResolvedValue(undefined),
+      setErrorReportingConsent: vi.fn().mockResolvedValue(undefined),
+      deleteQueuedReports: vi.fn().mockResolvedValue(undefined),
+      checkForUpdate: vi.fn().mockResolvedValue(undefined),
+      installAvailableUpdate: vi.fn().mockResolvedValue(undefined),
+      restartAfterUpdate: vi.fn().mockResolvedValue(undefined),
+    },
+    onUpdateCheck: vi.fn((handler: (event: UpdateCheckEvent) => void) => {
+      emitUpdate = handler;
+      return Promise.resolve(stopListening);
+    }),
+  };
+});
 
 const { Prefs } = await import("./Prefs");
 const { api } = await import("../ipc");
 
-const prefs = (): PrefsView =>
-  ({
+const prefs = (): PrefsView => {
+  return {
     locale: "en",
     lufsProfile: 0,
     outputFolder: "C:/out",
@@ -40,7 +46,8 @@ const prefs = (): PrefsView =>
     soundLibraryPath: "s",
     telemetryEnabled: false,
     errorReportingConsent: "disabled",
-  }) as unknown as PrefsView;
+  } as unknown as PrefsView;
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -57,13 +64,17 @@ async function open() {
   await screen.findByTestId("screen-prefs");
 }
 
-const lastSaved = () => vi.mocked(api.setPrefs).mock.calls.at(-1)![0];
+const lastSaved = () => {
+  return vi.mocked(api.setPrefs).mock.calls.at(-1)![0];
+};
 
 describe("preferences screen", () => {
   it("renders nothing until the preferences load", async () => {
     vi.mocked(api.getPrefs).mockResolvedValue(undefined as never);
     const { container } = render(<Prefs />);
-    await waitFor(() => expect(api.getPrefs).toHaveBeenCalled());
+    await waitFor(() => {
+      return expect(api.getPrefs).toHaveBeenCalled();
+    });
     expect(container.innerHTML).toBe("");
   });
 
@@ -73,13 +84,14 @@ describe("preferences screen", () => {
     fireEvent.change(language, { target: { value: "pt_br" } });
     expect(lastSaved()).toMatchObject({ locale: "pt_br" });
     // Switching language retranslates the screen immediately.
-    expect(screen.getByRole("heading").textContent).toBe(t("preferences"));
+    expect(screen.getByText(t("settingsGeneral"))).toBeTruthy();
 
     fireEvent.change(lufs, { target: { value: "2" } });
     expect(lastSaved()).toMatchObject({ lufsProfile: 2, locale: "pt_br" });
 
-    const text = (label: string) =>
-      screen.getByText(label).querySelector("input") as HTMLInputElement;
+    const text = (label: string) => {
+      return screen.getByLabelText(label) as HTMLInputElement;
+    };
     const edits: [string, string][] = [
       ["outputFolder", "D:/new"],
       ["whisperModelPath", "w2"],
@@ -125,7 +137,9 @@ describe("preferences screen", () => {
     vi.mocked(api.getQueuedReportCount).mockResolvedValue(3);
     await open();
     fireEvent.click(await screen.findByText(t("deleteQueuedReports")));
-    await waitFor(() => expect(screen.queryByText(t("deleteQueuedReports"))).toBeNull());
+    await waitFor(() => {
+      return expect(screen.queryByText(t("deleteQueuedReports"))).toBeNull();
+    });
     expect(api.deleteQueuedReports).toHaveBeenCalled();
   });
 
@@ -134,35 +148,41 @@ describe("preferences screen", () => {
     fireEvent.click(screen.getByText(t("checkForUpdate")));
     expect(api.checkForUpdate).toHaveBeenCalled();
 
-    act(() => emitUpdate({ type: "upToDate" }));
+    act(() => {
+      return emitUpdate({ type: "upToDate" });
+    });
     expect(screen.getByText(t("updateCheckUpToDate"))).toBeTruthy();
-    act(() => emitUpdate({ type: "failed" }));
+    act(() => {
+      return emitUpdate({ type: "failed" });
+    });
     expect(screen.getByText(t("updateCheckFailed"))).toBeTruthy();
-    act(() => emitUpdate({ type: "installFailed" }));
+    act(() => {
+      return emitUpdate({ type: "installFailed" });
+    });
     expect(screen.getByText(t("updateInstallFailed"))).toBeTruthy();
   });
 
   it("installs an available update in place, or links to the release page", async () => {
     await open();
-    act(() =>
-      emitUpdate({
+    act(() => {
+      return emitUpdate({
         type: "newerVersionAvailable",
         version: "2.0.0",
         htmlUrl: "https://example.test/r",
         autoUpdateAvailable: true,
-      }),
-    );
+      });
+    });
     fireEvent.click(screen.getByText(t("updateInstall")));
     expect(api.installAvailableUpdate).toHaveBeenCalledWith("2.0.0");
 
-    act(() =>
-      emitUpdate({
+    act(() => {
+      return emitUpdate({
         type: "newerVersionAvailable",
         version: "2.0.0",
         htmlUrl: "https://example.test/r",
         autoUpdateAvailable: false,
-      }),
-    );
+      });
+    });
     const link = screen.getByText(t("updateOpenRelease")) as HTMLAnchorElement;
     expect(link.href).toBe("https://example.test/r");
   });
@@ -170,11 +190,82 @@ describe("preferences screen", () => {
   it("restarts after an installed update and stops listening on unmount", async () => {
     const { unmount } = render(<Prefs />);
     await screen.findByTestId("screen-prefs");
-    act(() => emitUpdate({ type: "installed", version: "2.0.0" }));
+    act(() => {
+      return emitUpdate({ type: "installed", version: "2.0.0" });
+    });
     fireEvent.click(screen.getByText(t("updateRestart")));
     expect(api.restartAfterUpdate).toHaveBeenCalled();
 
     unmount();
-    await waitFor(() => expect(stopListening).toHaveBeenCalled());
+    await waitFor(() => {
+      return expect(stopListening).toHaveBeenCalled();
+    });
+  });
+});
+
+describe("preferences screen: GPU encoder", () => {
+  beforeEach(() => {
+    vi.mocked(api.getPrefs).mockResolvedValue(prefs());
+    vi.mocked(api.getQueuedReportCount).mockResolvedValue(0);
+  });
+  afterEach(() => {
+    return cleanup();
+  });
+
+  it("adopts the stored preference and saves a change", async () => {
+    vi.mocked(api.getGpuEncoderPreference).mockResolvedValueOnce("nvenc");
+    render(<Prefs />);
+    const select = (await screen.findByLabelText(t("gpuEncoder"))) as HTMLSelectElement;
+    await waitFor(() => {
+      return expect(select.value).toBe("nvenc");
+    });
+    fireEvent.change(select, { target: { value: "cpu" } });
+    expect(api.setGpuEncoderPreference).toHaveBeenCalledWith("cpu");
+  });
+});
+
+describe("preferences screen: paths", () => {
+  beforeEach(() => {
+    vi.mocked(api.getPrefs).mockResolvedValue(prefs());
+    vi.mocked(api.getQueuedReportCount).mockResolvedValue(0);
+  });
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("flags a path that is not on disk and accepts one that is", async () => {
+    vi.mocked(api.checkPath).mockImplementation((path: string) => {
+      return Promise.resolve(path === "w" ? "file" : "missing");
+    });
+    render(<Prefs />);
+    expect(await screen.findAllByText(t("pathMissing"))).not.toHaveLength(0);
+    expect(screen.getAllByText(t("pathOk")).length).toBeGreaterThan(0);
+  });
+
+  it("flags a folder where a file is expected", async () => {
+    vi.mocked(api.checkPath).mockResolvedValue("folder");
+    render(<Prefs />);
+    expect(await screen.findAllByText(t("pathWrongKind"))).not.toHaveLength(0);
+  });
+
+  it("fills a path from the native picker", async () => {
+    vi.mocked(api.checkPath).mockResolvedValue("file");
+    vi.mocked(api.pickPath).mockResolvedValueOnce("D:/models/new.bin");
+    render(<Prefs />);
+    await screen.findByLabelText(t("whisperModelPath"));
+    fireEvent.click(screen.getAllByText(t("browse"))[1]);
+    await waitFor(() => {
+      expect(api.setPrefs).toHaveBeenLastCalledWith(
+        expect.objectContaining({ whisperModelPath: "D:/models/new.bin" }),
+      );
+    });
+    expect(api.pickPath).toHaveBeenCalledWith("file", ["bin"]);
+  });
+
+  it("confirms that a change was saved", async () => {
+    vi.mocked(api.checkPath).mockResolvedValue("file");
+    render(<Prefs />);
+    fireEvent.change(await screen.findByLabelText(t("language")), { target: { value: "en" } });
+    expect(screen.getByRole("status").textContent).toBe(t("settingsSaved"));
   });
 });

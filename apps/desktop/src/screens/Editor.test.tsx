@@ -2,35 +2,81 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n";
+import { keymapStore } from "../keymap";
 import { previewStore, uiStore } from "../store";
 import { makeSession } from "../testSupport";
 import type { SessionView } from "../types";
 
-vi.mock("../editor/Inspector", () => ({ Inspector: () => <div data-testid="inspector" /> }));
-vi.mock("../editor/ExportPanel", () => ({ ExportPanel: () => <div data-testid="export-panel" /> }));
-vi.mock("../editor/MediaLibrary", () => ({ MediaLibrary: () => <div data-testid="library" /> }));
-vi.mock("../editor/PreviewPanel", () => ({ PreviewPanel: () => <div data-testid="preview" /> }));
-vi.mock("../editor/Timeline", () => ({ Timeline: () => <div data-testid="timeline" /> }));
-vi.mock("../editor/SequenceTabs", () => ({ SequenceTabs: () => <div data-testid="tabs" /> }));
+vi.mock("../editor/Inspector", () => {
+  return {
+    Inspector: () => {
+      return <div data-testid="inspector" />;
+    },
+  };
+});
+vi.mock("../editor/MediaLibrary", () => {
+  return {
+    MediaLibrary: () => {
+      return <div data-testid="library" />;
+    },
+  };
+});
+vi.mock("../editor/PreviewPanel", () => {
+  return {
+    PreviewPanel: () => {
+      return <div data-testid="preview" />;
+    },
+  };
+});
+vi.mock("../editor/Timeline", () => {
+  return {
+    Timeline: () => {
+      return <div data-testid="timeline" />;
+    },
+  };
+});
 
 type DragDropHandler = (event: { payload: { type: string; paths?: string[] } }) => void;
-const webview = vi.hoisted(() => ({ handler: null as unknown, unlisten: null as unknown }));
-vi.mock("@tauri-apps/api/webview", () => ({
-  getCurrentWebview: () => ({
-    onDragDropEvent: (handler: DragDropHandler) => {
-      webview.handler = handler;
-      return Promise.resolve(webview.unlisten);
+const webview = vi.hoisted(() => {
+  return { handler: null as unknown, unlisten: null as unknown };
+});
+vi.mock("@tauri-apps/api/webview", () => {
+  return {
+    getCurrentWebview: () => {
+      return {
+        onDragDropEvent: (handler: DragDropHandler) => {
+          webview.handler = handler;
+          return Promise.resolve(webview.unlisten);
+        },
+      };
     },
-  }),
-}));
+  };
+});
 
 vi.mock("../ipc", () => {
   const names = [
-    "setPlaying", "redo", "undo", "saveProject", "importMediaDialog", "copyClipFormatting",
-    "pasteClipFormatting", "copyClip", "cutClip", "splitAtPlayhead", "addMarker", "deleteClips",
-    "step", "seek", "importMedia", "setPanelLayout",
+    "setPlaying",
+    "redo",
+    "undo",
+    "saveProject",
+    "importMediaDialog",
+    "copyClipFormatting",
+    "pasteClipFormatting",
+    "copyClip",
+    "cutClip",
+    "splitAtPlayhead",
+    "addMarker",
+    "deleteClips",
+    "step",
+    "seek",
+    "importMedia",
+    "setPanelLayout",
   ];
-  const api: Record<string, unknown> = Object.fromEntries(names.map((n) => [n, vi.fn().mockResolvedValue(undefined)]));
+  const api: Record<string, unknown> = Object.fromEntries(
+    names.map((n) => {
+      return [n, vi.fn().mockResolvedValue(undefined)];
+    }),
+  );
   api.pasteClip = vi.fn().mockResolvedValue([3, 4]);
   api.addCustomShapeClip = vi.fn().mockResolvedValue(8);
   return { api };
@@ -46,25 +92,73 @@ const sessionWith = (id: number, layout?: Record<string, number>): SessionView =
   return session;
 };
 
-const screenEditor = () => screen.getByTestId("screen-editor");
-const cssVar = (name: string) => screenEditor().style.getPropertyValue(name);
-const emit = (payload: { type: string; paths?: string[] }) => act(() => (webview.handler as DragDropHandler)({ payload }));
+const screenEditor = () => {
+  return screen.getByTestId("screen-editor");
+};
+const cssVar = (name: string) => {
+  return screenEditor().style.getPropertyValue(name);
+};
+const emit = (payload: { type: string; paths?: string[] }) => {
+  return act(() => {
+    return (webview.handler as DragDropHandler)({ payload });
+  });
+};
 const press = (init: KeyboardEventInit & { target?: EventTarget }) => {
   const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
-  act(() => void (init.target ?? window).dispatchEvent(event));
+  act(() => {
+    return void (init.target ?? window).dispatchEvent(event);
+  });
   return event;
 };
-const pointer = (target: Element, type: string, x = 0, y = 0) =>
-  fireEvent(target, new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0 }));
+const pointer = (target: Element, type: string, x = 0, y = 0) => {
+  return fireEvent(
+    target,
+    new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0 }),
+  );
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
   webview.unlisten = vi.fn();
   webview.handler = null;
   Element.prototype.setPointerCapture = vi.fn();
-  Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, get: () => 1000 });
-  uiStore.set({ screen: "editor", selectedClipIds: [], tool: "select", pxPerSec: 40, error: null, drawingShapePoints: null });
-  previewStore.set({ frameSeq: 0, playheadSecs: 0, playing: false, hasClip: false, available: true, error: null, peakL: 0, peakR: 0 });
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+    configurable: true,
+    get: () => {
+      return 1000;
+    },
+  });
+  uiStore.set({
+    screen: "editor",
+    selectedClipIds: [],
+    tool: "select",
+    pxPerSec: 40,
+    error: null,
+    drawingShapePoints: null,
+    exportQueueOpen: false,
+    exportDialogOpen: false,
+    openDialogs: 0,
+    markIn: null,
+    markOut: null,
+    snapEnabled: true,
+    shortcutsOpen: false,
+    paletteOpen: false,
+    settingsOpen: false,
+    watchOpen: false,
+    monitorZoom: "fit",
+    monitorGuides: false,
+  });
+  previewStore.set({
+    frameSeq: 0,
+    playheadSecs: 0,
+    playing: false,
+    hasClip: false,
+    available: true,
+    error: null,
+    peakL: 0,
+    peakR: 0,
+    momentaryLufs: null,
+  });
 });
 afterEach(() => {
   cleanup();
@@ -74,7 +168,7 @@ afterEach(() => {
 describe("editor screen", () => {
   it("composes every panel", () => {
     render(<Editor session={sessionWith(1)} />);
-    for (const id of ["library", "preview", "inspector", "export-panel", "tabs", "timeline"]) {
+    for (const id of ["library", "preview", "inspector", "timeline"]) {
       expect(screen.getByTestId(id)).toBeTruthy();
     }
   });
@@ -82,13 +176,21 @@ describe("editor screen", () => {
   describe("layout", () => {
     it("uses the defaults when the project stores no layout", () => {
       render(<Editor session={sessionWith(1)} />);
-      expect(cssVar("--library-width")).toBe("260px");
-      expect(cssVar("--inspector-width")).toBe("280px");
-      expect(cssVar("--timeline-height")).toBe("300px");
+      expect(cssVar("--library-width")).toBe("340px");
+      expect(cssVar("--inspector-width")).toBe("296px");
+      expect(cssVar("--timeline-height")).toBe("392px");
     });
 
     it("restores the stored layout within its bounds", () => {
-      render(<Editor session={sessionWith(1, { lib_panel_width: 9999, props_panel_width: 10, timeline_height: 50 })} />);
+      render(
+        <Editor
+          session={sessionWith(1, {
+            lib_panel_width: 9999,
+            props_panel_width: 10,
+            timeline_height: 50,
+          })}
+        />,
+      );
       expect(cssVar("--library-width")).toBe("640px");
       expect(cssVar("--inspector-width")).toBe("180px");
       expect(cssVar("--timeline-height")).toBe("140px");
@@ -108,13 +210,13 @@ describe("editor screen", () => {
       const splitter = container.querySelector(".splitter")!;
       pointer(splitter, "pointerdown", 0, 500);
       pointer(splitter, "pointermove", 0, 400);
-      expect(cssVar("--timeline-height")).toBe("400px");
+      expect(cssVar("--timeline-height")).toBe("492px");
       pointer(splitter, "pointermove", 0, -5000);
       expect(cssVar("--timeline-height")).toBe("800px");
       pointer(splitter, "pointermove", 0, 9000);
       expect(cssVar("--timeline-height")).toBe("140px");
       pointer(splitter, "pointerup", 0, 9000);
-      expect(calls.setPanelLayout).toHaveBeenCalledWith(260, 280, 140);
+      expect(calls.setPanelLayout).toHaveBeenCalledWith(340, 296, 140);
 
       pointer(splitter, "pointermove", 0, 0);
       pointer(splitter, "pointerup", 0, 0);
@@ -134,14 +236,14 @@ describe("editor screen", () => {
       const splitter = container.querySelector(".library-splitter")!;
       pointer(splitter, "pointerdown", 100, 0);
       pointer(splitter, "pointermove", 200, 0);
-      expect(cssVar("--library-width")).toBe("360px");
-      expect(cssVar("--inspector-width")).toBe("280px");
+      expect(cssVar("--library-width")).toBe("440px");
+      expect(cssVar("--inspector-width")).toBe("296px");
       pointer(splitter, "pointermove", 5000, 0);
       expect(cssVar("--library-width")).toBe("640px");
       pointer(splitter, "pointermove", -5000, 0);
       expect(cssVar("--library-width")).toBe("160px");
       pointer(splitter, "pointerup", -5000, 0);
-      expect(calls.setPanelLayout).toHaveBeenCalledWith(160, 280, 300);
+      expect(calls.setPanelLayout).toHaveBeenCalledWith(160, 296, 392);
     });
 
     it("drags the inspector splitter the opposite way", () => {
@@ -149,14 +251,14 @@ describe("editor screen", () => {
       const splitter = container.querySelector(".inspector-splitter")!;
       pointer(splitter, "pointerdown", 100, 0);
       pointer(splitter, "pointermove", 150, 0);
-      expect(cssVar("--inspector-width")).toBe("230px");
-      expect(cssVar("--library-width")).toBe("260px");
+      expect(cssVar("--inspector-width")).toBe("246px");
+      expect(cssVar("--library-width")).toBe("340px");
       pointer(splitter, "pointermove", 5000, 0);
       expect(cssVar("--inspector-width")).toBe("180px");
       pointer(splitter, "pointermove", -5000, 0);
       expect(cssVar("--inspector-width")).toBe("640px");
       pointer(splitter, "pointerup", -5000, 0);
-      expect(calls.setPanelLayout).toHaveBeenCalledWith(260, 640, 300);
+      expect(calls.setPanelLayout).toHaveBeenCalledWith(340, 640, 392);
     });
   });
 
@@ -206,6 +308,40 @@ describe("editor screen", () => {
       previewStore.set({ ...previewStore.get(), playing: true });
       press({ code: "Space", key: " " });
       expect(calls.setPlaying).toHaveBeenLastCalledWith(false);
+    });
+
+    it("leaves Space to a focused button instead of starting playback", () => {
+      const button = document.createElement("button");
+      document.body.appendChild(button);
+      const event = press({ code: "Space", key: " ", target: button });
+      expect(event.defaultPrevented).toBe(false);
+      expect(calls.setPlaying).not.toHaveBeenCalled();
+      button.remove();
+    });
+
+    it("does nothing while a dialog is open", () => {
+      uiStore.set({ ...uiStore.get(), openDialogs: 1 });
+      press({ key: "Delete" });
+      press({ key: "s" });
+      press({ code: "Space", key: " " });
+      expect(calls.deleteClips).not.toHaveBeenCalled();
+      expect(calls.splitAtPlayhead).not.toHaveBeenCalled();
+      expect(calls.setPlaying).not.toHaveBeenCalled();
+      uiStore.set({ ...uiStore.get(), openDialogs: 0 });
+    });
+
+    it("does nothing inside a text area", () => {
+      const area = document.createElement("textarea");
+      document.body.appendChild(area);
+      press({ key: "Delete", target: area });
+      expect(calls.deleteClips).not.toHaveBeenCalled();
+      area.remove();
+    });
+
+    it("opens the export dialog with Ctrl+E", () => {
+      press({ key: "e", ctrlKey: true });
+      expect(uiStore.get().exportDialogOpen).toBe(true);
+      uiStore.set({ ...uiStore.get(), exportDialogOpen: false });
     });
 
     it("undoes and redoes", () => {
@@ -322,7 +458,11 @@ describe("editor screen", () => {
   });
 
   describe("drawing a custom shape", () => {
-    const triangle: [number, number][] = [[0, 0], [1, 0], [0.5, 1]];
+    const triangle: [number, number][] = [
+      [0, 0],
+      [1, 0],
+      [0.5, 1],
+    ];
     beforeEach(() => {
       render(<Editor session={sessionWith(1)} />);
     });
@@ -346,7 +486,13 @@ describe("editor screen", () => {
     });
 
     it("needs three points to finish", () => {
-      uiStore.set({ ...uiStore.get(), drawingShapePoints: [[0, 0], [1, 1]] });
+      uiStore.set({
+        ...uiStore.get(),
+        drawingShapePoints: [
+          [0, 0],
+          [1, 1],
+        ],
+      });
       press({ key: "Enter" });
       expect(calls.addCustomShapeClip).not.toHaveBeenCalled();
       expect(uiStore.get().drawingShapePoints).toHaveLength(2);
@@ -365,5 +511,84 @@ describe("editor screen", () => {
       expect(calls.setPlaying).not.toHaveBeenCalled();
       expect(calls.addMarker).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("editor shortcuts from the command table", () => {
+  beforeEach(() => {
+    render(<Editor session={sessionWith(1)} />);
+    keymapStore.set({});
+    uiStore.set({ ...uiStore.get(), selectedClipIds: [7] });
+  });
+  afterEach(() => {
+    keymapStore.set({});
+  });
+
+  it("runs a command moved to another key and ignores its old key", () => {
+    keymapStore.set({ undo: ["Alt+U"] });
+    press({ key: "z", ctrlKey: true });
+    expect(calls.undo).not.toHaveBeenCalled();
+    press({ key: "u", altKey: true });
+    expect(calls.undo).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops a running shuttle when the editor goes away", async () => {
+    const { shuttleStore, shuttle } = await import("../shuttle");
+    await shuttle(-1);
+    expect(shuttleStore.get().direction).toBe(-1);
+    cleanup();
+    expect(shuttleStore.get().direction).toBe(0);
+  });
+
+  it("runs a held key once, except for commands that make sense to repeat", () => {
+    const held = press({ key: "m", repeat: true });
+    expect(held.defaultPrevented).toBe(true);
+    expect(calls.addMarker).not.toHaveBeenCalled();
+    press({ key: "m" });
+    expect(calls.addMarker).toHaveBeenCalledTimes(1);
+
+    press({ key: "z", ctrlKey: true, repeat: true });
+    press({ key: "z", ctrlKey: true, repeat: true });
+    expect(calls.undo).toHaveBeenCalledTimes(2);
+  });
+
+  it("does nothing for a command the user unbound", () => {
+    keymapStore.set({ addMarker: [] });
+    expect(press({ key: "m" }).defaultPrevented).toBe(false);
+    expect(calls.addMarker).not.toHaveBeenCalled();
+  });
+
+  it("marks in and out at the playhead and opens the sheet, palette and settings", () => {
+    previewStore.set({ ...previewStore.get(), playheadSecs: 3 });
+    press({ key: "i" });
+    previewStore.set({ ...previewStore.get(), playheadSecs: 9 });
+    press({ key: "o" });
+    expect([uiStore.get().markIn, uiStore.get().markOut]).toEqual([3, 9]);
+    press({ key: "?", shiftKey: true });
+    press({ key: "k", ctrlKey: true });
+    press({ key: ",", ctrlKey: true });
+    const ui = uiStore.get();
+    expect([ui.shortcutsOpen, ui.paletteOpen, ui.settingsOpen]).toEqual([true, true, true]);
+  });
+
+  it("switches tools and toggles snapping from the keyboard", () => {
+    press({ key: "r" });
+    expect(uiStore.get().tool).toBe("roll");
+    press({ key: "v" });
+    expect(uiStore.get().tool).toBe("select");
+    const snap = uiStore.get().snapEnabled;
+    press({ key: "n" });
+    expect(uiStore.get().snapEnabled).toBe(!snap);
+  });
+
+  it("clears the selection with Escape and selects nothing else", () => {
+    press({ key: "Escape" });
+    expect(uiStore.get().selectedClipIds).toEqual([]);
+  });
+
+  it("does not run commands that are disabled", () => {
+    uiStore.set({ ...uiStore.get(), selectedClipIds: [] });
+    press({ key: "Delete" });
+    expect(calls.deleteClips).not.toHaveBeenCalled();
   });
 });

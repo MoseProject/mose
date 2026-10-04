@@ -145,3 +145,60 @@ fn subtitles_are_written_where_the_dialog_points_and_a_cancel_writes_nothing() {
     crate::dialogs::scripted::answer(Some(vec![h.dir.join("missing").join("show.srt")]));
     assert!(tauri::async_runtime::block_on(export_active_sequence_srt(h.handle())).is_err());
 }
+
+#[test]
+fn exporting_over_a_media_file_of_the_project_is_refused() {
+    let h = harness();
+    h.add_fixture_clip();
+    let source = own_copy_of_the_media(&h);
+    let before = std::fs::read(&source).unwrap();
+
+    let result = start_export(h.handle(), source.display().to_string(), false);
+
+    assert_eq!(result, Err("outputIsSource".to_string()));
+    assert!(list_exports(h.state()).is_empty());
+    assert_eq!(
+        std::fs::read(&source).unwrap(),
+        before,
+        "the media is untouched"
+    );
+}
+
+#[test]
+fn exporting_to_the_same_file_as_a_pending_job_is_refused() {
+    let h = harness();
+    h.add_fixture_clip();
+    let output = path_in(&h.dir, "twice.mp4").display().to_string();
+    start_export(h.handle(), output.clone(), false).unwrap();
+
+    assert_eq!(
+        start_export(h.handle(), output.clone(), false),
+        Err("outputInQueue".to_string())
+    );
+
+    wait_exports(&h);
+    // Once the first job is done the file may be replaced by a new export.
+    assert!(start_export(h.handle(), output, false).is_ok());
+    wait_exports(&h);
+}
+
+#[test]
+fn renaming_a_clash_with_a_media_file_exports_beside_it_instead() {
+    let h = harness();
+    h.add_fixture_clip();
+    let source = own_copy_of_the_media(&h);
+    start_export(h.handle(), source.display().to_string(), true).unwrap();
+    wait_exports(&h);
+    let jobs = list_exports(h.state());
+    assert_ne!(jobs[0].output_path, source.display().to_string());
+}
+
+/// Points the library's only asset at a copy inside the scratch dir, so a test that would lose
+/// its media if the guard failed destroys the copy and never the shipped fixture.
+fn own_copy_of_the_media(h: &Harness) -> std::path::PathBuf {
+    let copy = path_in(&h.dir, "copy.mp4");
+    let original = h.session().project.media_library[0].source_path.clone();
+    std::fs::copy(original, &copy).unwrap();
+    h.session().project.media_library[0].source_path = copy.clone();
+    copy
+}

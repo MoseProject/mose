@@ -12,10 +12,20 @@
 use std::path::{Path, PathBuf};
 
 use avcore::{MediaKind, PreviewQuality};
-use tauri::{AppHandle, Manager, Runtime};
+use serde::Serialize;
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use super::with_session;
 use crate::state::{publish, AppState, Session};
+
+/// Emitted when a file could not be read as media, so the import does not fail in silence.
+pub const IMPORT_FAILED_EVENT: &str = "import-failed";
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportFailedPayload {
+    pub file_name: String,
+}
 
 const AUDIO_EXTENSIONS: &[&str] = &["wav", "mp3", "m4a", "aac", "flac", "ogg", "opus"];
 
@@ -53,6 +63,23 @@ pub fn toggle_favorite<R: Runtime>(app: AppHandle<R>, asset_id: u64) -> Result<(
     })
 }
 
+/// Removes an asset from the media library. Refused with `assetInUse` while any clip still
+/// plays it, so the timeline never ends up with a dangling reference.
+#[tauri::command]
+pub fn remove_asset<R: Runtime>(app: AppHandle<R>, asset_id: u64) -> Result<(), String> {
+    with_session(&app, |session| {
+        if session.project.asset_in_use(asset_id) {
+            return Err("assetInUse".to_string());
+        }
+        if session.project.remove_asset(asset_id) {
+            session.dirty = true;
+            // An older undo step could bring back a clip of this asset, which is gone now.
+            session.undo.clear();
+        }
+        Ok(())
+    })
+}
+
 fn import_paths<R: Runtime>(app: &AppHandle<R>, paths: Vec<PathBuf>) {
     let (epoch, proxy_dir) = {
         let state = app.state::<AppState>();
@@ -74,6 +101,11 @@ fn import_one<R: Runtime>(app: &AppHandle<R>, path: &Path, epoch: u64, proxy_dir
         Ok(probed) => probed,
         Err(error) => {
             tracing::warn!(path = %path.display(), %error, "failed to probe media");
+            let file_name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let _ = app.emit(IMPORT_FAILED_EVENT, ImportFailedPayload { file_name });
             return;
         }
     };
@@ -83,14 +115,7 @@ fn import_one<R: Runtime>(app: &AppHandle<R>, path: &Path, epoch: u64, proxy_dir
         .unwrap_or_default();
 
     let Some((asset_id, kind)) = with_current_project(app, epoch, |session| {
-        let id = session
-            .project
-            .media_library
-            .iter()
-            .map(|a| a.id)
-            .max()
-            .unwrap_or(0)
-            + 1;
+        let id = session.allocate_asset_id();
         let asset = probed.into_media_asset(id, file_name, path.to_path_buf());
         let kind = asset.kind;
         session.project.media_library.push(asset);
@@ -100,20 +125,35 @@ fn import_one<R: Runtime>(app: &AppHandle<R>, path: &Path, epoch: u64, proxy_dir
         return;
     };
 
-    let loudness = avcore::measure_loudness(path)
-        .inspect_err(|error| tracing::warn!(%error, "failed to measure loudness"))
-        .ok();
-    let proxy_path = if kind == MediaKind::Video {
-        avcore::ensure_proxy(path, proxy_dir, PreviewQuality::default())
-            .inspect_err(|error| tracing::warn!(%error, "failed to generate proxy"))
-            .ok()
-    } else {
-        None
-    };
+    // Cheapest and most visible first, each result published as soon as it exists: on a
+    // multi-hour recording the proxy encode takes far longer than everything else together, and
+    // the timeline's waveform used to wait behind it.
     let waveform_peaks = avcore::generate_waveform(path)
         .inspect_err(|error| tracing::warn!(%error, "failed to compute waveform"))
         .ok();
+    update_asset(app, epoch, asset_id, |asset| {
+        asset.waveform_peaks = waveform_peaks
+    });
 
+    let loudness = avcore::measure_loudness(path)
+        .inspect_err(|error| tracing::warn!(%error, "failed to measure loudness"))
+        .ok();
+    update_asset(app, epoch, asset_id, |asset| asset.loudness = loudness);
+
+    if kind == MediaKind::Video {
+        let proxy_path = avcore::ensure_proxy(path, proxy_dir, PreviewQuality::default())
+            .inspect_err(|error| tracing::warn!(%error, "failed to generate proxy"))
+            .ok();
+        update_asset(app, epoch, asset_id, |asset| asset.proxy_path = proxy_path);
+    }
+}
+
+fn update_asset<R: Runtime>(
+    app: &AppHandle<R>,
+    epoch: u64,
+    asset_id: u64,
+    change: impl FnOnce(&mut avcore::MediaAsset),
+) {
     with_current_project(app, epoch, |session| {
         if let Some(asset) = session
             .project
@@ -121,9 +161,7 @@ fn import_one<R: Runtime>(app: &AppHandle<R>, path: &Path, epoch: u64, proxy_dir
             .iter_mut()
             .find(|a| a.id == asset_id)
         {
-            asset.loudness = loudness;
-            asset.proxy_path = proxy_path;
-            asset.waveform_peaks = waveform_peaks;
+            change(asset);
         }
     });
 }

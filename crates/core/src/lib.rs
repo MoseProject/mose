@@ -138,7 +138,8 @@ pub use multicam_sync::{
 };
 pub use persistence::{
     from_ocproj_bytes, from_ocqueue_bytes, from_octr_bytes, load_project_from_file,
-    save_project_to_file, to_ocproj_bytes, to_ocqueue_bytes, to_octr_bytes, PersistError,
+    save_project_to_file, to_ocproj_bytes, to_ocqueue_bytes, to_octr_bytes, write_atomic,
+    PersistError,
 };
 pub use probe::{probe_media, ProbeError, ProbedMedia};
 pub use project::{PanelLayout, Project, Recency, Sequence, SequenceExportSettings};
@@ -193,7 +194,10 @@ pub use watched_folder::{
     is_video_file, output_path_for, process_watched_file, ProcessError, StabilityTracker,
     DEFAULT_OUTPUT_SUBFOLDER, DEFAULT_STABLE_SECS, DEFAULT_TARGET_LUFS, VIDEO_EXTENSIONS,
 };
-pub use waveform::{generate_waveform, WaveformError, WAVEFORM_BUCKET_COUNT};
+pub use waveform::{
+    detailed_bucket_count, generate_detailed_waveform, generate_waveform, WaveformError,
+    WAVEFORM_BUCKET_COUNT, WAVEFORM_DETAIL_BUCKETS_PER_SEC,
+};
 pub use youtube_download::{
     download_youtube, is_yt_dlp_available, Mp3Bitrate, Mp4Quality, YoutubeDownloadError,
     YoutubeDownloadTarget,

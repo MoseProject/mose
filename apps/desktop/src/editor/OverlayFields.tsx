@@ -1,7 +1,8 @@
 // Inspector field widgets and catalog access shared by the text and shape inspectors. Every
 // widget previews locally and commits once per user-visible change (one undo step).
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useDraft } from "../useDraft";
 import { api } from "../ipc";
 import { hexToRgb, rgbToHex } from "../overlays";
 import { run } from "../store";
@@ -16,7 +17,9 @@ let pendingCatalog: Promise<OverlayCatalog | undefined> | null = null;
 export function useOverlayCatalog(): OverlayCatalog | null {
   const [catalog, setCatalog] = useState(cachedCatalog);
   useEffect(() => {
-    if (catalog) return;
+    if (catalog) {
+      return;
+    }
     let alive = true;
     pendingCatalog ??= run(api.overlayCatalog());
     void pendingCatalog.then((loaded) => {
@@ -25,7 +28,9 @@ export function useOverlayCatalog(): OverlayCatalog | null {
         return;
       }
       cachedCatalog = loaded;
-      if (alive) setCatalog(loaded);
+      if (alive) {
+        setCatalog(loaded);
+      }
     });
     return () => {
       alive = false;
@@ -41,10 +46,11 @@ export function TextField(props: {
   placeholder?: string;
   onCommit: (value: string) => void;
 }) {
-  const [draft, setDraft] = useState(props.value);
-  useEffect(() => setDraft(props.value), [props.value]);
+  const [draft, setDraft] = useDraft(props.value);
   const commit = () => {
-    if (draft !== props.value) props.onCommit(draft);
+    if (draft !== props.value) {
+      props.onCommit(draft);
+    }
   };
   return (
     <div className="field">
@@ -53,11 +59,17 @@ export function TextField(props: {
         style={FULL_ROW}
         value={draft}
         placeholder={props.placeholder}
-        onChange={(e) => setDraft(e.target.value)}
+        onChange={(e) => {
+          return setDraft(e.target.value);
+        }}
         onBlur={commit}
         onKeyDown={(e) => {
-          if (e.key === "Enter") e.currentTarget.blur();
-          if (e.key === "Escape") setDraft(props.value);
+          if (e.key === "Enter") {
+            e.currentTarget.blur();
+          }
+          if (e.key === "Escape") {
+            setDraft(props.value);
+          }
         }}
       />
     </div>
@@ -78,7 +90,9 @@ export function SelectField(props: {
         style={FULL_ROW}
         value={props.value}
         disabled={props.disabled}
-        onChange={(e) => props.onChange(e.target.value)}
+        onChange={(e) => {
+          return props.onChange(e.target.value);
+        }}
       >
         {props.children}
       </select>
@@ -94,27 +108,41 @@ export function ColorField(props: {
   onCommit: (rgb: [number, number, number]) => void;
 }) {
   const value = rgbToHex(props.rgb);
-  const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
+  const [draft, setDraft] = useDraft(value);
   const inputRef = useRef<HTMLInputElement>(null);
   const commitRef = useRef(props.onCommit);
-  commitRef.current = props.onCommit;
   const committedRef = useRef(value);
-  committedRef.current = value;
+  useLayoutEffect(() => {
+    commitRef.current = props.onCommit;
+    committedRef.current = value;
+  });
   useEffect(() => {
     const input = inputRef.current;
-    if (!input) return;
+    if (!input) {
+      return;
+    }
     const onChange = () => {
       const rgb = hexToRgb(input.value);
-      if (rgb && input.value.toLowerCase() !== committedRef.current) commitRef.current(rgb);
+      if (rgb && input.value.toLowerCase() !== committedRef.current) {
+        commitRef.current(rgb);
+      }
     };
     input.addEventListener("change", onChange);
-    return () => input.removeEventListener("change", onChange);
+    return () => {
+      return input.removeEventListener("change", onChange);
+    };
   }, []);
   return (
     <div className="field">
       <label>{props.label}</label>
-      <input ref={inputRef} type="color" value={draft} onChange={(e) => setDraft(e.target.value)} />
+      <input
+        ref={inputRef}
+        type="color"
+        value={draft}
+        onChange={(e) => {
+          return setDraft(e.target.value);
+        }}
+      />
     </div>
   );
 }

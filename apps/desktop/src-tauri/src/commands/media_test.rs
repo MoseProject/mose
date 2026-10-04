@@ -23,6 +23,70 @@ fn favoriting_toggles_and_ignores_unknown_assets() {
 }
 
 #[test]
+fn removing_media_is_refused_while_a_clip_uses_it() {
+    let h = harness();
+    h.session().project.media_library.push(video_asset(1, 5.0));
+    h.session().project.media_library.push(video_asset(2, 5.0));
+    crate::commands::timeline::add_asset_to_timeline(h.handle(), 1, None, None).unwrap();
+
+    assert_eq!(remove_asset(h.handle(), 1), Err("assetInUse".to_string()));
+    assert_eq!(h.session().project.media_library.len(), 2);
+
+    remove_asset(h.handle(), 2).unwrap();
+    let ids: Vec<u64> = h
+        .session()
+        .project
+        .media_library
+        .iter()
+        .map(|a| a.id)
+        .collect();
+    assert_eq!(ids, vec![1]);
+    assert!(h.session().dirty);
+    remove_asset(h.handle(), 404).unwrap();
+}
+
+#[test]
+fn removing_media_drops_the_undo_history_that_could_bring_its_clips_back() {
+    let h = harness();
+    h.session().project.media_library.push(video_asset(1, 5.0));
+    h.session().project.media_library.push(video_asset(2, 5.0));
+    crate::commands::timeline::add_asset_to_timeline(h.handle(), 1, None, None).unwrap();
+    assert!(h.session().undo.can_undo());
+
+    remove_asset(h.handle(), 2).unwrap();
+    assert!(!h.session().undo.can_undo());
+}
+
+#[test]
+fn asking_to_remove_unknown_media_keeps_the_undo_history() {
+    let h = harness();
+    h.session().project.media_library.push(video_asset(1, 5.0));
+    crate::commands::timeline::add_asset_to_timeline(h.handle(), 1, None, None).unwrap();
+    remove_asset(h.handle(), 404).unwrap();
+    assert!(h.session().undo.can_undo());
+}
+
+#[test]
+fn media_ids_are_never_reused_after_a_removal() {
+    let h = harness();
+    h.session().project.media_library.push(video_asset(1, 5.0));
+    let mut session = h.session();
+    let second = session.allocate_asset_id();
+    assert_eq!(second, 2);
+    session.project.media_library.push(video_asset(second, 5.0));
+    assert!(session.project.remove_asset(second));
+    assert_eq!(session.allocate_asset_id(), 3, "2 is not handed out again");
+
+    let project = session.project.clone();
+    session.replace_project(project);
+    assert_eq!(
+        session.allocate_asset_id(),
+        2,
+        "a new project starts from its own library"
+    );
+}
+
+#[test]
 fn an_imported_video_gets_its_loudness_proxy_and_waveform() {
     let h = saved_harness();
     import_media(h.handle(), vec![fixture("video.mp4").display().to_string()]);
@@ -97,6 +161,34 @@ fn a_file_that_cannot_be_probed_adds_nothing() {
     );
     assert!(h.session().project.media_library.is_empty());
     assert_eq!(events.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn a_file_that_cannot_be_probed_is_reported_by_name() {
+    use tauri::Listener;
+
+    let h = saved_harness();
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let sink = std::sync::Arc::clone(&seen);
+    h.app.listen(IMPORT_FAILED_EVENT, move |event| {
+        sink.lock().unwrap().push(event.payload().to_string());
+    });
+    let (epoch, proxy_dir) = {
+        let s = h.session();
+        (
+            s.project_epoch,
+            avcore::proxy::cache_dir_for_project(&s.project),
+        )
+    };
+    import_one(
+        &h.handle(),
+        &path_in(&h.dir, "broken.mp4"),
+        epoch,
+        &proxy_dir,
+    );
+    let payloads = seen.lock().unwrap();
+    assert_eq!(payloads.len(), 1);
+    assert!(payloads[0].contains("broken.mp4"), "got {}", payloads[0]);
 }
 
 #[test]

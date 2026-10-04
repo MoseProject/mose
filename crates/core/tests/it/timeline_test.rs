@@ -377,6 +377,8 @@ fn timeline_duration_is_the_furthest_clip_end_across_all_tracks() {
 
                 visible: true,
                 audio_role: AudioRole::Unspecified,
+                muted: false,
+                solo: false,
                 locked: false,
                 color_label: None,
             },
@@ -392,6 +394,8 @@ fn timeline_duration_is_the_furthest_clip_end_across_all_tracks() {
 
                 visible: true,
                 audio_role: AudioRole::Unspecified,
+                muted: false,
+                solo: false,
                 locked: false,
                 color_label: None,
             },
@@ -416,6 +420,8 @@ fn track_with(clips: Vec<ClipInstance>) -> Track {
 
         visible: true,
         audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
         locked: false,
         color_label: None,
     }
@@ -1305,6 +1311,8 @@ fn move_clip_to_track_relocates_the_clip_to_a_same_kind_track() {
 
             visible: true,
             audio_role: AudioRole::Unspecified,
+            muted: false,
+            solo: false,
             locked: false,
             color_label: None,
         },
@@ -1319,6 +1327,8 @@ fn move_clip_to_track_relocates_the_clip_to_a_same_kind_track() {
 
             visible: true,
             audio_role: AudioRole::Unspecified,
+            muted: false,
+            solo: false,
             locked: false,
             color_label: None,
         },
@@ -1345,6 +1355,8 @@ fn move_clip_to_track_is_a_no_op_across_mismatched_kinds() {
 
             visible: true,
             audio_role: AudioRole::Unspecified,
+            muted: false,
+            solo: false,
             locked: false,
             color_label: None,
         },
@@ -1359,6 +1371,8 @@ fn move_clip_to_track_is_a_no_op_across_mismatched_kinds() {
 
             visible: true,
             audio_role: AudioRole::Unspecified,
+            muted: false,
+            solo: false,
             locked: false,
             color_label: None,
         },
@@ -1384,6 +1398,8 @@ fn move_clip_to_track_is_a_no_op_for_an_unknown_target_track() {
 
         visible: true,
         audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
         locked: false,
         color_label: None,
     }]);
@@ -1408,6 +1424,8 @@ fn move_clip_to_track_is_a_no_op_for_a_negative_position() {
 
             visible: true,
             audio_role: AudioRole::Unspecified,
+            muted: false,
+            solo: false,
             locked: false,
             color_label: None,
         },
@@ -1422,6 +1440,8 @@ fn move_clip_to_track_is_a_no_op_for_a_negative_position() {
 
             visible: true,
             audio_role: AudioRole::Unspecified,
+            muted: false,
+            solo: false,
             locked: false,
             color_label: None,
         },
@@ -1570,6 +1590,8 @@ fn timeline_clip_mut_finds_a_clip_across_tracks() {
 
             visible: true,
             audio_role: AudioRole::Unspecified,
+            muted: false,
+            solo: false,
             locked: false,
             color_label: None,
         },
@@ -1584,6 +1606,8 @@ fn timeline_clip_mut_finds_a_clip_across_tracks() {
 
             visible: true,
             audio_role: AudioRole::Unspecified,
+            muted: false,
+            solo: false,
             locked: false,
             color_label: None,
         },
@@ -1609,6 +1633,8 @@ fn timeline_clip_mut_returns_none_for_an_unknown_id() {
 
         visible: true,
         audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
         locked: false,
         color_label: None,
     }]);
@@ -2264,4 +2290,189 @@ fn switching_to_a_family_without_bold_drops_bold_and_static_families_drop_weight
     clip.font_style = TextFontStyle::Bold;
     assert!(!clip.set_font_family(TextFontFamily::Lato));
     assert_eq!(clip.font_style, TextFontStyle::Bold);
+}
+
+#[test]
+fn lift_range_drops_what_is_inside_and_leaves_later_clips_where_they_are() {
+    let mut track = track_with(vec![
+        clip(1, 0.0, 0.0, 5.0),
+        clip(2, 5.0, 0.0, 3.0),
+        clip(3, 8.0, 0.0, 5.0),
+    ]);
+    let mut next_id = 4;
+
+    assert!(track.lift_range(5.0, 8.0, &mut next_id));
+
+    assert_eq!(track.clips.len(), 2);
+    let clip3 = track.clips.iter().find(|c| c.id == 3).unwrap();
+    assert_eq!(clip3.start_secs, 8.0, "the gap stays open");
+}
+
+#[test]
+fn lift_range_splits_a_straddling_clip_and_keeps_both_remainders_in_place() {
+    let mut track = track_with(vec![clip(1, 0.0, 0.0, 20.0)]);
+    let mut next_id = 2;
+
+    assert!(track.lift_range(5.0, 15.0, &mut next_id));
+
+    assert_eq!(next_id, 4);
+    assert_eq!(track.clips.len(), 2);
+    let tail = track.clips.iter().find(|c| c.id == 3).unwrap();
+    assert_eq!(tail.start_secs, 15.0);
+    assert_eq!(tail.source_in_secs, 15.0);
+}
+
+#[test]
+fn lift_range_rejects_an_empty_or_inverted_range() {
+    let mut track = track_with(vec![clip(1, 0.0, 0.0, 10.0)]);
+    let mut next_id = 2;
+    assert!(!track.lift_range(5.0, 5.0, &mut next_id));
+    assert!(!track.lift_range(8.0, 3.0, &mut next_id));
+    assert_eq!(track.clips.len(), 1);
+}
+
+/// Small deterministic generator for the randomized range-edit checks below.
+struct Lcg(u64);
+
+impl Lcg {
+    fn next(&mut self) -> u64 {
+        self.0 = self
+            .0
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        self.0 >> 33
+    }
+
+    /// A multiple of a quarter second in `[min, max]`, so every boundary is exactly representable.
+    fn quarter_secs(&mut self, min: u64, max: u64) -> f64 {
+        (min + self.next() % (max - min + 1)) as f64 / 4.0
+    }
+}
+
+fn contiguous_track(rng: &mut Lcg) -> Track {
+    let mut clips = Vec::new();
+    let mut start = 0.0;
+    for id in 1..=(2 + rng.next() % 5) {
+        let length = rng.quarter_secs(2, 40);
+        clips.push(clip(id, start, 0.0, length));
+        start += length;
+    }
+    track_with(clips)
+}
+
+fn total_secs(track: &Track) -> f64 {
+    track.clips.iter().map(|c| c.duration_secs()).sum()
+}
+
+/// How much of `[a, b)` the clips of `track` cover.
+fn covered(track: &Track, a: f64, b: f64) -> f64 {
+    track
+        .clips
+        .iter()
+        .map(|c| {
+            let end = c.start_secs + c.duration_secs();
+            (end.min(b) - c.start_secs.max(a)).max(0.0)
+        })
+        .sum()
+}
+
+#[test]
+fn lifting_any_range_removes_exactly_what_it_covers_and_moves_nothing_else() {
+    let mut rng = Lcg(7);
+    for round in 0..400 {
+        let mut track = contiguous_track(&mut rng);
+        let a = rng.quarter_secs(0, 120);
+        let b = a + rng.quarter_secs(1, 60);
+        let before_total = total_secs(&track);
+        let inside = covered(&track, a, b);
+        let before: Vec<(f64, f64)> = track
+            .clips
+            .iter()
+            .map(|c| (c.start_secs, c.start_secs + c.duration_secs()))
+            .collect();
+        let mut next_id = 100;
+
+        assert!(track.lift_range(a, b, &mut next_id));
+
+        let after_total = total_secs(&track);
+        assert!(
+            (before_total - inside - after_total).abs() < 1e-9,
+            "round {round}: {before_total} - {inside} != {after_total} for [{a}, {b})"
+        );
+        assert_eq!(
+            covered(&track, a, b),
+            0.0,
+            "round {round}: something is left in the range"
+        );
+        for c in &track.clips {
+            let (start, end) = (c.start_secs, c.start_secs + c.duration_secs());
+            assert!(
+                before
+                    .iter()
+                    .any(|(s, e)| start >= s - 1e-9 && end <= e + 1e-9),
+                "round {round}: a clip [{start}, {end}) is not inside any original clip"
+            );
+        }
+    }
+}
+
+#[test]
+fn rippling_any_range_out_keeps_a_contiguous_track_contiguous() {
+    let mut rng = Lcg(11);
+    for round in 0..400 {
+        let mut track = contiguous_track(&mut rng);
+        let a = rng.quarter_secs(0, 120);
+        let b = a + rng.quarter_secs(1, 60);
+        let before_total = total_secs(&track);
+        let inside = covered(&track, a, b);
+        let mut next_id = 100;
+
+        assert!(track.ripple_delete_range(a, b, &mut next_id));
+
+        assert!(
+            (before_total - inside - total_secs(&track)).abs() < 1e-9,
+            "round {round}: duration changed by more than the covered range"
+        );
+        let mut clips: Vec<_> = track.clips.iter().collect();
+        clips.sort_by(|x, y| x.start_secs.partial_cmp(&y.start_secs).unwrap());
+        let mut cursor = 0.0;
+        for c in clips {
+            assert!(
+                (c.start_secs - cursor).abs() < 1e-9,
+                "round {round}: gap or overlap at {cursor} (clip starts at {})",
+                c.start_secs
+            );
+            cursor = c.start_secs + c.duration_secs();
+        }
+    }
+}
+
+#[test]
+fn range_edits_hold_for_clips_at_other_speeds() {
+    let mut rng = Lcg(23);
+    for round in 0..300 {
+        let mut track = contiguous_track(&mut rng);
+        let mut start = 0.0;
+        for c in &mut track.clips {
+            c.speed_factor = [0.5, 1.0, 2.0, 4.0][(rng.next() % 4) as usize];
+            c.start_secs = start;
+            start += c.duration_secs();
+        }
+        let a = rng.quarter_secs(0, 100);
+        let b = a + rng.quarter_secs(1, 50);
+        let before_total = total_secs(&track);
+        let inside = covered(&track, a, b);
+        let mut next_id = 100;
+
+        assert!(track.lift_range(a, b, &mut next_id));
+
+        assert!(
+            (before_total - inside - total_secs(&track)).abs() < 1e-6,
+            "round {round}: speed-adjusted duration drifted for [{a}, {b})"
+        );
+        assert!(
+            covered(&track, a, b) < 1e-9,
+            "round {round}: range not empty"
+        );
+    }
 }

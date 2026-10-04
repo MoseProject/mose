@@ -181,6 +181,12 @@ fn a_saved_project_reopens_with_its_path_and_joins_the_recent_list() {
 }
 
 #[test]
+fn a_recent_list_that_cannot_be_written_is_logged_not_propagated() {
+    assert!(note_recent_with(|| Ok(())));
+    assert!(!note_recent_with(|| Err("disk full".to_string())));
+}
+
+#[test]
 fn opening_a_missing_project_reports_the_error() {
     let h = harness();
     let missing = path_in(&h.dir, "missing.ocproj");
@@ -188,8 +194,38 @@ fn opening_a_missing_project_reports_the_error() {
         h.handle(),
         missing.display().to_string(),
     ));
-    assert!(result.is_err());
+    assert_eq!(result, Err("projectMissing".to_string()));
     assert_eq!(h.session().project.name, "Untitled");
+}
+
+#[test]
+fn opening_a_project_that_is_gone_drops_it_from_the_recent_list() {
+    let h = harness();
+    let missing = path_in(&h.dir, "vanished.ocproj").display().to_string();
+    h.prefs().view.recent_project_paths = vec![missing.clone(), "other.ocproj".to_string()];
+
+    let result = tauri::async_runtime::block_on(open_project_path(h.handle(), missing.clone()));
+
+    assert_eq!(result, Err("projectMissing".to_string()));
+    assert_eq!(
+        h.prefs().view.recent_project_paths,
+        vec!["other.ocproj".to_string()]
+    );
+}
+
+#[test]
+fn a_file_that_is_not_a_project_reports_the_parse_error_and_stays_in_the_list() {
+    let h = harness();
+    let broken = path_in(&h.dir, "broken.ocproj");
+    std::fs::write(&broken, b"not a project").unwrap();
+    h.prefs().view.recent_project_paths = vec![broken.display().to_string()];
+
+    let result =
+        tauri::async_runtime::block_on(open_project_path(h.handle(), broken.display().to_string()));
+
+    let message = result.unwrap_err();
+    assert_ne!(message, "projectMissing");
+    assert_eq!(h.prefs().view.recent_project_paths.len(), 1);
 }
 
 #[test]

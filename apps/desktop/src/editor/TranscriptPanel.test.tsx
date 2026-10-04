@@ -5,39 +5,45 @@ import { t } from "../i18n";
 import { makeSession } from "../testSupport";
 import type { TranscriptDocument } from "../types";
 
-vi.mock("../ipc", () => ({
-  api: {
-    getTranscript: vi.fn(),
-    searchTranscripts: vi.fn(),
-    seekToTranscriptWord: vi.fn().mockResolvedValue(undefined),
-  },
-}));
+vi.mock("../ipc", () => {
+  return {
+    api: {
+      getTranscript: vi.fn(),
+      searchTranscripts: vi.fn(),
+      seekToTranscriptWord: vi.fn().mockResolvedValue(undefined),
+    },
+  };
+});
 
 const { TranscriptPanel } = await import("./TranscriptPanel");
 const { api } = await import("../ipc");
 const { patchUi, previewStore } = await import("../store");
 
-const clip = (overrides: Record<string, unknown> = {}) => ({
-  id: 7,
-  asset_id: 3,
-  start_secs: 10,
-  source_in_secs: 2,
-  speed_factor: 1,
-  frozen: false,
-  ...overrides,
-});
+const clip = (overrides: Record<string, unknown> = {}) => {
+  return {
+    id: 7,
+    asset_id: 3,
+    start_secs: 10,
+    source_in_secs: 2,
+    speed_factor: 1,
+    frozen: false,
+    ...overrides,
+  };
+};
 
-const session = (clipOverrides: Record<string, unknown> = {}) =>
-  makeSession([{ id: 1, name: "Main", tracks: [{ clips: [clip(clipOverrides)] }] }]);
+const session = (clipOverrides: Record<string, unknown> = {}) => {
+  return makeSession([{ id: 1, name: "Main", tracks: [{ clips: [clip(clipOverrides)] }] }]);
+};
 
-const document = (): TranscriptDocument =>
-  ({
+const document = (): TranscriptDocument => {
+  return {
     asset_id: 3,
     words: [
       { id: 1, text: "hello", start_secs: 2, end_secs: 3, confidence: 0.9 },
       { id: 2, text: "world", start_secs: 3, end_secs: 4, confidence: 0.3 },
     ],
-  }) as unknown as TranscriptDocument;
+  } as unknown as TranscriptDocument;
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -45,7 +51,9 @@ beforeEach(() => {
   previewStore.set({ ...previewStore.get(), playheadSecs: 10 });
   vi.mocked(api.getTranscript).mockResolvedValue(document());
 });
-afterEach(() => cleanup());
+afterEach(() => {
+  return cleanup();
+});
 
 function open(view = session()) {
   const result = render(<TranscriptPanel session={view} />);
@@ -116,13 +124,15 @@ describe("transcript panel", () => {
   });
 
   it("searches the whole project and groups hits by asset", async () => {
-    const word = (id: number, text: string, start: number) => ({
-      id,
-      text,
-      start_secs: start,
-      end_secs: start + 1,
-      confidence: 0.8,
-    });
+    const word = (id: number, text: string, start: number) => {
+      return {
+        id,
+        text,
+        start_secs: start,
+        end_secs: start + 1,
+        confidence: 0.8,
+      };
+    };
     vi.mocked(api.searchTranscripts).mockResolvedValue([
       { assetId: 3, assetName: "a.mp4", word: word(1, "alpha", 1) },
       { assetId: 4, assetName: "b.mp4", word: word(2, "beta", 5) },
@@ -139,7 +149,9 @@ describe("transcript panel", () => {
     fireEvent.change(screen.getByPlaceholderText(t("transcriptProjectSearchHint")), {
       target: { value: "Al" },
     });
-    await waitFor(() => expect(api.searchTranscripts).toHaveBeenCalledWith("al"));
+    await waitFor(() => {
+      return expect(api.searchTranscripts).toHaveBeenCalledWith("al");
+    });
     expect(await screen.findByText("b.mp4")).toBeTruthy();
     expect(screen.getAllByText("a.mp4")).toHaveLength(1);
 

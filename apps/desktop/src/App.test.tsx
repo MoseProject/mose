@@ -2,27 +2,79 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "./i18n";
-import { sessionStore, uiStore } from "./store";
+import { answerConfirm, confirmStore, toastStore } from "./notifications";
+import { exportsStore, sessionStore, uiStore } from "./store";
 import { makeSession } from "./testSupport";
 import type { SessionView } from "./types";
 
-vi.mock("./screens/Home", () => ({ Home: () => <div data-testid="screen-home" /> }));
-vi.mock("./screens/Prefs", () => ({ Prefs: () => <div data-testid="screen-prefs" /> }));
-vi.mock("./screens/WatchFolder", () => ({ WatchFolder: () => <div data-testid="screen-watch" /> }));
-vi.mock("./screens/Editor", () => ({ Editor: () => <div data-testid="screen-editor" /> }));
-vi.mock("./screens/CrashReviewModal", () => ({ CrashReviewModal: () => <div data-testid="crash-modal" /> }));
-vi.mock("./ipc", () => ({
-  api: {
-    undo: vi.fn().mockResolvedValue(undefined),
-    redo: vi.fn().mockResolvedValue(undefined),
-    saveProject: vi.fn().mockResolvedValue(undefined),
-  },
-  exportActiveSequence: vi.fn().mockResolvedValue(undefined),
-}));
-vi.mock("./store", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./store")>()),
-  connect: vi.fn().mockResolvedValue(undefined),
-}));
+vi.mock("./screens/Home", () => {
+  return {
+    Home: () => {
+      return <div data-testid="screen-home" />;
+    },
+  };
+});
+vi.mock("./screens/Prefs", () => {
+  return {
+    Prefs: () => {
+      return <div data-testid="screen-prefs" />;
+    },
+  };
+});
+vi.mock("./screens/WatchFolder", () => {
+  return {
+    WatchFolder: ({ open }: { open?: boolean }) => {
+      return open ? <div data-testid="screen-watch" /> : null;
+    },
+  };
+});
+vi.mock("./screens/Editor", () => {
+  return {
+    Editor: () => {
+      return <div data-testid="screen-editor" />;
+    },
+  };
+});
+vi.mock("./screens/CrashReviewModal", () => {
+  return {
+    CrashReviewModal: () => {
+      return <div data-testid="crash-modal" />;
+    },
+  };
+});
+vi.mock("./editor/ExportDialog", () => {
+  return {
+    ExportDialog: () => {
+      return <div data-testid="export-dialog" />;
+    },
+  };
+});
+let closeHandler: (request: { dirty: boolean; exporting: boolean }) => void = () => {};
+const stopListeningToClose = vi.fn();
+
+vi.mock("./ipc", () => {
+  return {
+    api: {
+      undo: vi.fn().mockResolvedValue(undefined),
+      redo: vi.fn().mockResolvedValue(undefined),
+      saveProject: vi.fn().mockResolvedValue(undefined),
+      quitApp: vi.fn().mockResolvedValue(undefined),
+    },
+    onCloseRequested: vi.fn(
+      (handler: (request: { dirty: boolean; exporting: boolean }) => void) => {
+        closeHandler = handler;
+        return Promise.resolve(stopListeningToClose);
+      },
+    ),
+    exportActiveSequence: vi.fn().mockResolvedValue(undefined),
+  };
+});
+vi.mock("./store", async (importOriginal) => {
+  return {
+    ...(await importOriginal<typeof import("./store")>()),
+    connect: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
 const { App } = await import("./App");
 const { api, exportActiveSequence } = await import("./ipc");
@@ -35,15 +87,40 @@ const session = (overrides: Record<string, unknown> = {}): SessionView => {
   return view;
 };
 
-const goTo = (screenName: "home" | "prefs" | "watch" | "editor") =>
-  act(() => uiStore.set({ ...uiStore.get(), screen: screenName }));
+const goTo = (screenName: "home" | "editor") => {
+  return act(() => {
+    return uiStore.set({ ...uiStore.get(), screen: screenName });
+  });
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
   sessionStore.set(null);
-  uiStore.set({ screen: "home", selectedClipIds: [], tool: "select", pxPerSec: 40, error: null, drawingShapePoints: null });
+  toastStore.set([]);
+  uiStore.set({
+    screen: "home",
+    selectedClipIds: [],
+    tool: "select",
+    pxPerSec: 40,
+    error: null,
+    drawingShapePoints: null,
+    exportQueueOpen: false,
+    exportDialogOpen: false,
+    openDialogs: 0,
+    markIn: null,
+    markOut: null,
+    snapEnabled: true,
+    shortcutsOpen: false,
+    paletteOpen: false,
+    settingsOpen: false,
+    watchOpen: false,
+    monitorZoom: "fit",
+    monitorGuides: false,
+  });
 });
-afterEach(() => cleanup());
+afterEach(() => {
+  return cleanup();
+});
 
 describe("app shell", () => {
   it("connects to the backend once on mount", () => {
@@ -70,38 +147,52 @@ describe("app shell", () => {
       expect(screen.getByTestId("screen-home")).toBeTruthy();
     });
 
-    it("shows the editor, preferences, home and watch-folder screens for an open session", () => {
+    it("shows the editor and home for an open session", () => {
       sessionStore.set(session());
       render(<App />);
       goTo("editor");
       expect(screen.getByTestId("screen-editor")).toBeTruthy();
-      goTo("prefs");
-      expect(screen.getByTestId("screen-prefs")).toBeTruthy();
       goTo("home");
       expect(screen.getByTestId("screen-home")).toBeTruthy();
-      goTo("watch");
-      expect(screen.getByTestId("screen-watch")).toBeTruthy();
     });
 
-    it("shows the watch-folder screen without a session", () => {
-      uiStore.set({ ...uiStore.get(), screen: "watch" });
+    it("opens settings as a dialog over whatever screen is showing", () => {
+      render(<App />);
+      expect(screen.queryByTestId("screen-prefs")).toBeNull();
+      act(() => {
+        return uiStore.set({ ...uiStore.get(), settingsOpen: true });
+      });
+      expect(screen.getByRole("dialog", { name: t("preferences") })).toBeTruthy();
+      expect(screen.getByTestId("screen-prefs")).toBeTruthy();
+    });
+
+    it("shows the watch-folder dialog without a session", () => {
+      uiStore.set({ ...uiStore.get(), watchOpen: true });
       render(<App />);
       expect(screen.getByTestId("screen-watch")).toBeTruthy();
     });
 
-    it("navigates from the top bar and marks the current screen", () => {
+    it("navigates from the View menu", () => {
       sessionStore.set(session());
       render(<App />);
       fireEvent.click(screen.getByTestId("nav-prefs"));
-      expect(uiStore.get().screen).toBe("prefs");
-      expect(screen.getByTestId("nav-prefs").className).toContain("active");
+      expect(uiStore.get().settingsOpen).toBe(true);
       fireEvent.click(screen.getByTestId("nav-watch"));
-      expect(uiStore.get().screen).toBe("watch");
-      expect(screen.getByTestId("nav-watch").className).toContain("active");
+      expect(uiStore.get().watchOpen).toBe(true);
       fireEvent.click(screen.getByTestId("nav-home"));
       expect(uiStore.get().screen).toBe("home");
-      expect(screen.getByTestId("nav-home").className).toContain("active");
-      expect(screen.getByTestId("nav-prefs").className).not.toContain("active");
+      expect(screen.getByTestId("nav-home").getAttribute("aria-current")).toBe("page");
+    });
+
+    it("opens the shortcut sheet and the command palette from the View menu", () => {
+      sessionStore.set(session());
+      render(<App />);
+      fireEvent.click(screen.getByText(t("cmdShortcuts"), { selector: "button" }));
+      expect(screen.getByRole("dialog", { name: t("cmdShortcuts") })).toBeTruthy();
+      cleanup();
+      uiStore.set({ ...uiStore.get(), shortcutsOpen: false, paletteOpen: true });
+      render(<App />);
+      expect(screen.getByRole("dialog", { name: t("cmdPalette") })).toBeTruthy();
     });
   });
 
@@ -115,10 +206,12 @@ describe("app shell", () => {
     it("shows the project name and the unsaved marker only when dirty", () => {
       sessionStore.set(session({ dirty: false }));
       render(<App />);
-      expect(screen.getByText("My project")).toBeTruthy();
-      expect(screen.queryByText(new RegExp(t("unsaved")))).toBeNull();
-      act(() => sessionStore.set(session({ dirty: true })));
-      expect(screen.getByText(new RegExp(t("unsaved")))).toBeTruthy();
+      expect(screen.getByText(/My project/)).toBeTruthy();
+      expect(screen.queryByLabelText(t("unsaved"))).toBeNull();
+      act(() => {
+        return sessionStore.set(session({ dirty: true }));
+      });
+      expect(screen.getByLabelText(t("unsaved"))).toBeTruthy();
     });
 
     it("enables undo and redo only when there is something to undo or redo", () => {
@@ -126,7 +219,9 @@ describe("app shell", () => {
       render(<App />);
       expect((screen.getByTestId("undo") as HTMLButtonElement).disabled).toBe(true);
       expect((screen.getByTestId("redo") as HTMLButtonElement).disabled).toBe(true);
-      act(() => sessionStore.set(session({ canUndo: true, canRedo: true })));
+      act(() => {
+        return sessionStore.set(session({ canUndo: true, canRedo: true }));
+      });
       expect((screen.getByTestId("undo") as HTMLButtonElement).disabled).toBe(false);
       expect((screen.getByTestId("redo") as HTMLButtonElement).disabled).toBe(false);
     });
@@ -142,33 +237,109 @@ describe("app shell", () => {
       expect(api.saveProject).toHaveBeenCalledWith(false);
     });
 
-    it("exports, asking before overwriting through window.confirm", () => {
-      const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    it("opens the export options dialog instead of exporting at once", () => {
       sessionStore.set(session());
       render(<App />);
       fireEvent.click(screen.getByTestId("export"));
-      expect(exportActiveSequence).toHaveBeenCalledTimes(1);
-      const ask = vi.mocked(exportActiveSequence).mock.calls[0][0];
-      expect(ask()).toBe(false);
-      expect(confirm).toHaveBeenCalledWith(t("exportOverwriteConfirm"));
-      confirm.mockRestore();
+      expect(uiStore.get().exportDialogOpen).toBe(true);
+      expect(screen.getByTestId("export-dialog")).toBeTruthy();
+      expect(exportActiveSequence).not.toHaveBeenCalled();
     });
   });
 
-  describe("error banner", () => {
-    it("shows the error and dismisses it", () => {
+  describe("error toasts", () => {
+    it("turns an error into a dismissable toast and clears the pending error", () => {
       uiStore.set({ ...uiStore.get(), error: "disk full" });
       render(<App />);
-      const banner = screen.getByRole("alert");
-      expect(banner.textContent).toContain(`${t("errorPrefix")}: disk full`);
-      fireEvent.click(screen.getByText("✕"));
+      const toast = screen.getByRole("alert");
+      expect(toast.textContent).toContain(t("errorPrefix") + ": disk full");
       expect(uiStore.get().error).toBeNull();
+      fireEvent.click(screen.getByLabelText(t("close")));
       expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("keeps a second error instead of replacing the first", () => {
+      render(<App />);
+      act(() => {
+        return uiStore.set({ ...uiStore.get(), error: "first" });
+      });
+      act(() => {
+        return uiStore.set({ ...uiStore.get(), error: "second" });
+      });
+      expect(screen.getAllByRole("alert")).toHaveLength(2);
     });
 
     it("is absent when there is no error", () => {
       render(<App />);
       expect(screen.queryByRole("alert")).toBeNull();
     });
+  });
+});
+
+describe("export queue popover", () => {
+  it("stays closed until toggled, and shows the active job count", () => {
+    sessionStore.set(session());
+    exportsStore.set([
+      {
+        id: 1,
+        title: "a.mp4",
+        outputPath: "a",
+        status: "Queued",
+        percent: 0,
+        elapsedSecs: null,
+      },
+    ]);
+    render(<App />);
+    expect(screen.queryByText(t("noExports"))).toBeNull();
+    const toggle = screen.getByTestId("export-queue-toggle");
+    expect(toggle.textContent).toContain("1");
+    fireEvent.click(toggle);
+    expect(uiStore.get().exportQueueOpen).toBe(true);
+    expect(screen.getByRole("dialog", { name: t("exportQueue") })).toBeTruthy();
+    exportsStore.set([]);
+  });
+});
+
+describe("closing the window", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    confirmStore.set(null);
+  });
+
+  it("asks before quitting when changes would be lost, and quits when confirmed", async () => {
+    render(<App />);
+    act(() => {
+      closeHandler({ dirty: true, exporting: false });
+    });
+    const request = confirmStore.get()!;
+    expect(request.title).toBe(t("confirmQuitTitle"));
+    expect(request.message).toBe(t("confirmQuitDirty"));
+    expect(api.quitApp).not.toHaveBeenCalled();
+
+    await act(async () => {
+      answerConfirm(true);
+    });
+    expect(api.quitApp).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays open when the question is dismissed", async () => {
+    render(<App />);
+    act(() => {
+      closeHandler({ dirty: true, exporting: true });
+    });
+    expect(confirmStore.get()!.message).toBe(
+      t("confirmQuitDirty") + " " + t("confirmQuitExporting"),
+    );
+    await act(async () => {
+      answerConfirm(false);
+    });
+    expect(api.quitApp).not.toHaveBeenCalled();
+  });
+
+  it("stops listening when the app goes away", async () => {
+    const { unmount } = render(<App />);
+    unmount();
+    await Promise.resolve();
+    expect(stopListeningToClose).toHaveBeenCalled();
   });
 });

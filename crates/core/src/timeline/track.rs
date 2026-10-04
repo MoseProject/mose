@@ -113,6 +113,15 @@ pub struct Track {
     /// `Unspecified`, same as a never-tagged track in a new project.
     #[serde(default)]
     pub audio_role: AudioRole,
+    /// Silences this track in preview and export without removing its clips. Independent of
+    /// [`Self::visible`], which hides a video track's picture but keeps its sound.
+    /// `#[serde(default)]` so older projects load with nothing muted.
+    #[serde(default)]
+    pub muted: bool,
+    /// Solo: while any track is soloed, only soloed tracks are heard. See
+    /// [`super::Timeline::track_is_audible`].
+    #[serde(default)]
+    pub solo: bool,
     /// Optional RGB color label for this track, per `matrix/competitor-parity.md`'s 2026-08-27
     /// update (`spec/ROADMAP.md` P4 item 27) — DaVinci Resolve's track color, called out by
     /// users as something Premiere still lacks. Purely cosmetic, same "at-a-glance
@@ -595,6 +604,28 @@ impl Track {
                 clip.start_secs = (clip.start_secs - removed_span).max(0.0);
             }
         }
+        true
+    }
+
+    /// Removes the timeline range `[start_secs, end_secs)` from this track and leaves the gap
+    /// open: the "lift" counterpart of [`Self::ripple_delete_range`]. Clips straddling a boundary
+    /// are split the same way (consuming ids from `next_clip_id`), clips fully inside the range
+    /// are dropped, and nothing moves. No-op (`false`) if `end_secs <= start_secs`.
+    pub fn lift_range(&mut self, start_secs: f64, end_secs: f64, next_clip_id: &mut u64) -> bool {
+        if end_secs <= start_secs {
+            return false;
+        }
+        if self.split_clip_at(start_secs, *next_clip_id) {
+            *next_clip_id += 1;
+        }
+        if self.split_clip_at(end_secs, *next_clip_id) {
+            *next_clip_id += 1;
+        }
+        const EPSILON: f64 = 1e-6;
+        self.clips.retain(|c| {
+            let c_end = c.start_secs + c.duration_secs();
+            !(c.start_secs >= start_secs - EPSILON && c_end <= end_secs + EPSILON)
+        });
         true
     }
 

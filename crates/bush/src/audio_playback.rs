@@ -9,6 +9,7 @@ use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
+use crate::k_weighting::{self, KWeighting};
 use crate::{
     AudioBlock, AudioBlockError, AudioMixer, AudioSink, AudioSource, AudioSourceError,
     ContributorContent, ContributorId, MixError, MixInput, SceneSnapshot, SinkError, TimeStretcher,
@@ -318,6 +319,8 @@ pub struct AudioPlayer {
     /// Peak level of each rendered block, oldest first, for a level meter that follows the
     /// device rather than the render position.
     peaks: VecDeque<BlockPeak>,
+    /// K-weighting filters feeding the loudness reading.
+    weighting: KWeighting,
 }
 
 /// Blocks whose peaks are remembered; far more than the sink buffers ahead of the device.
@@ -328,6 +331,9 @@ struct BlockPeak {
     start_frame: u64,
     left: f32,
     right: f32,
+    /// K-weighted energy of the block, summed over frames and both channels.
+    energy: f64,
+    frames: u64,
 }
 
 impl AudioPlayer {
@@ -337,6 +343,7 @@ impl AudioPlayer {
         block_frames: usize,
         target_buffer_frames: usize,
     ) -> Self {
+        let weighting = KWeighting::new(renderer.sample_rate);
         Self {
             renderer,
             scene,
@@ -344,7 +351,32 @@ impl AudioPlayer {
             block_frames,
             target_buffer_frames,
             peaks: VecDeque::new(),
+            weighting,
         }
+    }
+
+    /// Momentary loudness (BS.1770, the 400 ms ending with the block that covers `frame`) in
+    /// LUFS; `None` when nothing audible was rendered there.
+    pub fn momentary_lufs_at(&self, frame: u64) -> Option<f32> {
+        let end = self
+            .peaks
+            .iter()
+            .rposition(|block| block.start_frame <= frame)?;
+        let last = &self.peaks[end];
+        if frame >= last.start_frame + last.frames {
+            return None;
+        }
+        let rate = u64::from(self.renderer.sample_rate);
+        let window = rate * 4 / 10;
+        let (mut energy, mut frames) = (0.0, 0_u64);
+        for block in self.peaks.iter().take(end + 1).rev() {
+            energy += block.energy;
+            frames += block.frames;
+            if frames >= window {
+                break;
+            }
+        }
+        k_weighting::lufs(energy, frames)
     }
 
     /// Linear peak `(left, right)` of the rendered block that covers timeline `frame`, `(0, 0)`
@@ -366,6 +398,7 @@ impl AudioPlayer {
     /// Jumps to `frame`, discarding queued audio so the next sound is from the new position.
     pub fn seek(&mut self, frame: u64, sink: &mut dyn AudioSink) {
         self.position_frame = frame;
+        self.weighting.reset();
         self.peaks.clear();
         sink.clear();
     }
@@ -376,6 +409,7 @@ impl AudioPlayer {
         let queued = sink.buffered_frames() as u64;
         self.position_frame = self.position_frame.saturating_sub(queued);
         self.scene = scene;
+        self.weighting.reset();
         self.peaks.clear();
         sink.clear();
     }
@@ -413,6 +447,7 @@ impl AudioPlayer {
             left = left.max(frame[0].abs());
             right = right.max(frame[channels.min(2) - 1].abs());
         }
+        let energy = self.weighting.energy(block.samples(), channels);
         if self.peaks.len() == PEAK_HISTORY_BLOCKS {
             self.peaks.pop_front();
         }
@@ -420,6 +455,8 @@ impl AudioPlayer {
             start_frame: self.position_frame,
             left,
             right,
+            energy,
+            frames: block.frame_count() as u64,
         });
     }
 }

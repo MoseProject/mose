@@ -73,6 +73,8 @@ fn project_at(project_path: &PathBuf, assets: Vec<MediaAsset>) -> Project {
                     shape_clips: vec![],
                     visible: true,
                     audio_role: AudioRole::Unspecified,
+                    muted: false,
+                    solo: false,
                     locked: false,
                     color_label: None,
                 }],

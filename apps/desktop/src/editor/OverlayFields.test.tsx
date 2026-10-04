@@ -1,34 +1,58 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OverlayCatalog } from "../types";
 
-vi.mock("../ipc", () => ({
-  api: { overlayCatalog: vi.fn() },
-}));
+vi.mock("../ipc", () => {
+  return {
+    api: { overlayCatalog: vi.fn() },
+  };
+});
 
 const { ColorField, SelectField, TextField, useOverlayCatalog } = await import("./OverlayFields");
 const { api } = await import("../ipc");
 
-beforeEach(() => vi.clearAllMocks());
-afterEach(() => cleanup());
+beforeEach(() => {
+  return vi.clearAllMocks();
+});
+afterEach(() => {
+  return cleanup();
+});
 
 describe("overlay catalog hook", () => {
   const catalog = { fonts: [], shapes: [] } as unknown as OverlayCatalog;
 
   it("retries after a failed load, then fetches once and serves the cache", async () => {
     vi.mocked(api.overlayCatalog).mockRejectedValueOnce(new Error("offline"));
-    const first = renderHook(() => useOverlayCatalog());
+    const first = renderHook(() => {
+      return useOverlayCatalog();
+    });
     expect(first.result.current).toBeNull();
-    await waitFor(() => expect(api.overlayCatalog).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      return expect(api.overlayCatalog).toHaveBeenCalledTimes(1);
+    });
     first.unmount();
 
     vi.mocked(api.overlayCatalog).mockResolvedValue(catalog);
-    const second = renderHook(() => useOverlayCatalog());
-    await waitFor(() => expect(second.result.current).toBe(catalog));
+    const second = renderHook(() => {
+      return useOverlayCatalog();
+    });
+    await waitFor(() => {
+      return expect(second.result.current).toBe(catalog);
+    });
     expect(api.overlayCatalog).toHaveBeenCalledTimes(2);
 
-    const third = renderHook(() => useOverlayCatalog());
+    const third = renderHook(() => {
+      return useOverlayCatalog();
+    });
     expect(third.result.current).toBe(catalog);
     expect(api.overlayCatalog).toHaveBeenCalledTimes(2);
   });
@@ -37,7 +61,14 @@ describe("overlay catalog hook", () => {
 describe("TextField", () => {
   it("commits on blur only when the text changed", () => {
     const onCommit = vi.fn();
-    render(<TextField label="Name" value="abc" placeholder="type" onCommit={onCommit} />);
+    render(
+      <TextField
+        label="Name"
+        value="abc"
+        placeholder="type"
+        onCommit={onCommit}
+      />,
+    );
     const input = screen.getByPlaceholderText("type") as HTMLInputElement;
 
     fireEvent.blur(input);
@@ -49,7 +80,13 @@ describe("TextField", () => {
 
   it("commits on Enter, reverts on Escape and follows the parent's value", () => {
     const onCommit = vi.fn();
-    const { rerender } = render(<TextField label="Name" value="abc" onCommit={onCommit} />);
+    const { rerender } = render(
+      <TextField
+        label="Name"
+        value="abc"
+        onCommit={onCommit}
+      />,
+    );
     const input = screen.getByRole("textbox") as HTMLInputElement;
     input.focus();
     fireEvent.change(input, { target: { value: "xyz" } });
@@ -60,7 +97,13 @@ describe("TextField", () => {
     fireEvent.keyDown(input, { key: "Escape" });
     expect(input.value).toBe("abc");
 
-    rerender(<TextField label="Name" value="from-parent" onCommit={onCommit} />);
+    rerender(
+      <TextField
+        label="Name"
+        value="from-parent"
+        onCommit={onCommit}
+      />,
+    );
     expect(input.value).toBe("from-parent");
   });
 });
@@ -69,7 +112,11 @@ describe("SelectField", () => {
   it("reports the chosen value and honours disabled", () => {
     const onChange = vi.fn();
     render(
-      <SelectField label="Font" value="a" onChange={onChange}>
+      <SelectField
+        label="Font"
+        value="a"
+        onChange={onChange}
+      >
         <option value="a">A</option>
         <option value="b">B</option>
       </SelectField>,
@@ -79,7 +126,12 @@ describe("SelectField", () => {
     cleanup();
 
     render(
-      <SelectField label="Font" value="a" disabled onChange={onChange}>
+      <SelectField
+        label="Font"
+        value="a"
+        disabled
+        onChange={onChange}
+      >
         <option value="a">A</option>
       </SelectField>,
     );
@@ -88,12 +140,19 @@ describe("SelectField", () => {
 });
 
 describe("ColorField", () => {
-  const colorInput = (container: HTMLElement) =>
-    container.querySelector('input[type="color"]') as HTMLInputElement;
+  const colorInput = (container: HTMLElement) => {
+    return container.querySelector('input[type="color"]') as HTMLInputElement;
+  };
 
   it("shows the current color and commits a new one as rgb", () => {
     const onCommit = vi.fn();
-    const { container } = render(<ColorField label="Fill" rgb={[255, 0, 0]} onCommit={onCommit} />);
+    const { container } = render(
+      <ColorField
+        label="Fill"
+        rgb={[255, 0, 0]}
+        onCommit={onCommit}
+      />,
+    );
     expect(colorInput(container).value).toBe("#ff0000");
 
     fireEvent.change(colorInput(container), { target: { value: "#00ff80" } });
@@ -103,12 +162,24 @@ describe("ColorField", () => {
   it("does not commit the unchanged color and follows the parent", () => {
     const onCommit = vi.fn();
     const { container, rerender } = render(
-      <ColorField label="Fill" rgb={[255, 0, 0]} onCommit={onCommit} />,
+      <ColorField
+        label="Fill"
+        rgb={[255, 0, 0]}
+        onCommit={onCommit}
+      />,
     );
     fireEvent.change(colorInput(container), { target: { value: "#FF0000" } });
     expect(onCommit).not.toHaveBeenCalled();
 
-    act(() => rerender(<ColorField label="Fill" rgb={[0, 0, 255]} onCommit={onCommit} />));
+    act(() => {
+      return rerender(
+        <ColorField
+          label="Fill"
+          rgb={[0, 0, 255]}
+          onCommit={onCommit}
+        />,
+      );
+    });
     expect(colorInput(container).value).toBe("#0000ff");
   });
 });

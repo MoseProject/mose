@@ -225,7 +225,7 @@ mod commands {
             .map(|t| t.id)
             .collect();
         for id in ids {
-            set_track_flags(h.handle(), id, None, Some(true)).unwrap();
+            set_track_flags(h.handle(), id, None, Some(true), None, None, None).unwrap();
         }
         let events = h.count_session_events();
         assert_eq!(
@@ -454,7 +454,7 @@ mod commands {
             .map(|t| t.id)
             .collect();
         for track in tracks {
-            set_track_flags(h.handle(), track, None, Some(true)).unwrap();
+            set_track_flags(h.handle(), track, None, Some(true), None, None, None).unwrap();
         }
         let events = h.count_session_events();
         let text_patch = || TextClipPatch {

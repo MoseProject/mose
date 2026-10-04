@@ -4,13 +4,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n";
 import type { SessionView } from "../types";
 
-vi.mock("../ipc", () => ({
-  api: {
-    saveLayerTemplate: vi.fn(),
-    deleteLayerTemplate: vi.fn(),
-    applyLayerTemplate: vi.fn().mockResolvedValue(undefined),
-  },
-}));
+vi.mock("../ipc", () => {
+  return {
+    api: {
+      saveLayerTemplate: vi.fn(),
+      deleteLayerTemplate: vi.fn(),
+      applyLayerTemplate: vi.fn().mockResolvedValue(undefined),
+    },
+  };
+});
 
 const { LayerTemplates } = await import("./LayerTemplates");
 const { api } = await import("../ipc");
@@ -26,19 +28,27 @@ const session = {
   },
 } as unknown as SessionView;
 
-const template = (name: string, kinds: string[]) => ({
-  name,
-  layers: kinds.map((kind) => [kind, {}]),
-});
+const template = (name: string, kinds: string[]) => {
+  return {
+    name,
+    layers: kinds.map((kind) => {
+      return [kind, {}];
+    }),
+  };
+};
 
-const listButton = () => screen.getByRole("button", { name: t("templates") });
+const listButton = () => {
+  return screen.getByRole("button", { name: t("templates") });
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
   layerTemplatesStore.set([]);
   patchUi({ selectedClipIds: [], error: null });
 });
-afterEach(() => cleanup());
+afterEach(() => {
+  return cleanup();
+});
 
 describe("layer templates", () => {
   it("only offers to save a template for two or more selected clips", () => {
@@ -64,7 +74,9 @@ describe("layer templates", () => {
     fireEvent.click(confirm);
 
     expect(api.saveLayerTemplate).toHaveBeenCalledWith("Intro", [4, 5]);
-    await waitFor(() => expect(layerTemplatesStore.get()).toHaveLength(1));
+    await waitFor(() => {
+      return expect(layerTemplatesStore.get()).toHaveLength(1);
+    });
     expect(screen.queryByText(t("saveTemplateTitle"))).toBeNull();
   });
 
@@ -100,7 +112,9 @@ describe("layer templates", () => {
     expect(await screen.findByText("One")).toBeTruthy();
     fireEvent.click(screen.getAllByText(t("deleteTemplate"))[0]);
     expect(api.deleteLayerTemplate).toHaveBeenCalledWith(0);
-    await waitFor(() => expect(layerTemplatesStore.get()).toHaveLength(1));
+    await waitFor(() => {
+      return expect(layerTemplatesStore.get()).toHaveLength(1);
+    });
   });
 
   it("applies a template by choosing an asset of the right kind for each layer", () => {
@@ -112,15 +126,16 @@ describe("layer templates", () => {
     const apply = screen.getByText(t("applyTemplateConfirm")) as HTMLButtonElement;
     expect(apply.disabled).toBe(true);
     const [video, audio] = screen.getAllByRole("combobox") as HTMLSelectElement[];
-    expect([...video.options].map((o) => o.textContent)).toEqual([
-      t("applyTemplatePickAsset"),
-      "clip-a.mp4",
-      "clip-b.mp4",
-    ]);
-    expect([...audio.options].map((o) => o.textContent)).toEqual([
-      t("applyTemplatePickAsset"),
-      "music.mp3",
-    ]);
+    expect(
+      [...video.options].map((o) => {
+        return o.textContent;
+      }),
+    ).toEqual([t("applyTemplatePickAsset"), "clip-a.mp4", "clip-b.mp4"]);
+    expect(
+      [...audio.options].map((o) => {
+        return o.textContent;
+      }),
+    ).toEqual([t("applyTemplatePickAsset"), "music.mp3"]);
 
     fireEvent.change(video, { target: { value: "3" } });
     expect(apply.disabled).toBe(false);
@@ -135,7 +150,9 @@ describe("layer templates", () => {
     layerTemplatesStore.set([template("Solo", ["Video"])] as never);
     patchUi({ selectedClipIds: [1, 2] });
     const { container } = render(<LayerTemplates session={session} />);
-    const overlay = () => container.querySelector(".modal-overlay")!;
+    const overlay = () => {
+      return container.querySelector(".modal-overlay")!;
+    };
 
     fireEvent.click(listButton());
     fireEvent.click(overlay());

@@ -150,6 +150,8 @@ fn renders_two_clips_with_different_effects_as_one_concatenated_export() {
 
         visible: true,
         audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
         locked: false,
         color_label: None,
     };
@@ -196,6 +198,8 @@ fn frozen_clip_still_exports_its_full_timeline_duration() {
 
         visible: true,
         audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
         locked: false,
         color_label: None,
     };
@@ -256,6 +260,8 @@ fn rejects_a_clip_with_a_missing_asset() {
 
         visible: true,
         audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
         locked: false,
         color_label: None,
     };
@@ -292,6 +298,8 @@ fn cancelling_mid_timeline_export_reports_cancelled() {
 
         visible: true,
         audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
         locked: false,
         color_label: None,
     };
@@ -338,6 +346,8 @@ fn deflicker_exports_without_error() {
 
         visible: true,
         audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
         locked: false,
         color_label: None,
     };
@@ -379,6 +389,8 @@ fn word_highlight_text_overlay_exports_without_error() {
 
         visible: true,
         audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
         locked: false,
         color_label: None,
     };
@@ -428,6 +440,8 @@ fn word_highlight_text_overlay_exports_without_error() {
         shape_clips: vec![],
         visible: true,
         audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
         locked: false,
         color_label: None,
     };
@@ -473,6 +487,8 @@ fn fade_transition_exports_without_error() {
 
         visible: true,
         audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
         locked: false,
         color_label: None,
     };
@@ -518,6 +534,8 @@ fn slide_transition_exports_without_error() {
 
         visible: true,
         audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
         locked: false,
         color_label: None,
     };
@@ -563,6 +581,8 @@ fn zoom_transition_exports_without_error() {
 
         visible: true,
         audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
         locked: false,
         color_label: None,
     };
@@ -623,6 +643,8 @@ fn animated_scale_keyframes_export_without_error() {
 
         visible: true,
         audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
         locked: false,
         color_label: None,
     };
@@ -676,6 +698,8 @@ fn animated_rotation_keyframes_export_without_error() {
 
         visible: true,
         audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
         locked: false,
         color_label: None,
     };

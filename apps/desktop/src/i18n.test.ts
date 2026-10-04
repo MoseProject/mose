@@ -1,6 +1,8 @@
+// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   formatTime,
+  formatTimecode,
   localeFromPrefs,
   localeSnapshot,
   setLocale,
@@ -9,7 +11,9 @@ import {
   type TextKey,
 } from "./i18n";
 
-afterEach(() => setLocale("pt-BR"));
+afterEach(() => {
+  return setLocale("pt-BR");
+});
 
 describe("locale", () => {
   it("maps stored preferences to a supported locale, defaulting to Portuguese", () => {
@@ -40,7 +44,9 @@ describe("locale", () => {
     const { readFileSync } = await import("node:fs");
     const { resolve } = await import("node:path");
     const source = readFileSync(resolve(__dirname, "i18n.ts"), "utf8");
-    const keys = [...source.matchAll(/^ {2}(\w+): \{/gm)].map((match) => match[1] as TextKey);
+    const keys = [...source.matchAll(/^ {2}(\w+): \{/gm)].map((match) => {
+      return match[1] as TextKey;
+    });
     expect(keys.length).toBeGreaterThan(100);
     for (const locale of ["pt-BR", "en"] as const) {
       setLocale(locale);
@@ -63,5 +69,36 @@ describe("formatTime", () => {
     expect(formatTime(-3)).toBe("00:00.00");
     expect(formatTime(0.004)).toBe("00:00.00");
     expect(formatTime(0.006)).toBe("00:00.01");
+  });
+});
+
+describe("formatTimecode", () => {
+  it("writes hours, minutes, seconds and frames", () => {
+    expect(formatTimecode(0, 24)).toBe("00:00:00:00");
+    expect(formatTimecode(134 + 8 / 24, 24)).toBe("00:02:14:08");
+    expect(formatTimecode(3661.5, 30)).toBe("01:01:01:15");
+  });
+
+  it("rounds a fractional frame rate to whole frames per second", () => {
+    expect(formatTimecode(1, 23.976)).toBe("00:00:01:00");
+    expect(formatTimecode(1.5, 59.94)).toBe("00:00:01:30");
+  });
+
+  it("falls back to 30 fps and clamps negatives", () => {
+    expect(formatTimecode(1.5, 0)).toBe("00:00:01:15");
+    expect(formatTimecode(-3, 24)).toBe("00:00:00:00");
+  });
+
+  it("does not wrap past two digits of hours", () => {
+    expect(formatTimecode(100 * 3600, 25)).toBe("100:00:00:00");
+  });
+});
+
+describe("the document language", () => {
+  it("follows the interface language", () => {
+    setLocale("en");
+    expect(document.documentElement.lang).toBe("en");
+    setLocale("pt-BR");
+    expect(document.documentElement.lang).toBe("pt-BR");
   });
 });

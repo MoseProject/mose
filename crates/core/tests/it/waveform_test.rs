@@ -15,7 +15,10 @@
 
 use std::path::{Path, PathBuf};
 
-use avcore::waveform::{generate_waveform, WAVEFORM_BUCKET_COUNT};
+use avcore::waveform::{
+    detailed_bucket_count, generate_detailed_waveform, generate_waveform, WAVEFORM_BUCKET_COUNT,
+    WAVEFORM_DETAIL_MAX_BUCKETS,
+};
 
 fn fixture(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -55,4 +58,21 @@ fn all_peaks_are_in_the_normalized_range() {
 fn errors_on_a_missing_source() {
     let result = generate_waveform(&fixture("does_not_exist.mp4"));
     assert!(result.is_err());
+}
+
+#[test]
+fn the_detail_bucket_count_scales_with_duration_within_its_bounds() {
+    assert_eq!(detailed_bucket_count(0.0), WAVEFORM_BUCKET_COUNT);
+    assert_eq!(detailed_bucket_count(10.0), WAVEFORM_BUCKET_COUNT);
+    assert_eq!(detailed_bucket_count(600.0), 30_000);
+    assert_eq!(detailed_bucket_count(9_900.0), 495_000);
+    assert_eq!(detailed_bucket_count(1.0e9), WAVEFORM_DETAIL_MAX_BUCKETS);
+}
+
+#[test]
+fn a_detailed_waveform_of_a_real_file_has_the_requested_resolution() {
+    let peaks = generate_detailed_waveform(&fixture("video.mp4"), 5.0).unwrap();
+
+    assert_eq!(peaks.len(), detailed_bucket_count(5.0));
+    assert!(peaks.iter().any(|(min, max)| *min < 0.0 || *max > 0.0));
 }

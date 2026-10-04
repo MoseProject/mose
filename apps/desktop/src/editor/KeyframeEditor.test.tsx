@@ -5,12 +5,16 @@ import { t } from "../i18n";
 import type { Keyframe, Position } from "../types";
 import { F32KeyframeList, PositionKeyframeList } from "./KeyframeEditor";
 
-afterEach(() => cleanup());
+afterEach(() => {
+  return cleanup();
+});
 
-const numbers = (): Keyframe<number>[] => [
-  { time_fraction: 0, value: 0.2 },
-  { time_fraction: 1, value: 0.8 },
-];
+const numbers = (): Keyframe<number>[] => {
+  return [
+    { time_fraction: 0, value: 0.2 },
+    { time_fraction: 1, value: 0.8 },
+  ];
+};
 
 function renderNumbers(onCommit = vi.fn(), keyframes = numbers()) {
   const view = render(
@@ -56,16 +60,10 @@ describe("F32KeyframeList", () => {
   it("adds a keyframe at the end with the default value and removes a row at once", () => {
     const { onCommit } = renderNumbers();
     fireEvent.click(screen.getByText(t("addKeyframe")));
-    expect(onCommit).toHaveBeenLastCalledWith([
-      ...numbers(),
-      { time_fraction: 1, value: 0.5 },
-    ]);
+    expect(onCommit).toHaveBeenLastCalledWith([...numbers(), { time_fraction: 1, value: 0.5 }]);
 
     fireEvent.click(screen.getAllByText("🗑")[0]);
-    expect(onCommit).toHaveBeenLastCalledWith([
-      numbers()[1],
-      { time_fraction: 1, value: 0.5 },
-    ]);
+    expect(onCommit).toHaveBeenLastCalledWith([numbers()[1], { time_fraction: 1, value: 0.5 }]);
   });
 
   it("follows new keyframes handed in by the parent", () => {
@@ -85,10 +83,18 @@ describe("F32KeyframeList", () => {
   });
 });
 
-const positions = (): Keyframe<Position>[] => [{ time_fraction: 0.5, value: { x: 0.1, y: -0.1 } }];
+const positions = (): Keyframe<Position>[] => {
+  return [{ time_fraction: 0.5, value: { x: 0.1, y: -0.1 } }];
+};
 
 function renderPositions(onCommit = vi.fn()) {
-  render(<PositionKeyframeList label="Position" keyframes={positions()} onCommit={onCommit} />);
+  render(
+    <PositionKeyframeList
+      label="Position"
+      keyframes={positions()}
+      onCommit={onCommit}
+    />,
+  );
   return onCommit;
 }
 
@@ -101,7 +107,9 @@ describe("PositionKeyframeList", () => {
 
     fireEvent.change(time, { target: { value: "0.75" } });
     fireEvent.pointerUp(time);
-    expect(onCommit).toHaveBeenLastCalledWith([{ time_fraction: 0.75, value: { x: 0.1, y: -0.1 } }]);
+    expect(onCommit).toHaveBeenLastCalledWith([
+      { time_fraction: 0.75, value: { x: 0.1, y: -0.1 } },
+    ]);
 
     fireEvent.change(x, { target: { value: "0.4" } });
     fireEvent.blur(x);

@@ -9,6 +9,7 @@ import {
   api,
   onAutoReframe,
   onExports,
+  onImportFailed,
   onMatteGeneration,
   onMotionTrack,
   onPreview,
@@ -18,7 +19,7 @@ import {
   onTranscribe,
   onTts,
 } from "./ipc";
-import { localeFromPrefs, setLocale, t } from "./i18n";
+import { localeFromPrefs, setLocale, t, type TextKey } from "./i18n";
 import type { ExportJobView, LayerTemplate, PreviewTick, SessionView } from "./types";
 
 export interface Store<T> {
@@ -31,16 +32,24 @@ export function createStore<T>(initial: T): Store<T> {
   let value = initial;
   const listeners = new Set<() => void>();
   return {
-    get: () => value,
+    get: () => {
+      return value;
+    },
     set: (next) => {
       const resolved = typeof next === "function" ? (next as (prev: T) => T)(value) : next;
-      if (Object.is(resolved, value)) return;
+      if (Object.is(resolved, value)) {
+        return;
+      }
       value = resolved;
-      listeners.forEach((l) => l());
+      listeners.forEach((l) => {
+        return l();
+      });
     },
     subscribe: (listener) => {
       listeners.add(listener);
-      return () => listeners.delete(listener);
+      return () => {
+        return listeners.delete(listener);
+      };
     },
   };
 }
@@ -49,7 +58,7 @@ export function useStore<T>(store: Store<T>): T {
   return useSyncExternalStore(store.subscribe, store.get);
 }
 
-export type Screen = "home" | "editor" | "prefs" | "watch";
+export type Screen = "home" | "editor";
 
 /** Timeline edit tool -- egui's `EditorTool`. "select" is the default drag-to-move/trim mode;
  *  the others repurpose a body/edge drag into the matching Premiere/DaVinci/FCP-style edit. */
@@ -67,6 +76,25 @@ export interface UiState {
    *  points`; kept here rather than as backend state since nothing is committed until the
    *  drawing finishes (Enter, >=3 points) or is cancelled (Escape). */
   drawingShapePoints: [number, number][] | null;
+  /** The export queue popover; closed until the user asks for it or starts an export. */
+  exportQueueOpen: boolean;
+  /** The export options dialog (aspect ratio, loudness target, encoder). */
+  exportDialogOpen: boolean;
+  /** How many modal dialogs are open; global shortcuts stand down while it is above zero. */
+  openDialogs: number;
+  /** Timeline in/out marks (seconds) set with I and O; `null` when unset. */
+  markIn: number | null;
+  markOut: number | null;
+  /** Whether dragging clips snaps to edges and markers (toggled with N). */
+  snapEnabled: boolean;
+  shortcutsOpen: boolean;
+  paletteOpen: boolean;
+  settingsOpen: boolean;
+  watchOpen: boolean;
+  /** Program-monitor zoom: fit the window, or a fixed percentage of the canvas size. */
+  monitorZoom: "fit" | "50" | "100";
+  /** Title/action safe-area and center guides over the monitor. */
+  monitorGuides: boolean;
 }
 
 export const sessionStore = createStore<SessionView | null>(null);
@@ -79,6 +107,7 @@ export const previewStore = createStore<PreviewTick>({
   error: null,
   peakL: 0,
   peakR: 0,
+  momentaryLufs: null,
 });
 export const exportsStore = createStore<ExportJobView[]>([]);
 export const layerTemplatesStore = createStore<LayerTemplate[]>([]);
@@ -90,6 +119,18 @@ export const uiStore = createStore<UiState>({
   pxPerSec: 40,
   error: null,
   drawingShapePoints: null,
+  exportQueueOpen: false,
+  exportDialogOpen: false,
+  openDialogs: 0,
+  markIn: null,
+  markOut: null,
+  snapEnabled: true,
+  shortcutsOpen: false,
+  paletteOpen: false,
+  settingsOpen: false,
+  watchOpen: false,
+  monitorZoom: "fit",
+  monitorGuides: false,
 });
 
 /** An asset being dragged from the media library toward the timeline. */
@@ -101,19 +142,39 @@ export interface AssetDrag {
 
 export const assetDragStore = createStore<AssetDrag | null>(null);
 
-export const MIN_PX_PER_SEC = 2;
+/** Low enough to see a whole ten-hour timeline in an ordinary window. */
+export const MIN_PX_PER_SEC = 0.01;
 export const MAX_PX_PER_SEC = 600;
 
 export function patchUi(patch: Partial<UiState>) {
-  uiStore.set((prev) => ({ ...prev, ...patch }));
+  uiStore.set((prev) => {
+    return { ...prev, ...patch };
+  });
 }
 
 /** Runs a backend call, surfacing a rejection in the error banner instead of dropping it. */
+/** Error codes the backend returns instead of a sentence, with the text that explains them. */
+const ERROR_CODES: Record<string, TextKey> = {
+  assetInUse: "assetInUse",
+  pathMissing: "pathMissing",
+  outputIsSource: "exportOutputIsSource",
+  outputInQueue: "exportOutputInQueue",
+  projectMissing: "projectMissing",
+};
+
+/** What to show for a failed call: the translated text for a known backend code, otherwise the
+ *  error as the backend wrote it. */
+export function describeError(error: unknown): string {
+  const text = String(error);
+  const key = ERROR_CODES[text];
+  return key ? t(key) : text;
+}
+
 export async function run<T>(call: Promise<T>): Promise<T | undefined> {
   try {
     return await call;
   } catch (error) {
-    patchUi({ error: String(error) });
+    patchUi({ error: describeError(error) });
     return undefined;
   }
 }
@@ -122,44 +183,77 @@ let connected = false;
 
 /** Subscribes to backend events once and loads the initial session. */
 export async function connect() {
-  if (connected) return;
+  if (connected) {
+    return;
+  }
   connected = true;
   await onSession((view) => {
     const previous = sessionStore.get();
     sessionStore.set(view);
     const previousId = previous?.project.sequences[previous.project.active_sequence]?.id;
     const activeId = view.project.sequences[view.project.active_sequence]?.id;
-    if (previousId !== undefined && previousId !== activeId) patchUi({ selectedClipIds: [] });
+    if (previousId !== undefined && previousId !== activeId) {
+      patchUi({ selectedClipIds: [] });
+    }
     // Drop selections that no longer exist (undo, delete, project switch).
     const ids = new Set(
-      view.project.sequences[view.project.active_sequence].timeline.tracks.flatMap((t) =>
-        t.clips.map((c) => c.id),
-      ),
+      view.project.sequences[view.project.active_sequence].timeline.tracks.flatMap((t) => {
+        return t.clips.map((c) => {
+          return c.id;
+        });
+      }),
     );
     const selected = uiStore.get().selectedClipIds;
-    if (selected.some((id) => !ids.has(id))) {
-      patchUi({ selectedClipIds: selected.filter((id) => ids.has(id)) });
+    if (
+      selected.some((id) => {
+        return !ids.has(id);
+      })
+    ) {
+      patchUi({
+        selectedClipIds: selected.filter((id) => {
+          return ids.has(id);
+        }),
+      });
     }
   });
-  await onPreview((tick) => previewStore.set(tick));
-  await onExports((jobs) => exportsStore.set(jobs));
+  await onPreview((tick) => {
+    return previewStore.set(tick);
+  });
+  await onExports((jobs) => {
+    return exportsStore.set(jobs);
+  });
+  await onImportFailed((fileName) => {
+    patchUi({ error: t("importFailed") + ": " + fileName });
+  });
   await onSceneCut((count) => {
-    if (count === 0) patchUi({ error: t("sceneCutDetectionNone") });
+    if (count === 0) {
+      patchUi({ error: t("sceneCutDetectionNone") });
+    }
   });
   await onMotionTrack((count) => {
-    if (count === 0) patchUi({ error: t("motionTrackNoFramesDecoded") });
+    if (count === 0) {
+      patchUi({ error: t("motionTrackNoFramesDecoded") });
+    }
   });
   await onAutoReframe((event) => {
-    if (!event.subjectFound) patchUi({ error: t("autoReframeNoSubjectFound") });
+    if (!event.subjectFound) {
+      patchUi({ error: t("autoReframeNoSubjectFound") });
+    }
   });
   await onMatteGeneration((event) => {
-    if (event.type === "failed") patchUi({ error: event.message });
+    if (event.type === "failed") {
+      patchUi({ error: event.message });
+    }
   });
   await onPrivacyBlur((event) => {
-    if (event.type === "failed") patchUi({ error: event.message });
+    if (event.type === "failed") {
+      patchUi({ error: event.message });
+    }
   });
   await onTts((event) => {
-    if (event.type === "failed") patchUi({ error: event.message });
+    if (event.type === "failed") {
+      patchUi({ error: event.message });
+    }
   });
   await onTranscribe((event) => {
     if (event.type === "started") {

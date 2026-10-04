@@ -3,8 +3,13 @@ import { activeTimeline, aspectRatioDims, clipDuration } from "./types";
 import type { ClipInstance, Project } from "./types";
 
 describe("clipDuration", () => {
-  const clip = (sourceIn: number, sourceOut: number, speed: number) =>
-    ({ source_in_secs: sourceIn, source_out_secs: sourceOut, speed_factor: speed }) as ClipInstance;
+  const clip = (sourceIn: number, sourceOut: number, speed: number) => {
+    return {
+      source_in_secs: sourceIn,
+      source_out_secs: sourceOut,
+      speed_factor: speed,
+    } as ClipInstance;
+  };
 
   it("divides the trimmed source length by the speed", () => {
     expect(clipDuration(clip(1, 5, 1))).toBe(4);

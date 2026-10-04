@@ -247,7 +247,7 @@ pub fn save_transcript_document(
     let path = transcript_path(dir, document.asset_id);
     let bytes =
         crate::persistence::to_octr_bytes(document).map_err(TranscriptStorageError::Persist)?;
-    std::fs::write(&path, bytes).map_err(TranscriptStorageError::Io)?;
+    crate::persistence::write_atomic(&path, &bytes).map_err(TranscriptStorageError::Io)?;
     Ok(path)
 }
 

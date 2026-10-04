@@ -14,18 +14,39 @@ vi.mock("../ipc", () => {
     "dynamicAutoReframeClip",
     "generateMatteForClip",
     "applyPrivacyBlurToClip",
+    "mergeClipsIntoComposite",
+    "createCompoundClip",
+    "deleteClips",
   ];
-  return { api: Object.fromEntries(names.map((name) => [name, vi.fn().mockResolvedValue(undefined)])) };
+  return {
+    api: Object.fromEntries(
+      names.map((name) => {
+        return [name, vi.fn().mockResolvedValue(undefined)];
+      }),
+    ),
+  };
 });
-vi.mock("./TextInspector", () => ({ TextInspector: ({ clip }: { clip: { id: number } }) => <p>text-inspector-{clip.id}</p> }));
-vi.mock("./ShapeInspector", () => ({ ShapeInspector: ({ clip }: { clip: { id: number } }) => <p>shape-inspector-{clip.id}</p> }));
+vi.mock("./TextInspector", () => {
+  return {
+    TextInspector: ({ clip }: { clip: { id: number } }) => {
+      return <p>text-inspector-{clip.id}</p>;
+    },
+  };
+});
+vi.mock("./ShapeInspector", () => {
+  return {
+    ShapeInspector: ({ clip }: { clip: { id: number } }) => {
+      return <p>shape-inspector-{clip.id}</p>;
+    },
+  };
+});
 
 const { Inspector, Section, Slider } = await import("./Inspector");
 const { api } = await import("../ipc");
-const { patchUi } = await import("../store");
+const { patchUi, previewStore } = await import("../store");
 
-const clip = (overrides: Partial<ClipInstance> = {}): ClipInstance =>
-  ({
+const clip = (overrides: Partial<ClipInstance> = {}): ClipInstance => {
+  return {
     id: 7,
     asset_id: 3,
     gain_db: 0,
@@ -58,9 +79,13 @@ const clip = (overrides: Partial<ClipInstance> = {}): ClipInstance =>
     crop_w_keyframes: [],
     crop_h_keyframes: [],
     ...overrides,
-  }) as unknown as ClipInstance;
+  } as unknown as ClipInstance;
+};
 
-function sessionFor(overrides: Partial<ClipInstance> = {}, extra: Record<string, unknown> = {}): SessionView {
+function sessionFor(
+  overrides: Partial<ClipInstance> = {},
+  extra: Record<string, unknown> = {},
+): SessionView {
   const view = makeSession([
     {
       id: 1,
@@ -81,11 +106,18 @@ function sessionFor(overrides: Partial<ClipInstance> = {}, extra: Record<string,
   return view;
 }
 
-const field = (label: string) =>
-  screen.getByText(label, { selector: "label" }).parentElement as HTMLElement;
-const range = (label: string) => field(label).querySelector('input[type="range"]') as HTMLInputElement;
-const lastPatch = () => vi.mocked(api.updateClip).mock.calls.at(-1)![1];
-const sectionOf = (label: string) => screen.getByText(label, { selector: "summary" }).closest("details")!;
+const field = (label: string) => {
+  return screen.getByText(label, { selector: "label" }).parentElement as HTMLElement;
+};
+const range = (label: string) => {
+  return field(label).querySelector('input[type="range"]') as HTMLInputElement;
+};
+const lastPatch = () => {
+  return vi.mocked(api.updateClip).mock.calls.at(-1)![1];
+};
+const sectionOf = (label: string) => {
+  return screen.getByText(label, { selector: "summary > span" }).closest("details")!;
+};
 
 function slide(label: string, value: number) {
   fireEvent.change(range(label), { target: { value: String(value) } });
@@ -96,7 +128,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   patchUi({ selectedClipIds: [7] });
 });
-afterEach(() => cleanup());
+afterEach(() => {
+  return cleanup();
+});
 
 describe("inspector selection", () => {
   it("asks for a selection when nothing is selected, or more than one clip", () => {
@@ -104,10 +138,6 @@ describe("inspector selection", () => {
     render(<Inspector session={sessionFor()} />);
     expect(screen.getByText(t("noClipSelected"))).toBeTruthy();
     cleanup();
-
-    patchUi({ selectedClipIds: [7, 20] });
-    render(<Inspector session={sessionFor()} />);
-    expect(screen.getByText(t("noClipSelected"))).toBeTruthy();
   });
 
   it("shows the source asset of a selected media clip", () => {
@@ -120,7 +150,7 @@ describe("inspector selection", () => {
     const view = sessionFor();
     view.project.media_library = [];
     render(<Inspector session={view} />);
-    expect(screen.getByText(`${t("source")}: —`)).toBeTruthy();
+    expect(screen.getByText("—")).toBeTruthy();
   });
 
   it("hands text and shape overlays to their own inspectors", () => {
@@ -138,7 +168,19 @@ describe("inspector selection", () => {
 describe("slider and section", () => {
   it("previews locally and commits on pointer up, key up or blur, only when changed", () => {
     const onCommit = vi.fn();
-    render(<Slider label="Amount" value={1} min={0} max={5} step={1} format={(v) => `${v}!`} onCommit={onCommit} />);
+    render(
+      <Slider
+        label="Amount"
+        value={1}
+        min={0}
+        max={5}
+        step={1}
+        format={(v) => {
+          return `${v}!`;
+        }}
+        onCommit={onCommit}
+      />,
+    );
     const input = range("Amount");
     expect(screen.getByText("1!")).toBeTruthy();
     fireEvent.pointerUp(input);
@@ -153,17 +195,46 @@ describe("slider and section", () => {
   });
 
   it("follows the value the parent hands in", () => {
-    const props = { label: "Amount", min: 0, max: 5, step: 1, format: (v: number) => `${v}`, onCommit: vi.fn() };
-    const { rerender } = render(<Slider {...props} value={1} />);
-    rerender(<Slider {...props} value={4} />);
+    const props = {
+      label: "Amount",
+      min: 0,
+      max: 5,
+      step: 1,
+      format: (v: number) => {
+        return `${v}`;
+      },
+      onCommit: vi.fn(),
+    };
+    const { rerender } = render(
+      <Slider
+        {...props}
+        value={1}
+      />,
+    );
+    rerender(
+      <Slider
+        {...props}
+        value={4}
+      />,
+    );
     expect(range("Amount").value).toBe("4");
   });
 
   it("renders an open or closed section", () => {
     render(
       <>
-        <Section label="Open" defaultOpen={true}>a</Section>
-        <Section label="Closed" defaultOpen={false}>b</Section>
+        <Section
+          label="Open"
+          defaultOpen={true}
+        >
+          a
+        </Section>
+        <Section
+          label="Closed"
+          defaultOpen={false}
+        >
+          b
+        </Section>
       </>,
     );
     expect(sectionOf("Open").open).toBe(true);
@@ -290,7 +361,9 @@ describe("clip controls", () => {
   it("changes the mask, with a corner radius only for rounded rectangles", () => {
     render(<Inspector session={sessionFor()} />);
     expect(screen.queryByText(t("maskCornerRadius"))).toBeNull();
-    fireEvent.change(field(t("mask")).querySelector("select")!, { target: { value: "Circle" } });
+    fireEvent.change(field(t("mask")).querySelector("select")!, {
+      target: { value: "Circle" },
+    });
     expect(lastPatch()).toEqual({ maskShape: "Circle" });
     cleanup();
 
@@ -302,7 +375,9 @@ describe("clip controls", () => {
   it("changes the transition, with a duration only once one is chosen", () => {
     render(<Inspector session={sessionFor()} />);
     expect(screen.queryByText(t("transitionDuration"))).toBeNull();
-    fireEvent.change(field(t("transition")).querySelector("select")!, { target: { value: "Slide" } });
+    fireEvent.change(field(t("transition")).querySelector("select")!, {
+      target: { value: "Slide" },
+    });
     expect(lastPatch()).toEqual({ transitionIn: "Slide" });
     cleanup();
 
@@ -313,7 +388,9 @@ describe("clip controls", () => {
 
   it("changes the blend mode", () => {
     render(<Inspector session={sessionFor()} />);
-    fireEvent.change(field(t("blendMode")).querySelector("select")!, { target: { value: "Multiply" } });
+    fireEvent.change(field(t("blendMode")).querySelector("select")!, {
+      target: { value: "Multiply" },
+    });
     expect(lastPatch()).toEqual({ blendMode: "Multiply" });
   });
 
@@ -336,7 +413,9 @@ describe("clip controls", () => {
           ["cropWKeyframes", 1],
           ["cropHKeyframes", 1],
         ] as [string, number][]
-      ).map(([key, value]) => ({ [key]: [{ time_fraction: 1, value }] })),
+      ).map(([key, value]) => {
+        return { [key]: [{ time_fraction: 1, value }] };
+      }),
     ];
     expect(adds).toHaveLength(expected.length);
     adds.forEach((button, index) => {
@@ -347,8 +426,9 @@ describe("clip controls", () => {
 
   it("runs the AI actions with the chosen region", () => {
     render(<Inspector session={sessionFor()} />);
-    const edit = (title: string, value: string) =>
-      fireEvent.change(screen.getByTitle(t(title as never)), { target: { value } });
+    const edit = (title: string, value: string) => {
+      return fireEvent.change(screen.getByTitle(t(title as never)), { target: { value } });
+    };
     edit("centerX", "0.2");
     edit("centerY", "0.3");
     edit("regionWidth", "0.4");
@@ -364,5 +444,231 @@ describe("clip controls", () => {
     expect(api.dynamicAutoReframeClip).toHaveBeenCalledWith(7);
     fireEvent.click(screen.getByText(t("generateMatte")));
     expect(api.generateMatteForClip).toHaveBeenCalledWith(7);
+  });
+});
+
+describe("inspector tabs", () => {
+  it("groups the clip's sections under Inspector, Effects and Audio", () => {
+    const { container } = render(<Inspector session={sessionFor()} />);
+    const body = container.querySelector(".inspector-body")!;
+    expect(body.getAttribute("data-tab")).toBe("inspector");
+    fireEvent.click(screen.getByRole("tab", { name: t("inspectorEffects") }));
+    expect(body.getAttribute("data-tab")).toBe("effects");
+    expect(
+      screen.getByRole("tab", { name: t("inspectorEffects") }).getAttribute("aria-selected"),
+    ).toBe("true");
+    fireEvent.click(screen.getByRole("tab", { name: t("inspectorAudio") }));
+    expect(body.getAttribute("data-tab")).toBe("audio");
+    expect(screen.getByTestId("section-gain").getAttribute("data-group")).toBe("audio");
+    expect(container.querySelector('[data-group="effects"]')).toBeTruthy();
+  });
+
+  it("offers only the Inspector tab for text and shape overlays", () => {
+    patchUi({ selectedClipIds: [20] });
+    render(<Inspector session={sessionFor()} />);
+    expect(screen.getAllByRole("tab")).toHaveLength(1);
+  });
+});
+
+describe("transform section", () => {
+  it("shows position in canvas pixels, scale and rotation as plain numbers", () => {
+    render(
+      <Inspector
+        session={sessionFor({
+          position_keyframes: [{ time_fraction: 0, value: { x: 0.25, y: 0.5 } }],
+          layer_scale_x: 0.5,
+          rotation_keyframes: [{ time_fraction: 0, value: 30 }],
+        })}
+      />,
+    );
+    expect((screen.getByLabelText(t("positionX")) as HTMLInputElement).value).toBe("480");
+    expect((screen.getByLabelText(t("positionY")) as HTMLInputElement).value).toBe("540");
+    expect((screen.getByLabelText(t("scale")) as HTMLInputElement).value).toBe("50");
+    expect((screen.getByLabelText(t("rotation")) as HTMLInputElement).value).toBe("30");
+  });
+
+  it("commits an edited position on blur as one keyframe, in canvas fractions", () => {
+    render(<Inspector session={sessionFor()} />);
+    const x = screen.getByLabelText(t("positionX"));
+    fireEvent.change(x, { target: { value: "768" } });
+    expect(api.updateClip).not.toHaveBeenCalled();
+    fireEvent.blur(x);
+    expect(lastPatch()).toEqual({
+      positionKeyframes: [{ time_fraction: 0, value: { x: 0.4, y: 0 } }],
+    });
+  });
+
+  it("keeps a typed position within one canvas of the frame", () => {
+    render(<Inspector session={sessionFor()} />);
+    const x = screen.getByLabelText(t("positionX"));
+    fireEvent.change(x, { target: { value: "999999" } });
+    fireEvent.blur(x);
+    expect(lastPatch()).toEqual({
+      positionKeyframes: [{ time_fraction: 0, value: { x: 2, y: 0 } }],
+    });
+    const y = screen.getByLabelText(t("positionY"));
+    fireEvent.change(y, { target: { value: "-999999" } });
+    fireEvent.blur(y);
+    expect(lastPatch()).toEqual({
+      positionKeyframes: [{ time_fraction: 0, value: { x: 0, y: -1 } }],
+    });
+  });
+
+  it("scales both axes together and never below 1 percent", () => {
+    render(<Inspector session={sessionFor()} />);
+    const scale = screen.getByLabelText(t("scale"));
+    fireEvent.change(scale, { target: { value: "150" } });
+    fireEvent.keyDown(scale, { key: "Enter" });
+    fireEvent.blur(scale);
+    expect(lastPatch()).toEqual({ layerScaleX: 1.5, layerScaleY: 1.5 });
+    fireEvent.change(scale, { target: { value: "-20" } });
+    fireEvent.blur(scale);
+    expect(lastPatch()).toEqual({ layerScaleX: 0.01, layerScaleY: 0.01 });
+  });
+
+  it("commits a rotation and ignores an empty or unchanged field", () => {
+    render(<Inspector session={sessionFor()} />);
+    const rotation = screen.getByLabelText(t("rotation")) as HTMLInputElement;
+    fireEvent.change(rotation, { target: { value: "45" } });
+    fireEvent.blur(rotation);
+    expect(lastPatch()).toEqual({ rotationKeyframes: [{ time_fraction: 0, value: 45 }] });
+    vi.mocked(api.updateClip).mockClear();
+    fireEvent.change(rotation, { target: { value: "" } });
+    fireEvent.blur(rotation);
+    expect(api.updateClip).not.toHaveBeenCalled();
+    expect(rotation.value).toBe("0");
+  });
+
+  it("disables an animated value and points at the keyframes", () => {
+    render(
+      <Inspector
+        session={sessionFor({
+          position_keyframes: [
+            { time_fraction: 0, value: { x: 0, y: 0 } },
+            { time_fraction: 1, value: { x: 1, y: 1 } },
+          ],
+        })}
+      />,
+    );
+    expect((screen.getByLabelText(t("positionX")) as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByText(t("transformAnimated"))).toBeTruthy();
+  });
+
+  it("resets position, scale and rotation from the section header", () => {
+    render(<Inspector session={sessionFor({ layer_scale_x: 2 })} />);
+    fireEvent.click(screen.getByLabelText(t("resetSection") + ": " + t("transform")));
+    expect(lastPatch()).toEqual({
+      positionKeyframes: [],
+      layerScaleX: 1,
+      layerScaleY: 1,
+      rotationKeyframes: [],
+    });
+  });
+});
+
+describe("section resets", () => {
+  it.each([
+    ["gain", { gainDb: 0 }],
+    ["speed", { speedFactor: 1 }],
+    ["colorAdjust", { brightness: 0, contrast: 1, saturation: 1 }],
+    ["crop", { cropX: 0, cropY: 0, cropW: 1, cropH: 1 }],
+  ])("restores %s to its defaults without toggling the section", (key, patch) => {
+    render(<Inspector session={sessionFor()} />);
+    const label = t(key as never);
+    const section = sectionOf(label);
+    const wasOpen = section.open;
+    fireEvent.click(screen.getByLabelText(t("resetSection") + ": " + label));
+    expect(lastPatch()).toEqual(patch);
+    expect(section.open).toBe(wasOpen);
+  });
+});
+
+describe("inspector grouping and selection", () => {
+  it("puts voice cleanup under Audio and freeze/flip under Inspector", () => {
+    const { container } = render(<Inspector session={sessionFor()} />);
+    const group = (text: string) => {
+      return screen.getByText(text).closest("[data-group]")!.getAttribute("data-group");
+    };
+    expect(group(t("voiceCleanup"))).toBe("audio");
+    expect(group(t("freeze"))).toBe("inspector");
+    expect(group(t("flip"))).toBe("inspector");
+    expect(container.querySelector('[data-group="effects"]')).toBeTruthy();
+  });
+
+  it("says how many clips are selected and offers the group actions", () => {
+    patchUi({ selectedClipIds: [7, 20] });
+    vi.mocked(api.mergeClipsIntoComposite).mockClear();
+    render(<Inspector session={sessionFor()} />);
+    expect(screen.getByTestId("inspector-multi").textContent).toContain("2 " + t("clipsSelected"));
+    fireEvent.click(screen.getByText(t("mergeComposite")));
+    fireEvent.click(screen.getByText(t("compoundClip")));
+    fireEvent.click(screen.getByText(t("delete")));
+    fireEvent.click(screen.getByText(t("rippleDelete")));
+    expect(api.mergeClipsIntoComposite).toHaveBeenCalledWith([7, 20]);
+    expect(api.createCompoundClip).toHaveBeenCalledWith(7, [7, 20]);
+    expect(api.deleteClips).toHaveBeenCalledWith([7, 20], false);
+    expect(api.deleteClips).toHaveBeenCalledWith([7, 20], true);
+  });
+});
+
+describe("keyframe diamond", () => {
+  const placed = { start_secs: 0, source_in_secs: 0, source_out_secs: 10 };
+  const atSecs = (playheadSecs: number) => {
+    previewStore.set({ ...previewStore.get(), playheadSecs });
+  };
+  const diamond = (label: string) => {
+    return sectionOf(label).querySelector(".section-keyframe") as HTMLButtonElement;
+  };
+
+  it("is disabled while the playhead is outside the clip", () => {
+    atSecs(20);
+    render(<Inspector session={sessionFor(placed)} />);
+    expect(diamond(t("gain")).disabled).toBe(true);
+  });
+
+  it("adds a gain keyframe at the playhead carrying the current gain", () => {
+    atSecs(5);
+    render(<Inspector session={sessionFor({ ...placed, gain_db: 3 })} />);
+    fireEvent.click(diamond(t("gain")));
+    expect(lastPatch()).toEqual({ gainKeyframes: [{ time_fraction: 0.5, value: 3 }] });
+  });
+
+  it("removes the keyframe when one already sits at the playhead", () => {
+    atSecs(5);
+    render(
+      <Inspector
+        session={sessionFor({
+          ...placed,
+          gain_keyframes: [
+            { time_fraction: 0.5, value: 3 },
+            { time_fraction: 1, value: 6 },
+          ],
+        })}
+      />,
+    );
+    expect(diamond(t("gain")).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(diamond(t("gain")));
+    expect(lastPatch()).toEqual({ gainKeyframes: [{ time_fraction: 1, value: 6 }] });
+  });
+
+  it("keys position and rotation together from the transform section", () => {
+    atSecs(2.5);
+    render(<Inspector session={sessionFor(placed)} />);
+    fireEvent.click(diamond(t("transform")));
+    expect(lastPatch()).toEqual({
+      positionKeyframes: [{ time_fraction: 0.25, value: { x: 0, y: 0 } }],
+      rotationKeyframes: [{ time_fraction: 0.25, value: 0 }],
+    });
+  });
+
+  it("keys brightness, contrast and saturation together from the color section", () => {
+    atSecs(10);
+    render(<Inspector session={sessionFor({ ...placed, contrast: 1.2 })} />);
+    fireEvent.click(diamond(t("colorAdjust")));
+    expect(lastPatch()).toEqual({
+      brightnessKeyframes: [{ time_fraction: 1, value: 0 }],
+      contrastKeyframes: [{ time_fraction: 1, value: 1.2 }],
+      saturationKeyframes: [{ time_fraction: 1, value: 1 }],
+    });
   });
 });

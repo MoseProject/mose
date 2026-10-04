@@ -1,27 +1,27 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n";
-import { exportsStore } from "../store";
+import { exportsStore, patchUi, uiStore } from "../store";
 import type { ExportJobView } from "../types";
 
-vi.mock("../ipc", () => ({
-  api: {
-    getGpuEncoderPreference: vi.fn().mockResolvedValue("auto"),
-    setGpuEncoderPreference: vi.fn().mockResolvedValue(undefined),
-    exportActiveSequenceSrt: vi.fn().mockResolvedValue(true),
-    matchExportLoudness: vi.fn().mockResolvedValue(undefined),
-    pauseExport: vi.fn().mockResolvedValue(undefined),
-    resumeExport: vi.fn().mockResolvedValue(undefined),
-    cancelExport: vi.fn().mockResolvedValue(undefined),
-    removeExport: vi.fn().mockResolvedValue(undefined),
-  },
-  exportActiveSequence: vi.fn().mockResolvedValue(undefined),
-}));
+vi.mock("../ipc", () => {
+  return {
+    api: {
+      exportActiveSequenceSrt: vi.fn().mockResolvedValue(true),
+      matchExportLoudness: vi.fn().mockResolvedValue(undefined),
+      pauseExport: vi.fn().mockResolvedValue(undefined),
+      resumeExport: vi.fn().mockResolvedValue(undefined),
+      cancelExport: vi.fn().mockResolvedValue(undefined),
+      removeExport: vi.fn().mockResolvedValue(undefined),
+      revealInFolder: vi.fn().mockResolvedValue(undefined),
+    },
+  };
+});
 
 // Imported after the mock so ExportPanel picks up the mocked `../ipc`.
-const { ExportPanel } = await import("./ExportPanel");
-const { api, exportActiveSequence } = await import("../ipc");
+const { ExportPanel, remainingSecs } = await import("./ExportPanel");
+const { api } = await import("../ipc");
 
 function job(overrides: Partial<ExportJobView>): ExportJobView {
   return {
@@ -88,32 +88,14 @@ describe("ExportPanel", () => {
     expect(api.cancelExport).toHaveBeenCalledWith(7);
   });
 
-  it("adopts the stored GPU encoder preference and saves a change", async () => {
-    vi.mocked(api.getGpuEncoderPreference).mockResolvedValueOnce("nvenc");
+  it("closes from its own button and on Escape", () => {
+    patchUi({ exportQueueOpen: true });
     render(<ExportPanel />);
-    const select = screen.getByRole("combobox") as HTMLSelectElement;
-    await waitFor(() => expect(select.value).toBe("nvenc"));
-    fireEvent.change(select, { target: { value: "cpu" } });
-    expect(select.value).toBe("cpu");
-    expect(api.setGpuEncoderPreference).toHaveBeenCalledWith("cpu");
-  });
-
-  it("keeps the default GPU preference when none is stored", async () => {
-    vi.mocked(api.getGpuEncoderPreference).mockResolvedValueOnce("");
-    render(<ExportPanel />);
-    await waitFor(() => expect(api.getGpuEncoderPreference).toHaveBeenCalled());
-    expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("auto");
-  });
-
-  it("starts an export asking for overwrite confirmation through window.confirm", async () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
-    render(<ExportPanel />);
-    fireEvent.click(screen.getByText(t("export"), { selector: "button" }));
-    expect(exportActiveSequence).toHaveBeenCalledTimes(1);
-    const ask = vi.mocked(exportActiveSequence).mock.calls[0][0];
-    expect(ask()).toBe(true);
-    expect(confirm).toHaveBeenCalledWith(t("exportOverwriteConfirm"));
-    confirm.mockRestore();
+    fireEvent.click(screen.getByLabelText(t("close")));
+    expect(uiStore.get().exportQueueOpen).toBe(false);
+    patchUi({ exportQueueOpen: true });
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(uiStore.get().exportQueueOpen).toBe(false);
   });
 
   it("exports the subtitles as SRT", () => {
@@ -155,5 +137,47 @@ describe("ExportPanel", () => {
     fireEvent.click(buttons[1]);
     expect(api.removeExport).toHaveBeenCalledWith(1);
     expect(api.removeExport).toHaveBeenCalledWith(2);
+  });
+});
+
+describe("export ETA and folder", () => {
+  beforeEach(() => {
+    exportsStore.set([]);
+    vi.clearAllMocks();
+  });
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("extrapolates the time left from progress and elapsed time", () => {
+    expect(remainingSecs(job({ percent: 25, elapsedSecs: 30 }))).toBeCloseTo(90);
+    expect(remainingSecs(job({ percent: 50, elapsedSecs: 30 }))).toBeCloseTo(30);
+  });
+
+  it("has no estimate before progress is steady or once finished", () => {
+    expect(remainingSecs(job({ percent: 1, elapsedSecs: 5 }))).toBeNull();
+    expect(remainingSecs(job({ percent: 100, elapsedSecs: 5 }))).toBeNull();
+    expect(remainingSecs(job({ percent: 40, elapsedSecs: null }))).toBeNull();
+  });
+
+  it("shows the estimate on a rendering job", () => {
+    exportsStore.set([
+      job({ status: { Rendering: { percent: 50 } }, percent: 50, elapsedSecs: 30 }),
+    ]);
+    render(<ExportPanel />);
+    expect(screen.getByText(new RegExp(t("etaRemaining")))).toBeTruthy();
+  });
+
+  it("opens the output folder of a finished job", () => {
+    exportsStore.set([job({ status: "Done", percent: 100 })]);
+    render(<ExportPanel />);
+    fireEvent.click(screen.getByText(t("openExportFolder")));
+    expect(api.revealInFolder).toHaveBeenCalledWith("C:/out/clip.mp4");
+  });
+
+  it("offers no folder button for a job that has not finished", () => {
+    exportsStore.set([job({ status: "Queued" })]);
+    render(<ExportPanel />);
+    expect(screen.queryByText(t("openExportFolder"))).toBeNull();
   });
 });

@@ -51,7 +51,7 @@ ifneq ($(shell sccache --version 2>/dev/null),)
   export RUSTC_WRAPPER ?= sccache
 endif
 
-.PHONY: coverage coverage-web build release test test-core test-bush test-xtask test-e2e bench bench-bush fmt fmt-check lint graph docs check clean desktop-install desktop-dev desktop-build test-desktop
+.PHONY: coverage coverage-web build release test test-core test-bush test-xtask test-e2e bench bench-bush fmt fmt-check lint graph docs check clean desktop-install lint-desktop lint-desktop-fix desktop-run desktop-dev desktop-build test-desktop
 
 # Debug build of the whole workspace (core, avbridge, ytbridge, desktop, xtask).
 build:
@@ -78,6 +78,26 @@ test-xtask:
 desktop-install:
 	cd apps/desktop && npm install
 
+# One-shot launcher for manual validation: installs npm dependencies on first use, then starts
+# the app (Vite + Tauri, hot reload). On Windows it also points bindgen at libclang (core's
+# whisper-rs needs it; override with LIBCLANG_PATH) and puts FFmpeg's DLLs on PATH when FFMPEG_DIR
+# is set. It goes through the Tauri CLI because a bare `cargo build -p desktop` embeds the
+# dev-server URL instead of the built frontend. It runs the optimized (non-LTO) profile from
+# FAST_TEST_ENV: a debug build aborts at startup on Windows (the debug CRT heap validator trips in
+# whisper.cpp's static initialization, see spec/architecture/tauri-migration.md), and a full LTO
+# release build takes minutes per change.
+ifeq ($(OS),Windows_NT)
+  LIBCLANG_PATH ?= C:/Program Files/LLVM/bin
+  export LIBCLANG_PATH
+  ifneq ($(FFMPEG_DIR),)
+    export PATH := $(FFMPEG_DIR)/bin;$(PATH)
+  endif
+endif
+
+desktop-run:
+	@test -d apps/desktop/node_modules || (cd apps/desktop && npm install)
+	cd apps/desktop && $(FAST_TEST_ENV) CARGO_TARGET_DIR="$(CURDIR)/target/fast" npm run tauri dev -- --release
+
 # Runs Vite's dev server and the Tauri app with hot reload.
 desktop-dev:
 	cd apps/desktop && npm run tauri dev
@@ -93,6 +113,13 @@ desktop-build:
 # Measured: touching one test file and re-running `cargo test -p desktop --no-run` takes ~9 s here
 # instead of ~6.5 min.
 FAST_TEST_ENV = CARGO_PROFILE_RELEASE_LTO=false CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 	CARGO_PROFILE_RELEASE_OPT_LEVEL=1 CARGO_PROFILE_RELEASE_PANIC=unwind 	CARGO_PROFILE_RELEASE_INCREMENTAL=true CARGO_TARGET_DIR=target/fast
+
+# ESLint and Prettier over the React frontend; `lint-desktop-fix` applies the safe fixes.
+lint-desktop:
+	cd apps/desktop && npm run lint && npm run format:check
+
+lint-desktop-fix:
+	cd apps/desktop && npm run lint:fix && npm run format
 
 # Frontend typecheck + unit tests, then the Rust shell's own tests.
 test-desktop:

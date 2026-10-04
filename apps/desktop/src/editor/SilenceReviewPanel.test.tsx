@@ -3,13 +3,15 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n";
 
-vi.mock("../ipc", () => ({
-  api: {
-    detectSilenceGapsForClip: vi.fn(),
-    applySilenceGaps: vi.fn().mockResolvedValue(undefined),
-    seek: vi.fn().mockResolvedValue(undefined),
-  },
-}));
+vi.mock("../ipc", () => {
+  return {
+    api: {
+      detectSilenceGapsForClip: vi.fn(),
+      applySilenceGaps: vi.fn().mockResolvedValue(undefined),
+      seek: vi.fn().mockResolvedValue(undefined),
+    },
+  };
+});
 
 const { SilenceReviewPanel } = await import("./SilenceReviewPanel");
 const { api } = await import("../ipc");
@@ -21,7 +23,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   patchUi({ selectedClipIds: [], error: null });
 });
-afterEach(() => cleanup());
+afterEach(() => {
+  return cleanup();
+});
 
 describe("silence review panel", () => {
   it("asks for a clip first when none is selected", () => {
@@ -36,7 +40,9 @@ describe("silence review panel", () => {
     detect.mockRejectedValueOnce(new Error("scan failed"));
     render(<SilenceReviewPanel />);
     fireEvent.click(screen.getByText(t("silenceReview")));
-    await waitFor(() => expect(uiStore.get().error).toContain("scan failed"));
+    await waitFor(() => {
+      return expect(uiStore.get().error).toContain("scan failed");
+    });
     expect(screen.queryByRole("heading")).toBeNull();
   });
 
@@ -55,7 +61,11 @@ describe("silence review panel", () => {
     expect(detect).toHaveBeenCalledWith(5);
 
     const boxes = screen.getAllByRole("checkbox") as HTMLInputElement[];
-    expect(boxes.map((box) => box.checked)).toEqual([true, true]);
+    expect(
+      boxes.map((box) => {
+        return box.checked;
+      }),
+    ).toEqual([true, true]);
     expect(screen.getByText(/1\.5s/)).toBeTruthy();
 
     fireEvent.click(boxes[1]);
@@ -71,7 +81,7 @@ describe("silence review panel", () => {
     fireEvent.click(screen.getByText(t("silenceReview")));
     await screen.findByRole("heading");
 
-    fireEvent.click(screen.getByText("▶"));
+    fireEvent.click(screen.getByLabelText(t("goToGap")));
     expect(api.seek).toHaveBeenCalledWith(4);
 
     fireEvent.click(screen.getByRole("checkbox"));
