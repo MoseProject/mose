@@ -11,6 +11,10 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Dependency compilation is cached by sccache (GitHub Actions cache backend), so a Cargo.lock
+  # change only rebuilds the crates that changed instead of invalidating the whole target cache.
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: sccache
   # FFmpeg release pinning for supply-chain security. These must be updated together when
   # upgrading FFmpeg. See .github/FFMPEG_UPDATE.md for detailed instructions.
   FFMPEG_RELEASE_TAG: "autobuild-2026-10-01-13-06"
@@ -34,6 +38,9 @@ jobs:
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
 
       - name: Cache FFmpeg dev build
         id: ffmpeg-cache
@@ -134,6 +141,9 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+
       - name: Cache FFmpeg dev build
         id: ffmpeg-cache
         uses: actions/cache@v6
@@ -230,6 +240,9 @@ jobs:
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
 
       - name: Export FFMPEG_DIR
         run: |
