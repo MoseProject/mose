@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createStore, patchUi, run, uiStore, useStore } from "./store";
+import { createStore, describeError, patchUi, run, uiStore, useStore } from "./store";
+import { t } from "./i18n";
 
 afterEach(() => {
   return cleanup();
@@ -69,6 +70,23 @@ describe("ui state helpers", () => {
   });
 });
 
+describe("describeError", () => {
+  it("translates the codes the backend uses instead of a sentence", () => {
+    expect(describeError("assetInUse")).toBe(t("assetInUse"));
+    expect(describeError("pathMissing")).toBe(t("pathMissing"));
+  });
+
+  it("passes any other error through as the backend wrote it", () => {
+    expect(describeError("clip not found")).toBe("clip not found");
+    expect(describeError(new Error("boom"))).toContain("boom");
+  });
+
+  it("shows a translated code in the banner when a call fails with it", async () => {
+    await run(Promise.reject("assetInUse"));
+    expect(uiStore.get().error).toBe(t("assetInUse"));
+  });
+});
+
 describe("connect", () => {
   type Handler = (payload: never) => void;
   const handlers = new Map<string, Handler>();
@@ -117,6 +135,7 @@ describe("connect", () => {
         onSession: subscribe("session"),
         onPreview: subscribe("preview"),
         onExports: subscribe("exports"),
+        onImportFailed: subscribe("importFailed"),
         onSceneCut: subscribe("sceneCut"),
         onMotionTrack: subscribe("motionTrack"),
         onAutoReframe: subscribe("autoReframe"),
@@ -147,6 +166,12 @@ describe("connect", () => {
     await store.connect();
     expect(api.getSession).toHaveBeenCalledTimes(1);
     i18n.setLocale("pt-BR");
+  });
+
+  it("tells the user which file could not be imported", async () => {
+    const { store, i18n } = await load();
+    handlers.get("importFailed")!("broken.mp4" as never);
+    expect(store.uiStore.get().error).toBe(i18n.t("importFailed") + ": broken.mp4");
   });
 
   it("forwards preview ticks and export lists to their stores", async () => {
