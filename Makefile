@@ -51,7 +51,7 @@ ifneq ($(shell sccache --version 2>/dev/null),)
   export RUSTC_WRAPPER ?= sccache
 endif
 
-.PHONY: coverage coverage-web build release test test-core test-bush test-xtask test-e2e bench bench-bush fmt fmt-check lint graph docs check clean desktop-install desktop-run desktop-dev desktop-build test-desktop
+.PHONY: coverage coverage-web build release test test-core test-bush test-xtask test-e2e bench bench-bush fmt fmt-check lint graph docs check clean desktop-install lint-desktop lint-desktop-fix desktop-run desktop-dev desktop-build test-desktop
 
 # Debug build of the whole workspace (core, avbridge, ytbridge, desktop, xtask).
 build:
@@ -113,6 +113,13 @@ desktop-build:
 # Measured: touching one test file and re-running `cargo test -p desktop --no-run` takes ~9 s here
 # instead of ~6.5 min.
 FAST_TEST_ENV = CARGO_PROFILE_RELEASE_LTO=false CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 	CARGO_PROFILE_RELEASE_OPT_LEVEL=1 CARGO_PROFILE_RELEASE_PANIC=unwind 	CARGO_PROFILE_RELEASE_INCREMENTAL=true CARGO_TARGET_DIR=target/fast
+
+# ESLint and Prettier over the React frontend; `lint-desktop-fix` applies the safe fixes.
+lint-desktop:
+	cd apps/desktop && npm run lint && npm run format:check
+
+lint-desktop-fix:
+	cd apps/desktop && npm run lint:fix && npm run format
 
 # Frontend typecheck + unit tests, then the Rust shell's own tests.
 test-desktop:
