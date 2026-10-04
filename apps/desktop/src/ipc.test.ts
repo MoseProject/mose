@@ -33,7 +33,7 @@ function registeredCommands(): Set<string> {
   const main = readFileSync(resolve(__dirname, "../src-tauri/src/handler.rs"), "utf8");
   const block = main.slice(main.indexOf("generate_handler!["));
   const body = block.slice(0, block.indexOf("])"));
-  const names = [...body.matchAll(/commands::(?:\w+::)*(\w+)/g)].map((match) => {
+  const names = [...body.matchAll(/\$crate::(?:\w+::)*(\w+)/g)].map((match) => {
     return match[1];
   });
   return new Set(names);
@@ -206,5 +206,17 @@ describe("media urls", () => {
     expect(windows.frameUrl(3)).toBe("http://oca.localhost/frame/3");
     expect(windows.thumbnailUrl(9)).toBe("http://oca.localhost/thumb/9");
     vi.unstubAllGlobals();
+  });
+});
+
+describe("window close", () => {
+  it("passes the reasons of a held-back close to the handler and quits on request", async () => {
+    const handler = vi.fn();
+    await ipc.onCloseRequested(handler);
+    listeners.get(ipc.events.closeRequested)!({ payload: { dirty: true, exporting: false } });
+    expect(handler).toHaveBeenCalledWith({ dirty: true, exporting: false });
+
+    await ipc.api.quitApp();
+    expect(invoke).toHaveBeenLastCalledWith("quit_app");
   });
 });

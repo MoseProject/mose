@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "./i18n";
-import { toastStore } from "./notifications";
+import { answerConfirm, confirmStore, toastStore } from "./notifications";
 import { exportsStore, sessionStore, uiStore } from "./store";
 import { makeSession } from "./testSupport";
 import type { SessionView } from "./types";
@@ -49,13 +49,23 @@ vi.mock("./editor/ExportDialog", () => {
     },
   };
 });
+let closeHandler: (request: { dirty: boolean; exporting: boolean }) => void = () => {};
+const stopListeningToClose = vi.fn();
+
 vi.mock("./ipc", () => {
   return {
     api: {
       undo: vi.fn().mockResolvedValue(undefined),
       redo: vi.fn().mockResolvedValue(undefined),
       saveProject: vi.fn().mockResolvedValue(undefined),
+      quitApp: vi.fn().mockResolvedValue(undefined),
     },
+    onCloseRequested: vi.fn(
+      (handler: (request: { dirty: boolean; exporting: boolean }) => void) => {
+        closeHandler = handler;
+        return Promise.resolve(stopListeningToClose);
+      },
+    ),
     exportActiveSequence: vi.fn().mockResolvedValue(undefined),
   };
 });
@@ -287,5 +297,49 @@ describe("export queue popover", () => {
     expect(uiStore.get().exportQueueOpen).toBe(true);
     expect(screen.getByRole("dialog", { name: t("exportQueue") })).toBeTruthy();
     exportsStore.set([]);
+  });
+});
+
+describe("closing the window", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    confirmStore.set(null);
+  });
+
+  it("asks before quitting when changes would be lost, and quits when confirmed", async () => {
+    render(<App />);
+    act(() => {
+      closeHandler({ dirty: true, exporting: false });
+    });
+    const request = confirmStore.get()!;
+    expect(request.title).toBe(t("confirmQuitTitle"));
+    expect(request.message).toBe(t("confirmQuitDirty"));
+    expect(api.quitApp).not.toHaveBeenCalled();
+
+    await act(async () => {
+      answerConfirm(true);
+    });
+    expect(api.quitApp).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays open when the question is dismissed", async () => {
+    render(<App />);
+    act(() => {
+      closeHandler({ dirty: true, exporting: true });
+    });
+    expect(confirmStore.get()!.message).toBe(
+      t("confirmQuitDirty") + " " + t("confirmQuitExporting"),
+    );
+    await act(async () => {
+      answerConfirm(false);
+    });
+    expect(api.quitApp).not.toHaveBeenCalled();
+  });
+
+  it("stops listening when the app goes away", async () => {
+    const { unmount } = render(<App />);
+    unmount();
+    await Promise.resolve();
+    expect(stopListeningToClose).toHaveBeenCalled();
   });
 });
