@@ -8,6 +8,7 @@
 from selenium.webdriver.common.by import By
 
 from conftest import poll_until
+from helpers import goto_editor, invoke
 
 NAV_TESTID_TO_SCREEN_TESTID = {
     "nav-prefs": "screen-prefs",
@@ -29,11 +30,24 @@ def test_navigating_topbar_destinations_updates_the_screen(oca_driver):
         assert found, f"no [data-testid={screen_testid!r}] after clicking [data-testid={nav_testid!r}]"
 
 
-def test_new_project_opens_the_editor_screen(oca_driver):
+def test_new_project_asks_for_a_name_first(oca_driver):
+    # The save dialog that follows is native, which WebDriver cannot drive, so the flow is
+    # checked up to the name dialog and the editor is entered through the command itself.
     oca_driver.find_element(By.CSS_SELECTOR, '[data-testid="new-project"]').click()
+
+    found = poll_until(
+        lambda: oca_driver.find_elements(By.CSS_SELECTOR, '[role="dialog"] input[type="text"]'),
+        timeout_secs=5.0,
+    )
+    assert found, "no name dialog after clicking New project"
+
+
+def test_the_editor_opens_for_a_project_created_through_the_command(oca_driver):
+    invoke(oca_driver, "new_project", {"name": "E2E", "sequenceName": "Seq"})
+    goto_editor(oca_driver)
 
     found = poll_until(
         lambda: oca_driver.find_elements(By.CSS_SELECTOR, '[data-testid="screen-editor"]'),
         timeout_secs=5.0,
     )
-    assert found, "no [data-testid=screen-editor] after creating a new project"
+    assert found, "no [data-testid=screen-editor] after creating a project"
