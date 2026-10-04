@@ -526,6 +526,10 @@ const strings = {
   confirmKeepBoth: { "pt-BR": "Salvar com outro nome", en: "Save under another name" },
   etaRemaining: { "pt-BR": "restantes", en: "left" },
   openExportFolder: { "pt-BR": "Mostrar na pasta", en: "Show in folder" },
+  importFailed: {
+    "pt-BR": "Não foi possível importar o arquivo",
+    en: "Could not import the file",
+  },
   removeFromLibrary: { "pt-BR": "Remover da biblioteca", en: "Remove from library" },
   removeFromLibraryTitle: { "pt-BR": "Remover da biblioteca?", en: "Remove from library?" },
   removeFromLibraryMessage: {

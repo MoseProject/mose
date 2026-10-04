@@ -9,6 +9,7 @@ import {
   api,
   onAutoReframe,
   onExports,
+  onImportFailed,
   onMatteGeneration,
   onMotionTrack,
   onPreview,
@@ -203,6 +204,9 @@ export async function connect() {
   });
   await onExports((jobs) => {
     return exportsStore.set(jobs);
+  });
+  await onImportFailed((fileName) => {
+    patchUi({ error: t("importFailed") + ": " + fileName });
   });
   await onSceneCut((count) => {
     if (count === 0) {

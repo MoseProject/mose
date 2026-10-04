@@ -49,6 +49,7 @@ export const events = {
   privacyBlur: "privacy-blur-event",
   tts: "tts-event",
   watchFolder: "watch-folder-event",
+  importFailed: "import-failed",
   youtubeDownload: "youtube-download-event",
   updateCheck: "update-check-event",
 } as const;
@@ -112,6 +113,12 @@ export function onPrivacyBlur(handler: (event: PrivacyBlurEvent) => void): Promi
 export function onTts(handler: (event: TtsEvent) => void): Promise<UnlistenFn> {
   return listen<TtsEvent>(events.tts, (e) => {
     return handler(e.payload);
+  });
+}
+
+export function onImportFailed(handler: (fileName: string) => void): Promise<UnlistenFn> {
+  return listen<{ fileName: string }>(events.importFailed, (e) => {
+    return handler(e.payload.fileName);
   });
 }
 
