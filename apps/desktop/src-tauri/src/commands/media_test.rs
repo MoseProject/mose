@@ -23,6 +23,29 @@ fn favoriting_toggles_and_ignores_unknown_assets() {
 }
 
 #[test]
+fn removing_media_is_refused_while_a_clip_uses_it() {
+    let h = harness();
+    h.session().project.media_library.push(video_asset(1, 5.0));
+    h.session().project.media_library.push(video_asset(2, 5.0));
+    crate::commands::timeline::add_asset_to_timeline(h.handle(), 1, None, None).unwrap();
+
+    assert_eq!(remove_asset(h.handle(), 1), Err("assetInUse".to_string()));
+    assert_eq!(h.session().project.media_library.len(), 2);
+
+    remove_asset(h.handle(), 2).unwrap();
+    let ids: Vec<u64> = h
+        .session()
+        .project
+        .media_library
+        .iter()
+        .map(|a| a.id)
+        .collect();
+    assert_eq!(ids, vec![1]);
+    assert!(h.session().dirty);
+    remove_asset(h.handle(), 404).unwrap();
+}
+
+#[test]
 fn an_imported_video_gets_its_loudness_proxy_and_waveform() {
     let h = saved_harness();
     import_media(h.handle(), vec![fixture("video.mp4").display().to_string()]);

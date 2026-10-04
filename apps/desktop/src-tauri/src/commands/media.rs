@@ -53,6 +53,21 @@ pub fn toggle_favorite<R: Runtime>(app: AppHandle<R>, asset_id: u64) -> Result<(
     })
 }
 
+/// Removes an asset from the media library. Refused with `assetInUse` while any clip still
+/// plays it, so the timeline never ends up with a dangling reference.
+#[tauri::command]
+pub fn remove_asset<R: Runtime>(app: AppHandle<R>, asset_id: u64) -> Result<(), String> {
+    with_session(&app, |session| {
+        if session.project.asset_in_use(asset_id) {
+            return Err("assetInUse".to_string());
+        }
+        if session.project.remove_asset(asset_id) {
+            session.dirty = true;
+        }
+        Ok(())
+    })
+}
+
 fn import_paths<R: Runtime>(app: &AppHandle<R>, paths: Vec<PathBuf>) {
     let (epoch, proxy_dir) = {
         let state = app.state::<AppState>();
