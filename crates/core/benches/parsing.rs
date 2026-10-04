@@ -214,6 +214,17 @@ fn bench_project_ocproj_round_trip(c: &mut Criterion) {
             format!("to_ocproj_bytes/{clip_count}_clips_per_track"),
             |b| b.iter(|| to_ocproj_bytes(black_box(&project)).unwrap()),
         );
+        group.bench_function(format!("msgpack_only/{clip_count}_clips_per_track"), |b| {
+            b.iter(|| {
+                let mut out = Vec::new();
+                serde::Serialize::serialize(
+                    black_box(&project),
+                    &mut rmp_serde::Serializer::new(&mut out).with_struct_map(),
+                )
+                .unwrap();
+                out
+            })
+        });
         group.bench_function(
             format!("from_ocproj_bytes/{clip_count}_clips_per_track"),
             |b| b.iter(|| from_ocproj_bytes::<Project>(black_box(&bytes)).unwrap()),

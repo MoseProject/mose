@@ -137,6 +137,52 @@ fn new_engine(canvas: (u32, u32)) -> Option<Engine> {
         .ok()
 }
 
+/// Whether two projects look the same in the preview: the same media and the same tracks in every
+/// sequence (compound clips read the others). Everything else (names, export settings, layout,
+/// the stored playhead) is destructured and ignored on purpose, so a new field in these structs
+/// has to be placed on one side or the other here.
+fn same_preview_content(a: &avcore::Project, b: &avcore::Project) -> bool {
+    let avcore::Project {
+        id,
+        name: _,
+        last_edited: _,
+        summary: _,
+        media_library,
+        sequences,
+        active_sequence,
+        file_path,
+        panel_layout: _,
+        smart_bins: _,
+        recent_asset_ids: _,
+    } = a;
+    if *id != b.id
+        || *active_sequence != b.active_sequence
+        || *file_path != b.file_path
+        || *media_library != b.media_library
+        || sequences.len() != b.sequences.len()
+    {
+        return false;
+    }
+    sequences.iter().zip(&b.sequences).all(|(x, y)| {
+        let avcore::Sequence {
+            id,
+            name: _,
+            timeline,
+            export_settings: _,
+        } = x;
+        let avcore::Timeline {
+            tracks,
+            playhead_secs: _,
+            markers,
+            multicam_groups,
+        } = timeline;
+        *id == y.id
+            && *tracks == y.timeline.tracks
+            && *markers == y.timeline.markers
+            && *multicam_groups == y.timeline.multicam_groups
+    })
+}
+
 pub fn run<R: Runtime>(
     rx: mpsc::Receiver<Command>,
     app: AppHandle<R>,
@@ -164,6 +210,8 @@ pub(crate) fn run_with_audio<R: Runtime>(
         multicam_groups: Vec::new(),
     };
     let mut media: Vec<MediaAsset> = Vec::new();
+    // The project the scene was last built from.
+    let mut shown: Option<Arc<avcore::Project>> = None;
     let mut nested_cache: HashMap<u64, NestedSequenceCache> = HashMap::new();
     let mut player: Option<Player> = None;
     let mut canvas = DEFAULT_CANVAS;
@@ -206,7 +254,17 @@ pub(crate) fn run_with_audio<R: Runtime>(
         for command in commands {
             match command {
                 Command::Content { project: next } => {
+                    // Renames, export settings, panel layout and a playhead that only caught up
+                    // change nothing the preview shows: rebuilding the scene for them would
+                    // re-render the frame and restart the decoders' bookkeeping for no reason.
+                    if shown
+                        .as_ref()
+                        .is_some_and(|shown| same_preview_content(shown, &next))
+                    {
+                        continue;
+                    }
                     timeline = next.timeline().clone();
+                    shown = Some(Arc::clone(&next));
                     media = next.media_library.clone();
                     let cache_dir = cache_dir_for_project(&next);
                     match materialize_nested_sequences(
