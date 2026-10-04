@@ -206,13 +206,25 @@ describe("text inspector", () => {
     expect(lastPatch()).toEqual({ posY: 0.75 });
   });
 
-  it("opens only the keyframe sections that already have keyframes and adds new ones", async () => {
+  it("groups the controls and opens the keyframes only when some exist", async () => {
     const key = [{ time_fraction: 0.5, value: 0.4 }];
     const { container } = await loaded({ scale_keyframes: key });
-    const open = [...container.querySelectorAll("details")].map((d) => {
-      return d.open;
-    });
-    expect(open).toEqual([false, false, true, false, false]);
+    const openOf = (id: string) => {
+      return (container.querySelector(`[data-testid="${id}"]`) as HTMLDetailsElement).open;
+    };
+    expect(openOf("section-text-typography")).toBe(true);
+    expect(openOf("section-text-position")).toBe(true);
+    expect(openOf("section-text-timing")).toBe(true);
+    expect(openOf("section-text-background")).toBe(false);
+    expect(openOf("section-text-keyframes")).toBe(true);
+    cleanup();
+    const bare = await loaded();
+    expect(
+      (bare.container.querySelector('[data-testid="section-text-keyframes"]') as HTMLDetailsElement)
+        .open,
+    ).toBe(false);
+    cleanup();
+    await loaded({ scale_keyframes: key });
 
     const adds = screen.getAllByText(t("addKeyframe"));
     expect(adds).toHaveLength(5);
