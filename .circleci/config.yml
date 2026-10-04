@@ -32,6 +32,12 @@ parameters:
   cargo-nextest-linux64-sha256:
     type: string
     default: "66786b9abe23920d022a182d1416b1bbc8130dd4872a9553d76985a1708dcd1e"
+  sccache-version:
+    type: string
+    default: "0.17.0"
+  sccache-linux64-sha256:
+    type: string
+    default: "67c4a96dd237c1f518f6b36083f270f9976d516f1e57fce891755ea782e50006"
   # Keep the toolchain explicit rather than floating on "stable". The Ubuntu 24.04 base image
   # is selected separately below because ONNX Runtime's prebuilt static archive requires a
   # newer glibc/libstdc++ than the Ubuntu 22.04-based cimg/rust image provides.
@@ -101,6 +107,48 @@ commands:
             fi
             echo "Using LIBCLANG_PATH=$libclang_path"
             echo "export LIBCLANG_PATH=$libclang_path" >> "$BASH_ENV"
+
+      # sccache caches dependency compilation across runs (a changed Cargo.lock only rebuilds the
+      # crates that changed). Its compiled-output store is cached below instead of `target/`,
+      # which the comment above explains is too big to be worth transferring.
+      - restore_cache:
+          keys:
+            - v1-sccache-bin-<< pipeline.parameters.sccache-version >>
+
+      - run:
+          name: Download and verify sccache (prebuilt binary)
+          command: |
+            mkdir -p cargo-tools
+            if [ ! -x cargo-tools/sccache ]; then
+              sccache_version="<< pipeline.parameters.sccache-version >>"
+              sccache_sha256="<< pipeline.parameters.sccache-linux64-sha256 >>"
+              dir="sccache-v${sccache_version}-x86_64-unknown-linux-musl"
+              curl -fsSL -o sccache.tar.gz "https://github.com/mozilla/sccache/releases/download/v${sccache_version}/${dir}.tar.gz"
+              actual=$(sha256sum sccache.tar.gz | awk '{print $1}')
+              if [ "$actual" != "$sccache_sha256" ]; then
+                echo "sccache checksum mismatch! Expected: $sccache_sha256, Got: $actual" >&2
+                exit 1
+              fi
+              tar -xzf sccache.tar.gz -C cargo-tools --strip-components=1 "${dir}/sccache"
+              chmod +x cargo-tools/sccache
+            fi
+            {
+              echo "export PATH=$(pwd)/cargo-tools:\$PATH"
+              echo "export RUSTC_WRAPPER=$(pwd)/cargo-tools/sccache"
+              echo "export SCCACHE_DIR=$HOME/.cache/sccache"
+              echo "export SCCACHE_CACHE_SIZE=2G"
+            } >> "$BASH_ENV"
+
+      - save_cache:
+          key: v1-sccache-bin-<< pipeline.parameters.sccache-version >>
+          paths:
+            - cargo-tools/sccache
+
+      - restore_cache:
+          name: Restore sccache objects
+          keys:
+            - v1-sccache-objects-{{ .Environment.CIRCLE_JOB }}-{{ checksum "Cargo.lock" }}
+            - v1-sccache-objects-{{ .Environment.CIRCLE_JOB }}-
 
       - restore_cache:
           name: Restore Cargo registry
@@ -287,6 +335,12 @@ jobs:
           paths:
             - ~/.cargo/registry
 
+      - save_cache:
+          name: Save sccache objects
+          key: v1-sccache-objects-{{ .Environment.CIRCLE_JOB }}-{{ checksum "Cargo.lock" }}
+          paths:
+            - ~/.cache/sccache
+
   coverage:
     executor: linux
     retention:
@@ -311,6 +365,12 @@ jobs:
           key: v3-cargo-registry-{{ checksum "Cargo.lock" }}
           paths:
             - ~/.cargo/registry
+
+      - save_cache:
+          name: Save sccache objects
+          key: v1-sccache-objects-{{ .Environment.CIRCLE_JOB }}-{{ checksum "Cargo.lock" }}
+          paths:
+            - ~/.cache/sccache
 
       - codecov/upload:
           disable_search: true
