@@ -137,3 +137,19 @@ fn two_decoded_frames_produce_keyframes_at_their_time_fractions() {
     assert_eq!(keyframes.len(), 2);
     assert_eq!(keyframes[1].time_fraction, 1.0);
 }
+
+#[test]
+fn tracking_a_clip_with_no_footage_publishes_nothing() {
+    let h = harness();
+    let (_, clip) = h.add_fixture_clip();
+    {
+        let mut session = h.session();
+        let c = session.project.timeline_mut().clip_mut(clip).unwrap();
+        c.source_out_secs = c.source_in_secs;
+    }
+    let events = collect_events(&h);
+    let before = h.count_session_events();
+    motion_track_clip(h.handle(), clip, 0.5, 0.5, 0.2, 0.2, 0.1).unwrap();
+    assert_eq!(first_event(&events), "0");
+    assert_eq!(before.load(std::sync::atomic::Ordering::SeqCst), 0);
+}

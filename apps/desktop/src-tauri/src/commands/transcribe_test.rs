@@ -206,3 +206,21 @@ fn seeking_to_a_transcript_word_moves_the_playhead_through_the_clip_mapping() {
         .any(|c| matches!(c, crate::preview_engine::Command::Seek(secs) if *secs == 2.0)));
     assert_eq!(seek_to_transcript_word(h.handle(), 999, 1.0), Ok(false));
 }
+
+#[test]
+fn a_transcript_that_cannot_be_saved_still_becomes_text_clips() {
+    let h = ready();
+    let blocker = h.dir.join("a-file");
+    std::fs::write(&blocker, b"x").unwrap();
+    h.session().project.file_path = Some(blocker.join("inside").join("project.ocproj"));
+    let events = collect_events(&h);
+    *h.services.transcript.lock().unwrap() = Some(Ok(TranscribeOutcome::Completed(vec![segment(
+        0.0,
+        1.0,
+        "hello",
+        Vec::new(),
+    )])));
+    transcribe_asset(h.handle(), 1).unwrap();
+    wait_for(&events, "\"type\":\"done\"");
+    assert_eq!(h.session().project.timeline().tracks[0].text_clips.len(), 1);
+}
