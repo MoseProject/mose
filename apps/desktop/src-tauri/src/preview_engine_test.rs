@@ -241,3 +241,93 @@ fn a_compound_clip_whose_nested_media_is_gone_still_previews_what_it_can() {
     engine.set_content(h.session().project.clone());
     wait_for_tick(&ticks, "a tick", |_| true);
 }
+
+/// An audio output that keeps time on the wall clock and records what the loop asked of it.
+struct FakeAudio {
+    origin: Instant,
+    anchor: f64,
+}
+
+static AUDIO_LOG: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
+
+fn log(entry: &'static str) {
+    AUDIO_LOG.lock().unwrap().push(entry);
+}
+
+impl crate::bush_adapter::AudioOutput for FakeAudio {
+    fn seek_to(&mut self, secs: f64) {
+        log("seek_to");
+        self.origin = Instant::now();
+        self.anchor = secs;
+    }
+
+    fn peaks(&self) -> (f32, f32) {
+        (0.4, 0.6)
+    }
+
+    fn position_secs(&self) -> f64 {
+        self.anchor + self.origin.elapsed().as_secs_f64()
+    }
+
+    fn pump(&mut self) {
+        log("pump");
+    }
+
+    fn clear(&mut self) {
+        log("clear");
+    }
+
+    fn set_scene(&mut self, _scene: bush::SceneSnapshot) {
+        log("set_scene");
+    }
+
+    fn underflow_callbacks(&self) -> u64 {
+        0
+    }
+}
+
+fn open_fake_audio(
+    _scene: &bush::SceneSnapshot,
+) -> Option<Box<dyn crate::bush_adapter::AudioOutput>> {
+    Some(Box::new(FakeAudio {
+        origin: Instant::now(),
+        anchor: 0.0,
+    }))
+}
+
+#[test]
+fn playback_follows_the_audio_clock_and_tells_the_output_what_happens() {
+    let h = harness();
+    let ticks = collect_ticks(&h);
+    let project = repeated_fixture_project(&h, 3);
+    let engine = PreviewEngine::spawn_with(h.handle(), |rx, app, latest, playhead| {
+        crate::bush_adapter::run_with_audio(rx, app, latest, playhead, open_fake_audio)
+    });
+    engine.set_content(project.clone());
+    wait_for_tick(&ticks, "the first frame", |t| {
+        t["frameSeq"].as_u64().unwrap_or(0) > 0
+    });
+
+    engine.set_playing(true);
+    wait_for_tick(&ticks, "the level meter", |t| {
+        t["playing"] == true && t["peakL"].as_f64().unwrap_or(0.0) > 0.3
+    });
+    // A scene change while playing reaches the output, and a seek restarts its queue.
+    crate::commands::timeline::add_asset_to_timeline(h.handle(), 1, None, None).unwrap();
+    engine.set_content(h.session().project.clone());
+    engine.seek(0.5);
+    engine.set_playing(false);
+    wait_for_tick(&ticks, "the pause", |t| t["playing"] == false);
+    engine.set_playing(true);
+    wait_for_tick(&ticks, "the end of the timeline", |t| {
+        t["playing"] == false && t["playheadSecs"].as_f64().unwrap_or(0.0) > 3.0
+    });
+
+    let seen = AUDIO_LOG.lock().unwrap().clone();
+    for entry in ["seek_to", "pump", "clear", "set_scene"] {
+        assert!(
+            seen.contains(&entry),
+            "the output was never asked to {entry}: {seen:?}"
+        );
+    }
+}
