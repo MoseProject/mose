@@ -3,6 +3,8 @@
 // own view types (`SessionView`, `PreviewTick`, `ExportJobView`) are camelCase. Only the fields
 // the webview reads are declared -- extra fields are ignored at runtime.
 
+import type { PatchOp } from "./sessionPatch";
+
 export type MediaKind = "Video" | "Audio";
 export type TrackKind = "Video" | "Audio" | "Text" | "Shape";
 export interface Keyframe<T> {
@@ -305,11 +307,24 @@ export interface PanelLayout {
 }
 
 export interface SessionView {
+  /** Revision of the update stream this snapshot is current as of. */
+  rev?: number;
   project: Project;
   filePath: string | null;
   canUndo: boolean;
   canRedo: boolean;
   dirty: boolean;
+}
+
+/** A partial session update: `ops` turn the project at revision `base` into revision `rev`. */
+export interface SessionPatch {
+  base: number;
+  rev: number;
+  filePath: string | null;
+  canUndo: boolean;
+  canRedo: boolean;
+  dirty: boolean;
+  ops: PatchOp[];
 }
 
 export interface PrefsView {

@@ -20,6 +20,7 @@ import type {
   PrefsView,
   PrivacyBlurEvent,
   RecentProject,
+  SessionPatch,
   SessionView,
   ShapeClipPatch,
   TextClipPatch,
@@ -39,6 +40,7 @@ import type {
 
 export const events = {
   session: "session-changed",
+  sessionPatch: "session-patch",
   preview: "preview-tick",
   exports: "export-jobs",
   transcribe: "transcribe-event",
@@ -59,6 +61,12 @@ export const events = {
 
 export function onSession(handler: (view: SessionView) => void): Promise<UnlistenFn> {
   return listen<SessionView>(events.session, (e) => {
+    return handler(e.payload);
+  });
+}
+
+export function onSessionPatch(handler: (patch: SessionPatch) => void): Promise<UnlistenFn> {
+  return listen<SessionPatch>(events.sessionPatch, (e) => {
     return handler(e.payload);
   });
 }
