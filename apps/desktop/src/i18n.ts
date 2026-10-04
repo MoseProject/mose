@@ -551,6 +551,10 @@ const strings = {
   pathWrongKind: { "pt-BR": "Tipo de caminho inesperado", en: "Unexpected kind of path" },
   settingsSaved: { "pt-BR": "Salvo", en: "Saved" },
   trimTools: { "pt-BR": "Ferramentas de aparo", en: "Trim tools" },
+  monitorPanHint: {
+    "pt-BR": "Arraste para mover a imagem. Clique duplo centraliza.",
+    en: "Drag to move the image. Double-click to center it.",
+  },
   monitorZoom: { "pt-BR": "Zoom do monitor", en: "Monitor zoom" },
   zoomFitShort: { "pt-BR": "Ajustar", en: "Fit" },
   moreSources: { "pt-BR": "Mais fontes de mídia", en: "More media sources" },

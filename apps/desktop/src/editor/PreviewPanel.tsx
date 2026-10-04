@@ -48,6 +48,22 @@ type DragState =
       startScaleY: number;
     };
 
+/** Keeps a panned canvas from leaving the monitor entirely: at least a margin of it stays in
+ *  view on every side. Pure, for testing. */
+export function clampPan(
+  pan: { x: number; y: number },
+  canvas: { width: number; height: number },
+  monitor: { width: number; height: number },
+): { x: number; y: number } {
+  const margin = 48;
+  const limitX = Math.max(0, (canvas.width + monitor.width) / 2 - margin);
+  const limitY = Math.max(0, (canvas.height + monitor.height) / 2 - margin);
+  return {
+    x: Math.min(limitX, Math.max(-limitX, pan.x)),
+    y: Math.min(limitY, Math.max(-limitY, pan.y)),
+  };
+}
+
 export function PreviewPanel() {
   const tick = useStore(previewStore);
   const shuttleState = useStore(shuttleStore);
@@ -59,6 +75,13 @@ export function PreviewPanel() {
   const [drag, setDrag] = useState<DragState | null>(null);
   const [ghostPos, setGhostPos] = useState<Position | null>(null);
   const [ghostScale, setGhostScale] = useState<{ x: number; y: number } | null>(null);
+  // Pan of the zoomed canvas, kept with the zoom it belongs to so changing zoom recenters.
+  const [panState, setPanState] = useState({ zoom: "fit" as string, x: 0, y: 0 });
+  const panDrag = useRef<{ x: number; y: number; startX: number; startY: number } | null>(null);
+  if (panState.zoom !== ui.monitorZoom) {
+    setPanState({ zoom: ui.monitorZoom, x: 0, y: 0 });
+  }
+  const pan = { x: panState.x, y: panState.y };
 
   useEffect(() => {
     const el = monitorRef.current;
@@ -117,15 +140,23 @@ export function PreviewPanel() {
     : "Original";
   const [canvasW, canvasH] = aspectRatioDims(aspectRatio, asset?.resolution ?? [1920, 1080]);
   const zoomScale = ui.monitorZoom === "fit" ? null : Number(ui.monitorZoom) / 100;
+  const panned = clampPan(
+    pan,
+    { width: canvasW * (zoomScale ?? 1), height: canvasH * (zoomScale ?? 1) },
+    monitorSize,
+  );
   const canvasRect =
     zoomScale === null
       ? fitRect(monitorSize, canvasW / canvasH)
       : {
           width: canvasW * zoomScale,
           height: canvasH * zoomScale,
-          left: (monitorSize.width - canvasW * zoomScale) / 2,
-          top: (monitorSize.height - canvasH * zoomScale) / 2,
+          left: (monitorSize.width - canvasW * zoomScale) / 2 + panned.x,
+          top: (monitorSize.height - canvasH * zoomScale) / 2 + panned.y,
         };
+  const movePan = (x: number, y: number) => {
+    setPanState({ zoom: ui.monitorZoom, x, y });
+  };
   const base = fitRect({ width: canvasRect.width, height: canvasRect.height }, texAspect);
   const hasCanvas = monitorSize.width > 0 && monitorSize.height > 0;
 
@@ -328,7 +359,19 @@ export function PreviewPanel() {
     );
   }
 
+  const onMonitorPointerDown = (e: ReactPointerEvent) => {
+    if (zoomScale === null || (e.button !== 0 && e.button !== 1)) {
+      return;
+    }
+    panDrag.current = { x: panned.x, y: panned.y, startX: e.clientX, startY: e.clientY };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
   const onOverlayPointerMove = (e: ReactPointerEvent) => {
+    if (panDrag.current) {
+      const start = panDrag.current;
+      movePan(start.x + e.clientX - start.startX, start.y + e.clientY - start.startY);
+      return;
+    }
     if (!drag || !clip) {
       return;
     }
@@ -355,6 +398,14 @@ export function PreviewPanel() {
     }
   };
   const onOverlayPointerUp = (e: ReactPointerEvent) => {
+    if (panDrag.current) {
+      const moved =
+        Math.abs(e.clientX - panDrag.current.startX) + Math.abs(e.clientY - panDrag.current.startY);
+      panDrag.current = null;
+      if (moved > 3) {
+        return;
+      }
+    }
     if (drag) {
       if (drag.mode === "move" && ghostPos) {
         commitMove(ghostPos);
@@ -408,17 +459,37 @@ export function PreviewPanel() {
         className="monitor"
         data-testid="preview-monitor"
         style={
-          ui.tool === "text" || ui.drawingShapePoints !== null ? { cursor: "crosshair" } : undefined
+          ui.tool === "text" || ui.drawingShapePoints !== null
+            ? { cursor: "crosshair" }
+            : zoomScale !== null
+              ? { cursor: "grab" }
+              : undefined
         }
         title={
           ui.tool === "text"
             ? t("textToolHint")
             : ui.drawingShapePoints !== null
               ? t("drawCustomShapeHint")
-              : undefined
+              : zoomScale !== null
+                ? t("monitorPanHint")
+                : undefined
         }
+        onPointerDown={onMonitorPointerDown}
         onPointerMove={onOverlayPointerMove}
         onPointerUp={onOverlayPointerUp}
+        onDoubleClick={() => {
+          if (zoomScale !== null) {
+            movePan(0, 0);
+          }
+        }}
+        onWheel={(e) => {
+          if (zoomScale !== null) {
+            movePan(
+              panned.x - (e.shiftKey ? e.deltaY : e.deltaX),
+              panned.y - (e.shiftKey ? 0 : e.deltaY),
+            );
+          }
+        }}
       >
         {tick.hasClip && tick.frameSeq > 0 && !tick.error && (
           <img
