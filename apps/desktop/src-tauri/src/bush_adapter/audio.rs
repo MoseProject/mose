@@ -19,16 +19,43 @@ use super::backend::MAX_OPEN_SOURCES;
 const AUDIO_QUEUE_FRAMES: usize = 192_000;
 const AUDIO_BLOCK_FRAMES: usize = 1024;
 
+/// What the playback loop needs from the audio output. The real implementation drives the
+/// operating system's device; tests substitute one that keeps time on its own clock.
+pub(crate) trait AudioOutput {
+    /// Restarts the queue at `secs` of timeline time.
+    fn seek_to(&mut self, secs: f64);
+    /// Linear peaks of the block being played right now, for the level meter.
+    fn peaks(&self) -> (f32, f32);
+    /// Timeline seconds the output has actually played.
+    fn position_secs(&self) -> f64;
+    /// Feeds the queue; recovers a failed device.
+    fn pump(&mut self);
+    /// Drops everything queued.
+    fn clear(&mut self);
+    /// Switches to a new scene without restarting playback.
+    fn set_scene(&mut self, scene: SceneSnapshot);
+    /// How many times the device ran out of audio.
+    fn underflow_callbacks(&self) -> u64;
+}
+
+/// Opens an output for `scene`, or `None` when there is no usable device.
+pub(crate) type OpenAudio = fn(&SceneSnapshot) -> Option<Box<dyn AudioOutput>>;
+
+/// The real output: the default device.
+pub(crate) fn open_default_device(scene: &SceneSnapshot) -> Option<Box<dyn AudioOutput>> {
+    AudioStack::open(scene).map(|stack| Box::new(stack) as Box<dyn AudioOutput>)
+}
+
 /// Audio output kept next to the player: the device queue and the position it was anchored at.
 pub(super) struct AudioStack {
-    pub(super) sink: DeviceSink,
-    pub(super) player: AudioPlayer,
+    sink: DeviceSink,
+    player: AudioPlayer,
     anchor_consumed: u64,
     anchor_secs: f64,
 }
 
 impl AudioStack {
-    pub(super) fn open(scene: &SceneSnapshot) -> Option<Self> {
+    fn open(scene: &SceneSnapshot) -> Option<Self> {
         let sink = DeviceSink::open_default(AUDIO_QUEUE_FRAMES).ok()?;
         let rate = sink.sample_rate();
         let renderer = AudioRenderer::new(rate, sink.channels(), 4096, MAX_OPEN_SOURCES).ok()?;
@@ -45,8 +72,10 @@ impl AudioStack {
             anchor_secs: 0.0,
         })
     }
+}
 
-    pub(super) fn seek_to(&mut self, secs: f64) {
+impl AudioOutput for AudioStack {
+    fn seek_to(&mut self, secs: f64) {
         self.sink.clear();
         self.player.seek(
             (secs.max(0.0) * f64::from(self.sink.sample_rate())) as u64,
@@ -57,13 +86,13 @@ impl AudioStack {
     }
 
     /// Linear peaks of the block the device is playing right now, for the level meter.
-    pub(super) fn peaks(&self) -> (f32, f32) {
+    fn peaks(&self) -> (f32, f32) {
         let frame = (self.position_secs() * f64::from(self.sink.sample_rate())) as u64;
         self.player.peaks_at(frame)
     }
 
     /// Timeline seconds the device has actually played.
-    pub(super) fn position_secs(&self) -> f64 {
+    fn position_secs(&self) -> f64 {
         let played = self
             .sink
             .consumed_frames()
@@ -71,7 +100,7 @@ impl AudioStack {
         self.anchor_secs + played as f64 / f64::from(self.sink.sample_rate())
     }
 
-    pub(super) fn pump(&mut self) {
+    fn pump(&mut self) {
         static NEVER: AtomicBool = AtomicBool::new(false);
         if self.sink.is_failed() {
             if self.sink.recover().is_ok() {
@@ -83,5 +112,17 @@ impl AudioStack {
         if let Err(error) = self.player.pump(&mut self.sink, &NEVER) {
             tracing::warn!(?error, "bush audio pump failed");
         }
+    }
+
+    fn clear(&mut self) {
+        self.sink.clear();
+    }
+
+    fn set_scene(&mut self, scene: SceneSnapshot) {
+        self.player.set_scene(scene, &mut self.sink);
+    }
+
+    fn underflow_callbacks(&self) -> u64 {
+        self.sink.underflow_callbacks()
     }
 }

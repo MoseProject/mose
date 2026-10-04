@@ -28,12 +28,12 @@ use avcore::nested_sequence::{
 use avcore::timeline::{Timeline, TrackKind};
 use avcore::{Lut3D as CoreLut, MediaAsset, MediaKind};
 use bush::{
-    AudioSink, DecodePolicy, Engine, EngineConfig, Player, PlayerEvent, RendererChoice,
-    SceneSnapshot, SceneVersions, Version,
+    DecodePolicy, Engine, EngineConfig, Player, PlayerEvent, RendererChoice, SceneSnapshot,
+    SceneVersions, Version,
 };
 use tauri::{AppHandle, Emitter, Runtime};
 
-use super::audio::AudioStack;
+use super::audio::{open_default_device, AudioOutput, OpenAudio};
 use super::mapper::{map_timeline, Approximation, OverlayCache, SourceResolver};
 use crate::frames::{encode_jpeg_rgba, PREVIEW_MAX_DIM};
 use crate::preview_engine::{
@@ -143,6 +143,17 @@ pub fn run<R: Runtime>(
     latest: LatestFrame,
     playhead_bits: Arc<AtomicU64>,
 ) {
+    run_with_audio(rx, app, latest, playhead_bits, open_default_device);
+}
+
+/// [`run`] with the audio output factory passed in.
+pub(crate) fn run_with_audio<R: Runtime>(
+    rx: mpsc::Receiver<Command>,
+    app: AppHandle<R>,
+    latest: LatestFrame,
+    playhead_bits: Arc<AtomicU64>,
+    open_audio: OpenAudio,
+) {
     let started = Instant::now();
     let mut resolver = AppResolver::default();
     let mut overlay_cache = OverlayCache::default();
@@ -156,7 +167,7 @@ pub fn run<R: Runtime>(
     let mut nested_cache: HashMap<u64, NestedSequenceCache> = HashMap::new();
     let mut player: Option<Player> = None;
     let mut canvas = DEFAULT_CANVAS;
-    let mut audio: Option<AudioStack> = None;
+    let mut audio: Option<Box<dyn AudioOutput>> = None;
     let mut scene: Option<SceneSnapshot> = None;
     let mut approximations: BTreeSet<Approximation> = BTreeSet::new();
     let mut revision = 0u64;
@@ -213,7 +224,12 @@ pub fn run<R: Runtime>(
                 }
                 Command::Seek(position) => {
                     if let Some(player) = player.as_mut() {
-                        seek(player, audio.as_mut(), position, &mut outstanding_since);
+                        seek(
+                            player,
+                            audio.as_deref_mut(),
+                            position,
+                            &mut outstanding_since,
+                        );
                     } else {
                         playhead_bits.store(position.max(0.0).to_bits(), Ordering::Release);
                     }
@@ -223,7 +239,7 @@ pub fn run<R: Runtime>(
                     let fps = first_video_fps(&timeline, &media);
                     if let Some(player) = player.as_mut() {
                         let target = player.position_secs() + delta_frames as f64 / fps;
-                        seek(player, audio.as_mut(), target, &mut outstanding_since);
+                        seek(player, audio.as_deref_mut(), target, &mut outstanding_since);
                     }
                     dirty = true;
                 }
@@ -235,7 +251,7 @@ pub fn run<R: Runtime>(
                             } else {
                                 playing = true;
                                 if audio.is_none() {
-                                    audio = scene.as_ref().and_then(AudioStack::open);
+                                    audio = scene.as_ref().and_then(open_audio);
                                 }
                                 if let Some(audio) = audio.as_mut() {
                                     audio.seek_to(player.position_secs());
@@ -246,7 +262,7 @@ pub fn run<R: Runtime>(
                             player.pause();
                             playing = false;
                             if let Some(audio) = audio.as_mut() {
-                                audio.sink.clear();
+                                audio.clear();
                             }
                         }
                     }
@@ -306,7 +322,7 @@ pub fn run<R: Runtime>(
                                 error = None;
                                 outstanding_since = Some(Instant::now());
                                 if let Some(audio) = audio.as_mut() {
-                                    audio.player.set_scene(next_scene.clone(), &mut audio.sink);
+                                    audio.set_scene(next_scene.clone());
                                 }
                             }
                             Err(failure) => error = Some(format!("{failure:?}")),
@@ -339,7 +355,7 @@ pub fn run<R: Runtime>(
                     PlayerEvent::Ended { .. } => {
                         playing = false;
                         if let Some(audio) = audio.as_mut() {
-                            audio.sink.clear();
+                            audio.clear();
                         }
                         dirty = true;
                     }
@@ -384,7 +400,7 @@ pub fn run<R: Runtime>(
                 let drift_ms = audio
                     .as_ref()
                     .map(|audio| player.drift_against(audio.position_secs()) * 1000.0);
-                let underflows = audio.as_ref().map(|audio| audio.sink.underflow_callbacks());
+                let underflows = audio.as_ref().map(|audio| audio.underflow_callbacks());
                 stats.report(player.engine(), &encoder.shared, drift_ms, underflows);
             } else {
                 stats.reset(&encoder.shared);
@@ -403,7 +419,7 @@ pub fn run<R: Runtime>(
             let (peak_l, peak_r) = audio
                 .as_ref()
                 .filter(|_| playing)
-                .map_or((0.0, 0.0), AudioStack::peaks);
+                .map_or((0.0, 0.0), |audio| audio.peaks());
             let tick = PreviewTick {
                 frame_seq: frame_seq.wrapping_add(encoded),
                 playhead_secs: f64::from_bits(playhead_bits.load(Ordering::Acquire)),
@@ -539,7 +555,7 @@ impl PlaybackStats {
 
 fn seek(
     player: &mut Player,
-    audio: Option<&mut AudioStack>,
+    audio: Option<&mut (dyn AudioOutput + 'static)>,
     position_secs: f64,
     outstanding_since: &mut Option<Instant>,
 ) {

@@ -69,6 +69,18 @@ pub struct PreviewEngine {
 
 impl PreviewEngine {
     pub fn spawn<R: Runtime>(app: AppHandle<R>) -> Self {
+        Self::spawn_with(app, |rx, app, latest, playhead| {
+            crate::bush_adapter::run(rx, app, latest, playhead)
+        })
+    }
+
+    /// [`spawn`] with the playback loop passed in, so tests can run it with a fake audio output.
+    pub(crate) fn spawn_with<R: Runtime>(
+        app: AppHandle<R>,
+        run: impl FnOnce(mpsc::Receiver<Command>, AppHandle<R>, LatestFrame, Arc<AtomicU64>)
+            + Send
+            + 'static,
+    ) -> Self {
         let (tx, rx) = mpsc::channel();
         let latest: LatestFrame = Arc::new(Mutex::new(None));
         let playhead_bits = Arc::new(AtomicU64::new(0f64.to_bits()));
@@ -76,7 +88,7 @@ impl PreviewEngine {
         let engine_playhead = Arc::clone(&playhead_bits);
         std::thread::Builder::new()
             .name("oca-preview-engine".into())
-            .spawn(move || crate::bush_adapter::run(rx, app, engine_latest, engine_playhead))
+            .spawn(move || run(rx, app, engine_latest, engine_playhead))
             .expect("spawning the preview engine thread");
         Self {
             tx,

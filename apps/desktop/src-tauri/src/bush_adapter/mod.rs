@@ -18,4 +18,8 @@ mod audio;
 mod backend;
 mod mapper;
 
+#[cfg(test)]
+pub(crate) use audio::AudioOutput;
 pub use backend::run;
+#[cfg(test)]
+pub(crate) use backend::run_with_audio;
