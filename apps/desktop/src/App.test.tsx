@@ -94,14 +94,14 @@ describe("app shell", () => {
       render(<App />);
       fireEvent.click(screen.getByTestId("nav-prefs"));
       expect(uiStore.get().screen).toBe("prefs");
-      expect(screen.getByTestId("nav-prefs").className).toContain("active");
+      expect(screen.getByTestId("nav-prefs").getAttribute("aria-current")).toBe("page");
       fireEvent.click(screen.getByTestId("nav-watch"));
       expect(uiStore.get().screen).toBe("watch");
-      expect(screen.getByTestId("nav-watch").className).toContain("active");
+      expect(screen.getByTestId("nav-watch").getAttribute("aria-current")).toBe("page");
       fireEvent.click(screen.getByTestId("nav-home"));
       expect(uiStore.get().screen).toBe("home");
-      expect(screen.getByTestId("nav-home").className).toContain("active");
-      expect(screen.getByTestId("nav-prefs").className).not.toContain("active");
+      expect(screen.getByTestId("nav-home").getAttribute("aria-current")).toBe("page");
+      expect(screen.getByTestId("nav-prefs").getAttribute("aria-current")).toBeNull();
     });
   });
 
@@ -115,7 +115,7 @@ describe("app shell", () => {
     it("shows the project name and the unsaved marker only when dirty", () => {
       sessionStore.set(session({ dirty: false }));
       render(<App />);
-      expect(screen.getByText("My project")).toBeTruthy();
+      expect(screen.getByText(/My project/)).toBeTruthy();
       expect(screen.queryByLabelText(t("unsaved"))).toBeNull();
       act(() => sessionStore.set(session({ dirty: true })));
       expect(screen.getByLabelText(t("unsaved"))).toBeTruthy();

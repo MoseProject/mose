@@ -81,8 +81,8 @@ describe("editor screen", () => {
   describe("layout", () => {
     it("uses the defaults when the project stores no layout", () => {
       render(<Editor session={sessionWith(1)} />);
-      expect(cssVar("--library-width")).toBe("260px");
-      expect(cssVar("--inspector-width")).toBe("280px");
+      expect(cssVar("--library-width")).toBe("340px");
+      expect(cssVar("--inspector-width")).toBe("296px");
       expect(cssVar("--timeline-height")).toBe("300px");
     });
 
@@ -113,7 +113,7 @@ describe("editor screen", () => {
       pointer(splitter, "pointermove", 0, 9000);
       expect(cssVar("--timeline-height")).toBe("140px");
       pointer(splitter, "pointerup", 0, 9000);
-      expect(calls.setPanelLayout).toHaveBeenCalledWith(260, 280, 140);
+      expect(calls.setPanelLayout).toHaveBeenCalledWith(340, 296, 140);
 
       pointer(splitter, "pointermove", 0, 0);
       pointer(splitter, "pointerup", 0, 0);
@@ -133,14 +133,14 @@ describe("editor screen", () => {
       const splitter = container.querySelector(".library-splitter")!;
       pointer(splitter, "pointerdown", 100, 0);
       pointer(splitter, "pointermove", 200, 0);
-      expect(cssVar("--library-width")).toBe("360px");
-      expect(cssVar("--inspector-width")).toBe("280px");
+      expect(cssVar("--library-width")).toBe("440px");
+      expect(cssVar("--inspector-width")).toBe("296px");
       pointer(splitter, "pointermove", 5000, 0);
       expect(cssVar("--library-width")).toBe("640px");
       pointer(splitter, "pointermove", -5000, 0);
       expect(cssVar("--library-width")).toBe("160px");
       pointer(splitter, "pointerup", -5000, 0);
-      expect(calls.setPanelLayout).toHaveBeenCalledWith(160, 280, 300);
+      expect(calls.setPanelLayout).toHaveBeenCalledWith(160, 296, 300);
     });
 
     it("drags the inspector splitter the opposite way", () => {
@@ -148,14 +148,14 @@ describe("editor screen", () => {
       const splitter = container.querySelector(".inspector-splitter")!;
       pointer(splitter, "pointerdown", 100, 0);
       pointer(splitter, "pointermove", 150, 0);
-      expect(cssVar("--inspector-width")).toBe("230px");
-      expect(cssVar("--library-width")).toBe("260px");
+      expect(cssVar("--inspector-width")).toBe("246px");
+      expect(cssVar("--library-width")).toBe("340px");
       pointer(splitter, "pointermove", 5000, 0);
       expect(cssVar("--inspector-width")).toBe("180px");
       pointer(splitter, "pointermove", -5000, 0);
       expect(cssVar("--inspector-width")).toBe("640px");
       pointer(splitter, "pointerup", -5000, 0);
-      expect(calls.setPanelLayout).toHaveBeenCalledWith(260, 640, 300);
+      expect(calls.setPanelLayout).toHaveBeenCalledWith(340, 640, 300);
     });
   });
 

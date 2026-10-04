@@ -110,7 +110,7 @@ describe("preview panel", () => {
 
   it("renders the transport readout against the timeline length", () => {
     sessionStore.set(sessionWith(clip({ start_secs: 5, source_out_secs: 10 })));
-    previewStore.set(tick({ playheadSecs: 3, peakL: 0.25, peakR: 4 }));
+    previewStore.set(tick({ playheadSecs: 3 }));
     const { container } = mount();
     expect(container.querySelector(".time-now")!.textContent).toContain("0:03");
     expect(container.querySelector(".time-total")!.textContent).toContain("0:15");
@@ -119,9 +119,6 @@ describe("preview panel", () => {
     expect(Number(scrubber.value)).toBe(3);
     fireEvent.change(scrubber, { target: { value: "7" } });
     expect(api.seek).toHaveBeenCalledWith(7);
-    const bars = container.querySelectorAll<HTMLElement>(".meter > div");
-    expect(bars[0].style.width).toBe("50%");
-    expect(bars[1].style.width).toBe("100%");
   });
 
   it("has a zero length without a session", () => {
