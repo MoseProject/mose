@@ -607,6 +607,28 @@ impl Track {
         true
     }
 
+    /// Removes the timeline range `[start_secs, end_secs)` from this track and leaves the gap
+    /// open: the "lift" counterpart of [`Self::ripple_delete_range`]. Clips straddling a boundary
+    /// are split the same way (consuming ids from `next_clip_id`), clips fully inside the range
+    /// are dropped, and nothing moves. No-op (`false`) if `end_secs <= start_secs`.
+    pub fn lift_range(&mut self, start_secs: f64, end_secs: f64, next_clip_id: &mut u64) -> bool {
+        if end_secs <= start_secs {
+            return false;
+        }
+        if self.split_clip_at(start_secs, *next_clip_id) {
+            *next_clip_id += 1;
+        }
+        if self.split_clip_at(end_secs, *next_clip_id) {
+            *next_clip_id += 1;
+        }
+        const EPSILON: f64 = 1e-6;
+        self.clips.retain(|c| {
+            let c_end = c.start_secs + c.duration_secs();
+            !(c.start_secs >= start_secs - EPSILON && c_end <= end_secs + EPSILON)
+        });
+        true
+    }
+
     /// The position, in seconds, where this track's last clip ends. `0.0` for an empty track —
     /// the natural "append here" position for a clip added to this track. Accounts for
     /// [`ClipInstance`]s, [`TextClip`]s, and [`ShapeClip`]s so every track kind reports its own
