@@ -16,7 +16,7 @@ import { t, type TextKey } from "./i18n";
 import { api } from "./ipc";
 import { effectiveKeys, keymapStore, type Bindable } from "./keymap";
 import { formatKeys, matchesKeys, type KeySpec } from "./shortcuts";
-import { shuttle, stopShuttle } from "./shuttle";
+import { playRange, shuttle, stopShuttle } from "./shuttle";
 import { patchUi, previewStore, run, sessionStore, uiStore, type EditorTool } from "./store";
 
 export type CommandGroup = "playback" | "edit" | "timeline" | "tools" | "file" | "view";
@@ -453,6 +453,63 @@ export const COMMANDS: Command[] = [
       }
       await run(api.rippleDeleteRange(markIn, markOut));
       patchUi({ markIn: null, markOut: null });
+    },
+  },
+  {
+    id: "liftRange",
+    label: "cmdLiftRange",
+    group: "timeline",
+    keys: [{ key: ";" }],
+    enabled: () => {
+      const { markIn, markOut } = uiStore.get();
+      return markIn !== null && markOut !== null && markOut > markIn;
+    },
+    run: async () => {
+      const { markIn, markOut } = uiStore.get();
+      if (markIn === null || markOut === null || markOut <= markIn) {
+        return;
+      }
+      await run(api.liftRange(markIn, markOut));
+      patchUi({ markIn: null, markOut: null });
+    },
+  },
+  {
+    id: "goToMarkIn",
+    label: "cmdGoToMarkIn",
+    group: "timeline",
+    keys: [{ key: "i", shift: true }],
+    enabled: () => {
+      return uiStore.get().markIn !== null;
+    },
+    run: () => {
+      const { markIn } = uiStore.get();
+      return markIn === null ? undefined : run(api.seek(markIn));
+    },
+  },
+  {
+    id: "goToMarkOut",
+    label: "cmdGoToMarkOut",
+    group: "timeline",
+    keys: [{ key: "o", shift: true }],
+    enabled: () => {
+      return uiStore.get().markOut !== null;
+    },
+    run: () => {
+      const { markOut } = uiStore.get();
+      return markOut === null ? undefined : run(api.seek(markOut));
+    },
+  },
+  {
+    id: "playRange",
+    label: "cmdPlayRange",
+    group: "playback",
+    keys: [{ key: "p", shift: true }],
+    enabled: () => {
+      const { markIn, markOut } = uiStore.get();
+      return markIn !== null && markOut !== null && markOut > markIn;
+    },
+    run: () => {
+      return playRange();
     },
   },
   {

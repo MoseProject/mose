@@ -770,6 +770,8 @@ export function Timeline({ session }: { session: SessionView }) {
           },
           cmdItem("clearMarks", { separator: true }),
           cmdItem("deleteRange"),
+          cmdItem("liftRange"),
+          cmdItem("playRange"),
         ],
       });
       return;

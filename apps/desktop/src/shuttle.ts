@@ -5,7 +5,7 @@
 
 import { timelineDuration } from "./editing";
 import { api } from "./ipc";
-import { createStore, previewStore, run, sessionStore } from "./store";
+import { createStore, previewStore, run, sessionStore, uiStore } from "./store";
 
 export const SHUTTLE_LEVELS = [1, 2, 4, 8];
 const TICK_MS = 80;
@@ -75,4 +75,43 @@ export async function shuttle(requested: -1 | 1) {
   await run(api.setPlaying(false));
   position = previewStore.get().playheadSecs;
   timer = setInterval(tick, TICK_MS);
+}
+
+let stopWatching: (() => void) | null = null;
+
+/** Ends a range playback started by {@link playRange}, leaving the transport as it is. */
+export function stopRange() {
+  stopWatching?.();
+  stopWatching = null;
+}
+
+/** Plays from the in mark to the out mark and pauses there. A pause by hand or a jump away from
+ *  the range ends the watch, so playing later does not stop at the old out mark. */
+export async function playRange() {
+  const { markIn, markOut } = uiStore.get();
+  if (markIn === null || markOut === null || markOut <= markIn) {
+    return;
+  }
+  stopShuttle();
+  stopRange();
+  await run(api.seek(markIn));
+  await run(api.setPlaying(true));
+  let seenPlaying = false;
+  stopWatching = previewStore.subscribe(() => {
+    const tick = previewStore.get();
+    if (tick.playing) {
+      seenPlaying = true;
+    }
+    // Ticks that still describe the state before the seek and play requests say nothing yet.
+    if (!seenPlaying) {
+      return;
+    }
+    const here = tick.playheadSecs;
+    if (!tick.playing || here < markIn - 0.5 || here > markOut + 0.5) {
+      stopRange();
+    } else if (here >= markOut) {
+      stopRange();
+      void run(api.setPlaying(false));
+    }
+  });
 }

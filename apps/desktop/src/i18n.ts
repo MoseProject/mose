@@ -475,6 +475,13 @@ const strings = {
     "pt-BR": "Excluir trecho entre entrada e saída",
     en: "Delete the range between in and out",
   },
+  cmdLiftRange: {
+    "pt-BR": "Remover trecho entre entrada e saída (deixa o vão)",
+    en: "Lift the range between in and out (leaves the gap)",
+  },
+  cmdGoToMarkIn: { "pt-BR": "Ir para a entrada", en: "Go to in" },
+  cmdGoToMarkOut: { "pt-BR": "Ir para a saída", en: "Go to out" },
+  cmdPlayRange: { "pt-BR": "Reproduzir de entrada a saída", en: "Play from in to out" },
   cmdSelectAll: { "pt-BR": "Selecionar tudo", en: "Select all" },
   cmdDeselect: { "pt-BR": "Limpar seleção", en: "Clear selection" },
   cmdDuplicate: { "pt-BR": "Duplicar clipe", en: "Duplicate clip" },

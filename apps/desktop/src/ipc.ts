@@ -335,6 +335,9 @@ export const api = {
   rippleDeleteRange: (startSecs: number, endSecs: number) => {
     return invoke<void>("ripple_delete_range", { startSecs, endSecs });
   },
+  liftRange: (startSecs: number, endSecs: number) => {
+    return invoke<void>("lift_range", { startSecs, endSecs });
+  },
   pickPath: (kind: "file" | "folder", extensions: string[] = []) => {
     return invoke<string | null>("pick_path", { kind, extensions });
   },
