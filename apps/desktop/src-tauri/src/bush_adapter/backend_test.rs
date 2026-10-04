@@ -292,3 +292,19 @@ fn seeking_moves_the_player_and_reports_when_the_engine_is_gone() {
     seek(&mut player, None, 6.0, &mut after_shutdown);
     assert!(after_shutdown.is_none());
 }
+
+#[test]
+fn the_engine_config_follows_the_decode_and_renderer_choices() {
+    let software = engine_config((640, 360), false, RendererChoice::Cpu);
+    assert!(matches!(software.decode_policy, DecodePolicy::Software));
+    assert_eq!((software.canvas_width, software.canvas_height), (640, 360));
+    let hardware = engine_config((640, 360), true, RendererChoice::GpuWithCpuFallback);
+    assert!(matches!(
+        hardware.decode_policy,
+        DecodePolicy::HardwareWithFallback
+    ));
+    assert!(matches!(
+        hardware.renderer,
+        RendererChoice::GpuWithCpuFallback
+    ));
+}

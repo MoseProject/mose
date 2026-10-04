@@ -114,3 +114,130 @@ fn a_clip_whose_file_is_missing_but_proxy_exists_previews_from_the_proxy() {
         Some(crate::testing::fixture("video.mp4"))
     );
 }
+
+/// The fixture clip repeated `times` times back to back (it is one second long).
+fn repeated_fixture_project(h: &Harness, times: usize) -> avcore::Project {
+    h.add_fixture_clip();
+    for _ in 1..times {
+        crate::commands::timeline::add_asset_to_timeline(h.handle(), 1, None, None).unwrap();
+    }
+    h.session().project.clone()
+}
+
+#[test]
+fn playback_runs_to_the_end_of_the_timeline_and_stops_by_itself() {
+    let h = harness();
+    let ticks = collect_ticks(&h);
+    let project = repeated_fixture_project(&h, 3);
+    let engine = PreviewEngine::spawn(h.handle());
+    engine.set_content(project);
+    wait_for_tick(&ticks, "the first frame", |t| {
+        t["hasClip"] == true && t["frameSeq"].as_u64().unwrap_or(0) > 0
+    });
+    engine.set_playing(true);
+    wait_for_tick(&ticks, "playback", |t| t["playing"] == true);
+    // Past the two-second health window, then to the end at three seconds.
+    wait_for_tick(&ticks, "the end", |t| {
+        t["playing"] == false && t["playheadSecs"].as_f64().unwrap_or(0.0) > 2.5
+    });
+}
+
+#[test]
+fn seeking_and_stepping_before_any_content_still_move_the_playhead() {
+    let h = harness();
+    let ticks = collect_ticks(&h);
+    let engine = PreviewEngine::spawn(h.handle());
+    engine.seek(2.5);
+    engine.step(1);
+    wait_for_tick(&ticks, "the seek", |_| true);
+    let started = Instant::now();
+    while (engine.playhead() - 2.5).abs() > 1e-9 {
+        assert!(
+            started.elapsed() < Duration::from_secs(20),
+            "the playhead never moved"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[test]
+fn replacing_the_content_updates_the_scene_and_a_new_canvas_restarts_the_player() {
+    let h = harness();
+    let ticks = collect_ticks(&h);
+    let mut project = repeated_fixture_project(&h, 1);
+    let engine = PreviewEngine::spawn(h.handle());
+    engine.set_content(project.clone());
+    wait_for_tick(&ticks, "the first frame", |t| {
+        t["frameSeq"].as_u64().unwrap_or(0) > 0
+    });
+
+    let before = ticks
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|t| t["frameSeq"].as_u64().unwrap_or(0))
+        .max()
+        .unwrap_or(0);
+
+    // The same canvas with a longer timeline: the running player takes the new scene.
+    crate::commands::timeline::add_asset_to_timeline(h.handle(), 1, None, None).unwrap();
+    engine.set_content(h.session().project.clone());
+    wait_for_tick(&ticks, "a frame of the longer timeline", |t| {
+        t["frameSeq"].as_u64().unwrap_or(0) > before
+    });
+
+    // A portrait export changes the canvas, so a fresh player is built.
+    let after_longer = ticks
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|t| t["frameSeq"].as_u64().unwrap_or(0))
+        .max()
+        .unwrap_or(0);
+    project.active_sequence_mut().export_settings.aspect_ratio =
+        avcore::ExportAspectRatio::Portrait;
+    engine.set_content(project);
+    wait_for_tick(&ticks, "a frame on the new canvas", |t| {
+        t["frameSeq"].as_u64().unwrap_or(0) > after_longer
+    });
+}
+
+#[test]
+fn a_scene_that_needs_approximations_still_plays() {
+    let h = harness();
+    let ticks = collect_ticks(&h);
+    h.add_fixture_clip();
+    {
+        let mut session = h.session();
+        let clip = &mut session.project.timeline_mut().tracks[0].clips[0];
+        clip.transition_in = avcore::timeline::TransitionType::Slide;
+        clip.transition_duration_secs = 0.5;
+        clip.position_keyframes = vec![
+            avcore::keyframe::Keyframe {
+                time_fraction: 0.0,
+                value: avcore::keyframe::Position { x: 0.0, y: 0.0 },
+            },
+            avcore::keyframe::Keyframe {
+                time_fraction: 1.0,
+                value: avcore::keyframe::Position { x: 0.2, y: 0.0 },
+            },
+        ];
+    }
+    let engine = PreviewEngine::spawn(h.handle());
+    engine.set_content(h.session().project.clone());
+    wait_for_tick(&ticks, "a frame", |t| {
+        t["hasClip"] == true && t["frameSeq"].as_u64().unwrap_or(0) > 0
+    });
+}
+
+#[test]
+fn a_compound_clip_whose_nested_media_is_gone_still_previews_what_it_can() {
+    let h = harness();
+    let ticks = collect_ticks(&h);
+    let (_, clip) = h.add_fixture_clip();
+    crate::commands::timeline::create_compound_clip(h.handle(), clip, vec![clip]).unwrap();
+    h.session().project.media_library[0].source_path = h.dir.join("missing.mp4");
+    let engine = PreviewEngine::spawn(h.handle());
+    engine.set_content(h.session().project.clone());
+    wait_for_tick(&ticks, "a tick", |_| true);
+}
