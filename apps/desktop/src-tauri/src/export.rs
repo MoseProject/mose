@@ -281,9 +281,7 @@ impl ExportQueue {
         }
     }
     fn emit<R: Runtime>(&self, app: &AppHandle<R>) {
-        if let Err(e) = app.emit(EXPORT_JOBS, self.snapshot()) {
-            tracing::warn!(%e,"failed to emit export jobs")
-        }
+        let _ = app.emit(EXPORT_JOBS, self.snapshot());
     }
     fn pump<R: Runtime>(self: &Arc<Self>, app: AppHandle<R>) {
         loop {

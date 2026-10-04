@@ -230,16 +230,9 @@ impl PrefsDocument {
         // this merge nor the egui shell's `PrefsState` can read back.
         let patch = rmp_serde::to_vec_named(&DiskPrefs::from(&self.view))
             .map_err(|error| error.to_string())?;
-        let Value::Map(entries) =
-            rmp_serde::from_slice::<Value>(&patch).map_err(|error| error.to_string())?
-        else {
-            return Err("preferences patch must be a MessagePack map".to_string());
-        };
-        for (key, value) in entries {
-            if let Some(key) = key.as_str() {
-                self.raw.insert(key.to_string(), value);
-            }
-        }
+        let entries = rmp_serde::from_slice::<BTreeMap<String, Value>>(&patch)
+            .map_err(|error| error.to_string())?;
+        self.raw.extend(entries);
         let value = Value::Map(
             self.raw
                 .iter()

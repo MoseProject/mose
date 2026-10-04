@@ -55,7 +55,9 @@ fn main() {
 
     tauri::Builder::default()
         .register_asynchronous_uri_scheme_protocol(protocol::SCHEME, |ctx, request, responder| {
-            protocol::handle(ctx.app_handle(), request.uri().path(), responder);
+            protocol::handle_with(ctx.app_handle(), request.uri().path(), move |response| {
+                responder.respond(response)
+            });
         })
         .setup(|app| {
             let handle = app.handle().clone();

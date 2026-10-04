@@ -65,17 +65,15 @@ pub fn always_send_crash<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
         .lock()
         .unwrap_or_else(|p| p.into_inner())
         .clone();
-    if let Some(crash) = crash {
-        if let Some(reporter) = state
-            .error_reporter
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .as_ref()
-        {
-            match avcore::validate_report(&crash.report) {
-                Ok(()) => reporter.report(crash.report),
-                Err(e) => tracing::warn!(error = %e, "dropping invalid crash report"),
-            }
+    let reporter = state
+        .error_reporter
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .clone();
+    if let (Some(crash), Some(reporter)) = (crash, reporter) {
+        match avcore::validate_report(&crash.report) {
+            Ok(()) => reporter.report(crash.report),
+            Err(e) => tracing::warn!(error = %e, "dropping invalid crash report"),
         }
     }
     finish_crash_review(&state)

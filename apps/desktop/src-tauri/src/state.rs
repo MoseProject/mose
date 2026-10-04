@@ -209,9 +209,7 @@ impl AppState {
 pub fn publish<R: Runtime>(app: &AppHandle<R>, session: &Session) {
     let state = app.state::<AppState>();
     state.preview.set_content(session.project.clone());
-    if let Err(error) = app.emit(SESSION_CHANGED, session.view()) {
-        tracing::warn!(%error, "failed to emit session-changed");
-    }
+    let _ = app.emit(SESSION_CHANGED, session.view());
 }
 
 /// An empty, never-saved project -- what "Novo projeto" builds in the egui shell.

@@ -17,7 +17,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use tauri::http::{header, Response, StatusCode};
-use tauri::{AppHandle, Manager, Runtime, UriSchemeResponder};
+use tauri::{AppHandle, Manager, Runtime};
 
 use crate::frames::{encode_jpeg, THUMBNAIL_MAX_DIM};
 use crate::state::AppState;
@@ -32,11 +32,7 @@ pub struct ThumbnailCache {
     entries: Mutex<HashMap<PathBuf, Option<Arc<Vec<u8>>>>>,
 }
 
-pub fn handle<R: Runtime>(app: &AppHandle<R>, path: &str, responder: UriSchemeResponder) {
-    handle_with(app, path, move |response| responder.respond(response));
-}
-
-/// [`handle`] with the answer delivered through `respond`, so tests can read it back.
+/// Answers one `oca://` request through `respond`; `main` hands it the scheme responder.
 pub(crate) fn handle_with<R: Runtime>(
     app: &AppHandle<R>,
     path: &str,

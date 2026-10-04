@@ -33,15 +33,18 @@ pub enum ErrorReportingConsent {
 
 static BUILDER: OnceLock<Mutex<avcore::ErrorReportBuilder>> = OnceLock::new();
 
+fn build_channel(debug: bool) -> &'static str {
+    if debug {
+        "debug"
+    } else {
+        "stable"
+    }
+}
+
 fn default_builder() -> Mutex<avcore::ErrorReportBuilder> {
     Mutex::new(avcore::ErrorReportBuilder::new(ReleaseMetadata {
         release: format!("oca-{}", env!("CARGO_PKG_VERSION")),
-        build_channel: if cfg!(debug_assertions) {
-            "debug"
-        } else {
-            "stable"
-        }
-        .to_owned(),
+        build_channel: build_channel(cfg!(debug_assertions)).to_owned(),
         target_triple: option_env!("TARGET").unwrap_or("unknown").to_owned(),
         app_version: env!("CARGO_PKG_VERSION").to_owned(),
         commit: option_env!("OCA_COMMIT_SHA")
@@ -96,7 +99,12 @@ pub fn apply_consent_change(consent: ErrorReportingConsent) -> Option<Arc<dyn Er
 const QUEUE_DIR_ENV_VAR: &str = "OCA_ERROR_QUEUE_DIR";
 
 fn queue_dir() -> PathBuf {
-    match std::env::var_os(QUEUE_DIR_ENV_VAR) {
+    queue_dir_from(std::env::var_os(QUEUE_DIR_ENV_VAR))
+}
+
+/// The queue folder for an optional override, else the platform log folder's `error_reports`.
+fn queue_dir_from(override_dir: Option<std::ffi::OsString>) -> PathBuf {
+    match override_dir {
         Some(dir) => PathBuf::from(dir),
         None => crate::platform_log_dir().join("error_reports"),
     }
@@ -548,13 +556,12 @@ pub fn find_latest_unreviewed_crash(
     let mut candidates: Vec<(u64, PathBuf)> = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
-        let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
-            continue;
-        };
-        let Some(ts_str) = stem.strip_prefix("crash_") else {
-            continue;
-        };
-        let Ok(timestamp) = ts_str.parse::<u64>() else {
+        let Some(timestamp) = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .and_then(|stem| stem.strip_prefix("crash_"))
+            .and_then(|ts| ts.parse::<u64>().ok())
+        else {
             continue;
         };
         if timestamp > after_unix {
