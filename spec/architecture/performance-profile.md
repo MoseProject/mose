@@ -49,10 +49,12 @@ continuous controls (inspector sliders). Timeline drags already commit once on p
 | `Command::Content` carries `Arc<Project>` | two full project clones per edit | one |
 | Undo history bounded by clips held (120k clips total) | 100 full sequence copies regardless of size (about 200 MB at 3000 clips) | about 40 steps at 3000 clips, 100 steps for normal projects |
 
-Tried and dropped: replacing gzip with LZ4 in the `.ocproj` framing. Save went from 12.0 to 11.4 ms
-and load from 14.8 to 12.9 ms, because the time is MessagePack struct-map encoding of about 70
-named fields per clip (7.7 of the 10.5 ms), not compression. Not worth breaking older readers.
-Saving and loading already run off the UI path (autosave thread), so they are not a bottleneck.
+Project file (`.ocproj`) is now LZ4-compressed `postcard` (`to_project_bytes`/`from_project_bytes`,
+format version 2) instead of gzip + struct-map MessagePack: save 12.2 -> 1.8 ms, load 11.9 -> 3.0 ms
+at 3000 clips (the old time was MessagePack writing about 70 field names per clip, not gzip).
+The encoding is positional, so changing the fields of a type inside `Project` requires bumping
+`PROJECT_FORMAT_VERSION`; other versions are refused with an error. Prefs, queue and transcript
+files keep the self-describing MessagePack framing (prefs preserve unknown keys).
 
 ## Not yet measured
 
