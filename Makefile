@@ -111,10 +111,10 @@ test-bush:
 
 # Line coverage per crate (needs cargo-llvm-cov). Excluded by file, see
 # spec/architecture/test-coverage-plan.md: the Tauri entry point, the audio device and its wrapper,
-# the GPU renderer, the real network/self-update/model adapters (services.rs, update_install.rs),
+# the GPU renderer, the real network/self-update/model adapters (services.rs, update_install.rs, onnx_models.rs, whisper_model.rs),
 # and the test files and test harness themselves. `desktop` runs in release because its debug test binary
 # hits an MSVC CRT assertion at startup on Windows.
-COVERAGE_IGNORE = (main\.rs|device_sink\.rs|gpu_[a-z_]+\.(rs|wgsl)|_test\.rs|[/\\]tests[/\\]|[/\\]testing\.rs|[/\\]services\.rs|bush_adapter[/\\]audio\.rs|update_install\.rs)
+COVERAGE_IGNORE = (main\.rs|device_sink\.rs|gpu_[a-z_]+\.(rs|wgsl)|_test\.rs|[/\\]tests[/\\]|[/\\]testing\.rs|[/\\]services\.rs|bush_adapter[/\\]audio\.rs|update_install\.rs|onnx_models\.rs|whisper_model\.rs)
 coverage:
 	cargo llvm-cov -p avbridge --ignore-filename-regex '$(COVERAGE_IGNORE)'
 	cargo llvm-cov -p bush --ignore-filename-regex '$(COVERAGE_IGNORE)'
