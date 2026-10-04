@@ -773,6 +773,35 @@ describe("moving clips", () => {
     expect(calls.moveClipGroup).toHaveBeenCalledWith(1, 2.5);
   });
 
+  it("abandons a drag when the pointer is cancelled and commits nothing", () => {
+    mount();
+    ptr("pointerdown", 200, ROW(0));
+    ptr("pointermove", 300, ROW(0));
+    ptr("pointercancel", 300, ROW(0));
+    ptr("pointermove", 400, ROW(0));
+    ptr("pointerup", 400, ROW(0));
+    expect(calls.moveClipGroup).not.toHaveBeenCalled();
+    expect(calls.moveClip).not.toHaveBeenCalled();
+  });
+
+  it("abandons a drag on Escape and keeps the key from reaching the editor", () => {
+    mount();
+    ptr("pointerdown", 200, ROW(0));
+    ptr("pointermove", 300, ROW(0));
+    const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    const reachedWindow = vi.fn();
+    window.addEventListener("keydown", reachedWindow);
+    act(() => {
+      canvas().dispatchEvent(escape);
+    });
+    window.removeEventListener("keydown", reachedWindow);
+    ptr("pointerup", 300, ROW(0));
+
+    expect(escape.defaultPrevented).toBe(true);
+    expect(reachedWindow).not.toHaveBeenCalled();
+    expect(calls.moveClipGroup).not.toHaveBeenCalled();
+  });
+
   it("moves a clip to another row of the same kind", () => {
     mount();
     ptr("pointerdown", 200, ROW(0));

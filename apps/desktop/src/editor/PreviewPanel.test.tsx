@@ -247,6 +247,21 @@ describe("preview panel", () => {
       expect(screen.getByTestId("preview-layer")).toBeTruthy();
     });
 
+    it("commits nothing when the pointer is cancelled mid-drag", () => {
+      sessionStore.set(
+        sessionWith(
+          clip({ position_keyframes: [{ time_fraction: 0, value: { x: 0.5, y: 0.5 } }] }),
+        ),
+      );
+      mount();
+      pointer(screen.getByTestId("preview-layer"), "pointerdown", 100, 100);
+      pointer(monitor(), "pointermove", 300, 200);
+      pointer(monitor(), "pointercancel");
+      pointer(monitor(), "pointermove", 500, 300);
+      pointer(monitor(), "pointerup");
+      expect(api.updateClip).not.toHaveBeenCalled();
+    });
+
     it("resizes from the handle without starting a move, never below the minimum scale", () => {
       mount();
       const handle = screen.getByTestId("preview-layer-resize-handle");
