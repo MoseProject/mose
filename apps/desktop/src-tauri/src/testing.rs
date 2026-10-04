@@ -38,6 +38,20 @@ fn isolate_user_dirs() {
     });
 }
 
+pub(crate) type WatchResult =
+    Result<Option<(avcore::LoudnessMetrics, avcore::LoudnessMetrics)>, avcore::ProcessError>;
+
+/// A scripted download: gets the URL, target, cancel flag and progress callback.
+pub(crate) type YoutubeScript = Box<
+    dyn FnOnce(
+            &str,
+            avcore::YoutubeDownloadTarget,
+            &AtomicBool,
+            &mut dyn FnMut(f32),
+        ) -> Result<PathBuf, avcore::YoutubeDownloadError>
+        + Send,
+>;
+
 /// Stands in for [`crate::services::SystemServices`]: each call returns what the test queued
 /// for it, or a failure when nothing was queued.
 #[derive(Default)]
@@ -49,6 +63,12 @@ pub(crate) struct FakeServices {
     pub exits: Mutex<Vec<i32>>,
     pub speech: Mutex<Option<Result<Vec<f32>, avcore::TtsError>>>,
     pub whisper_model: Mutex<Option<PathBuf>>,
+    /// What the next watched-file normalization returns; absent runs the real one.
+    pub watch_result: Mutex<Option<WatchResult>>,
+    /// Whether the YouTube helper "is installed".
+    pub youtube_available: std::sync::atomic::AtomicBool,
+    /// What the next download does; absent means the helper reports the file as missing.
+    pub youtube: Mutex<Option<YoutubeScript>>,
     /// Faces every detection returns; `None` makes detection fail.
     pub faces: Mutex<Option<Vec<avcore::FaceBox>>>,
     /// Alpha every segmented pixel gets; `None` makes segmentation fail.
@@ -106,6 +126,39 @@ impl Services for FakeServices {
             .unwrap()
             .clone()
             .ok_or_else(|| avcore::ReframeError::Onnx("no model".into()))
+    }
+
+    fn process_watched_file(
+        &self,
+        source: &Path,
+        output: &Path,
+        target_lufs: f32,
+        cancel: &AtomicBool,
+        progress: &mut dyn FnMut(u8),
+    ) -> Result<Option<(avcore::LoudnessMetrics, avcore::LoudnessMetrics)>, avcore::ProcessError>
+    {
+        match self.watch_result.lock().unwrap().take() {
+            Some(result) => result,
+            None => avcore::process_watched_file(source, output, target_lufs, cancel, progress),
+        }
+    }
+
+    fn is_yt_dlp_available(&self) -> bool {
+        self.youtube_available.load(Ordering::SeqCst)
+    }
+
+    fn download_youtube(
+        &self,
+        url: &str,
+        target: avcore::YoutubeDownloadTarget,
+        _dir: &Path,
+        cancel: &AtomicBool,
+        progress: &mut dyn FnMut(f32),
+    ) -> Result<PathBuf, avcore::YoutubeDownloadError> {
+        match self.youtube.lock().unwrap().take() {
+            Some(script) => script(url, target, cancel, progress),
+            None => Err(avcore::YoutubeDownloadError::ToolNotFound),
+        }
     }
 
     fn bundled_whisper_model(&self) -> Option<PathBuf> {

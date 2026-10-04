@@ -14,6 +14,7 @@ use avcore::LoudnessMetrics;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
+use crate::services::Services;
 use crate::state::AppState;
 
 pub const WATCH_FOLDER_EVENT: &str = "watch-folder-event";
@@ -93,7 +94,8 @@ pub(crate) fn start_watching<R: Runtime>(
         .unwrap_or_else(|p| p.into_inner()) = Some(Arc::clone(&stop));
 
     let worker_app = app.clone();
-    std::thread::spawn(move || watch_loop(watch_path, stop, worker_app, timing));
+    let services = state.services.clone();
+    std::thread::spawn(move || watch_loop(watch_path, stop, worker_app, services, timing));
 }
 
 /// Stops the background watch loop, if running -- what the screen's "Stop watching" button does.
@@ -134,6 +136,7 @@ fn watch_loop<R: Runtime>(
     watch_path: PathBuf,
     stop: Arc<AtomicBool>,
     app: AppHandle<R>,
+    services: Arc<dyn Services>,
     timing: WatchTiming,
 ) {
     let stable_for = timing.stable_for;
@@ -147,10 +150,10 @@ fn watch_loop<R: Runtime>(
             continue;
         };
 
-        for entry in entries.flatten() {
-            if stop.load(Ordering::Relaxed) {
-                break;
-            }
+        for entry in entries
+            .flatten()
+            .take_while(|_| !stop.load(Ordering::Relaxed))
+        {
             let path = entry.path();
             if !path.is_file() || !avcore::is_video_file(&path) {
                 continue;
@@ -160,9 +163,7 @@ fn watch_loop<R: Runtime>(
             if output.exists() {
                 continue;
             }
-            let Ok(metadata) = entry.metadata() else {
-                continue;
-            };
+            let size = entry.metadata().map_or(0, |metadata| metadata.len());
 
             if seen.insert(path.clone()) {
                 emit(
@@ -173,7 +174,7 @@ fn watch_loop<R: Runtime>(
                 );
             }
 
-            let stable = tracker.poll(&path, metadata.len(), Instant::now(), stable_for);
+            let stable = tracker.poll(&path, size, Instant::now(), stable_for);
             if !stable {
                 errored.remove(&path);
                 emit(
@@ -196,12 +197,12 @@ fn watch_loop<R: Runtime>(
             );
             let progress_app = app.clone();
             let progress_path = path.clone();
-            let result = avcore::process_watched_file(
+            let result = services.process_watched_file(
                 &path,
                 &output,
                 avcore::DEFAULT_TARGET_LUFS,
                 &stop,
-                move |percent| {
+                &mut move |percent| {
                     emit(
                         &progress_app,
                         WatchFolderEventPayload::Progress {
