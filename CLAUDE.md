@@ -87,6 +87,7 @@ independent of whatever else is on the linker search path.
 make build     # debug build, whole workspace (core, avbridge, ytbridge, desktop, xtask)
 make test      # run every crate's test suite
 make test-core # cargo test -p core only
+make desktop-run   # one-shot: npm install if needed, LIBCLANG_PATH/FFmpeg PATH on Windows, then the app
 make desktop-dev   # Vite + Tauri dev server with hot reload -- the app itself
 make test-desktop  # desktop frontend typecheck + unit tests, then cargo test -p desktop
 make test-e2e  # pytest + selenium against a built target/release/oca-desktop.exe

@@ -51,7 +51,7 @@ ifneq ($(shell sccache --version 2>/dev/null),)
   export RUSTC_WRAPPER ?= sccache
 endif
 
-.PHONY: coverage coverage-web build release test test-core test-bush test-xtask test-e2e bench bench-bush fmt fmt-check lint graph docs check clean desktop-install desktop-dev desktop-build test-desktop
+.PHONY: coverage coverage-web build release test test-core test-bush test-xtask test-e2e bench bench-bush fmt fmt-check lint graph docs check clean desktop-install desktop-run desktop-dev desktop-build test-desktop
 
 # Debug build of the whole workspace (core, avbridge, ytbridge, desktop, xtask).
 build:
@@ -77,6 +77,23 @@ test-xtask:
 # the egui screens one by one -- see spec/architecture/tauri-migration.md. Node/npm required.
 desktop-install:
 	cd apps/desktop && npm install
+
+# One-shot launcher for manual validation: installs npm dependencies on first use, then starts
+# the app (Vite + Tauri, hot reload). On Windows it also points bindgen at libclang (core's
+# whisper-rs needs it; override with LIBCLANG_PATH) and puts FFmpeg's DLLs on PATH when FFMPEG_DIR
+# is set. It goes through the Tauri CLI because a bare `cargo build -p desktop` embeds the
+# dev-server URL instead of the built frontend.
+ifeq ($(OS),Windows_NT)
+  LIBCLANG_PATH ?= C:/Program Files/LLVM/bin
+  export LIBCLANG_PATH
+  ifneq ($(FFMPEG_DIR),)
+    export PATH := $(FFMPEG_DIR)/bin;$(PATH)
+  endif
+endif
+
+desktop-run:
+	@test -d apps/desktop/node_modules || (cd apps/desktop && npm install)
+	cd apps/desktop && npm run tauri dev
 
 # Runs Vite's dev server and the Tauri app with hot reload.
 desktop-dev:
