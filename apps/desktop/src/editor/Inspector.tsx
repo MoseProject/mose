@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { t } from "../i18n";
+import { formatTime, t } from "../i18n";
 import { api } from "../ipc";
 import { run, uiStore, useStore } from "../store";
 import { F32KeyframeList, PositionKeyframeList } from "./KeyframeEditor";
@@ -45,16 +45,28 @@ export function Inspector({ session }: { session: SessionView }) {
     ? timeline.tracks.flatMap((track) => track.shape_clips).find((item) => item.id === selectedClipIds[0])
     : undefined;
 
+  const [tab, setTab] = useState<InspectorGroup>("inspector");
   return (
     <section className="panel inspector">
-      <div className="panel-title">{t("inspector")}</div>
-      <div className="inspector-body">
+      <div className="panel-tabs" role="tablist">
+        {(clip ? (["inspector", "effects", "audio"] as const) : (["inspector"] as const)).map((id) => (
+          <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>
+            {t(id === "inspector" ? "inspector" : id === "effects" ? "inspectorEffects" : "inspectorAudio")}
+          </button>
+        ))}
+      </div>
+      <div className="inspector-body" data-tab={clip ? tab : "inspector"}>
         {clip ? (
           <div data-testid="inspector-clip">
             <div className="clip-head" title={asset?.source_path}>
               <span className="clip-name">{asset?.file_name ?? "—"}</span>
               <span className="muted">
-                {[t("source"), asset?.resolution ? `${asset.resolution[0]}×${asset.resolution[1]}` : null, asset?.fps ? `${Math.round(asset.fps)} fps` : null].filter(Boolean).join(" · ")}
+                {[
+                  t("source"),
+                  asset?.resolution ? `${asset.resolution[0]}×${asset.resolution[1]}` : null,
+                  asset?.fps ? `${asset.fps.toFixed(asset.fps % 1 === 0 ? 0 : 3)} fps` : null,
+                  asset ? formatTime(asset.duration_secs) : null,
+                ].filter(Boolean).join(" · ")}
               </span>
             </div>
             <ClipControls key={clip.id} clip={clip} />
@@ -76,9 +88,11 @@ export function Inspector({ session }: { session: SessionView }) {
  *  selection change (`key={clip.id}` above), so each newly selected clip's sections
  *  recompute their own default-open state fresh, same per-clip behavior egui's
  *  `default_open` argument has. */
-export function Section({ label, defaultOpen, testId, children }: { label: string; defaultOpen: boolean; testId?: string; children: ReactNode }) {
+export type InspectorGroup = "inspector" | "effects" | "audio";
+
+export function Section({ label, defaultOpen, testId, group = "inspector", children }: { label: string; defaultOpen: boolean; testId?: string; group?: InspectorGroup; children: ReactNode }) {
   return (
-    <details className="property-section" open={defaultOpen} data-testid={testId}>
+    <details className="property-section" open={defaultOpen} data-testid={testId} data-group={group}>
       <summary>{label}</summary>
       <div className="property-section-body">{children}</div>
     </details>
@@ -90,7 +104,7 @@ function ClipControls({ clip }: { clip: ClipInstance }) {
   const [region, setRegion] = useState({ centerX: 0.5, centerY: 0.5, width: 0.3, height: 0.3 });
   return (
     <>
-      <Section label={t("gain")} defaultOpen={clip.gain_db !== 0} testId="section-gain">
+      <Section label={t("gain")} defaultOpen={clip.gain_db !== 0} testId="section-gain" group="audio">
         <Slider
           label={t("gain")}
           value={clip.gain_db}
@@ -130,6 +144,7 @@ function ClipControls({ clip }: { clip: ClipInstance }) {
         </div>
       </Section>
       <Section
+        group="effects"
         label={t("colorAdjust")}
         defaultOpen={clip.brightness !== 0 || clip.contrast !== 1 || clip.saturation !== 1}
       >
@@ -231,7 +246,7 @@ function ClipControls({ clip }: { clip: ClipInstance }) {
         </button>
       </Section>
 
-      <Section label={t("mask")} defaultOpen={clip.mask_shape !== "None"}>
+      <Section label={t("mask")} defaultOpen={clip.mask_shape !== "None"} group="effects">
         <div className="field">
           <label>{t("mask")}</label>
           <select
@@ -258,7 +273,7 @@ function ClipControls({ clip }: { clip: ClipInstance }) {
         )}
       </Section>
 
-      <Section label={t("transition")} defaultOpen={clip.transition_in !== "None"}>
+      <Section label={t("transition")} defaultOpen={clip.transition_in !== "None"} group="effects">
         <div className="field">
           <label>{t("transition")}</label>
           <select
@@ -285,7 +300,7 @@ function ClipControls({ clip }: { clip: ClipInstance }) {
         )}
       </Section>
 
-      <div className="field">
+      <div className="field" data-group="inspector">
         <label>{t("blendMode")}</label>
         <select
           value={clip.blend_mode}
@@ -422,7 +437,7 @@ function ClipControls({ clip }: { clip: ClipInstance }) {
       />
       </Section>
 
-      <Section label={t("aiActions")} defaultOpen={false}>
+      <Section label={t("aiActions")} defaultOpen={false} group="effects">
       <div className="region-row">
         <input
           type="number"
@@ -522,9 +537,8 @@ export function Slider(props: {
     if (draft !== props.value) props.onCommit(draft);
   };
   return (
-    <div className="field">
+    <div className="field slider-field">
       <label>{props.label}</label>
-      <span className="mono">{props.format(draft)}</span>
       <input
         type="range"
         min={props.min}
@@ -536,6 +550,7 @@ export function Slider(props: {
         onKeyUp={commit}
         onBlur={commit}
       />
+      <span className="mono">{props.format(draft)}</span>
     </div>
   );
 }

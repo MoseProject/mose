@@ -6,7 +6,6 @@ import { Inspector } from "../editor/Inspector";
 import { MediaLibrary } from "../editor/MediaLibrary";
 import { PreviewPanel } from "../editor/PreviewPanel";
 import { Timeline } from "../editor/Timeline";
-import { SequenceTabs } from "../editor/SequenceTabs";
 import { t } from "../i18n";
 import { api } from "../ipc";
 import { patchUi, previewStore, run, uiStore } from "../store";
@@ -22,7 +21,7 @@ function initialLayout(session: SessionView) {
   return {
     libraryWidth: Math.max(MIN_LIBRARY_WIDTH, Math.min(MAX_PANEL_WIDTH, layout?.lib_panel_width ?? 340)),
     inspectorWidth: Math.max(MIN_INSPECTOR_WIDTH, Math.min(MAX_PANEL_WIDTH, layout?.props_panel_width ?? 296)),
-    timelineHeight: Math.max(MIN_TIMELINE_HEIGHT, layout?.timeline_height ?? 300),
+    timelineHeight: Math.max(MIN_TIMELINE_HEIGHT, layout?.timeline_height ?? 392),
   };
 }
 
@@ -182,7 +181,6 @@ export function Editor({ session }: { session: SessionView }) {
       <Inspector session={session} />
       <AudioMeter />
       <div className="splitter" onPointerDown={startResize} />
-      <SequenceTabs session={session} />
       <Timeline session={session} />
       {dropping && <div className="drop-overlay">{t("dropToImport")}</div>}
     </div>

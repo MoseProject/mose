@@ -3,6 +3,7 @@ import { t } from "../i18n";
 import { addShapeOverlay, addTextOverlay, seekToMarker } from "../editing";
 import { api } from "../ipc";
 import { Icon } from "./Icon";
+import { SequenceTabs } from "./SequenceTabs";
 import { frameAt, frameStepSecs, MEDIA_EVENT, peakRange, peaksFor } from "./timelineMedia";
 import { Menu } from "./Menu";
 import { LayerTemplates } from "./LayerTemplates";
@@ -560,6 +561,7 @@ export function Timeline({ session }: { session: SessionView }) {
         <span className="panel-title" style={{ border: 0, padding: "0 8px 0 0" }}>
           {t("timeline")}
         </span>
+        <SequenceTabs session={session} />
         <button
           className="icon"
           disabled={selected.length === 0}
@@ -613,6 +615,7 @@ export function Timeline({ session }: { session: SessionView }) {
         <button className="icon" title={t("previousMarker")} aria-label={t("previousMarker")} onClick={() => seekToMarker(markers, -1)}><Icon name="chevronLeft" /></button>
         <button className="icon" title={t("nextMarker")} aria-label={t("nextMarker")} onClick={() => seekToMarker(markers, 1)}><Icon name="chevronRight" /></button>
         <span style={{ flex: 1 }} />
+        <div className="zoom-group">
         <button className="icon" title={t("zoomOut")} aria-label={t("zoomOut")} onClick={() => zoomBy(1 / 1.5)}>
           <Icon name="minus" />
         </button>
@@ -622,6 +625,7 @@ export function Timeline({ session }: { session: SessionView }) {
         <button className="icon" title={t("zoomIn")} aria-label={t("zoomIn")} onClick={() => zoomBy(1.5)}>
           <Icon name="plus" />
         </button>
+        </div>
       </div>
       <div className="timeline-body">
         <div className="track-headers" style={{ width: HEADER_WIDTH }}>

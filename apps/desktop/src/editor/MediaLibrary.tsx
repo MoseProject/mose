@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { formatTime, t } from "../i18n";
 import { Icon } from "./Icon";
+import { Menu } from "./Menu";
 import { api, onYoutubeDownload, thumbnailUrl } from "../ipc";
 import { assetDragStore, run, transcribingAssetIdStore, useStore } from "../store";
 import type { LibraryTrack, MediaAsset, SessionView } from "../types";
@@ -201,26 +202,70 @@ function TtsButton() {
 /** Pixels the pointer must travel before a press on an asset becomes a drag. */
 const DRAG_THRESHOLD_PX = 4;
 
+type LibraryTab = "media" | "favorites" | "recent";
+const TABS: [LibraryTab, "libraryTabMedia" | "libraryTabFavorites" | "libraryTabRecent"][] = [
+  ["media", "libraryTabMedia"],
+  ["favorites", "libraryTabFavorites"],
+  ["recent", "libraryTabRecent"],
+];
+
 export function MediaLibrary({ session }: { session: SessionView }) {
-  const assets = session.project.media_library;
+  const [tab, setTab] = useState<LibraryTab>("media");
+  const [query, setQuery] = useState("");
+  const [view, setView] = useState<"grid" | "list">("grid");
+  const all = session.project.media_library;
+
+  const inTab =
+    tab === "favorites"
+      ? all.filter((asset) => asset.favorited)
+      : tab === "recent"
+        ? session.project.recent_asset_ids
+            .map((id) => all.find((asset) => asset.id === id))
+            .filter((asset): asset is MediaAsset => asset !== undefined)
+        : all;
+  const needle = query.trim().toLowerCase();
+  const assets = needle ? inTab.filter((asset) => asset.file_name.toLowerCase().includes(needle)) : inTab;
 
   return (
-    <section className="panel library">
-      <div className="panel-title">
-        <span>{t("mediaLibrary")}</span>
-        <span className="count">{assets.length}</span>
+    <section className="panel library" aria-label={t("mediaLibrary")}>
+      <div className="panel-tabs" role="tablist">
+        {TABS.map(([id, label]) => (
+          <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>
+            {t(label)}
+          </button>
+        ))}
+        <Menu label={<Icon name="plus" size={16} />} ariaLabel={t("importFiles")}>
+          <button onClick={() => run(api.importMediaDialog())}>{t("importFiles")}</button>
+          <TtsButton />
+          <SoundLibraryButton />
+          <YoutubeDownloadButton />
+        </Menu>
       </div>
-      <div className="library-actions">
-        <button onClick={() => run(api.importMediaDialog())}>
-          {t("importFiles")}
+      <div className="search-row">
+        <label className="search">
+          <Icon name="search" size={14} />
+          <input
+            type="search"
+            value={query}
+            placeholder={t("searchMedia")}
+            aria-label={t("searchMedia")}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </label>
+        <button className={`icon ${view === "grid" ? "active" : ""}`} aria-label={t("viewGrid")} title={t("viewGrid")} aria-pressed={view === "grid"} onClick={() => setView("grid")}>
+          <Icon name="grid" size={16} />
         </button>
-        <TtsButton />
-        <SoundLibraryButton />
-        <YoutubeDownloadButton />
+        <button className={`icon ${view === "list" ? "active" : ""}`} aria-label={t("viewList")} title={t("viewList")} aria-pressed={view === "list"} onClick={() => setView("list")}>
+          <Icon name="list" size={16} />
+        </button>
       </div>
-      <div className="asset-list">
+      <div className="media-head">
+        <span>{t("projectMedia")}</span>
+        <span className="count">{assets.length} {t("items")}</span>
+      </div>
+      <div className={`asset-list ${view}`}>
         {assets.length === 0 ? (
-          <div className="empty-state">{t("libraryEmpty")}</div>
+          <div className="empty-state">{all.length === 0 ? t("libraryEmpty") : t("libraryNoMatches")}</div>
         ) : (
           assets.map((asset) => <AssetRow key={asset.id} asset={asset} />)
         )}
@@ -267,53 +312,70 @@ function AssetRow({ asset }: { asset: MediaAsset }) {
     .filter(Boolean)
     .join(" · ");
 
+  const actions = (
+    <div className="asset-actions">
+      {asset.has_audio && (
+        <button
+          className="icon"
+          title={transcribing ? t("transcribing") : t("transcribe")}
+          aria-label={transcribing ? t("transcribing") : t("transcribe")}
+          disabled={transcribingAssetId !== null}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => run(api.transcribeAsset(asset.id))}
+        >
+          {transcribing ? "…" : <Icon name="document" />}
+        </button>
+      )}
+      <button
+        className={`icon ${asset.favorited ? "active" : ""}`}
+        title={t("favorite")}
+        aria-label={t("favorite")}
+        aria-pressed={asset.favorited}
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={() => run(api.toggleFavorite(asset.id))}
+      >
+        <Icon name="star" filled={asset.favorited} />
+      </button>
+    </div>
+  );
+
   return (
     <div
-      className="asset"
+      className={`asset ${asset.kind === "Audio" ? "audio" : ""}`}
       title={asset.source_path}
       onPointerDown={onPointerDown}
       onDoubleClick={() => run(api.addAssetToTimeline(asset.id))}
     >
-      <div className="thumb-wrap">
-        {asset.kind === "Video" && !thumbFailed ? (
-          <img
-            className="thumb"
-            src={thumbnailUrl(asset.id)}
-            alt=""
-            draggable={false}
-            onError={() => setThumbFailed(true)}
-          />
-        ) : (
-          <div className="thumb"><Icon name={asset.kind === "Audio" ? "music" : "film"} size={22} /></div>
-        )}
-        <span className="duration mono">{formatTime(asset.duration_secs)}</span>
-        <div className="asset-actions">
-          {asset.has_audio && (
-            <button
-              className="icon"
-              title={transcribing ? t("transcribing") : t("transcribe")}
-              aria-label={transcribing ? t("transcribing") : t("transcribe")}
-              disabled={transcribingAssetId !== null}
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={() => run(api.transcribeAsset(asset.id))}
-            >
-              {transcribing ? "…" : <Icon name="document" />}
-            </button>
-          )}
-          <button
-            className={`icon ${asset.favorited ? "active" : ""}`}
-            title={t("favorite")}
-            aria-label={t("favorite")}
-            aria-pressed={asset.favorited}
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => run(api.toggleFavorite(asset.id))}
-          >
-            <Icon name="star" filled={asset.favorited} />
-          </button>
+      {asset.kind === "Audio" ? (
+        <div className="audio-card">
+          <span className="audio-icon"><Icon name="music" size={20} /></span>
+          <div className="audio-text">
+            <div className="name">{asset.file_name}</div>
+            <div className="meta">{formatTime(asset.duration_secs)} {meta && `· ${meta}`}</div>
+          </div>
+          {actions}
         </div>
-      </div>
-      <div className="name">{asset.file_name}</div>
-      <div className="meta">{meta}</div>
+      ) : (
+        <>
+          <div className="thumb-wrap">
+            {!thumbFailed ? (
+              <img
+                className="thumb"
+                src={thumbnailUrl(asset.id)}
+                alt=""
+                draggable={false}
+                onError={() => setThumbFailed(true)}
+              />
+            ) : (
+              <div className="thumb"><Icon name="film" size={22} /></div>
+            )}
+            <span className="duration mono">{formatTime(asset.duration_secs)}</span>
+            {actions}
+          </div>
+          <div className="name">{asset.file_name}</div>
+          <div className="meta">{meta}</div>
+        </>
+      )}
     </div>
   );
 }

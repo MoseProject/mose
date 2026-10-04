@@ -36,6 +36,7 @@ export function SequenceTabs({ session }: { session: SessionView }) {
 function MarkerList({ session }: { session: SessionView }) {
   const markers = session.project.sequences[session.project.active_sequence].timeline.markers;
   return <details className="marker-list"><summary>{t("markers")}</summary>
+    <div className="marker-pop">
     <button onClick={() => run(api.addMarker())}>{t("addMarker")}</button>
     {markers.slice().sort((a, b) => a.position_secs - b.position_secs).map((marker) => <div key={marker.id} className="marker-row">
       <button className="icon" title={t("seekMarker")} onClick={() => run(api.seek(marker.position_secs))}>{formatTime(marker.position_secs)}</button>
@@ -44,5 +45,6 @@ function MarkerList({ session }: { session: SessionView }) {
       {marker.kind === "ToDo" && <input type="checkbox" checked={marker.completed} aria-label={t("markerCompleted")} onChange={(e) => run(api.updateMarker(marker.id, { completed: e.target.checked }))} />}
       <button className="icon" title={t("removeMarker")} aria-label={t("removeMarker")} onClick={() => run(api.removeMarker(marker.id))}><Icon name="close" /></button>
     </div>)}
+    </div>
   </details>;
 }

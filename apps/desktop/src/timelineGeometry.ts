@@ -6,7 +6,7 @@ import { clipDuration, type Marker, type Track } from "./types";
 
 export const RULER_HEIGHT = 24;
 export const TRACK_HEIGHT = 56;
-export const HEADER_WIDTH = 132;
+export const HEADER_WIDTH = 184;
 /** Grab width of a clip's trim handles, in px. */
 export const EDGE_GRAB_PX = 6;
 /** Snap distance, in px (converted to seconds at the current zoom). */
