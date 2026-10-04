@@ -76,6 +76,22 @@ describe("TopBar with a project", () => {
     expect(screen.getByLabelText(t("unsaved"))).toBeTruthy();
   });
 
+  it("shows the save state: saving while edits wait, saved once written, unsaved without a file", () => {
+    const { rerender } = render(
+      <TopBar session={{ ...session({ dirty: true }), filePath: "C:/p/doc.ocproj" }} />,
+    );
+    expect(screen.getByText(t("savingProject"))).toBeTruthy();
+    expect(screen.queryByLabelText(t("unsaved"))).toBeNull();
+
+    rerender(<TopBar session={{ ...session({ dirty: false }), filePath: "C:/p/doc.ocproj" }} />);
+    expect(screen.getByText(t("projectSaved"))).toBeTruthy();
+
+    rerender(<TopBar session={session({ dirty: false })} />);
+    expect(screen.queryByText(t("projectSaved"))).toBeNull();
+    rerender(<TopBar session={session({ dirty: true })} />);
+    expect(screen.getByLabelText(t("unsaved"))).toBeTruthy();
+  });
+
   it("reads the timecode, frame rate and resolution of the source", () => {
     previewStore.set({ ...previewStore.get(), playheadSecs: 134 + 8 / 24 });
     render(<TopBar session={session()} />);

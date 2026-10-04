@@ -71,7 +71,7 @@ describe("home screen", () => {
     render(<Home />);
     await startCreating();
     const input = screen.getByLabelText(t("projectName")) as HTMLInputElement;
-    expect(input.value).toBe(t("untitledProject"));
+    expect(input.value).not.toBe("");
     fireEvent.change(input, { target: { value: "  Boss fight  " } });
     fireEvent.click(screen.getByText(t("createProject")));
 
@@ -80,6 +80,23 @@ describe("home screen", () => {
     });
     expect(api.createProject).toHaveBeenCalledWith("Boss fight", t("defaultSequenceName"));
     expect(uiStore.get().selectedClipIds).toEqual([]);
+  });
+
+  it("suggests a funny name that no listed project has, and another on request", async () => {
+    vi.mocked(api.getRecentProjects).mockResolvedValue([recent()]);
+    render(<Home />);
+    await screen.findByText("One");
+    await startCreating();
+    const input = screen.getByLabelText(t("projectName")) as HTMLInputElement;
+    expect(input.value.split(" ").length).toBeGreaterThanOrEqual(2);
+    expect(input.value).not.toBe("One");
+
+    const seen = new Set([input.value]);
+    for (let i = 0; i < 20; i += 1) {
+      fireEvent.click(screen.getByLabelText(t("anotherName")));
+      seen.add((screen.getByLabelText(t("projectName")) as HTMLInputElement).value);
+    }
+    expect(seen.size).toBeGreaterThan(5);
   });
 
   it("creates with Enter and refuses a blank name", async () => {
@@ -174,8 +191,14 @@ describe("home screen", () => {
     });
   });
 
-  it("offers a way back to the editor, naming the open project, once a session exists", () => {
+  it("does not offer the untouched project the app starts with", () => {
     sessionStore.set(makeSession([{ id: 1, name: "A" }]));
+    render(<Home />);
+    expect(screen.queryByTestId("back-to-editor")).toBeNull();
+  });
+
+  it("offers a way back to the editor, naming the open project, once it has a file", () => {
+    sessionStore.set({ ...makeSession([{ id: 1, name: "A" }]), filePath: "C:/p/a.ocproj" });
     render(<Home />);
     expect(screen.getByLabelText(t("continueEditing"))).toBeTruthy();
     fireEvent.click(screen.getByTestId("back-to-editor"));
