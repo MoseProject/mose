@@ -107,6 +107,10 @@ export function Editor({ session }: { session: SessionView }) {
       if (!command) {
         return;
       }
+      if (e.repeat && !command.repeatable) {
+        e.preventDefault();
+        return;
+      }
       if (!command.enabled || command.enabled()) {
         void command.run();
       }

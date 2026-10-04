@@ -27,6 +27,9 @@ export interface Command {
   group: CommandGroup;
   /** Bindings; the first one is the one shown to people. */
   keys?: KeySpec[];
+  /** Whether holding the key keeps running the command. Everything else runs once per press, so
+   *  a held key cannot toggle playback, split or add markers over and over. */
+  repeatable?: boolean;
   /** False keeps the command out of the palette (it is still a shortcut). */
   palette?: boolean;
   enabled?: () => boolean;
@@ -107,6 +110,7 @@ export const COMMANDS: Command[] = [
   },
   {
     id: "back1s",
+    repeatable: true,
     label: "cmdBack1s",
     group: "playback",
     run: () => {
@@ -115,6 +119,7 @@ export const COMMANDS: Command[] = [
   },
   {
     id: "back10s",
+    repeatable: true,
     label: "cmdBack10s",
     group: "playback",
     keys: [{ key: "j", shift: true }],
@@ -125,6 +130,7 @@ export const COMMANDS: Command[] = [
   },
   {
     id: "forward10s",
+    repeatable: true,
     label: "cmdForward10s",
     group: "playback",
     keys: [{ key: "l", shift: true }],
@@ -135,6 +141,7 @@ export const COMMANDS: Command[] = [
   },
   {
     id: "stepBack",
+    repeatable: true,
     label: "stepBack",
     group: "playback",
     keys: [{ key: "ArrowLeft" }],
@@ -144,6 +151,7 @@ export const COMMANDS: Command[] = [
   },
   {
     id: "stepForward",
+    repeatable: true,
     label: "stepForward",
     group: "playback",
     keys: [{ key: "ArrowRight" }],
@@ -153,6 +161,7 @@ export const COMMANDS: Command[] = [
   },
   {
     id: "stepBack10",
+    repeatable: true,
     label: "cmdStepBack10",
     group: "playback",
     keys: [{ key: "ArrowLeft", shift: true }],
@@ -163,6 +172,7 @@ export const COMMANDS: Command[] = [
   },
   {
     id: "stepForward10",
+    repeatable: true,
     label: "cmdStepForward10",
     group: "playback",
     keys: [{ key: "ArrowRight", shift: true }],
@@ -193,6 +203,7 @@ export const COMMANDS: Command[] = [
   },
   {
     id: "prevEdit",
+    repeatable: true,
     label: "cmdPrevEdit",
     group: "playback",
     keys: [{ key: "ArrowUp" }],
@@ -207,6 +218,7 @@ export const COMMANDS: Command[] = [
   },
   {
     id: "nextEdit",
+    repeatable: true,
     label: "cmdNextEdit",
     group: "playback",
     keys: [{ key: "ArrowDown" }],
@@ -222,6 +234,7 @@ export const COMMANDS: Command[] = [
   // ---- editing
   {
     id: "undo",
+    repeatable: true,
     label: "undo",
     group: "edit",
     keys: [{ key: "z", ctrl: true }],
@@ -231,6 +244,7 @@ export const COMMANDS: Command[] = [
   },
   {
     id: "redo",
+    repeatable: true,
     label: "redo",
     group: "edit",
     keys: [
@@ -392,6 +406,7 @@ export const COMMANDS: Command[] = [
   },
   {
     id: "prevMarker",
+    repeatable: true,
     label: "previousMarker",
     group: "timeline",
     keys: [{ key: "m", shift: true }],
@@ -402,6 +417,7 @@ export const COMMANDS: Command[] = [
   },
   {
     id: "nextMarker",
+    repeatable: true,
     label: "nextMarker",
     group: "timeline",
     keys: [{ key: "m", alt: true }],
@@ -514,6 +530,7 @@ export const COMMANDS: Command[] = [
   },
   {
     id: "zoomIn",
+    repeatable: true,
     label: "zoomIn",
     group: "timeline",
     keys: [{ key: "=" }, { key: "+", shift: true }, { key: "=", ctrl: true }],
@@ -523,6 +540,7 @@ export const COMMANDS: Command[] = [
   },
   {
     id: "zoomOut",
+    repeatable: true,
     label: "zoomOut",
     group: "timeline",
     keys: [{ key: "-" }, { key: "-", ctrl: true }],
