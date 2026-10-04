@@ -159,6 +159,7 @@ const ERROR_CODES: Record<string, TextKey> = {
   pathMissing: "pathMissing",
   outputIsSource: "exportOutputIsSource",
   outputInQueue: "exportOutputInQueue",
+  projectMissing: "projectMissing",
 };
 
 /** What to show for a failed call: the translated text for a known backend code, otherwise the

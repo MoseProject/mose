@@ -544,6 +544,10 @@ const strings = {
     "pt-BR": "Há exportações na fila ou em andamento que serão perdidas.",
     en: "There are exports queued or running that would be lost.",
   },
+  projectMissing: {
+    "pt-BR": "O arquivo do projeto não existe mais. Ele foi tirado da lista de recentes.",
+    en: "The project file no longer exists. It was removed from the recent list.",
+  },
   importFailed: {
     "pt-BR": "Não foi possível importar o arquivo",
     en: "Could not import the file",
