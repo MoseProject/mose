@@ -55,6 +55,23 @@ pub(crate) fn save_when_settled<R: tauri::Runtime>(
     if quiet_for < debounce {
         return SaveOutcome::Waiting;
     }
+    write_pending(app, seq, saver)
+}
+
+/// Saves the project right now, without waiting for the changes to settle: what closing the
+/// window, quitting and losing focus call so that nothing the debounce still holds is lost.
+pub(crate) fn flush_now<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> SaveOutcome {
+    let seq = app.state::<AppState>().edits.seq();
+    write_pending(app, seq, &mut Saver::default())
+}
+
+/// Writes the open project if it is dirty and has a file; `seq` is the edit count it stands for.
+fn write_pending<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    seq: u64,
+    saver: &mut Saver,
+) -> SaveOutcome {
+    let state = app.state::<AppState>();
     let (project, path) = {
         let session = state.session();
         if !session.dirty {
@@ -100,6 +117,40 @@ fn mark_saved<R: tauri::Runtime>(app: &tauri::AppHandle<R>, seq: u64, path: &Pat
     session.dirty = false;
     publish(app, &session);
     true
+}
+
+/// The last-resort save for a crash: writes the project if it has unsaved changes, without ever
+/// waiting for a lock (the crashing thread may be holding it) and without trusting a project
+/// whose lock was poisoned, since a panic in the middle of an edit may have left it half done.
+/// Whether a file was written.
+pub(crate) fn emergency_save<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> bool {
+    let state = app.state::<AppState>();
+    let Ok(session) = state.session.try_lock() else {
+        return false;
+    };
+    if !session.dirty {
+        return false;
+    }
+    let Some(path) = session.project.file_path.clone() else {
+        return false;
+    };
+    let mut project = session.project.clone();
+    drop(session);
+    project.timeline_mut().playhead_secs = state.preview.playhead();
+    avcore::save_project_to_file(&project, &path).is_ok()
+}
+
+type EmergencySave = Box<dyn Fn() -> bool + Send + Sync>;
+static EMERGENCY_SAVE: std::sync::OnceLock<EmergencySave> = std::sync::OnceLock::new();
+
+/// Lets the panic hook reach the app: from now on a crash saves the project first.
+pub fn register_emergency_save<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
+    let _ = EMERGENCY_SAVE.set(Box::new(move || emergency_save(&app)));
+}
+
+/// Runs the registered emergency save, if there is one. Whether a file was written.
+pub fn run_emergency_save() -> bool {
+    EMERGENCY_SAVE.get().is_some_and(|save| save())
 }
 
 /// Starts the background saver: every half second it saves the project if its changes settled.
@@ -404,6 +455,106 @@ mod saver_tests {
 
         let loaded = avcore::load_project_from_file(&path).unwrap();
         assert_eq!(loaded.timeline().playhead_secs, 7.5);
+    }
+
+    #[test]
+    fn flushing_saves_at_once_without_waiting_for_the_edits_to_settle() {
+        let h = harness();
+        let path = project_in_a_file(&h, "flush.ocproj");
+        edit(&h, -22.0);
+
+        assert_eq!(flush_now(&h.handle()), SaveOutcome::Saved);
+
+        assert_eq!(lufs_on_disk(&path), -22.0);
+        assert!(!h.session().dirty);
+        assert_eq!(
+            flush_now(&h.handle()),
+            SaveOutcome::Idle,
+            "nothing left to write"
+        );
+    }
+
+    #[test]
+    fn flushing_saves_a_dirty_project_even_when_no_edit_was_counted() {
+        let h = harness();
+        let path = project_in_a_file(&h, "uncounted.ocproj");
+        h.session()
+            .project
+            .active_sequence_mut()
+            .export_settings
+            .target_lufs = -19.0;
+        h.session().dirty = true;
+
+        assert_eq!(flush_now(&h.handle()), SaveOutcome::Saved);
+        assert_eq!(lufs_on_disk(&path), -19.0);
+    }
+
+    #[test]
+    fn flushing_leaves_a_project_without_a_file_alone() {
+        let h = harness();
+        crate::commands::new_project(h.handle(), "Loose".into(), "Seq".into()).unwrap();
+        edit(&h, -20.0);
+        assert_eq!(flush_now(&h.handle()), SaveOutcome::NoFile);
+        assert!(h.session().dirty);
+    }
+
+    #[test]
+    fn an_emergency_save_writes_the_unsaved_project() {
+        let h = harness();
+        let path = project_in_a_file(&h, "crash.ocproj");
+        edit(&h, -21.0);
+
+        assert!(emergency_save(&h.handle()));
+
+        assert_eq!(lufs_on_disk(&path), -21.0);
+    }
+
+    #[test]
+    fn an_emergency_save_does_nothing_for_a_clean_or_file_less_project() {
+        let h = harness();
+        project_in_a_file(&h, "clean.ocproj");
+        assert!(!emergency_save(&h.handle()), "nothing unsaved");
+
+        crate::commands::new_project(h.handle(), "Loose".into(), "Seq".into()).unwrap();
+        edit(&h, -20.0);
+        assert!(!emergency_save(&h.handle()), "nowhere to write");
+    }
+
+    #[test]
+    fn an_emergency_save_never_waits_for_a_lock_nor_trusts_a_poisoned_one() {
+        let h = harness();
+        let path = project_in_a_file(&h, "locked.ocproj");
+        edit(&h, -21.0);
+
+        {
+            // Another thread is in the middle of something: do not wait for it.
+            let _held = h.session();
+            let app = h.handle();
+            let result =
+                std::thread::scope(|scope| scope.spawn(|| emergency_save(&app)).join().unwrap());
+            assert!(!result);
+        }
+        assert_ne!(lufs_on_disk(&path), -21.0);
+
+        // A panic while the lock was held may have left the project half edited.
+        let state = h.state();
+        std::thread::scope(|scope| {
+            let _ = scope
+                .spawn(|| {
+                    let _guard = state.session.lock().unwrap();
+                    panic!("in the middle of an edit");
+                })
+                .join();
+        });
+        assert!(state.session.is_poisoned());
+        assert!(!emergency_save(&h.handle()));
+        assert_ne!(lufs_on_disk(&path), -21.0);
+    }
+
+    #[test]
+    fn the_registered_emergency_save_is_reachable_from_the_panic_hook() {
+        // Nothing is registered in the test process unless a test does it; running it is safe.
+        let _ = run_emergency_save();
     }
 
     #[test]
