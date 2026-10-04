@@ -141,6 +141,11 @@ impl Timeline {
         self.push_empty_track(kind, format!("{}1", kind.name_prefix()))
     }
 
+    /// Whether `track` is heard: not muted, and, when any track is soloed, itself soloed.
+    pub fn track_is_audible(&self, track: &Track) -> bool {
+        !track.muted && (track.solo || !self.tracks.iter().any(|other| other.solo))
+    }
+
     fn push_empty_track(&mut self, kind: TrackKind, name: String) -> usize {
         let track_id = self.tracks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
         self.tracks.push(Track {
@@ -152,6 +157,8 @@ impl Timeline {
             shape_clips: Vec::new(),
             visible: true,
             audio_role: AudioRole::Unspecified,
+            muted: false,
+            solo: false,
             locked: false,
             color_label: None,
         });

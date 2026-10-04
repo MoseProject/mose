@@ -656,6 +656,64 @@ pub fn render_timeline_export(
     )
 }
 
+/// The mix segment for one audio-carrying clip of `track`.
+fn audio_segment(
+    clip: &crate::timeline::ClipInstance,
+    asset: &MediaAsset,
+    track: &crate::timeline::Track,
+) -> avbridge::AudioSegment {
+    avbridge::AudioSegment {
+        source_path: asset.source_path.clone(),
+        source_in_secs: clip.source_in_secs,
+        source_out_secs: clip.source_out_secs,
+        timeline_start_secs: clip.start_secs,
+        gain_db: clip.gain_db,
+        // AudioSegment has no ramp field of its own — atempo takes one fixed parameter,
+        // not a `t`-keyed expression, so a smooth per-sample tempo ramp isn't achievable
+        // on the audio side in this FFmpeg build (same limitation
+        // ClipSegment::smooth_speed_ramp_end_factor's own doc comment describes). The
+        // ramp's *average* speed stands in when one is active, matching the approximation
+        // ClipSegment's own inline audio path already uses for a ramped background/
+        // single-track clip.
+        speed_factor: clip
+            .speed_ramp_end_factor
+            .map(|end| (clip.speed_factor + end) / 2.0)
+            .unwrap_or(clip.speed_factor),
+        gain_keyframe_expr: keyframe::gain_filter_db_expr(
+            &clip.gain_keyframes,
+            clip.duration_secs(),
+        )
+        .unwrap_or_default(),
+        duck_role: track.audio_role.to_duck_role_code(),
+        voice_cleanup_enabled: clip.voice_cleanup_enabled,
+        voice_cleanup_noise_floor_db: clip.voice_cleanup_noise_floor_db,
+        voice_cleanup_compressor_threshold_db: clip.voice_cleanup_compressor_threshold_db,
+        voice_cleanup_compressor_ratio: clip.voice_cleanup_compressor_ratio,
+        voice_cleanup_ceiling_linear: clip.voice_cleanup_ceiling_linear,
+    }
+}
+
+/// A segment standing in for a fully silenced sequence: the first clip that carries audio.
+fn silent_stand_in(
+    sequence: &Sequence,
+    media_library: &[MediaAsset],
+) -> Option<avbridge::AudioSegment> {
+    for track in &sequence.timeline.tracks {
+        if !matches!(track.kind, TrackKind::Video | TrackKind::Audio) {
+            continue;
+        }
+        for clip in &track.clips {
+            let asset = media_library
+                .iter()
+                .find(|asset| asset.id == clip.resolved_asset_id())?;
+            if asset.has_audio {
+                return Some(audio_segment(clip, asset, track));
+            }
+        }
+    }
+    None
+}
+
 /// Resolves every audible clip from visible video and audio tracks. Returns an empty list when
 /// the first video track is the only audio contributor, allowing the established one-pass
 /// export path to avoid an unnecessary second AAC encode. Once any additional track contributes
@@ -671,8 +729,15 @@ pub fn resolve_audio_segments(
 
     let mut resolved = Vec::new();
     let mut has_additional_contributor = false;
+    // Set when a muted (or not-soloed) track holds clips: the one-pass export would still carry
+    // the first video track's own audio, so the post-pass mix must run to leave it out.
+    let mut silenced_clips = false;
     for (track_index, track) in sequence.timeline.tracks.iter().enumerate() {
         if !track.visible || !matches!(track.kind, TrackKind::Video | TrackKind::Audio) {
+            continue;
+        }
+        if !sequence.timeline.track_is_audible(track) {
+            silenced_clips |= !track.clips.is_empty();
             continue;
         }
         for clip in &track.clips {
@@ -686,38 +751,19 @@ pub fn resolve_audio_segments(
             if Some(track_index) != first_video_track {
                 has_additional_contributor = true;
             }
-            resolved.push(avbridge::AudioSegment {
-                source_path: asset.source_path.clone(),
-                source_in_secs: clip.source_in_secs,
-                source_out_secs: clip.source_out_secs,
-                timeline_start_secs: clip.start_secs,
-                gain_db: clip.gain_db,
-                // AudioSegment has no ramp field of its own — atempo takes one fixed parameter,
-                // not a `t`-keyed expression, so a smooth per-sample tempo ramp isn't achievable
-                // on the audio side in this FFmpeg build (same limitation
-                // ClipSegment::smooth_speed_ramp_end_factor's own doc comment describes). The
-                // ramp's *average* speed stands in when one is active, matching the approximation
-                // ClipSegment's own inline audio path already uses for a ramped background/
-                // single-track clip.
-                speed_factor: clip
-                    .speed_ramp_end_factor
-                    .map(|end| (clip.speed_factor + end) / 2.0)
-                    .unwrap_or(clip.speed_factor),
-                gain_keyframe_expr: keyframe::gain_filter_db_expr(
-                    &clip.gain_keyframes,
-                    clip.duration_secs(),
-                )
-                .unwrap_or_default(),
-                duck_role: track.audio_role.to_duck_role_code(),
-                voice_cleanup_enabled: clip.voice_cleanup_enabled,
-                voice_cleanup_noise_floor_db: clip.voice_cleanup_noise_floor_db,
-                voice_cleanup_compressor_threshold_db: clip.voice_cleanup_compressor_threshold_db,
-                voice_cleanup_compressor_ratio: clip.voice_cleanup_compressor_ratio,
-                voice_cleanup_ceiling_linear: clip.voice_cleanup_ceiling_linear,
-            });
+            resolved.push(audio_segment(clip, asset, track));
         }
     }
-    if !has_additional_contributor {
+    if silenced_clips && resolved.is_empty() {
+        // Everything is silenced. An empty list would mean "keep the original audio", so
+        // return one near-silent segment instead (-120 dB is inaudible and keeps the mix path).
+        if let Some(mut quiet) = silent_stand_in(sequence, media_library) {
+            quiet.gain_db = -120.0;
+            return Ok(vec![quiet]);
+        }
+        return Ok(Vec::new());
+    }
+    if !has_additional_contributor && !silenced_clips {
         return Ok(Vec::new());
     }
     resolved.sort_by(|a, b| a.timeline_start_secs.total_cmp(&b.timeline_start_secs));

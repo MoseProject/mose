@@ -200,6 +200,8 @@ fn track_edits_refuse_unknown_clips() {
         shape_clips: vec![],
         visible: true,
         audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
         locked: false,
         color_label: None,
     };

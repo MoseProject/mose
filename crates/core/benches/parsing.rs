@@ -162,6 +162,8 @@ fn large_project(asset_count: usize, clips_per_track: usize) -> Project {
         shape_clips: vec![],
         visible: true,
         audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
         locked: false,
         color_label: None,
     };

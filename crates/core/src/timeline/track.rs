@@ -113,6 +113,15 @@ pub struct Track {
     /// `Unspecified`, same as a never-tagged track in a new project.
     #[serde(default)]
     pub audio_role: AudioRole,
+    /// Silences this track in preview and export without removing its clips. Independent of
+    /// [`Self::visible`], which hides a video track's picture but keeps its sound.
+    /// `#[serde(default)]` so older projects load with nothing muted.
+    #[serde(default)]
+    pub muted: bool,
+    /// Solo: while any track is soloed, only soloed tracks are heard. See
+    /// [`super::Timeline::track_is_audible`].
+    #[serde(default)]
+    pub solo: bool,
     /// Optional RGB color label for this track, per `matrix/competitor-parity.md`'s 2026-08-27
     /// update (`spec/ROADMAP.md` P4 item 27) — DaVinci Resolve's track color, called out by
     /// users as something Premiere still lacks. Purely cosmetic, same "at-a-glance

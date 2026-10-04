@@ -105,6 +105,8 @@ fn compound_video_track(id: u64, clips: Vec<ClipInstance>) -> Track {
         shape_clips: vec![],
         visible: true,
         audio_role: avcore::AudioRole::Unspecified,
+        muted: false,
+        solo: false,
         locked: false,
         color_label: None,
     }
@@ -404,6 +406,8 @@ fn create_compound_clip_is_a_no_op_off_a_video_track() {
         shape_clips: vec![],
         visible: true,
         audio_role: avcore::AudioRole::Unspecified,
+        muted: false,
+        solo: false,
         locked: false,
         color_label: None,
     };

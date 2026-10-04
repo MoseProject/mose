@@ -144,6 +144,8 @@ fn track(id: u64, name: &str, clips: Vec<ClipInstance>) -> Track {
         shape_clips: vec![],
         visible: true,
         audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
         locked: false,
         color_label: None,
     }
@@ -273,6 +275,8 @@ fn resolve_audio_segments_includes_background_and_additional_audio_tracks() {
         shape_clips: vec![],
         visible: true,
         audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
         locked: false,
         color_label: None,
     };
@@ -305,6 +309,8 @@ fn resolve_audio_segments_carries_the_track_audio_role_as_duck_role() {
         shape_clips: vec![],
         visible: true,
         audio_role: AudioRole::Mic,
+        muted: false,
+        solo: false,
         locked: false,
         color_label: None,
     };
@@ -317,6 +323,8 @@ fn resolve_audio_segments_carries_the_track_audio_role_as_duck_role() {
         shape_clips: vec![],
         visible: true,
         audio_role: AudioRole::Music,
+        muted: false,
+        solo: false,
         locked: false,
         color_label: None,
     };
@@ -354,6 +362,8 @@ fn resolve_audio_segments_ignores_hidden_audio_tracks() {
         shape_clips: vec![],
         visible: false,
         audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
         locked: false,
         color_label: None,
     };
@@ -647,4 +657,80 @@ fn cancelling_mid_multi_track_export_reports_cancelled() {
     assert_eq!(outcome, RenderOutcome::Cancelled);
 
     let _ = std::fs::remove_file(&output);
+}
+
+fn audio_track(id: u64, clips: Vec<ClipInstance>) -> Track {
+    Track {
+        id,
+        name: format!("A{id}"),
+        kind: TrackKind::Audio,
+        clips,
+        text_clips: vec![],
+        shape_clips: vec![],
+        visible: true,
+        audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
+        locked: false,
+        color_label: None,
+    }
+}
+
+#[test]
+fn a_muted_audio_track_is_left_out_of_the_mix() {
+    let video = video_asset(1);
+    let audio = audio_asset(2);
+    let background = track(1, "V1", vec![clip(1, 1, 0.0, 0.0, 0.5)]);
+    let mut muted = audio_track(2, vec![clip(2, 2, 0.0, 0.0, 0.5)]);
+    muted.muted = true;
+    let sequence = sequence_with(vec![background, muted]);
+
+    let segments = resolve_audio_segments(&sequence, &[video, audio]).unwrap();
+
+    // Only the background track remains, so the one-pass path keeps its audio untouched... but a
+    // muted track means the mix path must run, listing just the background clip.
+    assert_eq!(segments.len(), 1);
+    assert!(segments[0]
+        .source_path
+        .ends_with(video_asset(1).source_path));
+}
+
+#[test]
+fn soloing_a_track_silences_the_others() {
+    let video = video_asset(1);
+    let audio = audio_asset(2);
+    let background = track(1, "V1", vec![clip(1, 1, 0.0, 0.0, 0.5)]);
+    let mut soloed = audio_track(2, vec![clip(2, 2, 0.0, 0.0, 0.5)]);
+    soloed.solo = true;
+    let sequence = sequence_with(vec![background, soloed]);
+
+    let segments = resolve_audio_segments(&sequence, &[video, audio.clone()]).unwrap();
+
+    assert_eq!(segments.len(), 1);
+    assert_eq!(segments[0].source_path, audio.source_path);
+}
+
+#[test]
+fn muting_the_only_audio_source_does_not_fall_back_to_the_original_audio() {
+    let video = video_asset(1);
+    let mut background = track(1, "V1", vec![clip(1, 1, 0.0, 0.0, 0.5)]);
+    background.muted = true;
+    let sequence = sequence_with(vec![background]);
+
+    let segments = resolve_audio_segments(&sequence, &[video]).unwrap();
+
+    // An empty list would mean "keep the original audio"; a near-silent stand-in is returned.
+    assert_eq!(segments.len(), 1);
+    assert!(segments[0].gain_db <= -100.0);
+}
+
+#[test]
+fn nothing_muted_keeps_the_one_pass_path_for_a_single_track() {
+    let video = video_asset(1);
+    let background = track(1, "V1", vec![clip(1, 1, 0.0, 0.0, 0.5)]);
+    let sequence = sequence_with(vec![background]);
+
+    assert!(resolve_audio_segments(&sequence, &[video])
+        .unwrap()
+        .is_empty());
 }

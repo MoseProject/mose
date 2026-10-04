@@ -556,6 +556,8 @@ pub fn interchange_to_timeline(
             shape_clips: vec![],
             visible: true,
             audio_role: crate::timeline::AudioRole::Unspecified,
+            muted: false,
+            solo: false,
             locked: false,
             color_label: None,
         });

@@ -166,6 +166,8 @@ fn fixture_project() -> Project {
 
                     visible: true,
                     audio_role: AudioRole::Unspecified,
+                    muted: false,
+                    solo: false,
                     locked: false,
                     color_label: None,
                 }],
@@ -245,6 +247,8 @@ fn project_with_styled_text() -> Project {
         shape_clips: vec![],
         visible: true,
         audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
         locked: false,
         color_label: None,
     });

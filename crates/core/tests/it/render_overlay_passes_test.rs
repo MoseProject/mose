@@ -54,6 +54,8 @@ fn track(kind: TrackKind, clips: Vec<ClipInstance>) -> Track {
         shape_clips: vec![],
         visible: true,
         audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
         locked: false,
         color_label: None,
     }
