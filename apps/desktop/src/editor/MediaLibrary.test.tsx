@@ -97,7 +97,7 @@ describe("media library", () => {
     cleanup();
 
     render(<MediaLibrary session={sessionWith([asset({ favorited: true })])} />);
-    expect(screen.getByTitle(t("favorite")).textContent).toBe("★");
+    expect(screen.getByTitle(t("favorite")).querySelector("svg")?.getAttribute("fill")).toBe("currentColor");
   });
 
   it("transcribes assets with audio, locking the button while one runs", () => {

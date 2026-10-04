@@ -1,14 +1,12 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n";
-import { exportsStore } from "../store";
+import { exportsStore, patchUi, uiStore } from "../store";
 import type { ExportJobView } from "../types";
 
 vi.mock("../ipc", () => ({
   api: {
-    getGpuEncoderPreference: vi.fn().mockResolvedValue("auto"),
-    setGpuEncoderPreference: vi.fn().mockResolvedValue(undefined),
     exportActiveSequenceSrt: vi.fn().mockResolvedValue(true),
     matchExportLoudness: vi.fn().mockResolvedValue(undefined),
     pauseExport: vi.fn().mockResolvedValue(undefined),
@@ -16,12 +14,11 @@ vi.mock("../ipc", () => ({
     cancelExport: vi.fn().mockResolvedValue(undefined),
     removeExport: vi.fn().mockResolvedValue(undefined),
   },
-  exportActiveSequence: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Imported after the mock so ExportPanel picks up the mocked `../ipc`.
 const { ExportPanel } = await import("./ExportPanel");
-const { api, exportActiveSequence } = await import("../ipc");
+const { api } = await import("../ipc");
 
 function job(overrides: Partial<ExportJobView>): ExportJobView {
   return {
@@ -88,32 +85,14 @@ describe("ExportPanel", () => {
     expect(api.cancelExport).toHaveBeenCalledWith(7);
   });
 
-  it("adopts the stored GPU encoder preference and saves a change", async () => {
-    vi.mocked(api.getGpuEncoderPreference).mockResolvedValueOnce("nvenc");
+  it("closes from its own button and on Escape", () => {
+    patchUi({ exportQueueOpen: true });
     render(<ExportPanel />);
-    const select = screen.getByRole("combobox") as HTMLSelectElement;
-    await waitFor(() => expect(select.value).toBe("nvenc"));
-    fireEvent.change(select, { target: { value: "cpu" } });
-    expect(select.value).toBe("cpu");
-    expect(api.setGpuEncoderPreference).toHaveBeenCalledWith("cpu");
-  });
-
-  it("keeps the default GPU preference when none is stored", async () => {
-    vi.mocked(api.getGpuEncoderPreference).mockResolvedValueOnce("");
-    render(<ExportPanel />);
-    await waitFor(() => expect(api.getGpuEncoderPreference).toHaveBeenCalled());
-    expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("auto");
-  });
-
-  it("starts an export asking for overwrite confirmation through window.confirm", async () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
-    render(<ExportPanel />);
-    fireEvent.click(screen.getByText(t("export"), { selector: "button" }));
-    expect(exportActiveSequence).toHaveBeenCalledTimes(1);
-    const ask = vi.mocked(exportActiveSequence).mock.calls[0][0];
-    expect(ask()).toBe(true);
-    expect(confirm).toHaveBeenCalledWith(t("exportOverwriteConfirm"));
-    confirm.mockRestore();
+    fireEvent.click(screen.getByLabelText(t("close")));
+    expect(uiStore.get().exportQueueOpen).toBe(false);
+    patchUi({ exportQueueOpen: true });
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(uiStore.get().exportQueueOpen).toBe(false);
   });
 
   it("exports the subtitles as SRT", () => {

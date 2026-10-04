@@ -79,7 +79,7 @@ beforeEach(() => {
   Element.prototype.setPointerCapture = vi.fn();
   previewStore.set(tick());
   sessionStore.set(null);
-  uiStore.set({ screen: "editor", selectedClipIds: [], tool: "select", pxPerSec: 40, error: null, drawingShapePoints: null });
+  uiStore.set({ screen: "editor", selectedClipIds: [], tool: "select", pxPerSec: 40, error: null, drawingShapePoints: null, exportQueueOpen: false });
 });
 afterEach(() => {
   cleanup();

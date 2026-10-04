@@ -38,7 +38,7 @@ describe("sequence tabs", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Cut B" }));
     expect(api.selectSequence).toHaveBeenCalledWith(1);
 
-    fireEvent.click(screen.getAllByTitle(t("duplicateSequence"))[0]);
+    fireEvent.click(screen.getAllByText(t("duplicateSequence"), { selector: "button" })[0]);
     expect(api.duplicateSequence).toHaveBeenCalledWith(0, `Main ${t("copy")}`);
 
     fireEvent.click(screen.getByTitle(t("addSequence")));
@@ -50,7 +50,7 @@ describe("sequence tabs", () => {
     expect(screen.getByRole("tab", { name: "Main" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("tab", { name: "Cut B" }).getAttribute("aria-selected")).toBe("false");
 
-    fireEvent.click(screen.getAllByTitle(t("renameSequence"))[0]);
+    fireEvent.click(screen.getAllByText(t("renameSequence"), { selector: "button" })[0]);
     const field = screen.getByLabelText(t("renameSequence")) as HTMLInputElement;
     fireEvent.change(field, { target: { value: "Renamed" } });
     fireEvent.blur(field);
@@ -60,15 +60,15 @@ describe("sequence tabs", () => {
 
   it("does not rename when the name is unchanged and leaves rename mode on Escape or Enter", () => {
     render(<SequenceTabs session={two()} />);
-    fireEvent.click(screen.getAllByTitle(t("renameSequence"))[0]);
+    fireEvent.click(screen.getAllByText(t("renameSequence"), { selector: "button" })[0]);
     fireEvent.blur(screen.getByLabelText(t("renameSequence")));
     expect(api.renameSequence).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getAllByTitle(t("renameSequence"))[0]);
+    fireEvent.click(screen.getAllByText(t("renameSequence"), { selector: "button" })[0]);
     fireEvent.keyDown(screen.getByLabelText(t("renameSequence")), { key: "Escape" });
     expect(screen.queryByLabelText(t("renameSequence"))).toBeNull();
 
-    fireEvent.click(screen.getAllByTitle(t("renameSequence"))[1]);
+    fireEvent.click(screen.getAllByText(t("renameSequence"), { selector: "button" })[1]);
     const field = screen.getByLabelText(t("renameSequence")) as HTMLInputElement;
     fireEvent.change(field, { target: { value: "Entered" } });
     fireEvent.keyDown(field, { key: "Enter" });
@@ -78,12 +78,12 @@ describe("sequence tabs", () => {
 
   it("removes and reorders, with the buttons disabled where the action makes no sense", () => {
     render(<SequenceTabs session={two()} />);
-    const remove = screen.getAllByTitle(t("removeSequence"));
+    const remove = screen.getAllByText(t("removeSequence"), { selector: "button" });
     fireEvent.click(remove[1]);
     expect(api.removeSequence).toHaveBeenCalledWith(22);
 
-    const left = screen.getAllByTitle(t("moveSequenceLeft"));
-    const right = screen.getAllByTitle(t("moveSequenceRight"));
+    const left = screen.getAllByText(t("moveSequenceLeft"), { selector: "button" });
+    const right = screen.getAllByText(t("moveSequenceRight"), { selector: "button" });
     expect((left[0] as HTMLButtonElement).disabled).toBe(true);
     expect((right[1] as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(right[0]);
@@ -92,7 +92,7 @@ describe("sequence tabs", () => {
     expect(api.moveSequence).toHaveBeenCalledWith(1, 0);
 
     // The active sequence cannot be nested into itself.
-    const insert = screen.getAllByTitle(t("insertAsCompoundClip"));
+    const insert = screen.getAllByText(t("insertAsCompoundClip"), { selector: "button" });
     expect((insert[0] as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(insert[1]);
     expect(api.insertSequenceAsCompoundClip).toHaveBeenCalledWith(22);
@@ -100,7 +100,7 @@ describe("sequence tabs", () => {
 
   it("will not remove the only sequence", () => {
     render(<SequenceTabs session={makeSession([{ id: 1, name: "Only" }])} />);
-    expect((screen.getByTitle(t("removeSequence")) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByText(t("removeSequence"), { selector: "button" }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
 

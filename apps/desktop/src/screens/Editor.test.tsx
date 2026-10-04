@@ -7,7 +7,6 @@ import { makeSession } from "../testSupport";
 import type { SessionView } from "../types";
 
 vi.mock("../editor/Inspector", () => ({ Inspector: () => <div data-testid="inspector" /> }));
-vi.mock("../editor/ExportPanel", () => ({ ExportPanel: () => <div data-testid="export-panel" /> }));
 vi.mock("../editor/MediaLibrary", () => ({ MediaLibrary: () => <div data-testid="library" /> }));
 vi.mock("../editor/PreviewPanel", () => ({ PreviewPanel: () => <div data-testid="preview" /> }));
 vi.mock("../editor/Timeline", () => ({ Timeline: () => <div data-testid="timeline" /> }));
@@ -63,7 +62,7 @@ beforeEach(() => {
   webview.handler = null;
   Element.prototype.setPointerCapture = vi.fn();
   Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, get: () => 1000 });
-  uiStore.set({ screen: "editor", selectedClipIds: [], tool: "select", pxPerSec: 40, error: null, drawingShapePoints: null });
+  uiStore.set({ screen: "editor", selectedClipIds: [], tool: "select", pxPerSec: 40, error: null, drawingShapePoints: null, exportQueueOpen: false });
   previewStore.set({ frameSeq: 0, playheadSecs: 0, playing: false, hasClip: false, available: true, error: null, peakL: 0, peakR: 0 });
 });
 afterEach(() => {
@@ -74,7 +73,7 @@ afterEach(() => {
 describe("editor screen", () => {
   it("composes every panel", () => {
     render(<Editor session={sessionWith(1)} />);
-    for (const id of ["library", "preview", "inspector", "export-panel", "tabs", "timeline"]) {
+    for (const id of ["library", "preview", "inspector", "tabs", "timeline"]) {
       expect(screen.getByTestId(id)).toBeTruthy();
     }
   });

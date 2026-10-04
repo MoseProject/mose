@@ -181,7 +181,7 @@ function mount(session: SessionView = world()) {
 }
 
 const resetUi = () =>
-  uiStore.set({ screen: "editor", selectedClipIds: [], tool: "select", pxPerSec: 40, error: null, drawingShapePoints: null });
+  uiStore.set({ screen: "editor", selectedClipIds: [], tool: "select", pxPerSec: 40, error: null, drawingShapePoints: null, exportQueueOpen: false });
 
 beforeEach(() => {
   vi.clearAllMocks();

@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "./i18n";
-import { sessionStore, uiStore } from "./store";
+import { exportsStore, sessionStore, uiStore } from "./store";
 import { makeSession } from "./testSupport";
 import type { SessionView } from "./types";
 
@@ -41,7 +41,7 @@ const goTo = (screenName: "home" | "prefs" | "watch" | "editor") =>
 beforeEach(() => {
   vi.clearAllMocks();
   sessionStore.set(null);
-  uiStore.set({ screen: "home", selectedClipIds: [], tool: "select", pxPerSec: 40, error: null, drawingShapePoints: null });
+  uiStore.set({ screen: "home", selectedClipIds: [], tool: "select", pxPerSec: 40, error: null, drawingShapePoints: null, exportQueueOpen: false });
 });
 afterEach(() => cleanup());
 
@@ -161,7 +161,7 @@ describe("app shell", () => {
       render(<App />);
       const banner = screen.getByRole("alert");
       expect(banner.textContent).toContain(`${t("errorPrefix")}: disk full`);
-      fireEvent.click(screen.getByText("✕"));
+      fireEvent.click(screen.getByLabelText(t("close")));
       expect(uiStore.get().error).toBeNull();
       expect(screen.queryByRole("alert")).toBeNull();
     });
@@ -170,5 +170,20 @@ describe("app shell", () => {
       render(<App />);
       expect(screen.queryByRole("alert")).toBeNull();
     });
+  });
+});
+
+describe("export queue popover", () => {
+  it("stays closed until toggled, and shows the active job count", () => {
+    sessionStore.set(session());
+    exportsStore.set([{ id: 1, title: "a.mp4", outputPath: "a", status: "Queued", percent: 0, elapsedSecs: null }]);
+    render(<App />);
+    expect(screen.queryByText(t("noExports"))).toBeNull();
+    const toggle = screen.getByTestId("export-queue-toggle");
+    expect(toggle.textContent).toContain("1");
+    fireEvent.click(toggle);
+    expect(uiStore.get().exportQueueOpen).toBe(true);
+    expect(screen.getByRole("dialog", { name: t("exportQueue") })).toBeTruthy();
+    exportsStore.set([]);
   });
 });

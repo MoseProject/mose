@@ -11,6 +11,8 @@ vi.mock("../ipc", () => ({
   api: {
     getPrefs: vi.fn(),
     getQueuedReportCount: vi.fn(),
+    getGpuEncoderPreference: vi.fn().mockResolvedValue("auto"),
+    setGpuEncoderPreference: vi.fn().mockResolvedValue(undefined),
     setPrefs: vi.fn().mockResolvedValue(undefined),
     setErrorReportingConsent: vi.fn().mockResolvedValue(undefined),
     deleteQueuedReports: vi.fn().mockResolvedValue(undefined),
@@ -176,5 +178,22 @@ describe("preferences screen", () => {
 
     unmount();
     await waitFor(() => expect(stopListening).toHaveBeenCalled());
+  });
+});
+
+describe("preferences screen: GPU encoder", () => {
+  beforeEach(() => {
+    vi.mocked(api.getPrefs).mockResolvedValue(prefs());
+    vi.mocked(api.getQueuedReportCount).mockResolvedValue(0);
+  });
+  afterEach(() => cleanup());
+
+  it("adopts the stored preference and saves a change", async () => {
+    vi.mocked(api.getGpuEncoderPreference).mockResolvedValueOnce("nvenc");
+    render(<Prefs />);
+    const select = (await screen.findByLabelText(t("gpuEncoder"))) as HTMLSelectElement;
+    await waitFor(() => expect(select.value).toBe("nvenc"));
+    fireEvent.change(select, { target: { value: "cpu" } });
+    expect(api.setGpuEncoderPreference).toHaveBeenCalledWith("cpu");
   });
 });
