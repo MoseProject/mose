@@ -104,7 +104,8 @@ export interface AssetDrag {
 
 export const assetDragStore = createStore<AssetDrag | null>(null);
 
-export const MIN_PX_PER_SEC = 2;
+/** Low enough to see a whole ten-hour timeline in an ordinary window. */
+export const MIN_PX_PER_SEC = 0.01;
 export const MAX_PX_PER_SEC = 600;
 
 export function patchUi(patch: Partial<UiState>) {

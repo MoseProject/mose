@@ -76,3 +76,52 @@ fn a_video_whose_file_is_gone_has_no_thumbnail() {
     h.session().project.media_library.push(video_asset(9, 5.0));
     assert_eq!(answer(&h, "/thumb/9").status(), StatusCode::NOT_FOUND);
 }
+
+#[test]
+fn the_timed_thumbnail_route_serves_the_frame_at_a_source_time() {
+    let h = harness_with_cache();
+    let mut asset = video_asset(7, 5.0);
+    asset.source_path = fixture("video.mp4");
+    h.session().project.media_library.push(asset);
+    let response = answer(&h, "/thumb/7/1500");
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(&response.body()[..2], &[0xFF, 0xD8]);
+    // The same time is served from the cache.
+    assert_eq!(answer(&h, "/thumb/7/1500").body(), response.body());
+    assert_eq!(answer(&h, "/thumb/7/not-a-time").status(), StatusCode::OK);
+}
+
+#[test]
+fn the_waveform_route_serves_little_endian_peak_pairs() {
+    let h = harness_with_cache();
+    let mut asset = video_asset(7, 5.0);
+    asset.source_path = fixture("video.mp4");
+    asset.has_audio = true;
+    h.session().project.media_library.push(asset);
+    let response = answer(&h, "/wave/7");
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers()[header::CONTENT_TYPE],
+        "application/octet-stream"
+    );
+    let expected = avcore::detailed_bucket_count(5.0) * 8;
+    assert_eq!(response.body().len(), expected);
+    let floats: Vec<f32> = response
+        .body()
+        .chunks_exact(4)
+        .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+        .collect();
+    assert!(floats.chunks_exact(2).all(|p| p[0] <= p[1]));
+    assert!(floats.iter().any(|v| *v != 0.0));
+}
+
+#[test]
+fn the_waveform_route_is_404_without_audio_or_for_unknown_assets() {
+    let h = harness_with_cache();
+    let mut silent = video_asset(8, 5.0);
+    silent.has_audio = false;
+    h.session().project.media_library.push(silent);
+    for path in ["/wave/8", "/wave/99", "/wave/not-a-number", "/wave"] {
+        assert_eq!(answer(&h, path).status(), StatusCode::NOT_FOUND, "{path}");
+    }
+}

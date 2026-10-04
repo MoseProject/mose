@@ -319,3 +319,7 @@ export async function exportActiveSequence(confirmOverwrite: () => boolean): Pro
   if (!target) return;
   await api.startExport(target.path, target.exists && !confirmOverwrite());
 }
+/** One video frame of an asset at a source time, for the timeline's clip strips. */
+export const frameAtUrl = (assetId: number, millis: number) => `${schemeBase}/thumb/${assetId}/${millis}`;
+/** The asset's detailed waveform: little-endian f32 (min, max) pairs across its duration. */
+export const waveformUrl = (assetId: number) => `${schemeBase}/wave/${assetId}`;

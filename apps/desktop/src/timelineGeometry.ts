@@ -118,7 +118,7 @@ export function snap(secs: number, candidates: number[], thresholdSecs: number):
   return best;
 }
 
-const TICK_STEPS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600];
+const TICK_STEPS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1200, 1800, 3600, 7200, 14400, 28800];
 const MIN_TICK_SPACING_PX = 80;
 
 /** Labelled ruler tick times covering `[scrollSecs, scrollSecs + width / pxPerSec]`. */
@@ -133,6 +133,25 @@ export function rulerTicks(pxPerSec: number, scrollSecs: number, width: number):
     ticks.push(Number((i * step).toFixed(3)));
   }
   return ticks;
+}
+
+/** Ruler label: `m:ss`, switching to `h:mm:ss` from one hour. */
+export function rulerLabel(secs: number): string {
+  const whole = Math.floor(secs);
+  const hours = Math.floor(whole / 3600);
+  const minutes = Math.floor((whole % 3600) / 60);
+  const seconds = whole % 60;
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  if (hours > 0) return `${hours}:${pad(minutes)}:${pad(seconds)}`;
+  const fraction = secs - whole;
+  const tail = fraction >= 0.005 ? `.${Math.round(fraction * 100).toString().padStart(2, "0")}` : "";
+  return `${minutes}:${pad(seconds)}${tail}`;
+}
+
+/** Pixels per second that fit `durationSecs` into `viewWidth` (with a small margin). */
+export function fitPxPerSec(durationSecs: number, viewWidth: number, min: number, max: number): number {
+  if (durationSecs <= 0 || viewWidth <= 0) return min;
+  return Math.min(max, Math.max(min, (viewWidth - 24) / durationSecs));
 }
 
 /** Zooms around an anchor so the time under the pointer stays put. */
