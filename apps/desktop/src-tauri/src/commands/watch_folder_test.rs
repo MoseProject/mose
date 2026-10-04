@@ -59,6 +59,8 @@ fn a_new_video_is_detected_normalized_and_reported() {
 
     start_watching(h.handle(), dir.clone(), FAST);
     wait_for(&events, "\"type\":\"done\"");
+    // A couple more scans: the finished file now has its output and is left alone.
+    std::thread::sleep(Duration::from_millis(100));
     stop_watching_folder(h.state());
 
     let seen = events.lock().unwrap().clone();

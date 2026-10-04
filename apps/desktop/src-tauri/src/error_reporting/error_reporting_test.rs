@@ -548,3 +548,24 @@ fn only_crash_files_with_a_numeric_timestamp_are_considered() {
     std::fs::write(dir.join("other_9.txt"), b"x").unwrap();
     assert!(find_latest_unreviewed_crash(&dir, 0).is_none());
 }
+
+#[test]
+fn a_report_that_cannot_be_queued_is_dropped_and_the_worker_carries_on() {
+    let blocker = temp_dir("blocked-queue").join("a-file");
+    std::fs::write(&blocker, b"x").unwrap();
+    let sender = Arc::new(ScriptedSender::new(&[]));
+    let (tx, rx) = mpsc::unbounded_channel();
+    spawn_delivery_worker_in(blocker.join("inside"), rx, sender.clone());
+    tx.send(report()).unwrap();
+    drop(tx);
+    std::thread::sleep(Duration::from_millis(150));
+    assert_eq!(sender.calls.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn pruning_skips_entries_that_cannot_be_read() {
+    let dir = temp_dir("prune-unreadable");
+    std::fs::create_dir_all(dir.join("folder.json")).unwrap();
+    prune_queue_dir(&dir);
+    assert!(dir.join("folder.json").exists());
+}

@@ -216,3 +216,17 @@ fn applying_skips_unassigned_and_unknown_assets_and_missing_templates() {
     assert_eq!(events.load(Ordering::SeqCst), 0);
     assert_eq!(h.session().project.timeline().tracks.len(), 1);
 }
+
+#[test]
+fn applying_a_template_to_an_audio_asset_makes_an_audio_track() {
+    let (h, ids) = with_clips();
+    save_layer_template(h.handle(), "Look".into(), vec![ids[0]]).unwrap();
+    let mut audio = video_asset(2, 4.0);
+    audio.kind = avcore::MediaKind::Audio;
+    h.session().project.media_library.push(audio);
+    apply_layer_template(h.handle(), 0, vec![Some(2)]).unwrap();
+    let session = h.session();
+    let tracks = &session.project.timeline().tracks;
+    assert_eq!(tracks.len(), 2);
+    assert_eq!(tracks[1].kind, TrackKind::Audio);
+}
