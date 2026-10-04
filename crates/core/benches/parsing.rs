@@ -236,10 +236,35 @@ fn bench_timeline_duration(c: &mut Criterion) {
     group.finish();
 }
 
+/// What every edit pays in the desktop shell: the undo snapshot (`Sequence` clone), the copy
+/// handed to the preview thread (`Project` clone) and the JSON the webview receives on
+/// `session-changed`. Scales with project size, so a drag that publishes per pointer move is
+/// bounded by these numbers.
+fn bench_per_edit_cost(c: &mut Criterion) {
+    let mut group = c.benchmark_group("per_edit");
+
+    for clip_count in [10usize, 200, 1000] {
+        let project = large_project(50, clip_count);
+        group.bench_function(format!("project_clone/{clip_count}_clips_per_track"), |b| {
+            b.iter(|| black_box(&project).clone())
+        });
+        group.bench_function(
+            format!("sequence_clone/{clip_count}_clips_per_track"),
+            |b| b.iter(|| black_box(&project).active_sequence().clone()),
+        );
+        group.bench_function(format!("session_json/{clip_count}_clips_per_track"), |b| {
+            b.iter(|| serde_json::to_vec(black_box(&project)).unwrap())
+        });
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_parse_loudnorm_stderr,
     bench_project_ocproj_round_trip,
     bench_timeline_duration,
+    bench_per_edit_cost,
 );
 criterion_main!(benches);
