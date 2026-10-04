@@ -123,8 +123,5 @@ describe("ExportDialog", () => {
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     expect(uiStore.get().exportDialogOpen).toBe(false);
     expect(exportActiveSequence).not.toHaveBeenCalled();
-    act(() => {
-      return undefined;
-    });
   });
 });
