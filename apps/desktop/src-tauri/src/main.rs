@@ -22,6 +22,7 @@
 
 mod autosave;
 mod bush_adapter;
+mod close_guard;
 mod commands;
 mod dialogs;
 mod error_reporting;
@@ -95,6 +96,13 @@ fn main() {
             ));
             autosave::spawn(handle);
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if close_guard::guard_close(window.app_handle()) {
+                    api.prevent_close();
+                }
+            }
         })
         .invoke_handler(handler::all_commands!())
         .run(tauri::generate_context!())
