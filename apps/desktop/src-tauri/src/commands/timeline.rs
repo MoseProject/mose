@@ -452,11 +452,8 @@ fn apply_speed_ramp(
     let ramped_steps = clip_ids.len();
     let mut cursor_secs = start_secs;
     for (i, &id) in clip_ids.iter().enumerate() {
-        let t = if ramped_steps > 1 {
-            i as f32 / (ramped_steps - 1) as f32
-        } else {
-            0.0
-        };
+        // One piece (every split refused) stays at the start speed.
+        let t = i as f32 / ramped_steps.saturating_sub(1).max(1) as f32;
         let speed = (start_speed + (end_speed - start_speed) * t).clamp(0.25, 4.0);
         if let Some(c) = timeline.clip_mut(id) {
             c.speed_factor = speed;
