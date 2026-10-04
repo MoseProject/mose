@@ -24,6 +24,7 @@ mod glitch;
 mod gpu_blur;
 #[cfg(feature = "gpu")]
 mod gpu_renderer;
+mod k_weighting;
 mod keyframes;
 mod latest_intent;
 mod layer_mods;
@@ -63,6 +64,7 @@ pub use frame_mailbox::{FrameMailbox, PublishedFrame};
 pub use glitch::{glitch, shake_offset};
 #[cfg(feature = "gpu")]
 pub use gpu_renderer::{GpuError, GpuRenderer};
+pub use k_weighting::{lufs, KWeighting};
 pub use keyframes::{
     Animation, Easing, Fade, Keyframe, KeyframeError, KeyframeTrack, MAX_GAIN_DB, MIN_GAIN_DB,
 };
