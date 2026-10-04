@@ -107,22 +107,79 @@ pub fn set_panel_layout<R: Runtime>(
     })
 }
 
+/// Loudness target for new projects: the profile chosen in the preferences.
+fn default_target_lufs<R: Runtime>(app: &AppHandle<R>) -> f32 {
+    let profile = app.state::<AppState>().prefs().view.lufs_profile;
+    [-14.0, -16.0, -23.0].get(profile).copied().unwrap_or(-14.0)
+}
+
 #[tauri::command]
 pub fn new_project<R: Runtime>(
     app: AppHandle<R>,
     name: String,
     sequence_name: String,
 ) -> Result<(), String> {
-    let target_lufs = {
-        let profile = app.state::<AppState>().prefs().view.lufs_profile;
-        [-14.0, -16.0, -23.0].get(profile).copied().unwrap_or(-14.0)
-    };
+    let target_lufs = default_target_lufs(&app);
     with_session(&app, |session| {
         let mut project = blank_project(name, sequence_name);
         project.active_sequence_mut().export_settings.target_lufs = target_lufs;
         session.replace_project(project);
         Ok(())
     })
+}
+
+/// A file name for `name`: the characters a file system rejects become spaces.
+fn file_stem_for(name: &str) -> String {
+    let cleaned: String = name
+        .chars()
+        .map(|c| {
+            if c.is_control() || ['<', '>', ':', '"', '/', '\\', '|', '?', '*'].contains(&c) {
+                ' '
+            } else {
+                c
+            }
+        })
+        .collect();
+    let cleaned = cleaned.trim().trim_end_matches('.').trim();
+    if cleaned.is_empty() {
+        "project".to_string()
+    } else {
+        cleaned.to_string()
+    }
+}
+
+/// Creates a project named `name`: asks where to keep it, writes the file at once so the project
+/// exists (and shows up in the projects list) even if the app is closed right away, and opens
+/// it. `Ok(false)` when the user cancels the dialog; the open project is untouched then, and
+/// also when the file cannot be written.
+#[tauri::command]
+pub async fn create_project<R: Runtime>(
+    app: AppHandle<R>,
+    name: String,
+    sequence_name: String,
+) -> Result<bool, String> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err("projectNameEmpty".to_string());
+    }
+    let Some(path) = crate::dialogs::save_file(
+        "oca",
+        &["ocproj"],
+        &format!("{}.ocproj", file_stem_for(&name)),
+    ) else {
+        return Ok(false);
+    };
+    let target_lufs = default_target_lufs(&app);
+    let mut project = blank_project(name, sequence_name);
+    project.active_sequence_mut().export_settings.target_lufs = target_lufs;
+    project.file_path = Some(path.clone());
+    avcore::save_project_to_file(&project, &path).map_err(|e| e.to_string())?;
+    with_session(&app, |session| {
+        session.replace_project(project);
+        Ok(())
+    })?;
+    note_recent_project(&app, &path);
+    Ok(true)
 }
 
 /// Shows an open dialog; `Ok(false)` when the user cancels.

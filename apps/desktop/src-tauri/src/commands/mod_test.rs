@@ -187,6 +187,81 @@ fn a_recent_list_that_cannot_be_written_is_logged_not_propagated() {
 }
 
 #[test]
+fn file_names_drop_what_a_file_system_rejects() {
+    assert_eq!(file_stem_for("My show"), "My show");
+    assert_eq!(file_stem_for(r"a/b\c:d*e?"), "a b c d e");
+    assert_eq!(file_stem_for("  trailing dot. "), "trailing dot");
+    assert_eq!(file_stem_for("???"), "project");
+    assert_eq!(file_stem_for(""), "project");
+}
+
+#[test]
+fn creating_a_project_writes_it_at_once_opens_it_and_lists_it() {
+    let h = harness();
+    let path = path_in(&h.dir, "Boss fight.ocproj");
+    crate::dialogs::scripted::answer(Some(vec![path.clone()]));
+
+    let created = tauri::async_runtime::block_on(create_project(
+        h.handle(),
+        "Boss fight".into(),
+        "Cut 1".into(),
+    ));
+
+    assert_eq!(created, Ok(true));
+    assert!(path.exists(), "the file exists before any save");
+    let session = h.session();
+    assert_eq!(session.project.name, "Boss fight");
+    assert_eq!(session.project.file_path.as_deref(), Some(path.as_path()));
+    assert!(!session.dirty);
+    drop(session);
+    let on_disk = avcore::load_project_from_file(&path).unwrap();
+    assert_eq!(on_disk.name, "Boss fight");
+    assert_eq!(on_disk.sequences[0].name, "Cut 1");
+    assert!(h
+        .prefs()
+        .view
+        .recent_project_paths
+        .contains(&path.display().to_string()));
+}
+
+#[test]
+fn a_cancelled_dialog_creates_nothing_and_keeps_the_open_project() {
+    let h = harness();
+    new_project(h.handle(), "Keep me".into(), "Seq".into()).unwrap();
+    crate::dialogs::scripted::answer(None);
+
+    let created =
+        tauri::async_runtime::block_on(create_project(h.handle(), "Other".into(), "Seq".into()));
+
+    assert_eq!(created, Ok(false));
+    assert_eq!(h.session().project.name, "Keep me");
+}
+
+#[test]
+fn a_blank_name_is_refused_before_any_dialog() {
+    let h = harness();
+    new_project(h.handle(), "Keep me".into(), "Seq".into()).unwrap();
+    let result =
+        tauri::async_runtime::block_on(create_project(h.handle(), "   ".into(), "Seq".into()));
+    assert_eq!(result, Err("projectNameEmpty".to_string()));
+    assert_eq!(h.session().project.name, "Keep me");
+}
+
+#[test]
+fn a_project_that_cannot_be_written_leaves_the_open_one_alone() {
+    let h = harness();
+    new_project(h.handle(), "Keep me".into(), "Seq".into()).unwrap();
+    let blocked = path_in(&h.dir, "no-such-dir").join("x.ocproj");
+    crate::dialogs::scripted::answer(Some(vec![blocked]));
+
+    let result =
+        tauri::async_runtime::block_on(create_project(h.handle(), "Doomed".into(), "Seq".into()));
+
+    assert!(result.is_err());
+    assert_eq!(h.session().project.name, "Keep me");
+}
+
+#[test]
 fn opening_a_missing_project_reports_the_error() {
     let h = harness();
     let missing = path_in(&h.dir, "missing.ocproj");

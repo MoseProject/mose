@@ -18,6 +18,12 @@ pub struct RecentProject {
     pub name: String,
     pub modified_unix_secs: u64,
     pub autosave_path: Option<String>,
+    /// The folder the project file lives in.
+    pub folder: String,
+    pub sequence_count: usize,
+    pub media_count: usize,
+    /// Length of the active sequence's timeline.
+    pub duration_secs: f64,
 }
 
 #[tauri::command]
@@ -58,11 +64,18 @@ pub fn get_recent_projects(state: State<'_, AppState>) -> Vec<RecentProject> {
                 .duration_since(std::time::UNIX_EPOCH)
                 .ok()?
                 .as_secs();
-            let name = avcore::load_project_from_file(&path).ok()?.name;
+            let project = avcore::load_project_from_file(&path).ok()?;
             Some(RecentProject {
                 autosave_path: autosave::is_newer(&path).map(|path| path.display().to_string()),
+                folder: path
+                    .parent()
+                    .map(|folder| folder.display().to_string())
+                    .unwrap_or_default(),
                 path: path.display().to_string(),
-                name,
+                sequence_count: project.sequences.len(),
+                media_count: project.media_library.len(),
+                duration_secs: project.timeline().duration_secs(),
+                name: project.name,
                 modified_unix_secs,
             })
         })
