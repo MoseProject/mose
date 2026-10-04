@@ -50,6 +50,7 @@ export const events = {
   tts: "tts-event",
   watchFolder: "watch-folder-event",
   importFailed: "import-failed",
+  closeRequested: "close-requested",
   youtubeDownload: "youtube-download-event",
   updateCheck: "update-check-event",
 } as const;
@@ -119,6 +120,15 @@ export function onTts(handler: (event: TtsEvent) => void): Promise<UnlistenFn> {
 export function onImportFailed(handler: (fileName: string) => void): Promise<UnlistenFn> {
   return listen<{ fileName: string }>(events.importFailed, (e) => {
     return handler(e.payload.fileName);
+  });
+}
+
+/** The window was asked to close while work would be lost: unsaved changes and/or exports. */
+export function onCloseRequested(
+  handler: (request: { dirty: boolean; exporting: boolean }) => void,
+): Promise<UnlistenFn> {
+  return listen<{ dirty: boolean; exporting: boolean }>(events.closeRequested, (e) => {
+    return handler(e.payload);
   });
 }
 
@@ -217,6 +227,9 @@ export const api = {
     return invoke<void>("toggle_favorite", { assetId });
   },
 
+  quitApp: () => {
+    return invoke<void>("quit_app");
+  },
   removeAsset: (assetId: number) => {
     return invoke<void>("remove_asset", { assetId });
   },

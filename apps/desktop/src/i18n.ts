@@ -534,6 +534,16 @@ const strings = {
     "pt-BR": "Já existe uma exportação para esse arquivo na fila.",
     en: "An export to that file is already in the queue.",
   },
+  confirmQuitTitle: { "pt-BR": "Sair do oca?", en: "Quit oca?" },
+  confirmQuitAction: { "pt-BR": "Sair mesmo assim", en: "Quit anyway" },
+  confirmQuitDirty: {
+    "pt-BR": "O projeto tem alterações que não foram salvas.",
+    en: "The project has changes that were not saved.",
+  },
+  confirmQuitExporting: {
+    "pt-BR": "Há exportações na fila ou em andamento que serão perdidas.",
+    en: "There are exports queued or running that would be lost.",
+  },
   importFailed: {
     "pt-BR": "Não foi possível importar o arquivo",
     en: "Could not import the file",
