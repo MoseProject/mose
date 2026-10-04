@@ -53,7 +53,7 @@ pub fn start_export<R: Runtime>(
         // unchanged nested content.
         let project = {
             let cache_dir = avcore::nested_sequence::cache_dir_for_project(&session.project);
-            let mut cache = state.nested_sequence_cache.lock().unwrap();
+            let mut cache = crate::state::lock_or_recover(&state.nested_sequence_cache);
             let nested_assets = avcore::nested_sequence::materialize_nested_sequences(
                 &session.project,
                 session.project.timeline(),

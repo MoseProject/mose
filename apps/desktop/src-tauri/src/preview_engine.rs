@@ -17,14 +17,32 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use avcore::{MediaAsset, Project};
 use serde::Serialize;
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Emitter, Runtime};
 
 /// Event carrying a [`PreviewTick`].
 pub const PREVIEW_TICK: &str = "preview-tick";
+
+/// Event telling the webview the playback thread crashed ([`PreviewRecovery`]).
+pub const PREVIEW_RECOVERY: &str = "preview-recovery";
+
+/// How often the supervisor wakes to check on the playback thread while no command arrives.
+const SUPERVISE_INTERVAL: Duration = Duration::from_millis(100);
+/// A playback thread that crashes this many times within [`RESTART_WINDOW`] is not restarted
+/// again: something about the project makes it crash every time.
+const MAX_RESTARTS: usize = 5;
+const RESTART_WINDOW: Duration = Duration::from_secs(60);
+
+/// What the webview is told after a playback crash.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewRecovery {
+    /// The thread was started again with the scene it had; `false` means it was given up on.
+    pub restarted: bool,
+}
 
 /// Upper bound on tick events per second while playing -- enough for a smooth playhead
 /// without flooding the IPC bridge.
@@ -79,19 +97,22 @@ impl PreviewEngine {
     /// [`spawn`] with the playback loop passed in, so tests can run it with a fake audio output.
     pub(crate) fn spawn_with<R: Runtime>(
         app: AppHandle<R>,
-        run: impl FnOnce(mpsc::Receiver<Command>, AppHandle<R>, LatestFrame, Arc<AtomicU64>)
+        run: impl Fn(mpsc::Receiver<Command>, AppHandle<R>, LatestFrame, Arc<AtomicU64>)
             + Send
+            + Sync
             + 'static,
     ) -> Self {
-        let (tx, rx) = mpsc::channel();
+        let (tx, commands) = mpsc::channel();
         let latest: LatestFrame = Arc::new(Mutex::new(None));
         let playhead_bits = Arc::new(AtomicU64::new(0f64.to_bits()));
         let engine_latest = Arc::clone(&latest);
         let engine_playhead = Arc::clone(&playhead_bits);
         std::thread::Builder::new()
-            .name("oca-preview-engine".into())
-            .spawn(move || run(rx, app, engine_latest, engine_playhead))
-            .expect("spawning the preview engine thread");
+            .name("oca-preview-supervisor".into())
+            .spawn(move || {
+                supervise(&app, commands, &run, engine_latest, engine_playhead);
+            })
+            .expect("spawning the preview supervisor thread");
         Self {
             tx,
             latest,
@@ -110,6 +131,12 @@ impl PreviewEngine {
             playhead_bits: Arc::new(AtomicU64::new(0f64.to_bits())),
         };
         (engine, rx)
+    }
+
+    /// The shared frame slot itself, for tests that poison its lock.
+    #[cfg(test)]
+    pub(crate) fn latest_slot(&self) -> LatestFrame {
+        Arc::clone(&self.latest)
     }
 
     /// Pretends the engine produced `bytes` as its latest preview frame.
@@ -149,10 +176,89 @@ impl PreviewEngine {
     }
 
     pub fn latest_frame(&self) -> Option<Arc<Vec<u8>>> {
-        self.latest
-            .lock()
-            .ok()
-            .and_then(|frame| frame.as_ref().map(Arc::clone))
+        crate::state::lock_or_recover(&self.latest)
+            .as_ref()
+            .map(Arc::clone)
+    }
+}
+
+/// Runs the playback loop on its own thread and keeps it alive: when it panics (a decoder edge
+/// case, say) the loop is started again with the project it had and the playhead where it was,
+/// so one crash does not leave the preview dead until the app restarts. Commands arrive here and
+/// are forwarded, which is what lets a new loop take over the queue.
+fn supervise<R: Runtime>(
+    app: &AppHandle<R>,
+    commands: mpsc::Receiver<Command>,
+    run: &(impl Fn(mpsc::Receiver<Command>, AppHandle<R>, LatestFrame, Arc<AtomicU64>)
+          + Send
+          + Sync
+          + 'static),
+    latest: LatestFrame,
+    playhead_bits: Arc<AtomicU64>,
+) {
+    let mut project: Option<Project> = None;
+    let mut crashes: Vec<Instant> = Vec::new();
+    let mut first = true;
+    loop {
+        let (inner_tx, inner_rx) = mpsc::channel();
+        if !first {
+            if let Some(project) = &project {
+                let _ = inner_tx.send(Command::Content {
+                    project: Box::new(project.clone()),
+                });
+                let secs = f64::from_bits(playhead_bits.load(Ordering::Acquire));
+                let _ = inner_tx.send(Command::Seek(secs));
+            }
+        }
+        first = false;
+        let worker = {
+            let app = app.clone();
+            let latest = Arc::clone(&latest);
+            let playhead_bits = Arc::clone(&playhead_bits);
+            std::thread::scope(|scope| {
+                let handle = std::thread::Builder::new()
+                    .name("oca-preview-engine".into())
+                    .spawn_scoped(scope, || run(inner_rx, app, latest, playhead_bits))
+                    .expect("spawning the preview engine thread");
+                loop {
+                    match commands.recv_timeout(SUPERVISE_INTERVAL) {
+                        Ok(command) => {
+                            if let Command::Content { project: content } = &command {
+                                project = Some((**content).clone());
+                            }
+                            let _ = inner_tx.send(command);
+                        }
+                        Err(mpsc::RecvTimeoutError::Timeout) => {
+                            if handle.is_finished() {
+                                break;
+                            }
+                        }
+                        Err(mpsc::RecvTimeoutError::Disconnected) => {
+                            // The handle was dropped: let the loop see its channel close.
+                            drop(inner_tx);
+                            let _ = handle.join();
+                            return None;
+                        }
+                    }
+                }
+                Some(handle.join())
+            })
+        };
+        match worker {
+            // Every sender is gone, or the loop ended by itself: nothing left to supervise.
+            None | Some(Ok(())) => return,
+            Some(Err(_)) => {
+                let now = Instant::now();
+                crashes.retain(|at| now.duration_since(*at) < RESTART_WINDOW);
+                crashes.push(now);
+                let restarted = crashes.len() <= MAX_RESTARTS;
+                tracing::error!(restarted, "the preview playback thread crashed");
+                let _ = app.emit(PREVIEW_RECOVERY, PreviewRecovery { restarted });
+                if !restarted {
+                    return;
+                }
+            }
+        }
     }
 }
 
