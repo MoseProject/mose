@@ -136,3 +136,15 @@ fn an_unwritable_prefs_path_fails_to_save() {
     assert!(PrefsDocument::default().save_to(&path).is_err());
     let _ = std::fs::remove_dir_all(path.parent().unwrap().parent().unwrap());
 }
+
+#[test]
+fn the_default_loader_reads_the_preferences_file_or_the_defaults() {
+    let loaded = PrefsDocument::load();
+    assert!(loaded.view.autosave_minutes > 0);
+}
+
+#[test]
+fn a_path_without_a_parent_folder_fails_to_save_but_does_not_panic() {
+    let mut document = PrefsDocument::default();
+    assert!(document.save_to(std::path::Path::new("")).is_err());
+}

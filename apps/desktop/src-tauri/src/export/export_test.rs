@@ -358,3 +358,77 @@ fn a_second_job_waits_for_a_free_worker_and_cancelling_the_first_stops_its_rende
     ));
     assert_eq!(status_of(&queue, second), Some(ExportJobStatus::Done));
 }
+
+#[test]
+fn a_settings_file_missing_fields_falls_back_to_the_defaults() {
+    let h = harness();
+    let dir = h.dir.join("partial");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("export-settings.json"), b"{}").unwrap();
+    let queue = ExportQueue::load(dir);
+    assert_eq!(queue.settings.lock().unwrap().worker_count, 1);
+    assert_eq!(queue.gpu_encoder_preference(), GpuEncoderPreference::Auto);
+}
+
+#[test]
+fn a_queue_that_cannot_be_saved_still_works_in_memory() {
+    let h = harness();
+    let blocker = h.dir.join("a-file");
+    std::fs::write(&blocker, b"x").unwrap();
+    let queue = ExportQueue::load(blocker.join("inside"));
+    put(&queue, vec![job(1, ExportJobStatus::Queued)]);
+    queue.match_loudness(&h.handle(), -23.0);
+    assert_eq!(queue.jobs.lock().unwrap()[0].target_lufs, -23.0);
+}
+
+#[test]
+fn progress_only_moves_running_or_paused_jobs() {
+    let h = harness();
+    let queue = queue(&h);
+    put(
+        &queue,
+        vec![
+            job(1, ExportJobStatus::Rendering { percent: 1 }),
+            job(2, ExportJobStatus::Paused { percent: 1 }),
+            job(3, ExportJobStatus::Done),
+        ],
+    );
+    for id in [1, 2, 3, 99] {
+        queue.progress(&h.handle(), id, 50);
+    }
+    assert_eq!(
+        status_of(&queue, 1),
+        Some(ExportJobStatus::Rendering { percent: 50 })
+    );
+    assert_eq!(
+        status_of(&queue, 2),
+        Some(ExportJobStatus::Paused { percent: 50 })
+    );
+    assert_eq!(status_of(&queue, 3), Some(ExportJobStatus::Done));
+}
+
+#[test]
+fn finishing_updates_the_job_it_belongs_to_and_ignores_one_that_is_gone() {
+    let h = harness();
+    let queue = queue(&h);
+    put(
+        &queue,
+        vec![
+            job(1, ExportJobStatus::Rendering { percent: 99 }),
+            job(2, ExportJobStatus::Rendering { percent: 10 }),
+            job(3, ExportJobStatus::Rendering { percent: 10 }),
+        ],
+    );
+    queue.finish(h.handle(), 1, Ok(avcore::RenderOutcome::Completed));
+    queue.finish(h.handle(), 2, Err(avcore::RenderError::EmptyTimeline));
+    queue.finish(h.handle(), 3, Ok(avcore::RenderOutcome::Cancelled));
+    assert_eq!(status_of(&queue, 1), Some(ExportJobStatus::Done));
+    assert!(matches!(
+        status_of(&queue, 2),
+        Some(ExportJobStatus::Failed { .. })
+    ));
+    assert_eq!(status_of(&queue, 3), None);
+
+    queue.finish(h.handle(), 99, Ok(avcore::RenderOutcome::Completed));
+    queue.finish(h.handle(), 99, Err(avcore::RenderError::EmptyTimeline));
+}

@@ -74,3 +74,17 @@ fn the_default_spawn_ticks_once_a_second() {
     let h = harness();
     spawn(h.handle());
 }
+
+#[test]
+fn a_snapshot_that_cannot_be_written_is_skipped_and_the_worker_keeps_running() {
+    let h = harness();
+    let project = path_in(&h.dir, "missing-folder").join("show.ocproj");
+    {
+        let mut session = h.session();
+        session.project.file_path = Some(project.clone());
+        session.dirty = true;
+    }
+    spawn_every(h.handle(), TICK);
+    std::thread::sleep(Duration::from_millis(150));
+    assert!(!autosave_path(&project).exists());
+}

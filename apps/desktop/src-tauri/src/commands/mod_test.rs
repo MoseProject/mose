@@ -250,3 +250,12 @@ fn saving_an_unsaved_project_asks_where_and_saving_as_asks_again() {
     );
     assert!(first.exists() && second.exists());
 }
+
+#[test]
+fn undoing_or_redoing_with_no_history_changes_nothing() {
+    let h = harness();
+    undo(h.handle()).unwrap();
+    redo(h.handle()).unwrap();
+    assert!(!h.session().view().can_undo);
+    assert!(!h.session().view().can_redo);
+}
