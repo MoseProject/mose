@@ -10,6 +10,7 @@ import { api, frameUrl } from "../ipc";
 import { Icon } from "./Icon";
 import { withShortcut } from "../commands";
 import { keymapStore } from "../keymap";
+import { shuttleStore, stopShuttle } from "../shuttle";
 import { patchUi, previewStore, run, sessionStore, uiStore, useStore } from "../store";
 import {
   activeTimeline,
@@ -49,6 +50,7 @@ type DragState =
 
 export function PreviewPanel() {
   const tick = useStore(previewStore);
+  const shuttleState = useStore(shuttleStore);
   const session = useStore(sessionStore);
   const ui = useStore(uiStore);
   useStore(keymapStore);
@@ -463,6 +465,16 @@ export function PreviewPanel() {
       <div className="transport">
         <div className="scrub">
           <span className="mono time-now">{formatTimecode(tick.playheadSecs, timecodeFps)}</span>
+          {shuttleState.direction !== 0 &&
+            (shuttleState.direction < 0 || shuttleState.level > 1) && (
+              <span
+                className="shuttle-badge"
+                title={t("shuttleBadge")}
+                data-testid="shuttle-badge"
+              >
+                {(shuttleState.direction < 0 ? "-" : "") + shuttleState.level + "x"}
+              </span>
+            )}
           <input
             type="range"
             className="scrubber"
@@ -477,6 +489,7 @@ export function PreviewPanel() {
               } as React.CSSProperties
             }
             onChange={(e) => {
+              stopShuttle();
               return void run(api.seek(Number(e.target.value)));
             }}
           />

@@ -16,6 +16,7 @@ import { t, type TextKey } from "./i18n";
 import { api } from "./ipc";
 import { effectiveKeys, keymapStore, type Bindable } from "./keymap";
 import { formatKeys, matchesKeys, type KeySpec } from "./shortcuts";
+import { shuttle, stopShuttle } from "./shuttle";
 import { patchUi, previewStore, run, sessionStore, uiStore, type EditorTool } from "./store";
 
 export type CommandGroup = "playback" | "edit" | "timeline" | "tools" | "file" | "view";
@@ -72,6 +73,7 @@ export const COMMANDS: Command[] = [
     group: "playback",
     keys: [{ code: "Space" }],
     run: () => {
+      stopShuttle();
       return run(api.setPlaying(!previewStore.get().playing));
     },
   },
@@ -81,7 +83,16 @@ export const COMMANDS: Command[] = [
     group: "playback",
     keys: [{ key: "l" }],
     run: () => {
-      return run(api.setPlaying(true));
+      return shuttle(1);
+    },
+  },
+  {
+    id: "shuttleBack",
+    label: "cmdShuttleBack",
+    group: "playback",
+    keys: [{ key: "j" }],
+    run: () => {
+      return shuttle(-1);
     },
   },
   {
@@ -90,6 +101,7 @@ export const COMMANDS: Command[] = [
     group: "playback",
     keys: [{ key: "k" }],
     run: () => {
+      stopShuttle();
       return run(api.setPlaying(false));
     },
   },
@@ -97,7 +109,6 @@ export const COMMANDS: Command[] = [
     id: "back1s",
     label: "cmdBack1s",
     group: "playback",
-    keys: [{ key: "j" }],
     run: () => {
       return seekBy(-1);
     },
