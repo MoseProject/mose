@@ -2,7 +2,11 @@
    they coexist. Change a token there and here together. */
 :root {
   /* Palette from the Mose reference mockup (mockup/mose_pixel_mockup/src/styles.css). */
-  --bg: #070d10;
+  --bg-page: #020709;
+  --bg: #05090c;
+  --bg-viewer: #05090b;
+  --bg-meter: #071014;
+  --bg-trackhead: #091115;
   --bg-workspace: #081014;
   --surface: #0b1317;
   --bg-elevated: #101a1f;
@@ -246,7 +250,7 @@ input[type="range"] {
 .editor .preview {
   grid-row: 1;
   grid-column: 4;
-  background: var(--bg);
+  background: var(--bg-workspace);
 }
 
 .editor .inspector {
@@ -746,10 +750,10 @@ button.icon:has(> .glyph) { display: inline-flex; align-items: center; justify-c
 .inspector-body > div > .field { padding: 8px 2px; border-top: 1px solid var(--border-subtle); }
 
 /* ---- timeline chrome ---- */
-.track-headers { background: var(--surface); }
-.track-header { background: var(--surface); padding: 0 8px; }
+.track-headers { background: var(--bg-trackhead); }
+.track-header { background: var(--bg-trackhead); padding: 0 8px; }
 .track-header .name { color: var(--text-primary); font-size: 12px; letter-spacing: 0.04em; }
-.timeline-toolbar { gap: 2px; padding: 4px 10px; background: var(--surface); }
+.timeline-toolbar { gap: 2px; padding: 4px 10px; background: transparent; }
 .timeline-toolbar .panel-title { color: var(--text-muted); }
 
 /* ---- top bar (Mose mockup: 50px, logo block, menu bar, timecode box) ---- */
@@ -782,11 +786,11 @@ button.icon:has(> .glyph) { display: inline-flex; align-items: center; justify-c
 .topbar .badge { position: absolute; top: -2px; right: -4px; margin: 0; }
 
 /* ---- audio meter (right of the inspector) ---- */
-.audio-meter { grid-row: 1; grid-column: 7; position: relative; background: var(--bg); border-left: 1px solid var(--border-subtle); }
+.audio-meter { grid-row: 1; grid-column: 7; position: relative; background: var(--bg-meter); border-left: 1px solid var(--border-subtle); }
 .meter-scale { position: absolute; right: 43px; top: 34px; bottom: 48px; display: flex; flex-direction: column; justify-content: space-between; font-size: 9px; color: var(--text-muted); }
 .meter-bars { position: absolute; right: 18px; top: 40px; bottom: 54px; display: flex; gap: 12px; }
 .meter-bar { position: relative; width: 4px; background: linear-gradient(to bottom, var(--error) 0 8%, #efdb3f 8% 20%, var(--success) 20%); border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
-.meter-cover { position: absolute; left: 0; right: 0; top: 0; background: var(--surface); transition: height 60ms linear; }
+.meter-cover { position: absolute; left: 0; right: 0; top: 0; background: var(--bg-meter); transition: height 60ms linear; }
 .meter-channels { position: absolute; right: 14px; bottom: 28px; display: flex; gap: 12px; font-size: 10px; color: var(--text-secondary); }
 
 /* ---- panel tabs, media search (Mose mockup) ---- */
@@ -851,3 +855,9 @@ input[type="range"] { height: 14px; }
 .sequence-tab.active { background: transparent; border: 0; border-bottom: 2px solid var(--accent); }
 .sequence-tab > button[role="tab"] { background: transparent; border: 0; color: var(--text-primary); padding: 0 6px; }
 .tab-list { display: flex; align-items: stretch; }
+
+/* ---- surfaces as in the mockup: page, monitor well, timeline ---- */
+body { background: var(--bg-page); }
+.app { background: var(--bg); }
+.monitor { background: var(--bg-viewer); }
+.editor > .timeline { background: var(--bg-workspace); }
