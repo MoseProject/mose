@@ -230,3 +230,85 @@ fn applying_a_template_to_an_audio_asset_makes_an_audio_track() {
     assert_eq!(tracks.len(), 2);
     assert_eq!(tracks[1].kind, TrackKind::Audio);
 }
+
+mod keybindings {
+    use std::collections::BTreeMap;
+
+    use super::*;
+
+    fn table(entries: &[(&str, &[&str])]) -> BTreeMap<String, Vec<String>> {
+        entries
+            .iter()
+            .map(|(id, keys)| (id.to_string(), keys.iter().map(|k| k.to_string()).collect()))
+            .collect()
+    }
+
+    #[test]
+    fn a_valid_table_is_kept_as_it_is() {
+        let input = table(&[
+            ("split", &["S", "C"]),
+            ("undo", &["Ctrl+Z"]),
+            ("zoomIn", &[]),
+        ]);
+        assert_eq!(sanitize_keybindings(input.clone()), input);
+    }
+
+    #[test]
+    fn bad_ids_and_bindings_are_dropped_and_duplicates_collapse() {
+        let long = "x".repeat(MAX_BINDING_LEN + 1);
+        let input = table(&[
+            ("", &["A"]),
+            ("has space", &["A"]),
+            (
+                "ok_id",
+                &["  Ctrl+A  ", "Ctrl+A", "", "bad\u{7}key", long.as_str()],
+            ),
+        ]);
+        assert_eq!(
+            sanitize_keybindings(input),
+            table(&[("ok_id", &["Ctrl+A"])])
+        );
+    }
+
+    #[test]
+    fn a_command_keeps_at_most_four_bindings() {
+        let input = table(&[("split", &["A", "B", "C", "D", "E", "F"])]);
+        assert_eq!(
+            sanitize_keybindings(input),
+            table(&[("split", &["A", "B", "C", "D"])])
+        );
+    }
+
+    #[test]
+    fn the_table_is_capped() {
+        let input: BTreeMap<String, Vec<String>> = (0..MAX_BINDING_COMMANDS + 50)
+            .map(|i| (format!("cmd{i:04}"), vec!["A".to_string()]))
+            .collect();
+        assert_eq!(sanitize_keybindings(input).len(), MAX_BINDING_COMMANDS);
+    }
+
+    #[test]
+    fn saving_returns_what_was_kept_and_get_reads_it_back() {
+        let h = harness();
+        let saved = set_keybindings(
+            h.handle(),
+            table(&[("split", &["Alt+S"]), ("bad id", &["A"])]),
+        )
+        .unwrap();
+        assert_eq!(saved, table(&[("split", &["Alt+S"])]));
+        let handle = h.handle();
+        let state = handle.state::<AppState>();
+        assert_eq!(get_keybindings(state), saved);
+    }
+
+    #[test]
+    fn an_empty_table_restores_every_default() {
+        let h = harness();
+        set_keybindings(h.handle(), table(&[("split", &["Alt+S"])])).unwrap();
+        let saved = set_keybindings(h.handle(), BTreeMap::new()).unwrap();
+        assert!(saved.is_empty());
+        let handle = h.handle();
+        let state = handle.state::<AppState>();
+        assert!(get_keybindings(state).is_empty());
+    }
+}
