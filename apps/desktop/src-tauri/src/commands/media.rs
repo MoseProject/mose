@@ -100,20 +100,35 @@ fn import_one<R: Runtime>(app: &AppHandle<R>, path: &Path, epoch: u64, proxy_dir
         return;
     };
 
-    let loudness = avcore::measure_loudness(path)
-        .inspect_err(|error| tracing::warn!(%error, "failed to measure loudness"))
-        .ok();
-    let proxy_path = if kind == MediaKind::Video {
-        avcore::ensure_proxy(path, proxy_dir, PreviewQuality::default())
-            .inspect_err(|error| tracing::warn!(%error, "failed to generate proxy"))
-            .ok()
-    } else {
-        None
-    };
+    // Cheapest and most visible first, each result published as soon as it exists: on a
+    // multi-hour recording the proxy encode takes far longer than everything else together, and
+    // the timeline's waveform used to wait behind it.
     let waveform_peaks = avcore::generate_waveform(path)
         .inspect_err(|error| tracing::warn!(%error, "failed to compute waveform"))
         .ok();
+    update_asset(app, epoch, asset_id, |asset| {
+        asset.waveform_peaks = waveform_peaks
+    });
 
+    let loudness = avcore::measure_loudness(path)
+        .inspect_err(|error| tracing::warn!(%error, "failed to measure loudness"))
+        .ok();
+    update_asset(app, epoch, asset_id, |asset| asset.loudness = loudness);
+
+    if kind == MediaKind::Video {
+        let proxy_path = avcore::ensure_proxy(path, proxy_dir, PreviewQuality::default())
+            .inspect_err(|error| tracing::warn!(%error, "failed to generate proxy"))
+            .ok();
+        update_asset(app, epoch, asset_id, |asset| asset.proxy_path = proxy_path);
+    }
+}
+
+fn update_asset<R: Runtime>(
+    app: &AppHandle<R>,
+    epoch: u64,
+    asset_id: u64,
+    change: impl FnOnce(&mut avcore::MediaAsset),
+) {
     with_current_project(app, epoch, |session| {
         if let Some(asset) = session
             .project
@@ -121,9 +136,7 @@ fn import_one<R: Runtime>(app: &AppHandle<R>, path: &Path, epoch: u64, proxy_dir
             .iter_mut()
             .find(|a| a.id == asset_id)
         {
-            asset.loudness = loudness;
-            asset.proxy_path = proxy_path;
-            asset.waveform_peaks = waveform_peaks;
+            change(asset);
         }
     });
 }

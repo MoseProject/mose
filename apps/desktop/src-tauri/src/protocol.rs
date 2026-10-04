@@ -10,10 +10,13 @@
 //!
 //! - `/frame/<seq>` -- the latest preview frame (`seq` is only a cache buster).
 //! - `/thumb/<asset_id>` -- a media-library poster frame, extracted once and cached.
+//! - `/thumb/<asset_id>/<millis>` -- the frame of an asset at that source time (timeline strips).
+//! - `/wave/<asset_id>` -- the asset's detailed waveform: little-endian `f32` (min, max) pairs,
+//!   `detailed_bucket_count(duration)` of them, computed on first request and cached.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use tauri::http::{header, Response, StatusCode};
@@ -27,9 +30,17 @@ pub const SCHEME: &str = "oca";
 /// Where in a clip the poster frame comes from -- past the typical black lead-in of a capture.
 const THUMBNAIL_AT_SECS: f64 = 1.0;
 
+/// Timeline frame strips ask for many distinct times; past this many cached tiles the cache is
+/// dropped wholesale (a tile is ~10 KB, so this bounds it near 15 MB) and refills as needed.
+const MAX_TILE_ENTRIES: usize = 1500;
+
+type Bytes = Option<Arc<Vec<u8>>>;
+
 #[derive(Default)]
 pub struct ThumbnailCache {
-    entries: Mutex<HashMap<PathBuf, Option<Arc<Vec<u8>>>>>,
+    entries: Mutex<HashMap<PathBuf, Bytes>>,
+    tiles: Mutex<HashMap<(PathBuf, u64), Bytes>>,
+    waves: Mutex<HashMap<PathBuf, Arc<OnceLock<Bytes>>>>,
 }
 
 /// Answers one `oca://` request through `respond`; `main` hands it the scheme responder.
@@ -44,11 +55,30 @@ pub(crate) fn handle_with<R: Runtime>(
             let frame = app.state::<AppState>().preview.latest_frame();
             respond(jpeg_or_not_found(frame));
         }
-        (Some("thumb"), Some(id)) => {
-            let Ok(asset_id) = id.parse::<u64>() else {
+        (Some("wave"), Some(id)) => {
+            let Some(asset) = id.parse::<u64>().ok().and_then(|id| find_asset(app, id)) else {
                 respond(not_found());
                 return;
             };
+            if !asset.has_audio {
+                respond(not_found());
+                return;
+            }
+            let app = app.clone();
+            // A full audio decode: minutes on a multi-hour recording, never on the IPC thread.
+            std::thread::spawn(move || {
+                let cache = app.state::<ThumbnailCache>();
+                let bytes = cache.get_or_wave(&asset.source_path, asset.duration_secs);
+                respond(bytes_or_not_found(bytes, "application/octet-stream"));
+            });
+        }
+        (Some("thumb"), Some(rest)) => {
+            let mut ids = rest.splitn(2, '/');
+            let Some(asset_id) = ids.next().and_then(|id| id.parse::<u64>().ok()) else {
+                respond(not_found());
+                return;
+            };
+            let at_millis = ids.next().and_then(|ms| ms.parse::<u64>().ok());
             let source = app
                 .state::<AppState>()
                 .session()
@@ -71,14 +101,64 @@ pub(crate) fn handle_with<R: Runtime>(
             // Frame sampling decodes video; keep it off the webview's IPC thread.
             std::thread::spawn(move || {
                 let cache = app.state::<ThumbnailCache>();
-                respond(jpeg_or_not_found(cache.get_or_extract(&source)));
+                let bytes = match at_millis {
+                    Some(millis) => cache.get_or_extract_at(&source, millis),
+                    None => cache.get_or_extract(&source),
+                };
+                respond(jpeg_or_not_found(bytes));
             });
         }
         _ => respond(not_found()),
     }
 }
 
+fn find_asset<R: Runtime>(app: &AppHandle<R>, asset_id: u64) -> Option<avcore::MediaAsset> {
+    app.state::<AppState>()
+        .session()
+        .project
+        .media_library
+        .iter()
+        .find(|asset| asset.id == asset_id)
+        .cloned()
+}
+
 impl ThumbnailCache {
+    fn get_or_extract_at(&self, source: &Path, millis: u64) -> Bytes {
+        let key = (source.to_path_buf(), millis);
+        if let Some(cached) = self.tiles.lock().ok()?.get(&key) {
+            return cached.clone();
+        }
+        let extracted = extract_frame_at(source, millis as f64 / 1000.0).map(Arc::new);
+        if let Ok(mut tiles) = self.tiles.lock() {
+            if tiles.len() >= MAX_TILE_ENTRIES {
+                tiles.clear();
+            }
+            tiles.insert(key, extracted.clone());
+        }
+        extracted
+    }
+
+    /// The detailed waveform of `source` as little-endian `f32` (min, max) pairs. Concurrent
+    /// requests for one file share a single decode pass.
+    fn get_or_wave(&self, source: &Path, duration_secs: f64) -> Bytes {
+        let cell = {
+            let mut waves = self.waves.lock().ok()?;
+            waves.entry(source.to_path_buf()).or_default().clone()
+        };
+        cell.get_or_init(|| {
+            let peaks = avcore::generate_detailed_waveform(source, duration_secs)
+                .inspect_err(|error| tracing::warn!(%error, "failed to compute waveform"))
+                .ok()?;
+            let mut bytes = Vec::with_capacity(peaks.len() * 8);
+            for (min, max) in peaks {
+                bytes.extend_from_slice(&min.to_le_bytes());
+                bytes.extend_from_slice(&max.to_le_bytes());
+            }
+            Some(Arc::new(bytes))
+        })
+        .clone()
+    }
+
     fn get_or_extract(&self, source: &Path) -> Option<Arc<Vec<u8>>> {
         if let Some(cached) = self.entries.lock().ok()?.get(source) {
             return cached.clone();
@@ -92,18 +172,26 @@ impl ThumbnailCache {
 }
 
 fn extract_thumbnail(path: &Path) -> Option<Vec<u8>> {
+    extract_frame_at(path, THUMBNAIL_AT_SECS)
+}
+
+fn extract_frame_at(path: &Path, at_secs: f64) -> Option<Vec<u8>> {
     if !path.exists() {
         return None;
     }
     let sampler = avcore::FrameSampler::open(path).ok()?;
-    let frame = sampler.sample(THUMBNAIL_AT_SECS, Duration::from_millis(800))?;
+    let frame = sampler.sample(at_secs, Duration::from_millis(800))?;
     encode_jpeg(&frame, THUMBNAIL_MAX_DIM)
 }
 
 fn jpeg_or_not_found(bytes: Option<Arc<Vec<u8>>>) -> Response<Vec<u8>> {
+    bytes_or_not_found(bytes, "image/jpeg")
+}
+
+fn bytes_or_not_found(bytes: Option<Arc<Vec<u8>>>, content_type: &str) -> Response<Vec<u8>> {
     match bytes {
         Some(bytes) => Response::builder()
-            .header(header::CONTENT_TYPE, "image/jpeg")
+            .header(header::CONTENT_TYPE, content_type)
             .header(header::CACHE_CONTROL, "no-store")
             .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
             .body(bytes.as_ref().clone())
