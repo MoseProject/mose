@@ -81,6 +81,7 @@ mod update_install;
 pub mod voice_cleanup_preview;
 pub mod watched_folder;
 pub mod waveform;
+mod whisper_model;
 pub mod youtube_download;
 
 pub use auto_reframe::{
