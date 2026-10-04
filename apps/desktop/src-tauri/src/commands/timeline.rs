@@ -545,6 +545,34 @@ pub fn ripple_delete_range<R: Runtime>(
     })
 }
 
+/// Removes `[start_secs, end_secs)` from every unlocked video and audio track and leaves the
+/// gap open (the I/O "lift"). Overlay tracks are left alone.
+#[tauri::command]
+pub fn lift_range<R: Runtime>(
+    app: AppHandle<R>,
+    start_secs: f64,
+    end_secs: f64,
+) -> Result<(), String> {
+    undoable(&app, |project| {
+        lift_range_in(project.timeline_mut(), start_secs, end_secs)
+    })
+}
+
+pub(crate) fn lift_range_in(timeline: &mut Timeline, start_secs: f64, end_secs: f64) -> bool {
+    if !start_secs.is_finite() || !end_secs.is_finite() || end_secs <= start_secs {
+        return false;
+    }
+    let mut next_id = timeline.next_clip_id();
+    let mut changed = false;
+    for track in &mut timeline.tracks {
+        if track.locked || !matches!(track.kind, TrackKind::Video | TrackKind::Audio) {
+            continue;
+        }
+        changed |= track.lift_range(start_secs, end_secs, &mut next_id);
+    }
+    changed
+}
+
 pub(crate) fn delete_range(timeline: &mut Timeline, start_secs: f64, end_secs: f64) -> bool {
     if !start_secs.is_finite() || !end_secs.is_finite() || end_secs <= start_secs {
         return false;

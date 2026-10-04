@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use avcore::timeline::{ClipInstance, TrackKind};
 use avcore::{MediaAsset, MediaKind, Project};
 
-use super::{add_asset, delete, delete_range, move_clip_in, split};
+use super::{add_asset, delete, delete_range, lift_range_in, move_clip_in, split};
 use crate::state::blank_project;
 
 fn asset(id: u64, kind: MediaKind, duration_secs: f64) -> MediaAsset {
@@ -708,4 +708,28 @@ mod edge_cases {
         }
         assert_eq!(h.session().project.timeline().tracks.len(), 4);
     }
+}
+
+#[test]
+fn lifting_a_range_leaves_the_gap_open_and_skips_locked_tracks() {
+    let mut project = project_with(vec![asset(1, MediaKind::Video, 10.0)]);
+    add_asset(&mut project, 1, None, None).unwrap();
+    let timeline = project.timeline_mut();
+
+    assert!(lift_range_in(timeline, 2.0, 5.0));
+    let ends: Vec<(f64, f64)> = timeline.tracks[0]
+        .clips
+        .iter()
+        .map(|c| (c.start_secs, c.start_secs + c.duration_secs()))
+        .collect();
+    assert_eq!(ends.len(), 2);
+    assert!((ends[0].1 - 2.0).abs() < 1e-6);
+    assert!((ends[1].0 - 5.0).abs() < 1e-6, "the tail did not move");
+    assert!((ends[1].1 - 10.0).abs() < 1e-6);
+
+    timeline.tracks[0].locked = true;
+    assert!(!lift_range_in(timeline, 6.0, 7.0));
+    timeline.tracks[0].locked = false;
+    assert!(!lift_range_in(timeline, 5.0, 5.0));
+    assert!(!lift_range_in(timeline, f64::NAN, 2.0));
 }

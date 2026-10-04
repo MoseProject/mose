@@ -64,6 +64,7 @@ macro_rules! all_commands {
             $crate::commands::timeline::split_at_playhead,
             $crate::commands::timeline::delete_clips,
             $crate::commands::timeline::ripple_delete_range,
+            $crate::commands::timeline::lift_range,
             $crate::commands::paths::pick_path,
             $crate::commands::paths::check_path,
             $crate::commands::paths::reveal_in_folder,
