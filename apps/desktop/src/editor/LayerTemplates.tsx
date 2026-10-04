@@ -3,6 +3,7 @@ import { t } from "../i18n";
 import { api } from "../ipc";
 import { layerTemplatesStore, run, uiStore, useStore } from "../store";
 import type { SessionView } from "../types";
+import { Dialog } from "./Dialog";
 
 /** Layer-group template list/save/apply popups -- egui's narrow `egui::Modal` exception
  *  (`spec/architecture/tauri-migration.md`'s parity notes), not a general-purpose dialog system. */
@@ -40,180 +41,156 @@ export function LayerTemplates({ session }: { session: SessionView }) {
       </button>
 
       {listOpen && (
-        <div
-          className="modal-overlay"
-          onClick={() => {
-            return setListOpen(false);
+        <Dialog
+          title={t("templates")}
+          onClose={() => {
+            setListOpen(false);
           }}
         >
-          <div
-            className="modal"
-            onClick={(e) => {
-              return e.stopPropagation();
-            }}
-          >
-            <h3>{t("templates")}</h3>
-            {templates.length === 0 && <p className="muted">{t("noSavedTemplates")}</p>}
-            {templates.map((template, index) => {
-              return (
-                <div
-                  className="modal-row"
-                  key={index}
-                >
-                  <span>{template.name}</span>
-                  <div>
-                    <button
-                      className="icon"
-                      onClick={() => {
-                        setApplying({
-                          index,
-                          assetIds: template.layers.map(() => {
-                            return null;
-                          }),
-                        });
-                        setListOpen(false);
-                      }}
-                    >
-                      {t("applyTemplate")}
-                    </button>
-                    <button
-                      className="icon"
-                      onClick={() => {
-                        return run(api.deleteLayerTemplate(index)).then((updated) => {
-                          if (updated) {
-                            layerTemplatesStore.set(updated);
-                          }
-                        });
-                      }}
-                    >
-                      {t("deleteTemplate")}
-                    </button>
-                  </div>
+          {templates.length === 0 && <p className="muted">{t("noSavedTemplates")}</p>}
+          {templates.map((template, index) => {
+            return (
+              <div
+                className="modal-row"
+                key={index}
+              >
+                <span>{template.name}</span>
+                <div>
+                  <button
+                    className="icon"
+                    onClick={() => {
+                      setApplying({
+                        index,
+                        assetIds: template.layers.map(() => {
+                          return null;
+                        }),
+                      });
+                      setListOpen(false);
+                    }}
+                  >
+                    {t("applyTemplate")}
+                  </button>
+                  <button
+                    className="icon"
+                    onClick={() => {
+                      return run(api.deleteLayerTemplate(index)).then((updated) => {
+                        if (updated) {
+                          layerTemplatesStore.set(updated);
+                        }
+                      });
+                    }}
+                  >
+                    {t("deleteTemplate")}
+                  </button>
                 </div>
-              );
-            })}
-          </div>
-        </div>
+              </div>
+            );
+          })}
+        </Dialog>
       )}
 
       {saving !== null && (
-        <div
-          className="modal-overlay"
-          onClick={() => {
-            return setSaving(null);
+        <Dialog
+          title={t("saveTemplateTitle")}
+          onClose={() => {
+            setSaving(null);
           }}
         >
-          <div
-            className="modal"
-            onClick={(e) => {
-              return e.stopPropagation();
+          <input
+            autoFocus
+            value={saving}
+            onChange={(e) => {
+              return setSaving(e.target.value);
             }}
-          >
-            <h3>{t("saveTemplateTitle")}</h3>
-            <input
-              autoFocus
-              value={saving}
-              onChange={(e) => {
-                return setSaving(e.target.value);
+            onKeyDown={(e) => {
+              return e.key === "Enter" && saving.trim() && confirmSave();
+            }}
+          />
+          <div className="modal-actions">
+            <button
+              className="icon"
+              onClick={() => {
+                return setSaving(null);
               }}
-              onKeyDown={(e) => {
-                return e.key === "Enter" && saving.trim() && confirmSave();
-              }}
-            />
-            <div className="modal-actions">
-              <button
-                className="icon"
-                onClick={() => {
-                  return setSaving(null);
-                }}
-              >
-                {t("cancel")}
-              </button>
-              <button
-                className="icon primary"
-                disabled={saving.trim().length === 0}
-                onClick={confirmSave}
-              >
-                {t("saveTemplateConfirm")}
-              </button>
-            </div>
+            >
+              {t("cancel")}
+            </button>
+            <button
+              className="icon primary"
+              disabled={saving.trim().length === 0}
+              onClick={confirmSave}
+            >
+              {t("saveTemplateConfirm")}
+            </button>
           </div>
-        </div>
+        </Dialog>
       )}
 
       {applying && (
-        <div
-          className="modal-overlay"
-          onClick={() => {
-            return setApplying(null);
+        <Dialog
+          title={t("applyTemplateTitle")}
+          onClose={() => {
+            setApplying(null);
           }}
         >
-          <div
-            className="modal"
-            onClick={(e) => {
-              return e.stopPropagation();
-            }}
-          >
-            <h3>{t("applyTemplateTitle")}</h3>
-            {templates[applying.index]?.layers.map(([kind], layerIndex) => {
-              const options = session.project.media_library.filter((a) => {
-                return a.kind === kind;
-              });
-              return (
-                <div
-                  className="modal-row"
-                  key={layerIndex}
+          {templates[applying.index]?.layers.map(([kind], layerIndex) => {
+            const options = session.project.media_library.filter((a) => {
+              return a.kind === kind;
+            });
+            return (
+              <div
+                className="modal-row"
+                key={layerIndex}
+              >
+                <span>
+                  {t("applyTemplateLayerLabel")} {layerIndex + 1} ({kind})
+                </span>
+                <select
+                  value={applying.assetIds[layerIndex] ?? ""}
+                  onChange={(e) => {
+                    const assetIds = [...applying.assetIds];
+                    assetIds[layerIndex] = e.target.value ? Number(e.target.value) : null;
+                    setApplying({ ...applying, assetIds });
+                  }}
                 >
-                  <span>
-                    {t("applyTemplateLayerLabel")} {layerIndex + 1} ({kind})
-                  </span>
-                  <select
-                    value={applying.assetIds[layerIndex] ?? ""}
-                    onChange={(e) => {
-                      const assetIds = [...applying.assetIds];
-                      assetIds[layerIndex] = e.target.value ? Number(e.target.value) : null;
-                      setApplying({ ...applying, assetIds });
-                    }}
-                  >
-                    <option value="">{t("applyTemplatePickAsset")}</option>
-                    {options.map((asset) => {
-                      return (
-                        <option
-                          key={asset.id}
-                          value={asset.id}
-                        >
-                          {asset.file_name}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
-              );
-            })}
-            <div className="modal-actions">
-              <button
-                className="icon"
-                onClick={() => {
-                  return setApplying(null);
-                }}
-              >
-                {t("cancel")}
-              </button>
-              <button
-                className="icon primary"
-                disabled={applying.assetIds.every((id) => {
-                  return id === null;
-                })}
-                onClick={() => {
-                  void run(api.applyLayerTemplate(applying.index, applying.assetIds));
-                  setApplying(null);
-                }}
-              >
-                {t("applyTemplateConfirm")}
-              </button>
-            </div>
+                  <option value="">{t("applyTemplatePickAsset")}</option>
+                  {options.map((asset) => {
+                    return (
+                      <option
+                        key={asset.id}
+                        value={asset.id}
+                      >
+                        {asset.file_name}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            );
+          })}
+          <div className="modal-actions">
+            <button
+              className="icon"
+              onClick={() => {
+                return setApplying(null);
+              }}
+            >
+              {t("cancel")}
+            </button>
+            <button
+              className="icon primary"
+              disabled={applying.assetIds.every((id) => {
+                return id === null;
+              })}
+              onClick={() => {
+                void run(api.applyLayerTemplate(applying.index, applying.assetIds));
+                setApplying(null);
+              }}
+            >
+              {t("applyTemplateConfirm")}
+            </button>
           </div>
-        </div>
+        </Dialog>
       )}
     </>
   );

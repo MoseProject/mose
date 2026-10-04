@@ -5,6 +5,7 @@ import { Menu } from "./Menu";
 import { api, onYoutubeDownload, thumbnailUrl } from "../ipc";
 import { assetDragStore, run, transcribingAssetIdStore, useStore } from "../store";
 import type { LibraryTrack, MediaAsset, SessionView } from "../types";
+import { Dialog } from "./Dialog";
 
 function YoutubeDownloadButton() {
   const [open, setOpen] = useState(false);
@@ -80,110 +81,104 @@ function YoutubeDownloadButton() {
   }
 
   return (
-    <div
-      className="modal-overlay"
-      onClick={() => {
-        return !downloading && setOpen(false);
+    <Dialog
+      title={t("youtubeDownload")}
+      onClose={() => {
+        if (!downloading) {
+          setOpen(false);
+        }
       }}
     >
-      <div
-        className="modal"
-        onClick={(e) => {
-          return e.stopPropagation();
+      {error && <p style={{ color: "var(--error, #e55)" }}>{error}</p>}
+      <input
+        autoFocus
+        disabled={downloading}
+        placeholder={t("youtubeDownloadUrlHint")}
+        value={url}
+        onChange={(e) => {
+          return setUrl(e.target.value);
         }}
-      >
-        <h3>{t("youtubeDownload")}</h3>
-        {error && <p style={{ color: "var(--error, #e55)" }}>{error}</p>}
-        <input
-          autoFocus
+      />
+      <div className="modal-row">
+        <select
           disabled={downloading}
-          placeholder={t("youtubeDownloadUrlHint")}
-          value={url}
+          value={format}
           onChange={(e) => {
-            return setUrl(e.target.value);
+            setFormat(e.target.value as "mp4" | "mp3");
+            setQuality(e.target.value === "mp4" ? "best" : "192");
           }}
+        >
+          <option value="mp4">MP4</option>
+          <option value="mp3">MP3</option>
+        </select>
+        <select
+          disabled={downloading}
+          value={quality}
+          onChange={(e) => {
+            return setQuality(e.target.value);
+          }}
+        >
+          {format === "mp4"
+            ? ["best", "1080", "720", "480", "360"].map((q) => {
+                return (
+                  <option
+                    key={q}
+                    value={q}
+                  >
+                    {q === "best" ? "Best" : `${q}p`}
+                  </option>
+                );
+              })
+            : ["320", "192", "128"].map((q) => {
+                return (
+                  <option
+                    key={q}
+                    value={q}
+                  >
+                    {q} kbps
+                  </option>
+                );
+              })}
+        </select>
+      </div>
+      {downloading && (
+        <progress
+          value={progress}
+          max={1}
+          style={{ width: "100%" }}
         />
-        <div className="modal-row">
-          <select
-            disabled={downloading}
-            value={format}
-            onChange={(e) => {
-              setFormat(e.target.value as "mp4" | "mp3");
-              setQuality(e.target.value === "mp4" ? "best" : "192");
+      )}
+      <div className="modal-actions">
+        {downloading ? (
+          <button
+            className="icon"
+            onClick={() => {
+              return void run(api.cancelYoutubeDownload());
             }}
           >
-            <option value="mp4">MP4</option>
-            <option value="mp3">MP3</option>
-          </select>
-          <select
-            disabled={downloading}
-            value={quality}
-            onChange={(e) => {
-              return setQuality(e.target.value);
-            }}
-          >
-            {format === "mp4"
-              ? ["best", "1080", "720", "480", "360"].map((q) => {
-                  return (
-                    <option
-                      key={q}
-                      value={q}
-                    >
-                      {q === "best" ? "Best" : `${q}p`}
-                    </option>
-                  );
-                })
-              : ["320", "192", "128"].map((q) => {
-                  return (
-                    <option
-                      key={q}
-                      value={q}
-                    >
-                      {q} kbps
-                    </option>
-                  );
-                })}
-          </select>
-        </div>
-        {downloading && (
-          <progress
-            value={progress}
-            max={1}
-            style={{ width: "100%" }}
-          />
-        )}
-        <div className="modal-actions">
-          {downloading ? (
+            {t("youtubeDownloadCancel")}
+          </button>
+        ) : (
+          <>
             <button
               className="icon"
               onClick={() => {
-                return void run(api.cancelYoutubeDownload());
+                return setOpen(false);
               }}
             >
-              {t("youtubeDownloadCancel")}
+              {t("cancel")}
             </button>
-          ) : (
-            <>
-              <button
-                className="icon"
-                onClick={() => {
-                  return setOpen(false);
-                }}
-              >
-                {t("cancel")}
-              </button>
-              <button
-                className="icon primary"
-                disabled={url.trim().length === 0}
-                onClick={start}
-              >
-                {t("youtubeDownloadStart")}
-              </button>
-            </>
-          )}
-        </div>
+            <button
+              className="icon primary"
+              disabled={url.trim().length === 0}
+              onClick={start}
+            >
+              {t("youtubeDownloadStart")}
+            </button>
+          </>
+        )}
       </div>
-    </div>
+    </Dialog>
   );
 }
 
@@ -209,49 +204,41 @@ function SoundLibraryButton() {
         {t("soundLibrary")}
       </button>
       {open && (
-        <div
-          className="modal-overlay"
-          onClick={() => {
-            return setOpen(false);
+        <Dialog
+          title={t("soundLibrary")}
+          onClose={() => {
+            setOpen(false);
           }}
         >
-          <div
-            className="modal"
-            onClick={(e) => {
-              return e.stopPropagation();
-            }}
-          >
-            <h3>{t("soundLibrary")}</h3>
-            {!tracks || tracks.length === 0 ? (
-              <p className="muted">{t("soundLibraryEmpty")}</p>
-            ) : (
-              <div style={{ maxHeight: 320, overflowY: "auto" }}>
-                {tracks.map((track) => {
-                  return (
-                    <div
-                      className="modal-row"
-                      key={track.path}
+          {!tracks || tracks.length === 0 ? (
+            <p className="muted">{t("soundLibraryEmpty")}</p>
+          ) : (
+            <div style={{ maxHeight: 320, overflowY: "auto" }}>
+              {tracks.map((track) => {
+                return (
+                  <div
+                    className="modal-row"
+                    key={track.path}
+                  >
+                    <span>
+                      {track.category === "music" ? "🎵" : "🔊"} {track.name} (
+                      {formatTime(track.durationSecs)})
+                    </span>
+                    <button
+                      className="icon"
+                      onClick={() => {
+                        void run(api.importMedia([track.path]));
+                        setOpen(false);
+                      }}
                     >
-                      <span>
-                        {track.category === "music" ? "🎵" : "🔊"} {track.name} (
-                        {formatTime(track.durationSecs)})
-                      </span>
-                      <button
-                        className="icon"
-                        onClick={() => {
-                          void run(api.importMedia([track.path]));
-                          setOpen(false);
-                        }}
-                      >
-                        {t("importFiles")}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
+                      {t("importFiles")}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Dialog>
       )}
     </>
   );
@@ -272,51 +259,43 @@ function TtsButton() {
     );
   }
   return (
-    <div
-      className="modal-overlay"
-      onClick={() => {
-        return setText(null);
+    <Dialog
+      title={t("ttsModalTitle")}
+      onClose={() => {
+        setText(null);
       }}
     >
-      <div
-        className="modal"
-        onClick={(e) => {
-          return e.stopPropagation();
+      <textarea
+        autoFocus
+        rows={4}
+        style={{ width: "100%" }}
+        placeholder={t("ttsPlaceholder")}
+        value={text}
+        onChange={(e) => {
+          return setText(e.target.value);
         }}
-      >
-        <h3>{t("ttsModalTitle")}</h3>
-        <textarea
-          autoFocus
-          rows={4}
-          style={{ width: "100%" }}
-          placeholder={t("ttsPlaceholder")}
-          value={text}
-          onChange={(e) => {
-            return setText(e.target.value);
+      />
+      <div className="modal-actions">
+        <button
+          className="icon"
+          onClick={() => {
+            return setText(null);
           }}
-        />
-        <div className="modal-actions">
-          <button
-            className="icon"
-            onClick={() => {
-              return setText(null);
-            }}
-          >
-            {t("cancel")}
-          </button>
-          <button
-            className="icon primary"
-            disabled={text.trim().length === 0}
-            onClick={() => {
-              void run(api.generateTts(text));
-              setText(null);
-            }}
-          >
-            {t("ttsGenerate")}
-          </button>
-        </div>
+        >
+          {t("cancel")}
+        </button>
+        <button
+          className="icon primary"
+          disabled={text.trim().length === 0}
+          onClick={() => {
+            void run(api.generateTts(text));
+            setText(null);
+          }}
+        >
+          {t("ttsGenerate")}
+        </button>
       </div>
-    </div>
+    </Dialog>
   );
 }
 

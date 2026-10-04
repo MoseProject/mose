@@ -8,6 +8,7 @@ import { PreviewPanel } from "../editor/PreviewPanel";
 import { Timeline } from "../editor/Timeline";
 import { t } from "../i18n";
 import { api } from "../ipc";
+import { isActivatableTarget, shouldIgnoreShortcut } from "../keyboard";
 import { patchUi, previewStore, run, uiStore } from "../store";
 import type { SessionView } from "../types";
 
@@ -77,7 +78,7 @@ export function Editor({ session }: { session: SessionView }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) {
+      if (shouldIgnoreShortcut(e, uiStore.get().openDialogs)) {
         return;
       }
       const ctrl = e.ctrlKey || e.metaKey;
@@ -101,6 +102,9 @@ export function Editor({ session }: { session: SessionView }) {
       }
       const selected = uiStore.get().selectedClipIds;
       let handled = true;
+      if (e.code === "Space" && isActivatableTarget(e.target)) {
+        return;
+      }
       if (e.code === "Space") {
         void run(api.setPlaying(!previewStore.get().playing));
       } else if (ctrl && e.key.toLowerCase() === "z") {
@@ -109,6 +113,8 @@ export function Editor({ session }: { session: SessionView }) {
         void run(api.redo());
       } else if (ctrl && e.key.toLowerCase() === "s") {
         void run(api.saveProject(e.shiftKey));
+      } else if (ctrl && e.key.toLowerCase() === "e") {
+        patchUi({ exportDialogOpen: true });
       } else if (ctrl && e.key.toLowerCase() === "i") {
         void run(api.importMediaDialog());
       } else if (ctrl && e.shiftKey && e.key.toLowerCase() === "c") {

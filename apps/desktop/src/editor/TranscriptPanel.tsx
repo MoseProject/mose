@@ -9,6 +9,7 @@ import {
   type TranscriptHit,
   type TranscriptWord,
 } from "../types";
+import { Dialog } from "./Dialog";
 
 /** Transcript search/seek popup -- egui's `App::show_transcript_panel` narrow modal shape. Two
  *  modes: off (default) filters the selected clip's own transcript; on (with a query) searches
@@ -87,109 +88,101 @@ export function TranscriptPanel({ session }: { session: SessionView }) {
   };
 
   return (
-    <div
-      className="modal-overlay"
-      onClick={() => {
-        return setOpen(false);
+    <Dialog
+      title={t("transcriptPanelTitle")}
+      onClose={() => {
+        setOpen(false);
       }}
     >
-      <div
-        className="modal"
-        onClick={(e) => {
-          return e.stopPropagation();
+      <input
+        autoFocus
+        value={search}
+        placeholder={
+          searchProject ? t("transcriptProjectSearchHint") : t("transcriptPanelSearchHint")
+        }
+        onChange={(e) => {
+          return setSearch(e.target.value);
         }}
+      />
+      <label
+        className="check"
+        style={{ marginTop: 6 }}
       >
-        <h3>{t("transcriptPanelTitle")}</h3>
         <input
-          autoFocus
-          value={search}
-          placeholder={
-            searchProject ? t("transcriptProjectSearchHint") : t("transcriptPanelSearchHint")
-          }
+          type="checkbox"
+          checked={searchProject}
           onChange={(e) => {
-            return setSearch(e.target.value);
+            return setSearchProject(e.target.checked);
           }}
         />
-        <label
-          className="check"
-          style={{ marginTop: 6 }}
-        >
-          <input
-            type="checkbox"
-            checked={searchProject}
-            onChange={(e) => {
-              return setSearchProject(e.target.checked);
-            }}
-          />
-          {t("transcriptSearchProject")}
-        </label>
-        <div style={{ maxHeight: 320, overflowY: "auto", marginTop: 8 }}>
-          {searchProject ? (
-            hits.length === 0 ? (
-              <p className="muted">{t("transcriptProjectEmpty")}</p>
-            ) : (
-              groupByAsset(hits).map(([assetId, assetName, words]) => {
-                return (
-                  <div key={assetId}>
-                    <div
-                      className="muted"
-                      style={{ marginTop: 6 }}
-                    >
-                      {assetName}
-                    </div>
-                    {words.map((word) => {
-                      return (
-                        <WordButton
-                          key={word.id}
-                          word={word}
-                          active={word.id === currentWordId}
-                          label={`${formatTime(word.start_secs)} - ${word.text}`}
-                          onClick={() => {
-                            return seek(assetId, word.start_secs);
-                          }}
-                        />
-                      );
-                    })}
-                  </div>
-                );
-              })
-            )
-          ) : !clip ? (
-            <p className="muted">{t("transcriptPanelNoClip")}</p>
-          ) : !document ? (
-            <p className="muted">{t("transcriptPanelNoTranscript")}</p>
+        {t("transcriptSearchProject")}
+      </label>
+      <div style={{ maxHeight: 320, overflowY: "auto", marginTop: 8 }}>
+        {searchProject ? (
+          hits.length === 0 ? (
+            <p className="muted">{t("transcriptProjectEmpty")}</p>
           ) : (
-            document.words
-              .filter((w) => {
-                return query.length === 0 || w.text.toLowerCase().includes(query);
-              })
-              .map((word) => {
-                return (
-                  <WordButton
-                    key={word.id}
-                    word={word}
-                    active={word.id === currentWordId}
-                    label={word.text}
-                    onClick={() => {
-                      return seek(document.asset_id, word.start_secs);
-                    }}
-                  />
-                );
-              })
-          )}
-        </div>
-        <div className="modal-actions">
-          <button
-            className="icon"
-            onClick={() => {
-              return setOpen(false);
-            }}
-          >
-            {t("cancel")}
-          </button>
-        </div>
+            groupByAsset(hits).map(([assetId, assetName, words]) => {
+              return (
+                <div key={assetId}>
+                  <div
+                    className="muted"
+                    style={{ marginTop: 6 }}
+                  >
+                    {assetName}
+                  </div>
+                  {words.map((word) => {
+                    return (
+                      <WordButton
+                        key={word.id}
+                        word={word}
+                        active={word.id === currentWordId}
+                        label={`${formatTime(word.start_secs)} - ${word.text}`}
+                        onClick={() => {
+                          return seek(assetId, word.start_secs);
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              );
+            })
+          )
+        ) : !clip ? (
+          <p className="muted">{t("transcriptPanelNoClip")}</p>
+        ) : !document ? (
+          <p className="muted">{t("transcriptPanelNoTranscript")}</p>
+        ) : (
+          document.words
+            .filter((w) => {
+              return query.length === 0 || w.text.toLowerCase().includes(query);
+            })
+            .map((word) => {
+              return (
+                <WordButton
+                  key={word.id}
+                  word={word}
+                  active={word.id === currentWordId}
+                  label={word.text}
+                  onClick={() => {
+                    return seek(document.asset_id, word.start_secs);
+                  }}
+                />
+              );
+            })
+        )}
       </div>
-    </div>
+      <div className="modal-actions">
+        <button
+          className="icon"
+          onClick={() => {
+            return setOpen(false);
+          }}
+        >
+          {t("cancel")}
+        </button>
+      </div>
+    </Dialog>
   );
 }
 

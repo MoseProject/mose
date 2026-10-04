@@ -235,6 +235,7 @@ const strings = {
     en: "yt-dlp is not installed.",
   },
 
+  crashReviewTitle: { "pt-BR": "O oca fechou inesperadamente", en: "oca closed unexpectedly" },
   crashReviewOffer: {
     "pt-BR":
       "O oca fechou inesperadamente na última vez. Você quer enviar um relatório para ajudar a corrigir isso?",

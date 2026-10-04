@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { t } from "../i18n";
 import { api } from "../ipc";
+import { Dialog } from "../editor/Dialog";
 import { run } from "../store";
 import type { CrashReview } from "../types";
 
@@ -26,69 +27,68 @@ export function CrashReviewModal() {
   };
 
   return (
-    <div className="modal-overlay">
-      <div
-        className="modal"
-        onClick={(e) => {
-          return e.stopPropagation();
+    <Dialog
+      title={t("crashReviewTitle")}
+      dismissible={false}
+      onClose={() => {
+        return undefined;
+      }}
+    >
+      <p>{t("crashReviewOffer")}</p>
+      <button
+        className="icon"
+        onClick={() => {
+          return setShowPayload((v) => {
+            return !v;
+          });
         }}
       >
-        <p>{t("crashReviewOffer")}</p>
+        {t("crashReviewShowPayload")}
+      </button>
+      {showPayload && (
+        <pre
+          style={{
+            maxHeight: 220,
+            overflow: "auto",
+            fontSize: 11,
+            whiteSpace: "pre-wrap",
+          }}
+        >
+          {crash.payloadPreview}
+        </pre>
+      )}
+      <div className="modal-actions">
         <button
           className="icon"
           onClick={() => {
-            return setShowPayload((v) => {
-              return !v;
+            return finish(() => {
+              return api.sendCrashOnce();
             });
           }}
         >
-          {t("crashReviewShowPayload")}
+          {t("crashReviewSendOnce")}
         </button>
-        {showPayload && (
-          <pre
-            style={{
-              maxHeight: 220,
-              overflow: "auto",
-              fontSize: 11,
-              whiteSpace: "pre-wrap",
-            }}
-          >
-            {crash.payloadPreview}
-          </pre>
-        )}
-        <div className="modal-actions">
-          <button
-            className="icon"
-            onClick={() => {
-              return finish(() => {
-                return api.sendCrashOnce();
-              });
-            }}
-          >
-            {t("crashReviewSendOnce")}
-          </button>
-          <button
-            className="icon"
-            onClick={() => {
-              return finish(() => {
-                return api.alwaysSendCrash();
-              });
-            }}
-          >
-            {t("crashReviewAlwaysSend")}
-          </button>
-          <button
-            className="icon"
-            onClick={() => {
-              return finish(() => {
-                return api.dismissCrashReview();
-              });
-            }}
-          >
-            {t("crashReviewDoNotSend")}
-          </button>
-        </div>
+        <button
+          className="icon"
+          onClick={() => {
+            return finish(() => {
+              return api.alwaysSendCrash();
+            });
+          }}
+        >
+          {t("crashReviewAlwaysSend")}
+        </button>
+        <button
+          className="icon"
+          onClick={() => {
+            return finish(() => {
+              return api.dismissCrashReview();
+            });
+          }}
+        >
+          {t("crashReviewDoNotSend")}
+        </button>
       </div>
-    </div>
+    </Dialog>
   );
 }

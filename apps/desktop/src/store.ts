@@ -77,6 +77,10 @@ export interface UiState {
   drawingShapePoints: [number, number][] | null;
   /** The export queue popover; closed until the user asks for it or starts an export. */
   exportQueueOpen: boolean;
+  /** The export options dialog (aspect ratio, loudness target, encoder). */
+  exportDialogOpen: boolean;
+  /** How many modal dialogs are open; global shortcuts stand down while it is above zero. */
+  openDialogs: number;
 }
 
 export const sessionStore = createStore<SessionView | null>(null);
@@ -101,6 +105,8 @@ export const uiStore = createStore<UiState>({
   error: null,
   drawingShapePoints: null,
   exportQueueOpen: false,
+  exportDialogOpen: false,
+  openDialogs: 0,
 });
 
 /** An asset being dragged from the media library toward the timeline. */
