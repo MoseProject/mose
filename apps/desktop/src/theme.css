@@ -1479,3 +1479,66 @@ body {
 .editor > .timeline {
   background: var(--bg-workspace);
 }
+
+/* ---- dialog forms (export options) ---- */
+.dialog-group {
+  border: 0;
+  margin: 0 0 14px;
+  padding: 0;
+  min-width: 0;
+}
+.dialog-group legend {
+  padding: 0;
+  margin-bottom: 8px;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.segmented {
+  display: flex;
+  gap: 0;
+}
+.segmented button {
+  flex: 1;
+  border-radius: 0;
+  margin-left: -1px;
+  background: var(--bg-workspace);
+}
+.segmented button:first-child {
+  border-radius: var(--radius) 0 0 var(--radius);
+  margin-left: 0;
+}
+.segmented button:last-child {
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+.segmented button.active,
+.segmented button[aria-checked="true"] {
+  background: var(--accent-tint);
+  border-color: var(--accent);
+  color: var(--accent);
+  position: relative;
+  z-index: 1;
+}
+.dialog-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0;
+  font-size: 12px;
+}
+.dialog-field > span:first-child {
+  min-width: 96px;
+  color: var(--text-secondary);
+}
+.dialog-field input[type="number"] {
+  width: 90px;
+}
+.dialog-field select {
+  flex: 1;
+}
+.dialog-error {
+  margin: 6px 0 0;
+  color: var(--error);
+  font-size: 11px;
+}

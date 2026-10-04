@@ -3,7 +3,7 @@ import logo from "./assets/logo.png";
 import { Icon } from "./editor/Icon";
 import { Menu } from "./editor/Menu";
 import { formatTime, t } from "./i18n";
-import { api, exportActiveSequence } from "./ipc";
+import { api } from "./ipc";
 import { exportsStore, patchUi, previewStore, run, uiStore, useStore } from "./store";
 import type { SessionView } from "./types";
 
@@ -25,12 +25,7 @@ export function TopBar({ session }: { session: SessionView | null }) {
   const selected = ui.selectedClipIds;
   const markers = session ? activeTimeline(session).markers : [];
   const startExport = () => {
-    patchUi({ exportQueueOpen: true });
-    void run(
-      exportActiveSequence(() => {
-        return window.confirm(t("exportOverwriteConfirm"));
-      }),
-    );
+    patchUi({ exportDialogOpen: true });
   };
 
   return (

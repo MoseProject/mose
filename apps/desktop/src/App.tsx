@@ -6,6 +6,7 @@ import { Home } from "./screens/Home";
 import { Prefs } from "./screens/Prefs";
 import { WatchFolder } from "./screens/WatchFolder";
 import { Icon } from "./editor/Icon";
+import { ExportDialog } from "./editor/ExportDialog";
 import { ExportPanel } from "./editor/ExportPanel";
 import { TopBar } from "./TopBar";
 import { connect, patchUi, run, sessionStore, uiStore, useStore } from "./store";
@@ -51,6 +52,7 @@ export function App() {
         </div>
       )}
       {session && ui.exportQueueOpen && <ExportPanel />}
+      {session && ui.exportDialogOpen && <ExportDialog session={session} />}
       <CrashReviewModal />
     </div>
   );
