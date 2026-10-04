@@ -397,6 +397,13 @@ export function PreviewPanel() {
       });
     }
   };
+  /** The system took the pointer away mid-gesture: nothing is committed. */
+  const onOverlayPointerCancel = () => {
+    panDrag.current = null;
+    setDrag(null);
+    setGhostPos(null);
+    setGhostScale(null);
+  };
   const onOverlayPointerUp = (e: ReactPointerEvent) => {
     if (panDrag.current) {
       const moved =
@@ -477,6 +484,7 @@ export function PreviewPanel() {
         onPointerDown={onMonitorPointerDown}
         onPointerMove={onOverlayPointerMove}
         onPointerUp={onOverlayPointerUp}
+        onPointerCancel={onOverlayPointerCancel}
         onDoubleClick={() => {
           if (zoomScale !== null) {
             movePan(0, 0);

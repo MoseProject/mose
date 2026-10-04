@@ -598,6 +598,15 @@ export function Timeline({ session }: { session: SessionView }) {
     scheduleDraw();
   };
 
+  /** Abandons a drag in progress without committing it (Escape, or the system taking the pointer
+   *  away): the clip stays where it was and the ghost disappears. */
+  const cancelDrag = () => {
+    if (dragRef.current) {
+      dragRef.current = null;
+      scheduleDraw();
+    }
+  };
+
   const onPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const drag = dragRef.current;
     dragRef.current = null;
@@ -883,6 +892,12 @@ export function Timeline({ session }: { session: SessionView }) {
     });
 
   const onCanvasKeyDown = (e: React.KeyboardEvent<HTMLCanvasElement>) => {
+    if (e.key === "Escape" && dragRef.current) {
+      e.preventDefault();
+      e.nativeEvent.stopPropagation();
+      cancelDrag();
+      return;
+    }
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight" && e.key !== "Enter") {
       return;
     }
@@ -1139,6 +1154,7 @@ export function Timeline({ session }: { session: SessionView }) {
             onDoubleClick={onDoubleClick}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
+            onPointerCancel={cancelDrag}
             onWheel={onWheel}
           />
           <ul
