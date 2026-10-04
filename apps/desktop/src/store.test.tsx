@@ -76,6 +76,7 @@ describe("describeError", () => {
     expect(describeError("pathMissing")).toBe(t("pathMissing"));
     expect(describeError("outputIsSource")).toBe(t("exportOutputIsSource"));
     expect(describeError("outputInQueue")).toBe(t("exportOutputInQueue"));
+    expect(describeError("projectMissing")).toBe(t("projectMissing"));
   });
 
   it("passes any other error through as the backend wrote it", () => {
