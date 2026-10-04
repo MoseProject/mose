@@ -2291,3 +2291,42 @@ fn switching_to_a_family_without_bold_drops_bold_and_static_families_drop_weight
     assert!(!clip.set_font_family(TextFontFamily::Lato));
     assert_eq!(clip.font_style, TextFontStyle::Bold);
 }
+
+#[test]
+fn lift_range_drops_what_is_inside_and_leaves_later_clips_where_they_are() {
+    let mut track = track_with(vec![
+        clip(1, 0.0, 0.0, 5.0),
+        clip(2, 5.0, 0.0, 3.0),
+        clip(3, 8.0, 0.0, 5.0),
+    ]);
+    let mut next_id = 4;
+
+    assert!(track.lift_range(5.0, 8.0, &mut next_id));
+
+    assert_eq!(track.clips.len(), 2);
+    let clip3 = track.clips.iter().find(|c| c.id == 3).unwrap();
+    assert_eq!(clip3.start_secs, 8.0, "the gap stays open");
+}
+
+#[test]
+fn lift_range_splits_a_straddling_clip_and_keeps_both_remainders_in_place() {
+    let mut track = track_with(vec![clip(1, 0.0, 0.0, 20.0)]);
+    let mut next_id = 2;
+
+    assert!(track.lift_range(5.0, 15.0, &mut next_id));
+
+    assert_eq!(next_id, 4);
+    assert_eq!(track.clips.len(), 2);
+    let tail = track.clips.iter().find(|c| c.id == 3).unwrap();
+    assert_eq!(tail.start_secs, 15.0);
+    assert_eq!(tail.source_in_secs, 15.0);
+}
+
+#[test]
+fn lift_range_rejects_an_empty_or_inverted_range() {
+    let mut track = track_with(vec![clip(1, 0.0, 0.0, 10.0)]);
+    let mut next_id = 2;
+    assert!(!track.lift_range(5.0, 5.0, &mut next_id));
+    assert!(!track.lift_range(8.0, 3.0, &mut next_id));
+    assert_eq!(track.clips.len(), 1);
+}
