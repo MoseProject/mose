@@ -6,7 +6,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use avcore::{Keyframe, Position};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use super::with_session;
 use crate::state::AppState;
@@ -26,8 +26,8 @@ const SEARCH_RADIUS_RANGE: std::ops::RangeInclusive<f32> = 0.02..=0.3;
 /// count (`0` means nothing was decoded and the clip's existing keyframes were left untouched).
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-pub fn motion_track_clip(
-    app: AppHandle,
+pub fn motion_track_clip<R: Runtime>(
+    app: AppHandle<R>,
     clip_id: u64,
     center_x: f32,
     center_y: f32,
@@ -152,17 +152,40 @@ fn motion_track_one(
     let Ok(sampler) = avcore::FrameSampler::open(source_path) else {
         return Vec::new();
     };
-    let mut decoded = Vec::with_capacity(sample_times.len());
-    for &t in &sample_times {
-        let Some(frame) = sampler.sample(t, Duration::from_millis(800)) else {
-            continue;
-        };
-        let time_fraction = ((t - source_in_secs) / duration) as f32;
-        decoded.push((
-            time_fraction,
-            avcore::rgba_to_gray(&frame.rgba, frame.width, frame.height),
-        ));
-    }
+    let decoded: Vec<(f32, avcore::GrayFrame)> = sample_times
+        .iter()
+        .filter_map(|&t| {
+            let frame = sampler.sample(t, Duration::from_millis(800))?;
+            let time_fraction = ((t - source_in_secs) / duration) as f32;
+            Some((
+                time_fraction,
+                avcore::rgba_to_gray(&frame.rgba, frame.width, frame.height),
+            ))
+        })
+        .collect();
+    track_decoded_frames(
+        decoded,
+        base_position,
+        center_x,
+        center_y,
+        template_width,
+        template_height,
+        search_radius,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+/// Tracks the region through already decoded `(time fraction, luma)` frames; fewer than two
+/// frames cannot show any motion.
+fn track_decoded_frames(
+    decoded: Vec<(f32, avcore::GrayFrame)>,
+    base_position: Position,
+    center_x: f32,
+    center_y: f32,
+    template_width: f32,
+    template_height: f32,
+    search_radius: f32,
+) -> Vec<Keyframe<Position>> {
     if decoded.len() < 2 {
         return Vec::new();
     }
@@ -177,3 +200,7 @@ fn motion_track_one(
     );
     avcore::tracked_positions_to_keyframes(&tracked, &time_fractions, base_position)
 }
+
+#[cfg(test)]
+#[path = "motion_tracking_test.rs"]
+mod tests;

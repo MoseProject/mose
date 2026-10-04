@@ -782,3 +782,91 @@ fn sepia_must_be_a_unit_fraction() {
         );
     }
 }
+
+fn opaque_pixels(output: &VideoFrame) -> Vec<usize> {
+    output
+        .pixels()
+        .chunks_exact(4)
+        .enumerate()
+        .filter(|(_, pixel)| pixel[3] != 0)
+        .map(|(index, _)| index)
+        .collect()
+}
+
+#[test]
+fn blend_mode_names_are_unique_ffmpeg_names() {
+    let names: std::collections::HashSet<_> = BlendMode::ALL
+        .iter()
+        .map(|mode| mode.ffmpeg_name())
+        .collect();
+    assert_eq!(names.len(), BlendMode::ALL.len());
+    assert_eq!(BlendMode::Normal.ffmpeg_name(), "normal");
+    assert_eq!(BlendMode::SoftLight.ffmpeg_name(), "softlight");
+}
+
+#[test]
+fn a_zero_budget_and_an_invalid_frame_are_render_errors() {
+    assert!(matches!(
+        CpuRenderer::new(0),
+        Err(RenderError::OutputExceedsBudget {
+            budget_bytes: 0,
+            ..
+        })
+    ));
+    let invalid = VideoFrame::new(PixelFormat::Rgba8, 2, 2, 1, 0.0, vec![0; 16]).unwrap_err();
+    assert!(matches!(RenderError::from(invalid), RenderError::Frame(_)));
+}
+
+#[test]
+fn layers_are_clipped_to_the_canvas_edges() {
+    let red = frame(2, 2, vec![255, 0, 0, 255].repeat(4));
+    let renderer = CpuRenderer::new(4 * 4 * 4).unwrap();
+    let at = |x: i32, y: i32| {
+        let mut layer = LayerFrame::new(&red);
+        layer.x = x;
+        layer.y = y;
+        renderer.render(4, 4, 0.0, &[layer]).unwrap()
+    };
+    // Only the overlapping corner pixel is painted, from every side.
+    assert_eq!(opaque_pixels(&at(3, 3)), vec![15]);
+    assert_eq!(opaque_pixels(&at(-1, -1)), vec![0]);
+    assert_eq!(opaque_pixels(&at(3, -1)), vec![3]);
+    assert_eq!(opaque_pixels(&at(-1, 3)), vec![12]);
+    // Entirely outside paints nothing.
+    for (x, y) in [(10, 0), (0, 10), (-10, 0), (0, -10)] {
+        assert!(opaque_pixels(&at(x, y)).is_empty(), "({x}, {y})");
+    }
+}
+
+#[test]
+fn rotated_layers_are_clipped_and_sampled_inside_their_crop() {
+    let white = frame(4, 4, vec![255, 255, 255, 255].repeat(16));
+    let renderer = CpuRenderer::new(8 * 8 * 4).unwrap();
+    let rotated = |x: i32, y: i32, degrees: f32| {
+        let mut layer = LayerFrame::new(&white);
+        layer.x = x;
+        layer.y = y;
+        layer.transform.rotation_deg = degrees;
+        renderer.render(8, 8, 0.0, &[layer]).unwrap()
+    };
+    let centred = opaque_pixels(&rotated(2, 2, 45.0));
+    assert!(!centred.is_empty());
+    // A 45 degree turn of a 4x4 square covers a diamond around its centre.
+    assert!(centred.contains(&(4 * 8 + 4)));
+    // Pushed off the top-left corner, only part of it remains and nothing panics.
+    let clipped = opaque_pixels(&rotated(-2, -2, 45.0));
+    assert!(!clipped.is_empty() && clipped.len() < centred.len());
+    // A cropped layer samples only inside its crop window.
+    let mut layer = LayerFrame::new(&white);
+    layer.transform.crop = CropRect {
+        x: 0.0,
+        y: 0.0,
+        width: 0.5,
+        height: 0.5,
+    };
+    layer.transform.rotation_deg = 30.0;
+    layer.x = 2;
+    layer.y = 2;
+    let cropped = opaque_pixels(&renderer.render(8, 8, 0.0, &[layer]).unwrap());
+    assert!(!cropped.is_empty() && cropped.len() <= 9);
+}

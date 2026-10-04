@@ -167,3 +167,156 @@ fn write_wav_produces_a_readable_file() {
     std::fs::remove_file(&path).unwrap();
     std::fs::remove_dir(&dir).unwrap();
 }
+
+struct FixedPhonemizer;
+
+impl Phonemizer for FixedPhonemizer {
+    fn phonemize(&self, _text: &str, _language: &str) -> Result<Vec<String>, PhonemizationError> {
+        Ok(vec!["a".to_string()])
+    }
+}
+
+#[test]
+fn every_tts_error_has_a_readable_message() {
+    assert!(TtsError::Io(std::io::Error::other("disk"))
+        .to_string()
+        .contains("disk"));
+    let json = serde_json::from_str::<PiperVoiceConfig>("{").unwrap_err();
+    assert!(TtsError::Json(json).to_string().contains("voice config"));
+    let phonemization = TtsError::Phonemization(PhonemizationError::new("test", "no voice"));
+    assert!(phonemization.to_string().contains("no voice"));
+    assert!(TtsError::Onnx("bad model".into())
+        .to_string()
+        .contains("bad model"));
+    assert!(!TtsError::NoAudio.to_string().is_empty());
+}
+
+#[test]
+fn a_voice_config_loads_from_a_file_and_bad_files_are_errors() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("voice.json");
+    std::fs::write(
+        &path,
+        r#"{"audio":{"sample_rate":16000},"espeak":{"voice":"pt-br"},"phoneme_id_map":{"_":[0]}}"#,
+    )
+    .unwrap();
+    assert_eq!(load_voice_config(&path).unwrap().audio.sample_rate, 16000);
+    assert!(matches!(
+        load_voice_config(&dir.path().join("missing.json")),
+        Err(TtsError::Io(_))
+    ));
+    std::fs::write(&path, "{").unwrap();
+    assert!(matches!(load_voice_config(&path), Err(TtsError::Json(_))));
+}
+
+#[test]
+fn synthesis_reports_phonemization_and_model_failures() {
+    let config = fixture_config();
+    let model = Path::new("missing-model.onnx");
+    assert!(matches!(
+        synthesize_with_phonemizer(model, &config, "Hello", &FailingPhonemizer),
+        Err(TtsError::Phonemization(_))
+    ));
+    assert!(matches!(
+        synthesize_with_phonemizer(model, &config, "Hello", &FixedPhonemizer),
+        Err(TtsError::Onnx(_))
+    ));
+    assert!(matches!(synthesize(model, &config, "Hello"), Err(_)));
+}
+
+#[test]
+fn the_bundled_espeak_backend_phonemizes_or_names_itself_in_the_error() {
+    match EspeakPhonemizer.phonemize("ola", "pt-br") {
+        Ok(sentences) => assert!(!sentences.is_empty()),
+        Err(error) => assert_eq!(error.backend(), "eSpeak NG"),
+    }
+}
+
+#[test]
+fn wav_files_are_written_as_sixteen_bit_mono_and_failures_are_io_errors() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("voice.wav");
+    // Samples beyond the range are clamped.
+    write_wav(&path, 8000, &[0.0, 0.5, 2.0, -2.0]).unwrap();
+    let mut reader = hound::WavReader::open(&path).unwrap();
+    assert_eq!(reader.spec().sample_rate, 8000);
+    let samples: Vec<i16> = reader.samples::<i16>().map(Result::unwrap).collect();
+    assert_eq!(samples, vec![0, 16383, i16::MAX, -i16::MAX]);
+
+    let missing_dir = dir.path().join("no").join("such").join("dir.wav");
+    assert!(matches!(
+        write_wav(&missing_dir, 8000, &[0.0]),
+        Err(TtsError::Io(_))
+    ));
+}
+
+#[test]
+fn hound_errors_become_io_errors() {
+    let io = io_from_hound(hound::Error::IoError(std::io::Error::other("raw")));
+    assert_eq!(io.to_string(), "raw");
+    let other = io_from_hound(hound::Error::FormatError("odd format"));
+    assert!(other.to_string().contains("odd format"));
+}
+
+#[test]
+fn sentences_are_run_through_the_model_and_joined_with_a_quarter_second_of_silence() {
+    let config = fixture_config();
+    let mut calls: Vec<Vec<i64>> = Vec::new();
+    let samples = assemble_sentences(&config, &["a".to_string(), "t".to_string()], |ids| {
+        calls.push(ids);
+        Ok(vec![0.5; 4])
+    })
+    .unwrap();
+    assert_eq!(calls.len(), 2);
+    // Two 4-sample sentences plus a quarter second (22050 / 4 samples) of silence between.
+    assert_eq!(samples.len(), 4 + 22050 / 4 + 4);
+    assert_eq!(samples[0], 0.5);
+    assert_eq!(samples[4], 0.0);
+}
+
+#[test]
+fn sentences_without_speakable_symbols_are_skipped_and_nothing_at_all_is_an_error() {
+    // A voice that knows no symbol at all turns every sentence into zero ids.
+    let mut config = fixture_config();
+    config.phoneme_id_map.clear();
+    let mut calls = 0;
+    let result = assemble_sentences(&config, &["???".to_string(), String::new()], |_| {
+        calls += 1;
+        Ok(vec![0.1])
+    });
+    assert!(matches!(result, Err(TtsError::NoAudio)));
+    assert_eq!(calls, 0);
+    assert!(matches!(
+        assemble_sentences(&config, &[], |_| Ok(vec![0.1])),
+        Err(TtsError::NoAudio)
+    ));
+}
+
+#[test]
+fn a_model_failure_stops_the_synthesis() {
+    let config = fixture_config();
+    let result = assemble_sentences(&config, &["a".to_string()], |_| {
+        Err(TtsError::Onnx("boom".into()))
+    });
+    assert!(matches!(result, Err(TtsError::Onnx(message)) if message == "boom"));
+}
+
+struct Words(Vec<String>);
+
+impl Phonemizer for Words {
+    fn phonemize(&self, _text: &str, _language: &str) -> Result<Vec<String>, PhonemizationError> {
+        Ok(self.0.clone())
+    }
+}
+
+#[test]
+fn a_missing_model_file_is_an_onnx_error_after_phonemizing() {
+    let config = fixture_config();
+    let result = synthesize_with_phonemizer(
+        Path::new("definitely-not-a-voice.onnx"),
+        &config,
+        "hello",
+        &Words(vec!["a".into()]),
+    );
+    assert!(matches!(result, Err(TtsError::Onnx(_))));
+}

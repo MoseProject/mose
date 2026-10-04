@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use avcore::{Mp3Bitrate, Mp4Quality, YoutubeDownloadTarget};
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
 use crate::state::AppState;
 
@@ -49,8 +49,8 @@ fn parse_target(format: &str, quality: &str) -> Option<YoutubeDownloadTarget> {
 /// Whether `ytbridge` (and yt-dlp) is available -- checked before offering the download modal's
 /// "Baixar" button.
 #[tauri::command]
-pub fn is_yt_dlp_available() -> bool {
-    avcore::is_yt_dlp_available()
+pub fn is_yt_dlp_available(state: State<'_, AppState>) -> bool {
+    state.services.is_yt_dlp_available()
 }
 
 /// Downloads `url` on a background thread at `format`/`quality` (`format`: `"mp4"`|`"mp3"`;
@@ -59,8 +59,8 @@ pub fn is_yt_dlp_available() -> bool {
 /// the media library like any other. Errors (already running, blank URL, tool missing) surface
 /// synchronously; progress/result arrive via [`YOUTUBE_DOWNLOAD_EVENT`].
 #[tauri::command]
-pub fn download_youtube(
-    app: AppHandle,
+pub fn download_youtube<R: Runtime>(
+    app: AppHandle<R>,
     url: String,
     format: String,
     quality: String,
@@ -72,7 +72,8 @@ pub fn download_youtube(
     let Some(target) = parse_target(&format, &quality) else {
         return Err("invalid format".to_string());
     };
-    if !avcore::is_yt_dlp_available() {
+    let services = app.state::<AppState>().services.clone();
+    if !services.is_yt_dlp_available() {
         return Err("yt-dlp is not installed".to_string());
     }
     let state = app.state::<AppState>();
@@ -100,7 +101,7 @@ pub fn download_youtube(
             guard.clone().expect("cancel flag set just above")
         };
         let progress_app = worker_app.clone();
-        let result = avcore::download_youtube(&url, target, &out_dir, &cancel, move |fraction| {
+        let result = services.download_youtube(&url, target, &out_dir, &cancel, &mut |fraction| {
             let _ = progress_app.emit(
                 YOUTUBE_DOWNLOAD_EVENT,
                 YoutubeDownloadEventPayload::Progress { fraction },
@@ -154,3 +155,7 @@ fn youtube_downloads_dir() -> PathBuf {
         .map(|d| d.join("youtube_downloads"))
         .unwrap_or_else(|| PathBuf::from("youtube_downloads"))
 }
+
+#[cfg(test)]
+#[path = "youtube_download_test.rs"]
+mod tests;

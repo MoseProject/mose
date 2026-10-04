@@ -82,7 +82,8 @@ impl SourceVariants {
         &self.variants
     }
 
-    /// Picks the lowest-resolution source that satisfies the requested quality, else the best available.
+    /// Picks the lowest-resolution source that satisfies the requested quality; the original
+    /// always does, so a lower quality never leaves the choice empty.
     pub fn select(&self, quality: PreviewQuality) -> &SourceVariant {
         let divisor = quality.divisor();
         let minimum_width = self.original_width.div_ceil(divisor);
@@ -96,16 +97,6 @@ impl SourceVariants {
                     variant.kind,
                 )
             })
-            .unwrap_or_else(|| {
-                self.variants
-                    .iter()
-                    .max_by_key(|variant| {
-                        (
-                            u64::from(variant.width) * u64::from(variant.height),
-                            variant.kind,
-                        )
-                    })
-                    .expect("validated source variants contain an original")
-            })
+            .expect("the original always satisfies every quality's minimum size")
     }
 }

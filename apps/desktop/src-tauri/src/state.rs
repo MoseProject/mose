@@ -17,7 +17,7 @@ use avcore::timeline::{ClipFormatting, ClipInstance, TrackKind};
 use avcore::undo::UndoStack;
 use avcore::{Project, Sequence, SequenceExportSettings, Timeline};
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use crate::export::ExportQueue;
 use crate::prefs::PrefsDocument;
@@ -146,9 +146,49 @@ pub struct AppState {
     /// separate from `PreviewEngine`'s own copy (it lives on that dedicated thread), so a
     /// compound clip's nested content isn't re-rendered on every export of the same sequence.
     pub nested_sequence_cache: Mutex<HashMap<u64, avcore::nested_sequence::NestedSequenceCache>>,
+    /// Calls that leave the process or need model files; faked in tests.
+    pub services: Arc<dyn crate::services::Services>,
 }
 
 impl AppState {
+    /// The state the app boots with: a blank project, empty clipboards and no background job
+    /// running. `main` and the test harness differ only in the pieces passed in.
+    pub fn new(
+        prefs: PrefsDocument,
+        preview: PreviewEngine,
+        exports: Arc<ExportQueue>,
+        error_reporter: Option<Arc<dyn avcore::ErrorReporter>>,
+        pending_crash_review: Option<crate::error_reporting::PendingCrashReview>,
+        telemetry_enabled: Arc<std::sync::atomic::AtomicBool>,
+        services: Arc<dyn crate::services::Services>,
+    ) -> Self {
+        Self {
+            session: Mutex::new(Session::new(blank_project(
+                "Untitled".to_string(),
+                "Sequence 1".to_string(),
+            ))),
+            prefs: Mutex::new(prefs),
+            preview,
+            exports,
+            clip_clipboard: Mutex::new(None),
+            formatting_clipboard: Mutex::new(None),
+            transcribing_asset_id: Mutex::new(None),
+            scene_cut_detection_clip_id: Mutex::new(None),
+            motion_tracking_clip_id: Mutex::new(None),
+            auto_reframing_clip_id: Mutex::new(None),
+            matte_generating_clip_id: Mutex::new(None),
+            privacy_blur_generating_clip_id: Mutex::new(None),
+            tts_generating: Mutex::new(false),
+            watch_folder_stop: Mutex::new(None),
+            youtube_download_cancel: Mutex::new(None),
+            error_reporter: Mutex::new(error_reporter),
+            pending_crash_review: Mutex::new(pending_crash_review),
+            telemetry_enabled,
+            nested_sequence_cache: Mutex::new(std::collections::HashMap::new()),
+            services,
+        }
+    }
+
     pub fn session(&self) -> MutexGuard<'_, Session> {
         // A poisoned lock means a command panicked mid-edit; the data is still the last
         // consistent snapshot any other command left, so keep serving it.
@@ -166,12 +206,10 @@ impl AppState {
 
 /// Emits the current session to the webview and hands the timeline to the preview engine.
 /// Every command that mutates [`Session`] ends with this.
-pub fn publish(app: &AppHandle, session: &Session) {
+pub fn publish<R: Runtime>(app: &AppHandle<R>, session: &Session) {
     let state = app.state::<AppState>();
     state.preview.set_content(session.project.clone());
-    if let Err(error) = app.emit(SESSION_CHANGED, session.view()) {
-        tracing::warn!(%error, "failed to emit session-changed");
-    }
+    let _ = app.emit(SESSION_CHANGED, session.view());
 }
 
 /// An empty, never-saved project -- what "Novo projeto" builds in the egui shell.

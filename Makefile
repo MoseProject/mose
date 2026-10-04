@@ -44,7 +44,14 @@ else
   endif
 endif
 
-.PHONY: build release test test-core test-bush test-xtask test-e2e bench bench-bush fmt fmt-check lint graph docs check clean desktop-install desktop-dev desktop-build test-desktop
+# Cache dependency compilation across clean builds when sccache is installed (cargo install sccache).
+# Measured on core's tests with an emptied target dir: 3m24s with a cold cache, 2m05s with a warm one.
+# Workspace crates built incrementally are skipped by sccache, so edit-compile loops are unaffected.
+ifneq ($(shell sccache --version 2>/dev/null),)
+  export RUSTC_WRAPPER ?= sccache
+endif
+
+.PHONY: coverage coverage-web build release test test-core test-bush test-xtask test-e2e bench bench-bush fmt fmt-check lint graph docs check clean desktop-install desktop-dev desktop-build test-desktop
 
 # Debug build of the whole workspace (core, avbridge, ytbridge, desktop, xtask).
 build:
@@ -79,10 +86,18 @@ desktop-dev:
 desktop-build:
 	cd apps/desktop && npm run tauri build
 
+# Test builds of the Rust shell run optimized (its debug test binary aborts at startup on Windows
+# with an MSVC CRT assertion) but without `[profile.release]`'s whole-program LTO and single codegen
+# unit, which made every rebuild take minutes: the same optimized build, 16 codegen units, no LTO,
+# incremental, in its own target dir (`target/fast`, so it never invalidates real release builds).
+# Measured: touching one test file and re-running `cargo test -p desktop --no-run` takes ~9 s here
+# instead of ~6.5 min.
+FAST_TEST_ENV = CARGO_PROFILE_RELEASE_LTO=false CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 	CARGO_PROFILE_RELEASE_OPT_LEVEL=1 CARGO_PROFILE_RELEASE_PANIC=unwind 	CARGO_PROFILE_RELEASE_INCREMENTAL=true CARGO_TARGET_DIR=target/fast
+
 # Frontend typecheck + unit tests, then the Rust shell's own tests.
 test-desktop:
 	cd apps/desktop && npm run typecheck && npm test
-	cargo test -p desktop
+	$(FAST_TEST_ENV) cargo test -p desktop --release
 
 # End-to-end tests (e2e/, pytest + selenium) driving the real built oca-desktop.exe through
 # tauri-driver's WebDriver bridge. Needs a build first via `make desktop-build` (this target
@@ -108,6 +123,22 @@ bench-bush:
 # Bush test suite (needs FFMPEG_DIR). Add --features cpal for the device tests.
 test-bush:
 	cargo test -p bush
+
+# Line coverage per crate (needs cargo-llvm-cov). Excluded by file, see
+# spec/architecture/test-coverage-plan.md: the Tauri entry point, the audio device and its wrapper,
+# the GPU renderer, the real network/self-update/model adapters (services.rs, update_install.rs, onnx_models.rs, whisper_model.rs),
+# and the test files and test harness themselves. `desktop` runs in release because its debug test binary
+# hits an MSVC CRT assertion at startup on Windows.
+COVERAGE_IGNORE = (main\.rs|device_sink\.rs|gpu_[a-z_]+\.(rs|wgsl)|_test\.rs|[/\\]tests[/\\]|[/\\]testing\.rs|[/\\]services\.rs|bush_adapter[/\\]audio\.rs|update_install\.rs|onnx_models\.rs|whisper_model\.rs)
+coverage:
+	cargo llvm-cov -p avbridge --ignore-filename-regex '$(COVERAGE_IGNORE)'
+	cargo llvm-cov -p bush --ignore-filename-regex '$(COVERAGE_IGNORE)'
+	cargo llvm-cov -p core --ignore-run-fail --ignore-filename-regex '$(COVERAGE_IGNORE)'
+	$(FAST_TEST_ENV) cargo llvm-cov -p desktop --release --ignore-filename-regex '$(COVERAGE_IGNORE)'
+
+# Frontend line coverage (vitest + v8).
+coverage-web:
+	cd apps/desktop && npm run coverage
 
 fmt:
 	cargo fmt --all

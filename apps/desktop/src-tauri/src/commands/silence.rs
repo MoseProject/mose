@@ -8,7 +8,7 @@ use avcore::{
     clip_silence_gaps, SilenceGap, DEFAULT_MIN_SILENCE_SECS, DEFAULT_SILENCE_THRESHOLD_LINEAR,
 };
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Runtime, State};
 
 use super::undoable;
 use crate::state::AppState;
@@ -77,8 +77,8 @@ pub fn detect_silence_gaps_for_clip(
 /// leftward ripple never invalidates a not-yet-applied gap's coordinates, same order
 /// `ui::App::apply_silence_review` uses.
 #[tauri::command]
-pub fn apply_silence_gaps(
-    app: AppHandle,
+pub fn apply_silence_gaps<R: Runtime>(
+    app: AppHandle<R>,
     track_id: u64,
     gaps: Vec<SilenceGapView>,
 ) -> Result<(), String> {
@@ -104,3 +104,7 @@ pub fn apply_silence_gaps(
         changed
     })
 }
+
+#[cfg(test)]
+#[path = "silence_test.rs"]
+mod tests;

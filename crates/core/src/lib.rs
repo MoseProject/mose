@@ -50,6 +50,7 @@ pub mod motion_template;
 pub mod motion_tracking;
 pub mod multicam_sync;
 pub mod nested_sequence;
+mod onnx_models;
 pub mod overlay_render;
 pub mod persistence;
 pub mod privacy_blur;
@@ -77,9 +78,11 @@ pub mod transcript_proposals;
 pub mod transcript_search;
 pub mod undo;
 pub mod update_check;
+mod update_install;
 pub mod voice_cleanup_preview;
 pub mod watched_folder;
 pub mod waveform;
+mod whisper_model;
 pub mod youtube_download;
 
 pub use auto_reframe::{
@@ -182,9 +185,10 @@ pub use transcript_proposals::{
 pub use transcript_search::{search_transcripts_in_project, ProjectTranscriptHit};
 pub use update_check::{
     apply_update, auto_update_supported, expected_update_asset_name, fetch_latest_release,
-    is_newer, package_supports_atomic_update, release_supports_auto_update, restart_application,
-    ApplyUpdateError, ApplyUpdateOutcome, LatestRelease, UpdateCheckError, UpdatePackage,
+    is_newer, package_supports_atomic_update, release_supports_auto_update, ApplyUpdateError,
+    ApplyUpdateOutcome, LatestRelease, UpdateCheckError, UpdatePackage,
 };
+pub use update_install::restart_application;
 pub use watched_folder::{
     is_video_file, output_path_for, process_watched_file, ProcessError, StabilityTracker,
     DEFAULT_OUTPUT_SUBFOLDER, DEFAULT_STABLE_SECS, DEFAULT_TARGET_LUFS, VIDEO_EXTENSIONS,

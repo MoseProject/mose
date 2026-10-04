@@ -186,7 +186,12 @@ pub struct PrefsDocument {
 
 impl PrefsDocument {
     pub fn load() -> Self {
-        let Ok(bytes) = std::fs::read(prefs_path()) else {
+        Self::load_from(&prefs_path())
+    }
+
+    /// Reads the preferences stored at `path`; a missing or unreadable file is the defaults.
+    pub fn load_from(path: &std::path::Path) -> Self {
+        let Ok(bytes) = std::fs::read(path) else {
             return Self::default();
         };
         let Ok(value) = avcore::from_ocproj_bytes::<Value>(&bytes) else {
@@ -216,20 +221,18 @@ impl PrefsDocument {
     }
 
     pub fn save(&mut self) -> Result<(), String> {
+        self.save_to(&prefs_path())
+    }
+
+    /// Writes the preferences to `path`, keeping keys this shell does not model.
+    pub fn save_to(&mut self, path: &std::path::Path) -> Result<(), String> {
         // Struct-map (named) encoding: plain `to_vec` writes structs as arrays, which neither
         // this merge nor the egui shell's `PrefsState` can read back.
         let patch = rmp_serde::to_vec_named(&DiskPrefs::from(&self.view))
             .map_err(|error| error.to_string())?;
-        let Value::Map(entries) =
-            rmp_serde::from_slice::<Value>(&patch).map_err(|error| error.to_string())?
-        else {
-            return Err("preferences patch must be a MessagePack map".to_string());
-        };
-        for (key, value) in entries {
-            if let Some(key) = key.as_str() {
-                self.raw.insert(key.to_string(), value);
-            }
-        }
+        let entries = rmp_serde::from_slice::<BTreeMap<String, Value>>(&patch)
+            .map_err(|error| error.to_string())?;
+        self.raw.extend(entries);
         let value = Value::Map(
             self.raw
                 .iter()
@@ -237,7 +240,6 @@ impl PrefsDocument {
                 .collect(),
         );
         let bytes = avcore::to_ocproj_bytes(&value).map_err(|error| error.to_string())?;
-        let path = prefs_path();
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
         }
@@ -257,30 +259,5 @@ impl Default for PrefsDocument {
 pub use avcore::app_paths::{autosave_path, prefs_path};
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn round_trip_preserves_unknown_egui_preferences() {
-        let mut raw = BTreeMap::new();
-        raw.insert("telemetry_enabled".to_string(), Value::Boolean(true));
-        let mut document = PrefsDocument {
-            raw,
-            view: PrefsView {
-                locale: "en".to_string(),
-                ..PrefsView::default()
-            },
-        };
-        let patch = rmp_serde::to_vec_named(&DiskPrefs::from(&document.view)).unwrap();
-        let Value::Map(entries) = rmp_serde::from_slice::<Value>(&patch).unwrap() else {
-            panic!("serialized preferences must be a map");
-        };
-        for (key, value) in entries {
-            document
-                .raw
-                .insert(key.as_str().unwrap().to_string(), value);
-        }
-        assert_eq!(document.raw["telemetry_enabled"], Value::Boolean(true));
-        assert_eq!(document.raw["locale"], Value::from("en"));
-    }
-}
+#[path = "prefs/prefs_test.rs"]
+mod tests;

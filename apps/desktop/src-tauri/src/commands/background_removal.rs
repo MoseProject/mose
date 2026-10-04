@@ -6,9 +6,10 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use super::with_session;
+use crate::services::Services;
 use crate::state::AppState;
 
 pub const MATTE_GENERATION_EVENT: &str = "matte-generation-event";
@@ -27,7 +28,7 @@ pub enum MatteGenerationResult {
 /// configured, clip/asset not found) surface synchronously; the mask path is applied
 /// automatically on success, and either outcome is reported via [`MATTE_GENERATION_EVENT`].
 #[tauri::command]
-pub fn generate_matte_for_clip(app: AppHandle, clip_id: u64) -> Result<(), String> {
+pub fn generate_matte_for_clip<R: Runtime>(app: AppHandle<R>, clip_id: u64) -> Result<(), String> {
     let state = app.state::<AppState>();
     {
         let mut running = state
@@ -84,8 +85,10 @@ pub fn generate_matte_for_clip(app: AppHandle, clip_id: u64) -> Result<(), Strin
     let model_path = PathBuf::from(model_path);
 
     let worker_app = app.clone();
+    let services = state.services.clone();
     std::thread::spawn(move || {
         let result = generate_matte_one(
+            services.as_ref(),
             &source_path,
             clip.source_in_secs,
             clip.source_out_secs,
@@ -120,6 +123,7 @@ pub fn generate_matte_for_clip(app: AppHandle, clip_id: u64) -> Result<(), Strin
 }
 
 fn generate_matte_one(
+    services: &dyn Services,
     source_path: &Path,
     source_in_secs: f64,
     source_out_secs: f64,
@@ -141,20 +145,31 @@ fn generate_matte_one(
     let sampler = avcore::FrameSampler::open(source_path)
         .map_err(|e| format!("failed to open source for decoding: {e}"))?;
 
-    let mut luma_frames: Vec<Vec<u8>> = Vec::with_capacity(sample_times.len());
-    let mut frame_w = 0u32;
-    let mut frame_h = 0u32;
-    for &t in &sample_times {
-        let Some(frame) = sampler.sample(t, Duration::from_millis(1500)) else {
-            continue;
-        };
-        if frame_w == 0 {
-            frame_w = frame.width;
-            frame_h = frame.height;
-        } else if frame.width != frame_w || frame.height != frame_h {
-            continue;
-        }
-        let alpha = avcore::segment_person(model_path, &frame.rgba, frame.width, frame.height)
+    let frames: Vec<avcore::SampledFrame> = sample_times
+        .iter()
+        .filter_map(|&t| sampler.sample(t, Duration::from_millis(1500)))
+        .collect();
+    matte_from_frames(services, &frames, duration, model_path, mask_dir, mask_path)
+}
+
+/// Segments the people in already decoded frames and encodes the matte video. Frames whose size
+/// differs from the first one's are skipped.
+fn matte_from_frames(
+    services: &dyn Services,
+    frames: &[avcore::SampledFrame],
+    duration: f64,
+    model_path: &Path,
+    mask_dir: &Path,
+    mask_path: &Path,
+) -> Result<PathBuf, String> {
+    let (frame_w, frame_h) = frames.first().map_or((0, 0), |f| (f.width, f.height));
+    let mut luma_frames: Vec<Vec<u8>> = Vec::with_capacity(frames.len());
+    for frame in frames
+        .iter()
+        .filter(|f| f.width == frame_w && f.height == frame_h)
+    {
+        let alpha = services
+            .segment_person(model_path, &frame.rgba, frame.width, frame.height)
             .map_err(|e| format!("segmentation failed: {e}"))?;
         luma_frames.push(
             alpha
@@ -178,3 +193,7 @@ fn generate_matte_one(
 
     Ok(mask_path.to_path_buf())
 }
+
+#[cfg(test)]
+#[path = "background_removal_test.rs"]
+mod tests;

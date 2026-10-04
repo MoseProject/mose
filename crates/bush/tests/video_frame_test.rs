@@ -57,3 +57,13 @@ fn frame_rejects_short_buffer() {
         })
     );
 }
+
+#[test]
+fn equal_content_shares_an_id_and_different_content_does_not() {
+    let make = |value: u8| {
+        bush::VideoFrame::new(bush::PixelFormat::Rgba8, 1, 1, 4, 0.0, vec![value; 4]).unwrap()
+    };
+    let frame = make(1);
+    assert_eq!(frame.id(), frame.clone().id());
+    assert_ne!(frame.id(), make(2).id());
+}

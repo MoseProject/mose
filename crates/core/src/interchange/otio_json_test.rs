@@ -427,3 +427,212 @@ fn a_clip_2_with_multiple_media_references_keeps_only_the_active_one_and_warns()
         result.warnings
     );
 }
+
+fn time(value: f64) -> serde_json::Value {
+    serde_json::json!({"OTIO_SCHEMA": "RationalTime.1", "value": value, "rate": 24.0})
+}
+
+fn range(start: f64, duration: f64) -> serde_json::Value {
+    serde_json::json!({
+        "OTIO_SCHEMA": "TimeRange.1",
+        "start_time": time(start),
+        "duration": time(duration),
+    })
+}
+
+fn document(tracks: serde_json::Value, markers: serde_json::Value) -> serde_json::Value {
+    serde_json::json!({
+        "OTIO_SCHEMA": "Timeline.1",
+        "name": "T",
+        "tracks": {"OTIO_SCHEMA": "Stack.1", "children": tracks, "markers": markers},
+    })
+}
+
+fn track(kind: &str, children: serde_json::Value) -> serde_json::Value {
+    serde_json::json!({"OTIO_SCHEMA": "Track.1", "name": "V1", "kind": kind, "children": children})
+}
+
+#[test]
+fn structural_problems_are_hard_errors_with_readable_messages() {
+    let not_object = parse_otio_json(&serde_json::json!([1])).unwrap_err();
+    assert!(matches!(not_object, OtioParseError::NotAnObject(_)));
+    assert!(not_object.to_string().contains("not a JSON object"));
+
+    let no_tracks = parse_otio_json(&serde_json::json!({"OTIO_SCHEMA": "Timeline.1"})).unwrap_err();
+    assert!(matches!(no_tracks, OtioParseError::MissingField { .. }));
+    assert!(no_tracks.to_string().contains("tracks"));
+
+    let wrong_root = parse_otio_json(&serde_json::json!({"OTIO_SCHEMA": "Other.1"})).unwrap_err();
+    assert!(wrong_root.to_string().contains("Other.1"));
+
+    let tracks_not_object = serde_json::json!({"OTIO_SCHEMA": "Timeline.1", "tracks": 5});
+    assert!(matches!(
+        parse_otio_json(&tracks_not_object).unwrap_err(),
+        OtioParseError::NotAnObject(_)
+    ));
+    let wrong_stack = serde_json::json!({
+        "OTIO_SCHEMA": "Timeline.1",
+        "tracks": {"OTIO_SCHEMA": "Track.1"},
+    });
+    assert!(matches!(
+        parse_otio_json(&wrong_stack).unwrap_err(),
+        OtioParseError::UnrecognizedTopLevelSchema(_)
+    ));
+}
+
+#[test]
+fn unsupported_pieces_are_skipped_with_warnings_instead_of_failing() {
+    let good_clip = serde_json::json!({
+        "OTIO_SCHEMA": "Clip.1",
+        "name": "Clip-7",
+        "source_range": range(0.0, 48.0),
+        "media_reference": {"OTIO_SCHEMA": "ExternalReference.1", "target_url": "file:///a.mp4"},
+        "metadata": {"oca": {"speed_factor": 2.0, "transition_in": "Zoom"}},
+    });
+    let tracks = serde_json::json!([
+        7,
+        {"OTIO_SCHEMA": "Stack.1"},
+        track("Subtitle", serde_json::json!([])),
+        track(
+            "Video",
+            serde_json::json!([
+                5,
+                {"OTIO_SCHEMA": "Gap.1"},
+                {"OTIO_SCHEMA": "Gap.1", "source_range": {"OTIO_SCHEMA": "TimeRange.1"}},
+                {"OTIO_SCHEMA": "Transition.1", "transition_type": "SMPTE_Dissolve"},
+                good_clip,
+                {"OTIO_SCHEMA": "Clip.1", "name": "Clip-8", "media_reference": null},
+                {"OTIO_SCHEMA": "Stack.1", "source_range": range(0.0, 24.0)},
+                {"OTIO_SCHEMA": "Stack.1", "source_range": {"OTIO_SCHEMA": "TimeRange.1"}},
+                {"OTIO_SCHEMA": "Stack.1"},
+            ])
+        ),
+    ]);
+    let markers = serde_json::json!([
+        {"OTIO_SCHEMA": "Marker.1", "name": "m", "marked_range": range(0.0, 1.0), "color": "RED"},
+        {"OTIO_SCHEMA": "Marker.1", "name": "no range"},
+        7,
+    ]);
+    let result = parse_otio_json(&document(tracks, markers)).unwrap();
+    assert_eq!(result.timeline.markers.len(), 1);
+    assert_eq!(result.timeline.markers[0].kind, MarkerKind::ToDo);
+    assert_eq!(result.timeline.tracks.len(), 1);
+    let items = &result.timeline.tracks[0].items;
+    // The clip kept its speed and picked up the transition from the item before it; the stack
+    // with a range became a gap.
+    let clips: Vec<_> = items
+        .iter()
+        .filter_map(|item| match item {
+            InterchangeTrackItem::Clip(clip) => Some(clip),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(clips.len(), 1);
+    assert_eq!(clips[0].source_id, 7);
+    assert_eq!(clips[0].speed_factor, 2.0);
+    assert_eq!(
+        clips[0].transition_in,
+        Some(InterchangeTransitionKind::Fade)
+    );
+    assert!(items
+        .iter()
+        .any(|item| matches!(item, InterchangeTrackItem::Gap(_))));
+    let warnings = result.warnings.join("\n");
+    for needle in [
+        "skipped a malformed marker",
+        "non-object top-level track item",
+        "unsupported top-level item",
+        "unsupported kind 'Subtitle'",
+        "non-object item",
+        "malformed Gap.1",
+        "Transition.1 approximated",
+        "malformed Clip.1",
+        "replaced with an equal-duration gap",
+        "unreadable source_range",
+        "no explicit source_range",
+    ] {
+        assert!(
+            warnings.contains(needle),
+            "missing warning: {needle}\n{warnings}"
+        );
+    }
+}
+
+#[test]
+fn media_references_and_marker_colours_map_to_their_kinds() {
+    use crate::interchange::{InterchangeMarker, MediaReference};
+    let reference = |schema: &str| serde_json::json!({"OTIO_SCHEMA": schema});
+    // A reference that is not an object, and an unrecognised schema, are offline with a warning.
+    let not_object = media_reference_from_json(&serde_json::json!(5));
+    assert_eq!(not_object.0, MediaReference::Missing);
+    assert!(not_object.1.is_some());
+    let (unknown, warning) = media_reference_from_json(&reference("ImageSequenceReference.1"));
+    assert_eq!(unknown, MediaReference::Missing);
+    assert!(warning.unwrap().contains("ImageSequenceReference.1"));
+    assert_eq!(
+        media_reference_from_json(&reference("MissingReference.1")),
+        (MediaReference::Missing, None)
+    );
+
+    for (color, kind) in [
+        ("RED", MarkerKind::ToDo),
+        ("BLUE", MarkerKind::Chapter),
+        ("YELLOW", MarkerKind::Highlight),
+        ("GREEN", MarkerKind::Standard),
+        ("PURPLE", MarkerKind::Standard),
+    ] {
+        assert_eq!(marker_kind_from_color(color), kind);
+    }
+
+    // Every marker kind serializes with its own colour.
+    for (kind, colour) in [
+        (MarkerKind::Standard, "GREEN"),
+        (MarkerKind::ToDo, "RED"),
+        (MarkerKind::Chapter, "BLUE"),
+        (MarkerKind::Highlight, "YELLOW"),
+    ] {
+        let mut timeline = sample_timeline();
+        timeline.markers = vec![InterchangeMarker {
+            kind,
+            ..timeline.markers[0].clone()
+        }];
+        let json = serialize_interchange_timeline(&timeline).to_string();
+        let expected = format!("\"color\":\"{colour}\"");
+        assert!(json.contains(&expected), "{colour}: {json}");
+    }
+}
+
+#[test]
+fn a_clip_two_keeps_only_its_active_media_reference_and_warns_about_the_rest() {
+    let clip = serde_json::json!({
+        "OTIO_SCHEMA": "Clip.2",
+        "name": "Clip-3",
+        "source_range": range(0.0, 24.0),
+        "active_media_reference_key": "missing-key",
+        "media_references": {
+            "b": {"OTIO_SCHEMA": "ExternalReference.1", "target_url": "file:///b.mp4"},
+            "a": {"OTIO_SCHEMA": "ImageSequenceReference.1"},
+        },
+    });
+    let result = parse_otio_json(&document(
+        serde_json::json!([track("Video", serde_json::json!([clip]))]),
+        serde_json::json!([]),
+    ))
+    .unwrap();
+    // The active key does not exist, so the alphabetically first reference wins.
+    let warnings = result.warnings.join("\n");
+    assert!(warnings.contains("only 'a' was kept"), "{warnings}");
+    assert!(
+        warnings.contains("unrecognized media reference schema"),
+        "{warnings}"
+    );
+
+    // A clip with neither a source range nor an available range is malformed.
+    let bare = serde_json::json!({"OTIO_SCHEMA": "Clip.2", "name": "Clip-4"});
+    let result = parse_otio_json(&document(
+        serde_json::json!([track("Video", serde_json::json!([bare]))]),
+        serde_json::json!([]),
+    ))
+    .unwrap();
+    assert!(result.warnings.join("\n").contains("malformed Clip.2"));
+}

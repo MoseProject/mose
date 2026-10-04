@@ -133,44 +133,37 @@ pub fn detect_faces(
     width: u32,
     height: u32,
 ) -> Result<Vec<FaceBox>, ReframeError> {
-    use ort::session::Session;
-    use ort::value::Value;
+    detect_faces_with(rgba, width, height, |input| {
+        crate::onnx_models::run_face_model(model_path, input, MODEL_INPUT_WIDTH, MODEL_INPUT_HEIGHT)
+    })
+}
 
-    let mut session = Session::builder()
-        .map_err(|e| ReframeError::Onnx(e.to_string()))?
-        .commit_from_file(model_path)
-        .map_err(|e| ReframeError::Onnx(e.to_string()))?;
-
-    let input_data = preprocess(rgba, width, height);
-    let input = Value::from_array((
-        [
-            1,
-            3,
-            MODEL_INPUT_HEIGHT as usize,
-            MODEL_INPUT_WIDTH as usize,
-        ],
-        input_data,
-    ))
-    .map_err(|e| ReframeError::Onnx(e.to_string()))?;
-
-    let outputs = session
-        .run(ort::inputs![input])
-        .map_err(|e| ReframeError::Onnx(e.to_string()))?;
-
+/// [`detect_faces`] with the model run passed in: it receives the preprocessed input tensor and
+/// returns every output tensor as `(dims, data)`, so the decoding is testable without a model.
+pub(crate) fn detect_faces_with(
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    run: impl FnOnce(Vec<f32>) -> Result<Vec<(Vec<i64>, Vec<f32>)>, ReframeError>,
+) -> Result<Vec<FaceBox>, ReframeError> {
+    let tensors = run(preprocess(rgba, width, height))?;
     // The model publishes two outputs, "scores" (`1x4420x2`, background/face) and "boxes"
     // (`1x4420x4`, xmin/ymin/xmax/ymax in 0..1 fractions) — told apart here by each tensor's
     // last dimension rather than trusted output order, since ONNX doesn't guarantee that order
     // survives export/re-export.
+    let (num_anchors, scores, boxes) = select_outputs(tensors)?;
+    Ok(decode_faces(num_anchors, &scores, &boxes))
+}
+
+fn select_outputs(
+    tensors: Vec<(Vec<i64>, Vec<f32>)>,
+) -> Result<(usize, Vec<f32>, Vec<f32>), ReframeError> {
     let mut scores_flat: Option<(Vec<i64>, Vec<f32>)> = None;
     let mut boxes_flat: Option<(Vec<i64>, Vec<f32>)> = None;
-    for (_name, value) in outputs.iter() {
-        let (shape, data) = value
-            .try_extract_tensor::<f32>()
-            .map_err(|e| ReframeError::Onnx(e.to_string()))?;
-        let dims: Vec<i64> = shape.iter().copied().collect();
+    for (dims, data) in tensors {
         match dims.last() {
-            Some(2) => scores_flat = Some((dims, data.to_vec())),
-            Some(4) => boxes_flat = Some((dims, data.to_vec())),
+            Some(2) => scores_flat = Some((dims, data)),
+            Some(4) => boxes_flat = Some((dims, data)),
             _ => {}
         }
     }
@@ -179,7 +172,12 @@ pub fn detect_faces(
     let (_, boxes) = boxes_flat
         .ok_or_else(|| ReframeError::Onnx("no boxes output (last dim 4) found".into()))?;
     let num_anchors = *score_dims.get(1).unwrap_or(&0) as usize;
+    Ok((num_anchors, scores, boxes))
+}
 
+/// Turns the raw model outputs into face boxes: keeps anchors scoring above the threshold,
+/// clamps their corners to the frame, drops empty boxes and suppresses overlaps.
+fn decode_faces(num_anchors: usize, scores: &[f32], boxes: &[f32]) -> Vec<FaceBox> {
     let mut candidates = Vec::new();
     for i in 0..num_anchors {
         let face_score = scores[i * 2 + 1];
@@ -201,8 +199,7 @@ pub fn detect_faces(
             score: face_score,
         });
     }
-
-    Ok(non_max_suppress(candidates))
+    non_max_suppress(candidates)
 }
 
 fn non_max_suppress(mut candidates: Vec<FaceBox>) -> Vec<FaceBox> {

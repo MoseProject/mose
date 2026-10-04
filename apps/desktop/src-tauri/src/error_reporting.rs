@@ -33,15 +33,18 @@ pub enum ErrorReportingConsent {
 
 static BUILDER: OnceLock<Mutex<avcore::ErrorReportBuilder>> = OnceLock::new();
 
+fn build_channel(debug: bool) -> &'static str {
+    if debug {
+        "debug"
+    } else {
+        "stable"
+    }
+}
+
 fn default_builder() -> Mutex<avcore::ErrorReportBuilder> {
     Mutex::new(avcore::ErrorReportBuilder::new(ReleaseMetadata {
         release: format!("oca-{}", env!("CARGO_PKG_VERSION")),
-        build_channel: if cfg!(debug_assertions) {
-            "debug"
-        } else {
-            "stable"
-        }
-        .to_owned(),
+        build_channel: build_channel(cfg!(debug_assertions)).to_owned(),
         target_triple: option_env!("TARGET").unwrap_or("unknown").to_owned(),
         app_version: env!("CARGO_PKG_VERSION").to_owned(),
         commit: option_env!("OCA_COMMIT_SHA")
@@ -92,8 +95,19 @@ pub fn apply_consent_change(consent: ErrorReportingConsent) -> Option<Arc<dyn Er
 // bounded on-disk queue
 // ---------------------------------------------------------------------------
 
+/// Overrides the queue directory (tests point it at a temporary folder).
+const QUEUE_DIR_ENV_VAR: &str = "OCA_ERROR_QUEUE_DIR";
+
 fn queue_dir() -> PathBuf {
-    crate::platform_log_dir().join("error_reports")
+    queue_dir_from(std::env::var_os(QUEUE_DIR_ENV_VAR))
+}
+
+/// The queue folder for an optional override, else the platform log folder's `error_reports`.
+fn queue_dir_from(override_dir: Option<std::ffi::OsString>) -> PathBuf {
+    match override_dir {
+        Some(dir) => PathBuf::from(dir),
+        None => crate::platform_log_dir().join("error_reports"),
+    }
 }
 
 fn envelope_path(dir: &std::path::Path, event_id: &str) -> PathBuf {
@@ -129,20 +143,23 @@ pub fn load_queue() -> Vec<QueueEnvelope> {
     load_queue_in(&queue_dir())
 }
 
-fn load_queue_in(dir: &std::path::Path) -> Vec<QueueEnvelope> {
+/// The readable `.json` files in `dir`, with their contents; anything else is skipped.
+fn queue_files(dir: &std::path::Path) -> Vec<(PathBuf, Vec<u8>)> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();
     };
+    entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().and_then(|e| e.to_str()) == Some("json"))
+        .filter_map(|path| std::fs::read(&path).ok().map(|bytes| (path, bytes)))
+        .collect()
+}
+
+fn load_queue_in(dir: &std::path::Path) -> Vec<QueueEnvelope> {
     let now = now_unix();
     let mut out = Vec::new();
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("json") {
-            continue;
-        }
-        let Ok(bytes) = std::fs::read(&path) else {
-            continue;
-        };
+    for (path, bytes) in queue_files(dir) {
         match serde_json::from_slice::<QueueEnvelope>(&bytes) {
             Ok(envelope) if avcore::validate_envelope(&envelope, now).is_ok() => {
                 out.push(envelope);
@@ -181,19 +198,9 @@ fn delete_envelope_in(dir: &std::path::Path, event_id: &str) {
 }
 
 fn prune_queue_dir(dir: &std::path::Path) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
-    };
     let now = now_unix();
     let mut records: Vec<(PathBuf, QueueEnvelope, u64)> = Vec::new();
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("json") {
-            continue;
-        }
-        let Ok(bytes) = std::fs::read(&path) else {
-            continue;
-        };
+    for (path, bytes) in queue_files(dir) {
         let len = bytes.len() as u64;
         match serde_json::from_slice::<QueueEnvelope>(&bytes) {
             Ok(envelope) => {
@@ -408,12 +415,21 @@ const INLINE_RETRY_BACKOFFS: [Duration; 3] = [
 ];
 
 fn deliver_with_retry(sender: &dyn EnvelopeSender, envelope: &QueueEnvelope) -> bool {
+    deliver_with_backoffs(sender, envelope, &INLINE_RETRY_BACKOFFS)
+}
+
+/// [`deliver_with_retry`] with explicit waits between attempts.
+fn deliver_with_backoffs(
+    sender: &dyn EnvelopeSender,
+    envelope: &QueueEnvelope,
+    backoffs: &[Duration],
+) -> bool {
     match sender.send(envelope) {
         DeliveryOutcome::Delivered | DeliveryOutcome::PermanentFailure => return true,
         DeliveryOutcome::NotConfigured => return false,
         DeliveryOutcome::TransientFailure => {}
     }
-    for backoff in INLINE_RETRY_BACKOFFS {
+    for backoff in backoffs.iter().copied() {
         std::thread::sleep(backoff);
         match sender.send(envelope) {
             DeliveryOutcome::Delivered | DeliveryOutcome::PermanentFailure => return true,
@@ -428,7 +444,15 @@ fn spawn_delivery_worker(
     rx: UnboundedReceiver<avcore::ErrorReport>,
     sender: Arc<dyn EnvelopeSender>,
 ) {
-    let dir = queue_dir();
+    spawn_delivery_worker_in(queue_dir(), rx, sender);
+}
+
+/// [`spawn_delivery_worker`] against an explicit queue folder.
+fn spawn_delivery_worker_in(
+    dir: PathBuf,
+    rx: UnboundedReceiver<avcore::ErrorReport>,
+    sender: Arc<dyn EnvelopeSender>,
+) {
     std::thread::spawn(move || {
         for envelope in load_queue_in(&dir) {
             if deliver_with_retry(sender.as_ref(), &envelope) {
@@ -533,13 +557,12 @@ pub fn find_latest_unreviewed_crash(
     let mut candidates: Vec<(u64, PathBuf)> = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
-        let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
-            continue;
-        };
-        let Some(ts_str) = stem.strip_prefix("crash_") else {
-            continue;
-        };
-        let Ok(timestamp) = ts_str.parse::<u64>() else {
+        let Some(timestamp) = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .and_then(|stem| stem.strip_prefix("crash_"))
+            .and_then(|ts| ts.parse::<u64>().ok())
+        else {
             continue;
         };
         if timestamp > after_unix {
@@ -610,3 +633,7 @@ pub fn send_crash_once(crash: &PendingCrashReview) {
         Err(e) => tracing::warn!(error = %e, "dropping invalid crash report"),
     }
 }
+
+#[cfg(test)]
+#[path = "error_reporting/error_reporting_test.rs"]
+pub(crate) mod tests;

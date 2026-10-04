@@ -143,6 +143,17 @@ impl DecodeSource {
         target_secs: f64,
         cancel: &AtomicBool,
     ) -> Result<Option<Arc<VideoFrame>>, DecodeSourceError> {
+        self.frame_at_within(target_secs, cancel, MAX_SEEK_SEARCH_FRAMES)
+    }
+
+    /// [`Self::frame_at`] with an explicit cap on the frames decoded to reach the target:
+    /// `SeekSearchLimit` when the target is further than `max_frames` from where decoding starts.
+    pub fn frame_at_within(
+        &mut self,
+        target_secs: f64,
+        cancel: &AtomicBool,
+        max_frames: u32,
+    ) -> Result<Option<Arc<VideoFrame>>, DecodeSourceError> {
         let continues_forward = self.current.as_ref().is_some_and(|current| {
             let ahead = target_secs - current.timestamp_secs();
             (-TIMESTAMP_EPSILON_SECS..=FORWARD_WINDOW_SECS).contains(&ahead)
@@ -154,7 +165,7 @@ impl DecodeSource {
         // Whether the native newest frame is a candidate (timestamp <= target) rather than an
         // overshoot or nothing.
         let mut newest_is_candidate = false;
-        for _ in 0..MAX_SEEK_SEARCH_FRAMES {
+        for _ in 0..max_frames {
             let timestamp = match self.pending_timestamp {
                 Some(timestamp) => timestamp,
                 None => match self.session.advance(cancel)? {
@@ -188,9 +199,7 @@ impl DecodeSource {
             self.pending_timestamp = None;
             newest_is_candidate = true;
         }
-        Err(DecodeSourceError::SeekSearchLimit {
-            limit: MAX_SEEK_SEARCH_FRAMES,
-        })
+        Err(DecodeSourceError::SeekSearchLimit { limit: max_frames })
     }
 
     /// Converts one native frame slot into a shared validated frame.

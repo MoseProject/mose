@@ -12,8 +12,9 @@ use std::time::{Duration, Instant};
 
 use avcore::LoudnessMetrics;
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
+use crate::services::Services;
 use crate::state::AppState;
 
 pub const WATCH_FOLDER_EVENT: &str = "watch-folder-event";
@@ -50,16 +51,40 @@ pub enum WatchFolderEventPayload {
 /// `None` if the dialog is cancelled.
 #[tauri::command]
 pub fn pick_watch_folder() -> Option<String> {
-    rfd::FileDialog::new()
-        .pick_folder()
-        .map(|folder| folder.display().to_string())
+    crate::dialogs::pick_folder().map(|folder| folder.display().to_string())
 }
 
 /// Starts the watch loop against `path` on a background thread -- what the watch-folder
 /// screen's "Start watching" button does. Stops any run already in flight against a different
 /// folder first (only one watch runs at a time, same as the egui shell).
 #[tauri::command]
-pub fn start_watching_folder(app: AppHandle, path: String) -> Result<(), String> {
+pub fn start_watching_folder<R: Runtime>(app: AppHandle<R>, path: String) -> Result<(), String> {
+    start_watching(app, PathBuf::from(path), WatchTiming::default());
+    Ok(())
+}
+
+/// How often the watch loop scans and how long a file must keep its size to count as finished.
+/// The app uses [`WatchTiming::default`]; tests shorten both so a watch runs in milliseconds.
+#[derive(Clone, Copy)]
+pub(crate) struct WatchTiming {
+    pub poll: Duration,
+    pub stable_for: Duration,
+}
+
+impl Default for WatchTiming {
+    fn default() -> Self {
+        Self {
+            poll: POLL_INTERVAL,
+            stable_for: Duration::from_secs(avcore::DEFAULT_STABLE_SECS),
+        }
+    }
+}
+
+pub(crate) fn start_watching<R: Runtime>(
+    app: AppHandle<R>,
+    watch_path: PathBuf,
+    timing: WatchTiming,
+) {
     let state = app.state::<AppState>();
     stop_watch_thread(&state);
     let stop = Arc::new(AtomicBool::new(false));
@@ -69,9 +94,8 @@ pub fn start_watching_folder(app: AppHandle, path: String) -> Result<(), String>
         .unwrap_or_else(|p| p.into_inner()) = Some(Arc::clone(&stop));
 
     let worker_app = app.clone();
-    let watch_path = PathBuf::from(path);
-    std::thread::spawn(move || watch_loop(watch_path, stop, worker_app));
-    Ok(())
+    let services = state.services.clone();
+    std::thread::spawn(move || watch_loop(watch_path, stop, worker_app, services, timing));
 }
 
 /// Stops the background watch loop, if running -- what the screen's "Stop watching" button does.
@@ -95,7 +119,11 @@ fn stop_watch_thread(state: &AppState) {
 /// `processed/` path) into the active project's media library, through the existing
 /// `import_media` pipeline -- what the screen's "Add to project" button does on a `Done` row.
 #[tauri::command]
-pub fn add_watched_file_to_project(app: AppHandle, watch_path: String, source_path: String) {
+pub fn add_watched_file_to_project<R: Runtime>(
+    app: AppHandle<R>,
+    watch_path: String,
+    source_path: String,
+) {
     let output = avcore::output_path_for(
         Path::new(&watch_path),
         avcore::DEFAULT_OUTPUT_SUBFOLDER,
@@ -104,22 +132,28 @@ pub fn add_watched_file_to_project(app: AppHandle, watch_path: String, source_pa
     crate::commands::media::import_media(app, vec![output.display().to_string()]);
 }
 
-fn watch_loop(watch_path: PathBuf, stop: Arc<AtomicBool>, app: AppHandle) {
-    let stable_for = Duration::from_secs(avcore::DEFAULT_STABLE_SECS);
+fn watch_loop<R: Runtime>(
+    watch_path: PathBuf,
+    stop: Arc<AtomicBool>,
+    app: AppHandle<R>,
+    services: Arc<dyn Services>,
+    timing: WatchTiming,
+) {
+    let stable_for = timing.stable_for;
     let mut tracker = avcore::StabilityTracker::new();
     let mut seen: HashSet<PathBuf> = HashSet::new();
     let mut errored: HashSet<PathBuf> = HashSet::new();
 
     while !stop.load(Ordering::Relaxed) {
         let Ok(entries) = std::fs::read_dir(&watch_path) else {
-            std::thread::sleep(POLL_INTERVAL);
+            std::thread::sleep(timing.poll);
             continue;
         };
 
-        for entry in entries.flatten() {
-            if stop.load(Ordering::Relaxed) {
-                break;
-            }
+        for entry in entries
+            .flatten()
+            .take_while(|_| !stop.load(Ordering::Relaxed))
+        {
             let path = entry.path();
             if !path.is_file() || !avcore::is_video_file(&path) {
                 continue;
@@ -129,9 +163,7 @@ fn watch_loop(watch_path: PathBuf, stop: Arc<AtomicBool>, app: AppHandle) {
             if output.exists() {
                 continue;
             }
-            let Ok(metadata) = entry.metadata() else {
-                continue;
-            };
+            let size = entry.metadata().map_or(0, |metadata| metadata.len());
 
             if seen.insert(path.clone()) {
                 emit(
@@ -142,7 +174,7 @@ fn watch_loop(watch_path: PathBuf, stop: Arc<AtomicBool>, app: AppHandle) {
                 );
             }
 
-            let stable = tracker.poll(&path, metadata.len(), Instant::now(), stable_for);
+            let stable = tracker.poll(&path, size, Instant::now(), stable_for);
             if !stable {
                 errored.remove(&path);
                 emit(
@@ -165,12 +197,12 @@ fn watch_loop(watch_path: PathBuf, stop: Arc<AtomicBool>, app: AppHandle) {
             );
             let progress_app = app.clone();
             let progress_path = path.clone();
-            let result = avcore::process_watched_file(
+            let result = services.process_watched_file(
                 &path,
                 &output,
                 avcore::DEFAULT_TARGET_LUFS,
                 &stop,
-                move |percent| {
+                &mut move |percent| {
                     emit(
                         &progress_app,
                         WatchFolderEventPayload::Progress {
@@ -207,7 +239,7 @@ fn watch_loop(watch_path: PathBuf, stop: Arc<AtomicBool>, app: AppHandle) {
             }
         }
 
-        std::thread::sleep(POLL_INTERVAL);
+        std::thread::sleep(timing.poll);
     }
 }
 
@@ -215,6 +247,10 @@ fn display(path: &Path) -> String {
     path.display().to_string()
 }
 
-fn emit(app: &AppHandle, payload: WatchFolderEventPayload) {
+fn emit<R: Runtime>(app: &AppHandle<R>, payload: WatchFolderEventPayload) {
     let _ = app.emit(WATCH_FOLDER_EVENT, payload);
 }
+
+#[cfg(test)]
+#[path = "watch_folder_test.rs"]
+mod tests;

@@ -11,9 +11,10 @@ use std::sync::Arc;
 use avcore::timeline::{TextClip, Timeline, TrackKind, WordTiming};
 use avcore::{ProjectTranscriptHit, TranscribeOutcome, TranscribeSegment, TranscriptDocument};
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
 use super::with_session;
+use crate::services::Services;
 use crate::state::AppState;
 
 pub const TRANSCRIBE_EVENT: &str = "transcribe-event";
@@ -41,7 +42,7 @@ pub struct TranscriptHitView {
 /// button does. Errors (already transcribing, asset not found, no model configured) surface
 /// synchronously; once running, progress/result arrive via [`TRANSCRIBE_EVENT`].
 #[tauri::command]
-pub fn transcribe_asset(app: AppHandle, asset_id: u64) -> Result<(), String> {
+pub fn transcribe_asset<R: Runtime>(app: AppHandle<R>, asset_id: u64) -> Result<(), String> {
     let state = app.state::<AppState>();
     {
         let mut transcribing = state
@@ -75,7 +76,10 @@ pub fn transcribe_asset(app: AppHandle, asset_id: u64) -> Result<(), String> {
         return Err("no Whisper model configured".to_string());
     };
     let worker_app = app.clone();
-    std::thread::spawn(move || run_transcription(worker_app, asset_id, source_path, model_path));
+    let services = state.services.clone();
+    std::thread::spawn(move || {
+        run_transcription(worker_app, services, asset_id, source_path, model_path)
+    });
     let _ = app.emit(
         TRANSCRIBE_EVENT,
         TranscribeEventPayload::Started { asset_id },
@@ -91,12 +95,18 @@ fn resolve_whisper_model_path(state: &AppState) -> Option<PathBuf> {
     if !configured.trim().is_empty() && Path::new(&configured).is_file() {
         return Some(PathBuf::from(configured));
     }
-    avcore::bundled_resource_path(avcore::BundledResource::WhisperBase)
+    state.services.bundled_whisper_model()
 }
 
-fn run_transcription(app: AppHandle, asset_id: u64, source_path: PathBuf, model_path: PathBuf) {
+fn run_transcription<R: Runtime>(
+    app: AppHandle<R>,
+    services: Arc<dyn Services>,
+    asset_id: u64,
+    source_path: PathBuf,
+    model_path: PathBuf,
+) {
     let cancel = Arc::new(AtomicBool::new(false));
-    let outcome = avcore::transcribe(&source_path, &model_path, None, &cancel, |_percent| {});
+    let outcome = services.transcribe(&source_path, &model_path, &cancel);
     {
         let state = app.state::<AppState>();
         *state
@@ -134,7 +144,11 @@ fn run_transcription(app: AppHandle, asset_id: u64, source_path: PathBuf, model_
     }
 }
 
-fn save_transcript_document(app: &AppHandle, asset_id: u64, segments: &[TranscribeSegment]) {
+fn save_transcript_document<R: Runtime>(
+    app: &AppHandle<R>,
+    asset_id: u64,
+    segments: &[TranscribeSegment],
+) {
     let document = TranscriptDocument::from_transcribe_segments(asset_id, None, segments);
     let dir = {
         let state = app.state::<AppState>();
@@ -208,8 +222,8 @@ pub fn search_transcripts(state: State<'_, AppState>, query: String) -> Vec<Tran
 /// clip that uses that asset -- what clicking a transcript word does. `Ok(false)` (not an
 /// error) if no clip on the timeline uses the asset; the panel row stays informational.
 #[tauri::command]
-pub fn seek_to_transcript_word(
-    app: AppHandle,
+pub fn seek_to_transcript_word<R: Runtime>(
+    app: AppHandle<R>,
     asset_id: u64,
     source_secs: f64,
 ) -> Result<bool, String> {
@@ -244,3 +258,7 @@ fn map_asset_source_to_timeline(
     }
     None
 }
+
+#[cfg(test)]
+#[path = "transcribe_test.rs"]
+mod tests;

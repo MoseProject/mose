@@ -152,3 +152,14 @@ fn tiny_frames_are_handled_without_panicking() {
         assert!(correction.0.is_finite() && correction.1.is_finite());
     }
 }
+
+#[test]
+fn motion_beyond_the_search_window_is_reported_at_its_edge() {
+    // The analysis grid is 160 pixels: a 20 pixel jump is past the +-8 pixel search radius, so
+    // the best match sits on the border of the window and gets no sub-pixel refinement.
+    let mut stabilizer = Stabilizer::new(0.5).unwrap();
+    stabilizer.analyze(&scene_at(160, 160, (0.0, 0.0), 0.0));
+    let (dx, dy) = stabilizer.analyze(&scene_at(160, 160, (20.0, 20.0), 1.0 / 30.0));
+    assert!(dx.is_finite() && dy.is_finite());
+    assert!(dx.abs() <= 8.5 && dy.abs() <= 8.5, "({dx}, {dy})");
+}

@@ -90,3 +90,89 @@ fn resize_matte_downsamples_without_out_of_bounds() {
         approx(v, 0.5);
     }
 }
+
+#[test]
+fn the_model_input_size_follows_the_constrained_side_in_multiples_of_32() {
+    // Landscape and portrait frames whose short side is far from the target are rescaled.
+    let (w, h) = model_input_size(1920, 1080);
+    assert_eq!((w % 32, h % 32), (0, 0));
+    let (pw, ph) = model_input_size(1080, 1920);
+    assert_eq!((pw % 32, ph % 32), (0, 0));
+    assert!(ph > pw, "a portrait frame stays portrait");
+    // A frame already inside the target range is only rounded down.
+    let rounded = TARGET_SIZE - TARGET_SIZE % 32;
+    assert_eq!(
+        model_input_size(TARGET_SIZE, TARGET_SIZE),
+        (rounded, rounded)
+    );
+    // Tiny frames are scaled up and never collapse below one 32 pixel block.
+    let (tw, th) = model_input_size(4, 4);
+    assert!(tw >= 32 && th >= 32);
+}
+
+#[test]
+fn preprocessing_normalises_to_minus_one_and_one() {
+    let rgba = [0u8, 255, 0, 255, 255, 0, 255, 255];
+    let chw = preprocess(&rgba, 2, 1, 2, 1);
+    // Red plane: 0 -> -1, 255 -> 1; green plane is the opposite; blue matches red.
+    assert_eq!(chw, vec![-1.0, 1.0, 1.0, -1.0, -1.0, 1.0]);
+}
+
+#[test]
+fn a_matte_is_resized_nearest_neighbour_back_to_the_frame_size() {
+    let matte = [0.0, 1.0, 0.5, 0.25];
+    let resized = resize_matte(&matte, 2, 2, 4, 4);
+    assert_eq!(resized.len(), 16);
+    assert_eq!(resized[0], 0.0);
+    assert_eq!(resized[3], 1.0);
+    assert_eq!(resized[12], 0.5);
+    assert_eq!(resized[15], 0.25);
+}
+
+#[test]
+fn errors_are_readable_and_a_missing_model_cannot_segment() {
+    assert!(SegmentError::Onnx("boom".into())
+        .to_string()
+        .contains("boom"));
+    let bridge = MatteEncodeError::Bridge(avbridge::MatteError::AllocOutput);
+    assert!(bridge.to_string().contains("matte"));
+    let result = segment_person(Path::new("missing-model.onnx"), &[0; 16], 2, 2);
+    assert!(matches!(result, Err(SegmentError::Onnx(_))));
+}
+
+#[test]
+fn encoding_no_frames_is_an_error() {
+    let out = std::env::temp_dir().join("avcore_empty_matte.mp4");
+    assert!(encode_matte_video(&[], 16, 16, 30, 1, &out).is_err());
+}
+
+#[test]
+fn the_model_matte_is_resized_back_to_the_frame() {
+    let rgba = vec![200u8; 100 * 60 * 4];
+    let matte = segment_person_with(&rgba, 100, 60, |input, model_w, model_h| {
+        assert_eq!(input.len(), (3 * model_w * model_h) as usize);
+        Ok(vec![0.75; (model_w * model_h) as usize])
+    })
+    .unwrap();
+    assert_eq!(matte.len(), 100 * 60);
+    assert!(matte.iter().all(|&a| (a - 0.75).abs() < 1e-6));
+}
+
+#[test]
+fn a_model_failure_is_passed_through() {
+    let result = segment_person_with(&[0u8; 4 * 4 * 4], 4, 4, |_, _, _| {
+        Err(SegmentError::Onnx("boom".into()))
+    });
+    assert!(matches!(result, Err(SegmentError::Onnx(m)) if m == "boom"));
+}
+
+#[test]
+fn a_missing_model_file_is_an_onnx_error() {
+    let result = segment_person(
+        Path::new("definitely-not-a-model.onnx"),
+        &[0u8; 4 * 4 * 4],
+        4,
+        4,
+    );
+    assert!(matches!(result, Err(SegmentError::Onnx(_))));
+}

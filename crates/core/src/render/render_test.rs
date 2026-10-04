@@ -226,3 +226,124 @@ fn fps_to_rational_falls_back_to_30_1_for_nonfinite_fps() {
     assert_eq!(fps_to_rational(f32::INFINITY), (30, 1));
     assert_eq!(fps_to_rational(f32::NAN), (30, 1));
 }
+
+#[test]
+fn every_render_error_has_a_distinct_readable_message() {
+    let errors = vec![
+        RenderError::OpenInput,
+        RenderError::StreamInfo,
+        RenderError::AllocOutput,
+        RenderError::NewStream,
+        RenderError::OpenOutput,
+        RenderError::WriteHeader,
+        RenderError::WriteFrame,
+        RenderError::NoAudioStream,
+        RenderError::Decoder,
+        RenderError::FilterGraph,
+        RenderError::Encoder,
+        RenderError::Pipeline,
+        RenderError::Unknown(42),
+        RenderError::NoVideoStream,
+        RenderError::AudioFormatMismatch,
+        RenderError::EmptyTimeline,
+        RenderError::MissingAsset,
+        RenderError::InvalidCanvas,
+        RenderError::InvalidTimelineSegment,
+        RenderError::InvalidTargetLufs,
+        RenderError::InvalidTextLayout,
+        RenderError::InvalidAudioSegment,
+        RenderError::AudioMix("mix".to_string()),
+        RenderError::MediaMux("mux".to_string()),
+        RenderError::ReplaceOutput(std::io::Error::other("replace")),
+        RenderError::MissingNestedSequence,
+        RenderError::CyclicNestedSequence,
+        RenderError::ProbeNestedSequence,
+    ];
+    let messages: std::collections::HashSet<String> =
+        errors.iter().map(|error| error.to_string()).collect();
+    assert_eq!(messages.len(), errors.len());
+    assert!(RenderError::Unknown(42).to_string().contains("42"));
+    assert!(RenderError::AudioMix("mix".to_string())
+        .to_string()
+        .contains("mix"));
+    assert!(RenderError::MediaMux("mux".to_string())
+        .to_string()
+        .contains("mux"));
+    assert!(RenderError::ReplaceOutput(std::io::Error::other("replace"))
+        .to_string()
+        .contains("replace"));
+}
+
+#[test]
+fn every_avbridge_encode_error_maps_to_its_render_error() {
+    use avbridge::EncodeError as E;
+    let invalid_path = std::ffi::CString::new("a b").unwrap_err();
+    assert!(matches!(
+        RenderError::from(E::InvalidPath(invalid_path)),
+        RenderError::OpenInput
+    ));
+    assert!(matches!(
+        RenderError::from(E::OpenInput),
+        RenderError::OpenInput
+    ));
+    assert!(matches!(
+        RenderError::from(E::StreamInfo),
+        RenderError::StreamInfo
+    ));
+    assert!(matches!(
+        RenderError::from(E::AllocOutput),
+        RenderError::AllocOutput
+    ));
+    assert!(matches!(
+        RenderError::from(E::NewStream),
+        RenderError::NewStream
+    ));
+    assert!(matches!(
+        RenderError::from(E::OpenOutput),
+        RenderError::OpenOutput
+    ));
+    assert!(matches!(
+        RenderError::from(E::WriteHeader),
+        RenderError::WriteHeader
+    ));
+    assert!(matches!(
+        RenderError::from(E::WriteFrame),
+        RenderError::WriteFrame
+    ));
+    assert!(matches!(
+        RenderError::from(E::NoAudioStream),
+        RenderError::NoAudioStream
+    ));
+    assert!(matches!(
+        RenderError::from(E::Decoder),
+        RenderError::Decoder
+    ));
+    assert!(matches!(
+        RenderError::from(E::FilterGraph),
+        RenderError::FilterGraph
+    ));
+    assert!(matches!(
+        RenderError::from(E::Encoder),
+        RenderError::Encoder
+    ));
+    assert!(matches!(
+        RenderError::from(E::Pipeline),
+        RenderError::Pipeline
+    ));
+    assert!(matches!(
+        RenderError::from(E::NoVideoStream),
+        RenderError::NoVideoStream
+    ));
+    assert!(matches!(
+        RenderError::from(E::AudioFormatMismatch),
+        RenderError::AudioFormatMismatch
+    ));
+    assert!(matches!(
+        RenderError::from(E::EmptyTimeline),
+        RenderError::EmptyTimeline
+    ));
+    assert!(matches!(
+        RenderError::from(E::Unknown(7)),
+        RenderError::Unknown(7)
+    ));
+}

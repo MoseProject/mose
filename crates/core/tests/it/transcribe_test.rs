@@ -119,3 +119,17 @@ fn fails_on_a_missing_model_file() {
 
     assert!(matches!(err, TranscribeError::ModelLoad(_)));
 }
+
+#[test]
+fn a_source_that_cannot_be_decoded_is_an_audio_error() {
+    let cancel = Arc::new(AtomicBool::new(false));
+    let error = transcribe(
+        &fixture("does-not-exist.m4a"),
+        Path::new("model.bin"),
+        None,
+        &cancel,
+        |_| {},
+    )
+    .unwrap_err();
+    assert!(matches!(error, TranscribeError::Audio(_)), "{error:?}");
+}

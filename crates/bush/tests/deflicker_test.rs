@@ -104,3 +104,18 @@ fn correction_is_bounded_so_real_fades_survive() {
     let dark = deflicker.process(&flat(20, 0.04));
     assert!(grey_of(&dark) <= 40.0 + 1.0);
 }
+
+#[test]
+fn a_black_frame_is_left_untouched() {
+    let black = bush::VideoFrame::new(
+        bush::PixelFormat::Rgba8,
+        2,
+        2,
+        8,
+        0.0,
+        vec![0, 0, 0, 255].repeat(4),
+    )
+    .unwrap();
+    let mut deflicker = bush::Deflicker::new(0.5).unwrap();
+    assert_eq!(deflicker.process(&black).pixels(), black.pixels());
+}

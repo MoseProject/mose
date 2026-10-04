@@ -110,3 +110,38 @@ fn repeated_target_returns_the_same_shared_frame() {
     let second = source.frame_at(0.4, &cancel).unwrap().unwrap();
     assert!(std::sync::Arc::ptr_eq(&first, &second));
 }
+
+#[test]
+fn a_target_past_the_end_presents_the_last_frame() {
+    let mut source = DecodeSource::open(&fixture()).unwrap();
+    let cancel = AtomicBool::new(false);
+    let frame = source.frame_at(10_000.0, &cancel).unwrap().unwrap();
+    assert!(frame.timestamp_secs() < 10_000.0);
+    // The stream is exhausted, so asking again keeps presenting that same last frame.
+    let again = source.frame_at(10_000.0, &cancel).unwrap().unwrap();
+    assert_eq!(frame.timestamp_secs(), again.timestamp_secs());
+}
+
+#[test]
+fn an_invalid_native_frame_is_reported_as_invalid_frame() {
+    let invalid =
+        bush::VideoFrame::new(bush::PixelFormat::Rgba8, 2, 2, 1, 0.0, vec![0; 16]).unwrap_err();
+    assert!(matches!(
+        DecodeSourceError::from(invalid),
+        DecodeSourceError::InvalidFrame(_)
+    ));
+}
+
+#[test]
+fn a_target_further_than_the_frame_cap_is_a_search_limit_error() {
+    let mut source = DecodeSource::open(&fixture()).unwrap();
+    let cancel = AtomicBool::new(false);
+    // The target is several frames past the first one, so a cap of one frame cannot reach it.
+    let error = source.frame_at_within(0.6, &cancel, 1).unwrap_err();
+    assert!(matches!(
+        error,
+        DecodeSourceError::SeekSearchLimit { limit: 1 }
+    ));
+    // The same request within the default cap succeeds.
+    assert!(source.frame_at(0.6, &cancel).unwrap().is_some());
+}

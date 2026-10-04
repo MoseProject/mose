@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n";
 import { exportsStore } from "../store";
@@ -21,7 +21,7 @@ vi.mock("../ipc", () => ({
 
 // Imported after the mock so ExportPanel picks up the mocked `../ipc`.
 const { ExportPanel } = await import("./ExportPanel");
-const { api } = await import("../ipc");
+const { api, exportActiveSequence } = await import("../ipc");
 
 function job(overrides: Partial<ExportJobView>): ExportJobView {
   return {
@@ -86,5 +86,74 @@ describe("ExportPanel", () => {
     render(<ExportPanel />);
     fireEvent.click(screen.getByText(t("cancel")));
     expect(api.cancelExport).toHaveBeenCalledWith(7);
+  });
+
+  it("adopts the stored GPU encoder preference and saves a change", async () => {
+    vi.mocked(api.getGpuEncoderPreference).mockResolvedValueOnce("nvenc");
+    render(<ExportPanel />);
+    const select = screen.getByRole("combobox") as HTMLSelectElement;
+    await waitFor(() => expect(select.value).toBe("nvenc"));
+    fireEvent.change(select, { target: { value: "cpu" } });
+    expect(select.value).toBe("cpu");
+    expect(api.setGpuEncoderPreference).toHaveBeenCalledWith("cpu");
+  });
+
+  it("keeps the default GPU preference when none is stored", async () => {
+    vi.mocked(api.getGpuEncoderPreference).mockResolvedValueOnce("");
+    render(<ExportPanel />);
+    await waitFor(() => expect(api.getGpuEncoderPreference).toHaveBeenCalled());
+    expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("auto");
+  });
+
+  it("starts an export asking for overwrite confirmation through window.confirm", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<ExportPanel />);
+    fireEvent.click(screen.getByText(t("export"), { selector: "button" }));
+    expect(exportActiveSequence).toHaveBeenCalledTimes(1);
+    const ask = vi.mocked(exportActiveSequence).mock.calls[0][0];
+    expect(ask()).toBe(true);
+    expect(confirm).toHaveBeenCalledWith(t("exportOverwriteConfirm"));
+    confirm.mockRestore();
+  });
+
+  it("exports the subtitles as SRT", () => {
+    render(<ExportPanel />);
+    fireEvent.click(screen.getByText(t("exportSrt")));
+    expect(api.exportActiveSequenceSrt).toHaveBeenCalled();
+  });
+
+  it("matches the queue loudness to the chosen target", () => {
+    exportsStore.set([job({ id: 1 }), job({ id: 2 })]);
+    render(<ExportPanel />);
+    fireEvent.click(screen.getByText("-16 LUFS"));
+    expect(api.matchExportLoudness).toHaveBeenCalledWith(-16);
+  });
+
+  it("pauses a rendering job and resumes then cancels a paused one", () => {
+    exportsStore.set([job({ id: 3, status: { Rendering: { percent: 5 } }, percent: 5 })]);
+    const { rerender } = render(<ExportPanel />);
+    fireEvent.click(screen.getByText(t("pauseExport")));
+    expect(api.pauseExport).toHaveBeenCalledWith(3);
+
+    exportsStore.set([job({ id: 3, status: { Paused: { percent: 5 } }, percent: 5 })]);
+    rerender(<ExportPanel />);
+    fireEvent.click(screen.getByText(t("resumeExport")));
+    expect(api.resumeExport).toHaveBeenCalledWith(3);
+    fireEvent.click(screen.getByText(t("cancel")));
+    expect(api.cancelExport).toHaveBeenCalledWith(3);
+  });
+
+  it("removes finished and failed jobs", () => {
+    exportsStore.set([
+      job({ id: 1, status: "Done" }),
+      job({ id: 2, status: { Failed: { message: "boom" } } as ExportJobView["status"] }),
+    ]);
+    render(<ExportPanel />);
+    const buttons = screen.getAllByText(t("removeExport"));
+    expect(buttons).toHaveLength(2);
+    fireEvent.click(buttons[0]);
+    fireEvent.click(buttons[1]);
+    expect(api.removeExport).toHaveBeenCalledWith(1);
+    expect(api.removeExport).toHaveBeenCalledWith(2);
   });
 });

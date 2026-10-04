@@ -993,11 +993,17 @@ pub fn find_family(family_id: &str) -> Option<&'static FontFamilyEntry> {
 /// verification (hash/size against the real files) is a separate, `include_bytes!`-driven test
 /// in this module's own test submodule, since `include_bytes!` needs a literal path per call.
 pub fn validate_static_catalog() -> Result<(), Vec<String>> {
+    validate_catalog(CATALOG)
+}
+
+/// [`validate_static_catalog`] over any list of entries, so the checks themselves can be
+/// exercised with deliberately broken data.
+fn validate_catalog(catalog: &[FontFamilyEntry]) -> Result<(), Vec<String>> {
     let mut errors = Vec::new();
     let mut seen_family_ids = std::collections::HashSet::new();
     let mut seen_source_paths = std::collections::HashSet::new();
 
-    for entry in CATALOG {
+    for entry in catalog {
         if entry.family_id.is_empty()
             || !entry
                 .family_id
@@ -1037,7 +1043,7 @@ pub fn validate_static_catalog() -> Result<(), Vec<String>> {
                     "family {:?} cannot be its own fallback",
                     entry.family_id
                 ));
-            } else if !CATALOG.iter().any(|other| other.family_id == fallback) {
+            } else if !catalog.iter().any(|other| other.family_id == fallback) {
                 errors.push(format!(
                     "family {:?} declares unknown fallback_family_id {:?}",
                     entry.family_id, fallback

@@ -156,11 +156,8 @@ pub(crate) fn blend8(mode: BlendMode, a: u8, b: u8) -> u8 {
         BlendMode::Extremity => (255 - ia - ib).unsigned_abs() as u8,
         BlendMode::SoftDifference => {
             if ia > ib {
-                if ib == 255 {
-                    0
-                } else {
-                    clip(((ia - ib) * 255 / (255 - ib)).min(255))
-                }
+                // `ia <= 255`, so `ib < 255` here and the divisor is never zero.
+                clip(((ia - ib) * 255 / (255 - ib)).min(255))
             } else if ib == 0 {
                 0
             } else {
@@ -203,4 +200,21 @@ pub(crate) fn blend8(mode: BlendMode, a: u8, b: u8) -> u8 {
 #[cfg_attr(not(feature = "gpu"), allow(dead_code))]
 pub(crate) fn softlight_table() -> &'static [u8; 65536] {
     SOFTLIGHT
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn normal_blend_returns_the_source_channel() {
+        use crate::BlendMode;
+        assert_eq!(super::blend8(BlendMode::Normal, 77, 200), 77);
+    }
+
+    #[test]
+    fn the_softlight_table_is_a_full_256_by_256_lookup() {
+        let table = super::softlight_table();
+        assert_eq!(table.len(), 256 * 256);
+        // Measured from FFmpeg: mid-grey over mid-grey comes out two levels darker.
+        assert_eq!(table[128 * 256 + 128], 126);
+    }
 }

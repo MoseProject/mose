@@ -252,3 +252,158 @@ fn constant_speed_is_unchanged_and_invalid_ramps_are_rejected() {
         );
     }
 }
+
+fn matte_source(name: &str) -> bush::MatteSource {
+    bush::MatteSource {
+        path: PathBuf::from(name),
+        version: Version(1),
+    }
+}
+
+fn scene_with(placement: Placement) -> Result<SceneSnapshot, SceneError> {
+    let mut contributor = media(1, 0, true, true);
+    contributor.placement = placement;
+    SceneSnapshot::new(SceneVersions::default(), vec![contributor])
+}
+
+#[test]
+fn matte_placements_are_validated() {
+    let invalid = |placement: Placement| {
+        assert_eq!(
+            scene_with(placement).unwrap_err(),
+            SceneError::InvalidPlacement
+        );
+    };
+    invalid(Placement {
+        alpha_matte: Some(matte_source("")),
+        ..Placement::default()
+    });
+    for (path, sigma) in [
+        ("", 4.0),
+        ("m.mp4", 0.0),
+        ("m.mp4", bush::MAX_BLUR_SIGMA + 1.0),
+    ] {
+        invalid(Placement {
+            privacy_blur: Some(bush::PrivacyBlur {
+                matte: matte_source(path),
+                sigma,
+            }),
+            ..Placement::default()
+        });
+    }
+    assert!(scene_with(Placement {
+        alpha_matte: Some(matte_source("a.mp4")),
+        privacy_blur: Some(bush::PrivacyBlur {
+            matte: matte_source("b.mp4"),
+            sigma: 8.0,
+        }),
+        ..Placement::default()
+    })
+    .is_ok());
+}
+
+#[test]
+fn matte_times_follow_the_source_for_alpha_and_the_window_for_privacy() {
+    // 2 s of source at 2x: a 1 s window starting at 3 s.
+    let mut clip = media(1, 0, true, true);
+    clip.placement = Placement {
+        timeline_start_secs: 3.0,
+        speed: 2.0,
+        alpha_matte: Some(matte_source("a.mp4")),
+        privacy_blur: Some(bush::PrivacyBlur {
+            matte: matte_source("b.mp4"),
+            sigma: 8.0,
+        }),
+        ..Placement::default()
+    };
+    assert_eq!(clip.alpha_matte_time_at(3.5), Some(1.0));
+    assert_eq!(clip.privacy_matte_time_at(3.5), Some(1.0));
+    assert_eq!(clip.privacy_matte_time_at(3.25), Some(0.5));
+    // Outside the window neither has a time.
+    assert_eq!(clip.alpha_matte_time_at(2.0), None);
+    assert_eq!(clip.privacy_matte_time_at(5.0), None);
+
+    // Without mattes there is nothing to look up, and overlays never have one.
+    let mut plain = media(2, 0, true, true);
+    assert_eq!(plain.alpha_matte_time_at(0.5), None);
+    assert_eq!(plain.privacy_matte_time_at(0.5), None);
+    plain.content = ContributorContent::RasterOverlay(RasterOverlay {
+        width: 1,
+        height: 1,
+        version: Version(1),
+    });
+    plain.placement = Placement {
+        alpha_matte: Some(matte_source("a.mp4")),
+        privacy_blur: Some(bush::PrivacyBlur {
+            matte: matte_source("b.mp4"),
+            sigma: 8.0,
+        }),
+        duration_secs: Some(1.0),
+        ..Placement::default()
+    };
+    assert_eq!(plain.alpha_matte_time_at(0.5), None);
+    assert_eq!(plain.privacy_matte_time_at(0.5), None);
+}
+
+#[test]
+fn a_ramp_with_equal_speeds_is_a_constant_speed() {
+    let mut clip = media(1, 0, true, true);
+    clip.placement = Placement {
+        speed: 2.0,
+        speed_ramp_end: Some(2.0),
+        ..Placement::default()
+    };
+    assert_eq!(clip.speed_at(0.3), 2.0);
+    assert_eq!(clip.source_offset_at(0.3), 0.6);
+}
+
+#[test]
+fn position_and_crop_tracks_are_evaluated_at_the_playhead() {
+    let track = |from: f32, to: f32| {
+        bush::KeyframeTrack::new(vec![
+            bush::Keyframe {
+                time_secs: 0.0,
+                value: from,
+                easing: bush::Easing::Linear,
+            },
+            bush::Keyframe {
+                time_secs: 2.0,
+                value: to,
+                easing: bush::Easing::Linear,
+            },
+        ])
+        .unwrap()
+    };
+    let mut clip = media(1, 0, true, true);
+    clip.placement = Placement {
+        animation: bush::Animation {
+            x: Some(track(0.0, 100.0)),
+            y: Some(track(10.0, 30.0)),
+            crop_x: Some(track(0.0, 0.5)),
+            crop_y: Some(track(0.0, 0.25)),
+            crop_width: Some(track(0.5, 0.5)),
+            crop_height: Some(track(0.5, 0.5)),
+            ..bush::Animation::default()
+        },
+        ..Placement::default()
+    };
+    let at = clip.placement_at(1.0);
+    assert_eq!((at.x, at.y), (50, 20));
+    let crop = at.transform.crop;
+    assert!((crop.x - 0.25).abs() < 1e-6 && (crop.y - 0.125).abs() < 1e-6);
+    assert_eq!((crop.width, crop.height), (0.5, 0.5));
+}
+
+#[test]
+fn an_empty_media_path_is_rejected() {
+    let mut clip = media(1, 0, true, true);
+    clip.content = ContributorContent::Media(MediaSource {
+        path: PathBuf::new(),
+        range: SourceRange::new(0.0, 1.0).unwrap(),
+        version: Version(1),
+    });
+    assert_eq!(
+        SceneSnapshot::new(SceneVersions::default(), vec![clip]).unwrap_err(),
+        SceneError::EmptyMediaPath
+    );
+}

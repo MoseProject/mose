@@ -206,14 +206,26 @@ pub fn download_youtube(
     target: YoutubeDownloadTarget,
     dest_dir: &Path,
     cancel: &AtomicBool,
-    mut on_progress: impl FnMut(f32),
+    on_progress: impl FnMut(f32),
 ) -> Result<PathBuf, YoutubeDownloadError> {
     let bridge = ytbridge_path().ok_or(YoutubeDownloadError::ToolNotFound)?;
+    download_with_bridge(&bridge, url, target, dest_dir, cancel, on_progress)
+}
+
+/// [`download_youtube`] against an explicit `ytbridge` executable.
+fn download_with_bridge(
+    bridge: &Path,
+    url: &str,
+    target: YoutubeDownloadTarget,
+    dest_dir: &Path,
+    cancel: &AtomicBool,
+    mut on_progress: impl FnMut(f32),
+) -> Result<PathBuf, YoutubeDownloadError> {
     if !bridge.is_file() {
         return Err(YoutubeDownloadError::ToolNotFound);
     }
 
-    let mut cmd = Command::new(&bridge);
+    let mut cmd = Command::new(bridge);
     cmd.arg(target.target_arg()).arg(url).arg(dest_dir);
     // Points the bundled interpreter at its own vendored stdlib/site-packages next to the
     // binary (Windows: python310.dll, DLLs/, Lib/; Linux: lib/) or the conventional macOS
@@ -221,7 +233,7 @@ pub fn download_youtube(
     // CPython's own DLL-directory auto-detection, which isn't a
     // documented/verified behavior for an embedding host like this (as opposed to running
     // python.exe/python3 itself).
-    if let (Some(dir), Some(python_home)) = (bridge.parent(), python_home_for_bridge(&bridge)) {
+    if let (Some(dir), Some(python_home)) = (bridge.parent(), python_home_for_bridge(bridge)) {
         cmd.env("PYTHONHOME", python_home);
         cmd.env("PYTHONNOUSERSITE", "1");
         cmd.env("PYTHONDONTWRITEBYTECODE", "1");
@@ -309,5 +321,178 @@ mod tests {
             python_home_for_bridge(Path::new("/opt/oca/ytbridge")),
             Some(PathBuf::from("/opt/oca"))
         );
+    }
+
+    #[test]
+    fn every_quality_and_bitrate_has_a_label_and_a_target() {
+        let qualities = [
+            (Mp4Quality::P360, "360p", "mp4:360"),
+            (Mp4Quality::P480, "480p", "mp4:480"),
+            (Mp4Quality::P720, "720p", "mp4:720"),
+            (Mp4Quality::P1080, "1080p", "mp4:1080"),
+            (Mp4Quality::Best, "Best", "mp4:best"),
+        ];
+        for (quality, label, target) in qualities {
+            assert_eq!(quality.label(), label);
+            assert_eq!(YoutubeDownloadTarget::Mp4(quality).target_arg(), target);
+        }
+        let bitrates = [
+            (Mp3Bitrate::K128, "128 kbps", "mp3:128"),
+            (Mp3Bitrate::K192, "192 kbps", "mp3:192"),
+            (Mp3Bitrate::K320, "320 kbps", "mp3:320"),
+        ];
+        for (bitrate, label, target) in bitrates {
+            assert_eq!(bitrate.label(), label);
+            assert_eq!(YoutubeDownloadTarget::Mp3(bitrate).target_arg(), target);
+        }
+    }
+
+    #[test]
+    fn every_download_error_has_a_message() {
+        assert!(YoutubeDownloadError::ToolNotFound
+            .to_string()
+            .contains("ytbridge"));
+        let spawn = YoutubeDownloadError::Spawn(std::io::Error::other("boom"));
+        assert!(spawn.to_string().contains("boom"));
+        assert!(YoutubeDownloadError::Failed("why".into())
+            .to_string()
+            .contains("why"));
+        assert!(!YoutubeDownloadError::NoOutputFile.to_string().is_empty());
+    }
+
+    #[test]
+    fn without_a_helper_next_to_the_executable_nothing_is_available() {
+        assert!(!is_yt_dlp_available());
+        let cancel = AtomicBool::new(false);
+        let result = download_youtube(
+            "https://example.invalid/v",
+            YoutubeDownloadTarget::Mp3(Mp3Bitrate::K128),
+            Path::new("."),
+            &cancel,
+            |_| {},
+        );
+        assert!(matches!(result, Err(YoutubeDownloadError::ToolNotFound)));
+    }
+
+    /// A stand-in `ytbridge`: a script that prints `body` (one event per line) and exits with
+    /// `exit_code`.
+    fn fake_bridge(name: &str, body: &[&str], exit_code: i32) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("avcore_fake_ytbridge_{name}"));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path;
+        let mut script = String::new();
+        if cfg!(windows) {
+            path = dir.join("ytbridge.bat");
+            script.push_str("@echo off\r\n");
+            for line in body {
+                script.push_str(&format!("echo {line}\r\n"));
+            }
+            script.push_str(&format!("exit /b {exit_code}\r\n"));
+        } else {
+            path = dir.join("ytbridge");
+            script.push_str("#!/bin/sh\n");
+            for line in body {
+                script.push_str(&format!("echo '{line}'\n"));
+            }
+            script.push_str(&format!("exit {exit_code}\n"));
+        }
+        std::fs::write(&path, script).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        path
+    }
+
+    fn run(
+        bridge: &Path,
+        cancel: &AtomicBool,
+        progress: &mut Vec<f32>,
+    ) -> Result<PathBuf, YoutubeDownloadError> {
+        download_with_bridge(
+            bridge,
+            "https://example.invalid/v",
+            YoutubeDownloadTarget::Mp4(Mp4Quality::P720),
+            Path::new("."),
+            cancel,
+            |fraction| progress.push(fraction),
+        )
+    }
+
+    #[test]
+    fn a_bridge_reports_progress_then_the_output_path() {
+        let bridge = fake_bridge(
+            "ok",
+            &[
+                r#"{"type":"progress","fraction":0.5}"#,
+                "not json at all",
+                r#"{"type":"done","path":"out.mp4"}"#,
+            ],
+            0,
+        );
+        let mut progress = Vec::new();
+        let path = run(&bridge, &AtomicBool::new(false), &mut progress).unwrap();
+        assert_eq!(path, PathBuf::from("out.mp4"));
+        assert_eq!(progress, vec![0.5]);
+    }
+
+    #[test]
+    fn bridge_failures_are_reported_by_kind() {
+        let cancel = AtomicBool::new(false);
+        let mut progress = Vec::new();
+
+        let error = fake_bridge(
+            "error",
+            &[r#"{"type":"error","message":"private video"}"#],
+            0,
+        );
+        assert!(matches!(
+            run(&error, &cancel, &mut progress),
+            Err(YoutubeDownloadError::Failed(message)) if message == "private video"
+        ));
+
+        let silent = fake_bridge("silent", &[], 0);
+        assert!(matches!(
+            run(&silent, &cancel, &mut progress),
+            Err(YoutubeDownloadError::NoOutputFile)
+        ));
+
+        let crashed = fake_bridge("crashed", &[], 3);
+        assert!(matches!(
+            run(&crashed, &cancel, &mut progress),
+            Err(YoutubeDownloadError::Failed(message)) if message.contains("without reporting")
+        ));
+
+        // A file that is not an executable cannot be spawned.
+        let plain = std::env::temp_dir().join("avcore_fake_ytbridge_plain.txt");
+        std::fs::write(&plain, "not a program").unwrap();
+        assert!(matches!(
+            run(&plain, &cancel, &mut progress),
+            Err(YoutubeDownloadError::Spawn(_))
+        ));
+        assert!(matches!(
+            run(Path::new("missing-ytbridge"), &cancel, &mut progress),
+            Err(YoutubeDownloadError::ToolNotFound)
+        ));
+    }
+
+    #[test]
+    fn cancelling_stops_the_download() {
+        let bridge = fake_bridge(
+            "cancel",
+            &[
+                r#"{"type":"progress","fraction":0.1}"#,
+                r#"{"type":"progress","fraction":0.2}"#,
+            ],
+            0,
+        );
+        let mut progress = Vec::new();
+        let result = run(&bridge, &AtomicBool::new(true), &mut progress);
+        assert!(matches!(
+            result,
+            Err(YoutubeDownloadError::Failed(message)) if message == "cancelled"
+        ));
+        assert!(progress.is_empty());
     }
 }

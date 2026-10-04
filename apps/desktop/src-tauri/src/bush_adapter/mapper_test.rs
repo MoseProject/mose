@@ -550,3 +550,179 @@ fn mattes_apply_above_the_first_video_track_and_a_missing_file_degrades() {
     assert!(mapped.approximations.contains(&Approximation::MatteMissing));
     let _ = std::fs::remove_file(&matte);
 }
+
+fn kf<T>(time_fraction: f32, value: T) -> Keyframe<T> {
+    Keyframe {
+        time_fraction,
+        value,
+    }
+}
+
+fn two_keys(a: f32, b: f32) -> Vec<Keyframe<f32>> {
+    vec![kf(0.0, a), kf(1.0, b)]
+}
+
+#[test]
+fn clips_without_an_asset_or_with_no_duration_contribute_nothing() {
+    let mapped = map_with(
+        vec![track(
+            1,
+            TrackKind::Video,
+            vec![
+                ClipInstance::new(10, 99, 0.0, 0.0, 4.0),
+                ClipInstance::new(11, 1, 0.0, 2.0, 2.0),
+            ],
+        )],
+        Vec::new(),
+    );
+    assert!(mapped.scene.contributors().is_empty());
+}
+
+#[test]
+fn an_unresolvable_source_is_skipped() {
+    let mapped = map_with(
+        vec![track(1, TrackKind::Video, vec![clip(0.0, 0.0, 4.0)])],
+        vec![1],
+    );
+    assert!(mapped.scene.contributors().is_empty());
+}
+
+#[test]
+fn overlays_with_no_usable_duration_are_skipped() {
+    let mut shapes = track(1, TrackKind::Shape, Vec::new());
+    let mut flat = ShapeClip::new(1, 0.0);
+    flat.duration_secs = f64::NAN;
+    let mut empty = ShapeClip::new(2, 0.0);
+    empty.width = 0.0;
+    empty.height = 0.0;
+    shapes.shape_clips = vec![flat, empty];
+    let mut texts = track(2, TrackKind::Text, Vec::new());
+    let mut zero = TextClip::new(3, 0.0, "hi".into());
+    zero.duration_secs = 0.0;
+    let blank = TextClip::new(4, 0.0, String::new());
+    texts.text_clips = vec![zero, blank];
+    let mapped = map_with(vec![shapes, texts], Vec::new());
+    // Only the zero-sized shape and the blank text, which still have a duration, are drawn.
+    assert_eq!(mapped.overlays.len(), 2);
+}
+
+#[test]
+fn scaling_alongside_crop_keyframes_is_approximated() {
+    let mut c = clip(0.0, 0.0, 4.0);
+    c.crop_x_keyframes = two_keys(0.0, 0.2);
+    c.crop_y_keyframes = two_keys(0.0, 0.2);
+    c.crop_w_keyframes = two_keys(1.0, 0.5);
+    c.crop_h_keyframes = two_keys(1.0, 0.5);
+    c.scale_keyframes = two_keys(1.0, 1.5);
+    let (mapped, contributor) = one_clip(c);
+    assert!(mapped
+        .approximations
+        .contains(&Approximation::ScaleWithCropKeyframes));
+    assert!(contributor.placement.animation.crop_x.is_some());
+    assert!(contributor.placement.animation.crop_height.is_some());
+}
+
+#[test]
+fn colour_keyframes_filters_and_chroma_key_reach_the_effects() {
+    let mut c = clip(0.0, 0.0, 4.0);
+    c.brightness_keyframes = two_keys(0.0, 0.5);
+    c.contrast_keyframes = two_keys(1.0, 2.0);
+    c.saturation_keyframes = two_keys(1.0, 0.0);
+    c.chroma_key_enabled = true;
+    c.chroma_key_color = [0, 255, 0];
+    let (_, animated) = one_clip(c.clone());
+    assert!(animated.placement.animation.brightness.is_some());
+    assert!(animated.placement.animation.contrast.is_some());
+    assert!(animated.placement.animation.saturation.is_some());
+    assert!(animated.placement.effects.chroma_key.is_some());
+
+    c.color_filter = ColorFilter::BlackAndWhite;
+    let (_, mono) = one_clip(c.clone());
+    assert_eq!(mono.placement.effects.saturation, 0.0);
+    assert!(mono.placement.animation.saturation.is_none());
+
+    c.color_filter = ColorFilter::Sepia;
+    let (_, sepia) = one_clip(c);
+    assert_eq!(sepia.placement.effects.sepia, 1.0);
+}
+
+#[test]
+fn stabilization_deflicker_blend_and_lut_are_forwarded() {
+    let mut c = clip(0.0, 0.0, 4.0);
+    c.stabilization_intensity = 0.5;
+    c.deflicker_enabled = true;
+    c.blend_mode = CoreBlend::Addition;
+    c.lut_path = "grade.cube".into();
+    let (_, contributor) = one_clip(c);
+    assert!(contributor.placement.stabilize.is_some());
+    assert!(contributor.placement.deflicker.is_some());
+    assert_eq!(contributor.placement.blend, BlendMode::Add);
+    assert!(
+        contributor.placement.lut.is_none(),
+        "the test resolver has no LUT"
+    );
+}
+
+#[test]
+fn a_privacy_blur_needs_its_matte_on_disk() {
+    let mut c = clip(0.0, 0.0, 4.0);
+    c.privacy_blur_enabled = true;
+    c.privacy_blur_mask_path = "definitely-missing-matte.mp4".into();
+    let (mapped, contributor) = one_clip(c.clone());
+    assert!(mapped.approximations.contains(&Approximation::MatteMissing));
+    assert!(contributor.placement.privacy_blur.is_none());
+
+    c.privacy_blur_mask_path = String::new();
+    let (mapped, _) = one_clip(c.clone());
+    assert!(mapped.approximations.contains(&Approximation::MatteMissing));
+
+    let matte = std::env::temp_dir().join(format!("oca_mapper_matte_{}.mp4", std::process::id()));
+    std::fs::write(&matte, b"matte").unwrap();
+    c.privacy_blur_mask_path = matte.display().to_string();
+    let (mapped, contributor) = one_clip(c);
+    let _ = std::fs::remove_file(&matte);
+    assert!(!mapped.approximations.contains(&Approximation::MatteMissing));
+    assert!(contributor.placement.privacy_blur.is_some());
+}
+
+#[test]
+fn keyframes_with_repeated_times_or_bad_values_are_dropped() {
+    let mut c = clip(0.0, 0.0, 4.0);
+    c.brightness_keyframes = vec![kf(0.0, 0.1), kf(0.0, 0.2), kf(0.5, f32::NAN), kf(1.0, 0.3)];
+    let (_, contributor) = one_clip(c);
+    assert!(contributor.placement.animation.brightness.is_some());
+}
+
+#[test]
+fn transitions_that_collide_with_other_animation_are_ignored() {
+    let moving = vec![
+        kf(0.0, Position { x: 0.0, y: 0.0 }),
+        kf(1.0, Position { x: 0.5, y: 0.0 }),
+    ];
+    let mut c = clip(0.0, 0.0, 4.0);
+    c.transition_in = TransitionType::Slide;
+    c.transition_duration_secs = 1.0;
+    c.position_keyframes = moving;
+    let (mapped, _) = one_clip(c);
+    assert!(mapped
+        .approximations
+        .contains(&Approximation::TransitionIgnored));
+
+    let mut zoom = clip(0.0, 0.0, 4.0);
+    zoom.transition_in = TransitionType::Zoom;
+    zoom.transition_duration_secs = 1.0;
+    zoom.layer_scale_x = 2.0;
+    let (mapped, _) = one_clip(zoom);
+    assert!(mapped
+        .approximations
+        .contains(&Approximation::TransitionIgnored));
+
+    let mut plain_zoom = clip(0.0, 0.0, 4.0);
+    plain_zoom.transition_in = TransitionType::Zoom;
+    plain_zoom.transition_duration_secs = 1.0;
+    let (mapped, contributor) = one_clip(plain_zoom);
+    assert!(!mapped
+        .approximations
+        .contains(&Approximation::TransitionIgnored));
+    assert!(contributor.placement.animation.scale_x.is_some());
+}

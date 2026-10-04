@@ -314,3 +314,70 @@ fn effect_and_crop_tracks_are_animated_and_kept_valid() {
         );
     }
 }
+
+#[test]
+fn an_animation_is_empty_until_any_track_is_set() {
+    let one = || Some(track(vec![key(0.0, 0.5, Easing::Linear)]));
+    assert!(Animation::default().is_empty());
+    let animations = vec![
+        Animation {
+            opacity: one(),
+            ..Animation::default()
+        },
+        Animation {
+            x: one(),
+            ..Animation::default()
+        },
+        Animation {
+            y: one(),
+            ..Animation::default()
+        },
+        Animation {
+            scale_x: one(),
+            ..Animation::default()
+        },
+        Animation {
+            scale_y: one(),
+            ..Animation::default()
+        },
+        Animation {
+            rotation_deg: one(),
+            ..Animation::default()
+        },
+        Animation {
+            brightness: one(),
+            ..Animation::default()
+        },
+        Animation {
+            contrast: one(),
+            ..Animation::default()
+        },
+        Animation {
+            saturation: one(),
+            ..Animation::default()
+        },
+        Animation {
+            crop_x: one(),
+            ..Animation::default()
+        },
+        Animation {
+            crop_y: one(),
+            ..Animation::default()
+        },
+        Animation {
+            crop_width: one(),
+            ..Animation::default()
+        },
+        Animation {
+            crop_height: one(),
+            ..Animation::default()
+        },
+        Animation {
+            gain_db: one(),
+            ..Animation::default()
+        },
+    ];
+    for animation in animations {
+        assert!(!animation.is_empty(), "{animation:?}");
+    }
+}

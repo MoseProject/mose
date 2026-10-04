@@ -161,3 +161,20 @@ fn silence_stays_silent_and_stereo_channels_stay_in_phase() {
         assert_eq!(pair[0], pair[1]);
     }
 }
+
+#[test]
+fn the_speed_can_change_inside_the_supported_range_only() {
+    let mut stretcher = bush::TimeStretcher::new(1.0, 1).unwrap();
+    assert_eq!(stretcher.speed(), 1.0);
+    assert!(stretcher.set_speed(1.5));
+    assert_eq!(stretcher.speed(), 1.5);
+    for rejected in [
+        f64::NAN,
+        f64::INFINITY,
+        bush::MAX_SPEED + 1.0,
+        bush::MIN_SPEED / 2.0,
+    ] {
+        assert!(!stretcher.set_speed(rejected), "{rejected}");
+        assert_eq!(stretcher.speed(), 1.5);
+    }
+}

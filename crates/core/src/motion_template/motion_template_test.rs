@@ -705,3 +705,163 @@ fn template_family_variant_for_looks_up_by_aspect_ratio() {
     assert_eq!(found.name, "Portrait variant");
     assert!(family.variant_for(ExportAspectRatio::Square).is_none());
 }
+
+#[test]
+fn every_validation_error_names_its_offender() {
+    let errors = vec![
+        TemplateValidationError::UnsupportedSchemaVersion { found: 9 },
+        TemplateValidationError::InvalidCanvasSize {
+            width: 0,
+            height: 7,
+        },
+        TemplateValidationError::DuplicateParameterId("dup_param".to_string()),
+        TemplateValidationError::DuplicateElementId("dup_element".to_string()),
+        TemplateValidationError::UnknownParameterReference {
+            element_id: "e_unknown".to_string(),
+            parameter_id: "p_unknown".to_string(),
+        },
+        TemplateValidationError::ParameterKindMismatch {
+            element_id: "e_kind".to_string(),
+            parameter_id: "p_kind".to_string(),
+            expected: TemplateParameterKind::Color,
+        },
+        TemplateValidationError::NonPositiveFontSize {
+            element_id: "e_font".to_string(),
+            value: -3.0,
+        },
+        TemplateValidationError::NonPositiveShapeExtent {
+            element_id: "e_shape".to_string(),
+            width: 0.0,
+            height: 5.0,
+        },
+        TemplateValidationError::NegativeTiming {
+            element_id: "e_timing".to_string(),
+            fade_in_secs: -1.0,
+            fade_out_secs: 0.5,
+        },
+    ];
+    let messages: Vec<String> = errors.iter().map(|error| error.to_string()).collect();
+    for (message, needle) in messages.iter().zip([
+        "9",
+        "0",
+        "dup_param",
+        "dup_element",
+        "p_unknown",
+        "p_kind",
+        "e_font",
+        "e_shape",
+        "e_timing",
+    ]) {
+        assert!(
+            message.contains(needle),
+            "{message} should mention {needle}"
+        );
+    }
+    let unique: std::collections::HashSet<_> = messages.iter().collect();
+    assert_eq!(unique.len(), messages.len());
+}
+
+#[test]
+fn parse_instantiate_and_family_errors_are_readable() {
+    let parse = GraphicTemplate::parse_and_validate("{").unwrap_err();
+    assert!(matches!(parse, TemplateParseOrValidationError::Parse(_)));
+    assert!(parse.to_string().contains("could not parse"));
+    let validation =
+        TemplateParseOrValidationError::from(TemplateValidationError::UnsupportedSchemaVersion {
+            found: 4,
+        });
+    assert!(validation.to_string().contains('4'));
+
+    let missing = TemplateInstantiateError::MissingParameterValue("p1".to_string());
+    assert!(missing.to_string().contains("p1"));
+    let wrong = TemplateInstantiateError::WrongParameterValueKind {
+        parameter_id: "p2".to_string(),
+        expected: TemplateParameterKind::Color,
+    };
+    assert!(wrong.to_string().contains("p2"));
+    let wrapped = TemplateInstantiateError::Validation(
+        TemplateValidationError::DuplicateElementId("e9".to_string()),
+    );
+    assert!(wrapped.to_string().contains("e9"));
+
+    assert!(TemplateFamilyValidationError::Empty
+        .to_string()
+        .contains("no variants"));
+    let duplicate =
+        TemplateFamilyValidationError::DuplicateAspectRatio(ExportAspectRatio::Portrait);
+    assert!(duplicate.to_string().contains("Portrait"));
+    let variant = TemplateFamilyValidationError::Variant {
+        aspect_ratio: ExportAspectRatio::Landscape,
+        error: TemplateValidationError::DuplicateParameterId("dp".to_string()),
+    };
+    let message = variant.to_string();
+    assert!(message.contains("Landscape") && message.contains("dp"));
+}
+
+#[test]
+fn a_shape_color_bound_to_a_text_parameter_is_rejected_and_wrong_values_fail_to_instantiate() {
+    let mut template = minimal_template();
+    template.parameters = vec![TemplateParameter {
+        id: "label".to_string(),
+        label: "Label".to_string(),
+        kind: TemplateParameterKind::Text,
+    }];
+    template.elements = vec![TemplateElement::Shape(shape_element(
+        "s1",
+        ColorBinding::Parameter("label".to_string()),
+    ))];
+    assert_eq!(
+        template.validate(),
+        Err(TemplateValidationError::ParameterKindMismatch {
+            element_id: "s1".to_string(),
+            parameter_id: "label".to_string(),
+            expected: TemplateParameterKind::Color,
+        })
+    );
+
+    // At instantiate time a text slot given a colour, and a colour slot given text, both fail.
+    let mut text_template = minimal_template();
+    text_template.parameters = vec![TemplateParameter {
+        id: "name".to_string(),
+        label: "Name".to_string(),
+        kind: TemplateParameterKind::Text,
+    }];
+    text_template.elements = vec![TemplateElement::Text(text_element(
+        "t1",
+        TextBinding::Parameter("name".to_string()),
+        ColorBinding::Fixed([0, 0, 0, 255]),
+    ))];
+    let mut values = HashMap::new();
+    values.insert("name".to_string(), ParameterValue::Color([1, 2, 3, 4]));
+    assert!(matches!(
+        instantiate(&text_template, &values),
+        Err(TemplateInstantiateError::WrongParameterValueKind {
+            expected: TemplateParameterKind::Text,
+            ..
+        })
+    ));
+
+    let mut color_template = minimal_template();
+    color_template.parameters = vec![TemplateParameter {
+        id: "tint".to_string(),
+        label: "Tint".to_string(),
+        kind: TemplateParameterKind::Color,
+    }];
+    color_template.elements = vec![TemplateElement::Shape(shape_element(
+        "s2",
+        ColorBinding::Parameter("tint".to_string()),
+    ))];
+    let mut values = HashMap::new();
+    values.insert("tint".to_string(), ParameterValue::Text("red".to_string()));
+    assert!(matches!(
+        instantiate(&color_template, &values),
+        Err(TemplateInstantiateError::WrongParameterValueKind {
+            expected: TemplateParameterKind::Color,
+            ..
+        })
+    ));
+    assert!(matches!(
+        instantiate(&color_template, &HashMap::new()),
+        Err(TemplateInstantiateError::MissingParameterValue(_))
+    ));
+}

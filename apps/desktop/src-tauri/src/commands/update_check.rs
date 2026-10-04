@@ -6,7 +6,9 @@
 //! port adds or removes.
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
+
+use crate::state::AppState;
 
 pub const UPDATE_CHECK_EVENT: &str = "update-check-event";
 
@@ -29,9 +31,10 @@ pub enum UpdateCheckEventPayload {
 /// Checks GitHub Releases for a newer published version on a background thread -- what the
 /// About screen's check does. Result arrives via [`UPDATE_CHECK_EVENT`].
 #[tauri::command]
-pub fn check_for_update(app: AppHandle) {
+pub fn check_for_update<R: Runtime>(app: AppHandle<R>) {
+    let services = app.state::<AppState>().services.clone();
     std::thread::spawn(move || {
-        let release = match avcore::fetch_latest_release() {
+        let release = match services.fetch_latest_release() {
             Ok(release) => release,
             Err(_) => {
                 let _ = app.emit(UPDATE_CHECK_EVENT, UpdateCheckEventPayload::Failed);
@@ -56,8 +59,9 @@ pub fn check_for_update(app: AppHandle) {
 /// `UnsupportedPlatform` and this reports [`UpdateCheckEventPayload::InstallFailed`]. Does not
 /// restart the process itself.
 #[tauri::command]
-pub fn install_available_update(app: AppHandle, version: String) {
-    std::thread::spawn(move || match avcore::apply_update(&version) {
+pub fn install_available_update<R: Runtime>(app: AppHandle<R>, version: String) {
+    let services = app.state::<AppState>().services.clone();
+    std::thread::spawn(move || match services.apply_update(&version) {
         Ok(avcore::ApplyUpdateOutcome::Updated { version }) => {
             tracing::info!(%version, "application update installed");
             let _ = app.emit(
@@ -78,8 +82,13 @@ pub fn install_available_update(app: AppHandle, version: String) {
 /// Starts the newly installed executable, preserving command-line arguments, then exits this
 /// process -- what the About screen's "Restart" button does once an update is installed.
 #[tauri::command]
-pub fn restart_after_update(app: AppHandle) -> Result<(), String> {
-    avcore::restart_application().map_err(|e| e.to_string())?;
-    app.exit(0);
+pub fn restart_after_update<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    let services = app.state::<AppState>().services.clone();
+    services.restart_application().map_err(|e| e.to_string())?;
+    services.exit(0);
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "update_check_test.rs"]
+mod tests;

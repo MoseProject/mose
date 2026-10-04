@@ -47,3 +47,9 @@ fn replacing_an_entry_updates_its_accounting_without_eviction() {
     assert_eq!(cache.len(), 1);
     assert_eq!(cache.get(&1), Some(&"new"));
 }
+
+#[test]
+fn the_hard_capacity_is_reported() {
+    let cache: bush::ByteCache<u32, u32> = bush::ByteCache::new(1024).unwrap();
+    assert_eq!(cache.max_bytes(), 1024);
+}

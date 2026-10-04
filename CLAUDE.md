@@ -96,7 +96,7 @@ make lint      # cargo clippy --workspace --all-targets
 make check     # cargo check --workspace --all-targets (fast compile-only loop)
 ```
 
-Single test: `cargo test -p core --test probe_test measure_loudness` or
+Single test: `cargo test -p core --test it probe_test::measure_loudness` or
 `cd apps/desktop && npx vitest run`.
 
 **Git hooks**: `npm install` (Node, one-time) sets up a husky pre-commit hook that runs
@@ -148,8 +148,9 @@ see [`spec/matrix/bush.md`](spec/matrix/bush.md); `make test-bush`.
 - **`ytbridge`** — standalone binary, deliberately isolated from `core`/`desktop`'s dependency
   graph; vendors its own Python runtime via `pyo3` for yt-dlp.
 
-Test placement: `core` and `avbridge` have `[lib]` targets → integration tests in
-`crates/<crate>/tests/`. `desktop` (`apps/desktop/src-tauri`) is bin-only → unit tests in
+Test placement: `avbridge` has a `[lib]` target → integration tests in `crates/avbridge/tests/`.
+`core`'s integration tests are all modules of one binary, `crates/core/tests/it/` (declare a new
+file in `it/main.rs`; one binary instead of ~30 keeps linking fast). `desktop` (`apps/desktop/src-tauri`) is bin-only → unit tests in
 `src/<module>/<module>_test.rs`.
 
 ## Approach

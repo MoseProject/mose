@@ -3,7 +3,7 @@
 //! is and isn't ported relative to the egui shell.
 
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, Runtime, State};
 
 use crate::error_reporting::{self, ErrorReportingConsent};
 use crate::state::AppState;
@@ -41,7 +41,7 @@ pub fn get_pending_crash_review(state: State<'_, AppState>) -> Option<CrashRevie
 
 /// "Send once": sends regardless of the persisted consent, then marks the crash reviewed.
 #[tauri::command]
-pub fn send_crash_once(app: AppHandle) -> Result<(), String> {
+pub fn send_crash_once<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
     let state = app.state::<AppState>();
     let crash = state
         .pending_crash_review
@@ -57,7 +57,7 @@ pub fn send_crash_once(app: AppHandle) -> Result<(), String> {
 /// "Always send": opts into steady-state consent, sends the pending crash through that reporter,
 /// then marks it reviewed.
 #[tauri::command]
-pub fn always_send_crash(app: AppHandle) -> Result<(), String> {
+pub fn always_send_crash<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
     let state = app.state::<AppState>();
     set_consent(&state, ErrorReportingConsent::AlwaysSend)?;
     let crash = state
@@ -65,17 +65,15 @@ pub fn always_send_crash(app: AppHandle) -> Result<(), String> {
         .lock()
         .unwrap_or_else(|p| p.into_inner())
         .clone();
-    if let Some(crash) = crash {
-        if let Some(reporter) = state
-            .error_reporter
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .as_ref()
-        {
-            match avcore::validate_report(&crash.report) {
-                Ok(()) => reporter.report(crash.report),
-                Err(e) => tracing::warn!(error = %e, "dropping invalid crash report"),
-            }
+    let reporter = state
+        .error_reporter
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .clone();
+    if let (Some(crash), Some(reporter)) = (crash, reporter) {
+        match avcore::validate_report(&crash.report) {
+            Ok(()) => reporter.report(crash.report),
+            Err(e) => tracing::warn!(error = %e, "dropping invalid crash report"),
         }
     }
     finish_crash_review(&state)
@@ -83,7 +81,7 @@ pub fn always_send_crash(app: AppHandle) -> Result<(), String> {
 
 /// "Do not send": dismisses the review without transmitting anything.
 #[tauri::command]
-pub fn dismiss_crash_review(app: AppHandle) -> Result<(), String> {
+pub fn dismiss_crash_review<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
     finish_crash_review(&app.state::<AppState>())
 }
 
@@ -104,8 +102,8 @@ fn finish_crash_review(state: &AppState) -> Result<(), String> {
 /// Applies a new ER-01B consent decision (Preferences screen toggle) -- persists it and
 /// live-swaps the held reporter; revocation deletes every queued-but-undelivered report.
 #[tauri::command]
-pub fn set_error_reporting_consent(
-    app: AppHandle,
+pub fn set_error_reporting_consent<R: Runtime>(
+    app: AppHandle<R>,
     consent: ErrorReportingConsent,
 ) -> Result<(), String> {
     set_consent(&app.state::<AppState>(), consent)
@@ -136,3 +134,7 @@ pub fn get_queued_report_count() -> usize {
 pub fn delete_queued_reports() {
     error_reporting::delete_all_queued();
 }
+
+#[cfg(test)]
+#[path = "error_reporting_test.rs"]
+mod tests;

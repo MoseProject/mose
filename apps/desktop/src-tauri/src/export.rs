@@ -10,7 +10,7 @@ use std::{
     sync::{Arc, Mutex},
     time::Instant,
 };
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Runtime};
 
 pub const EXPORT_JOBS: &str = "export-jobs";
 #[derive(Clone, Debug, Serialize)]
@@ -143,9 +143,9 @@ impl ExportQueue {
             .map_err(|e| e.to_string())?;
         std::fs::write(self.config_dir.join("export-settings.json"), b).map_err(|e| e.to_string())
     }
-    pub fn enqueue(
+    pub fn enqueue<R: Runtime>(
         self: &Arc<Self>,
-        app: AppHandle,
+        app: AppHandle<R>,
         title: String,
         output: PathBuf,
         prepared: PreparedExport,
@@ -172,7 +172,7 @@ impl ExportQueue {
         self.pump(app);
         id
     }
-    pub fn pause(self: &Arc<Self>, app: AppHandle, id: u64) {
+    pub fn pause<R: Runtime>(self: &Arc<Self>, app: AppHandle<R>, id: u64) {
         self.transition(id, |s| match s {
             ExportJobStatus::Queued => Some(ExportJobStatus::Paused { percent: 0 }),
             ExportJobStatus::Rendering { percent } => {
@@ -191,7 +191,7 @@ impl ExportQueue {
         self.persist();
         self.emit(&app)
     }
-    pub fn resume(self: &Arc<Self>, app: AppHandle, id: u64) {
+    pub fn resume<R: Runtime>(self: &Arc<Self>, app: AppHandle<R>, id: u64) {
         let c = self
             .controls
             .lock()
@@ -212,7 +212,7 @@ impl ExportQueue {
         self.emit(&app);
         self.pump(app)
     }
-    pub fn cancel(self: &Arc<Self>, app: AppHandle, id: u64) {
+    pub fn cancel<R: Runtime>(self: &Arc<Self>, app: AppHandle<R>, id: u64) {
         if let Some(c) = self
             .controls
             .lock()
@@ -230,7 +230,7 @@ impl ExportQueue {
         self.persist();
         self.emit(&app)
     }
-    pub fn remove(self: &Arc<Self>, app: AppHandle, id: u64) {
+    pub fn remove<R: Runtime>(self: &Arc<Self>, app: AppHandle<R>, id: u64) {
         if !self
             .controls
             .lock()
@@ -245,7 +245,7 @@ impl ExportQueue {
             self.emit(&app)
         }
     }
-    pub fn match_loudness(&self, app: &AppHandle, target: f32) {
+    pub fn match_loudness<R: Runtime>(&self, app: &AppHandle<R>, target: f32) {
         for j in self
             .jobs
             .lock()
@@ -280,12 +280,10 @@ impl ExportQueue {
             tracing::warn!(%e,"failed to save export queue")
         }
     }
-    fn emit(&self, app: &AppHandle) {
-        if let Err(e) = app.emit(EXPORT_JOBS, self.snapshot()) {
-            tracing::warn!(%e,"failed to emit export jobs")
-        }
+    fn emit<R: Runtime>(&self, app: &AppHandle<R>) {
+        let _ = app.emit(EXPORT_JOBS, self.snapshot());
     }
-    fn pump(self: &Arc<Self>, app: AppHandle) {
+    fn pump<R: Runtime>(self: &Arc<Self>, app: AppHandle<R>) {
         loop {
             if self
                 .controls
@@ -355,7 +353,7 @@ impl ExportQueue {
             });
         }
     }
-    fn progress(&self, app: &AppHandle, id: u64, percent: u8) {
+    fn progress<R: Runtime>(&self, app: &AppHandle<R>, id: u64, percent: u8) {
         self.transition(id, |s| match s {
             ExportJobStatus::Rendering { .. } => Some(ExportJobStatus::Rendering { percent }),
             ExportJobStatus::Paused { .. } => Some(ExportJobStatus::Paused { percent }),
@@ -363,9 +361,9 @@ impl ExportQueue {
         });
         self.emit(app)
     }
-    fn finish(
+    fn finish<R: Runtime>(
         self: &Arc<Self>,
-        app: AppHandle,
+        app: AppHandle<R>,
         id: u64,
         result: Result<RenderOutcome, avcore::RenderError>,
     ) {
@@ -399,3 +397,7 @@ impl ExportQueue {
         self.pump(app)
     }
 }
+
+#[cfg(test)]
+#[path = "export/export_test.rs"]
+mod tests;

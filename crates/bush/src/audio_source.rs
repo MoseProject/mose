@@ -100,6 +100,16 @@ impl AudioSource {
         frames: usize,
         cancel: &AtomicBool,
     ) -> Result<Option<AudioBlock>, AudioSourceError> {
+        self.read_within(start_frame, frames, cancel, MAX_BLOCKS_PER_READ)
+    }
+
+    fn read_within(
+        &mut self,
+        start_frame: u64,
+        frames: usize,
+        cancel: &AtomicBool,
+        max_blocks: u32,
+    ) -> Result<Option<AudioBlock>, AudioSourceError> {
         if frames > self.max_read_frames {
             return Err(AudioSourceError::ReadTooLarge {
                 frames,
@@ -126,7 +136,7 @@ impl AudioSource {
         let mut blocks = 0;
         while !self.end_of_stream && (!self.positioned || self.decoded_end() < end) {
             blocks += 1;
-            if blocks > MAX_BLOCKS_PER_READ {
+            if blocks > max_blocks {
                 return Err(AudioSourceError::DecodeLimit);
             }
             match self.session.next_block(cancel)? {
@@ -192,5 +202,65 @@ impl AudioSource {
             samples = &samples[overlap * channels..];
         }
         self.queue.extend(samples.iter().copied());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const RATE: u32 = 8_000;
+
+    fn source() -> AudioSource {
+        let fixture =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../avbridge/tests/fixtures/audio.m4a");
+        AudioSource::open(&fixture, RATE, 1, 4096).unwrap()
+    }
+
+    fn queued(source: &AudioSource) -> Vec<f32> {
+        source.queue.iter().copied().collect()
+    }
+
+    #[test]
+    fn the_format_is_reported_and_a_block_error_is_wrapped() {
+        let source = source();
+        assert_eq!((source.sample_rate(), source.channels()), (RATE, 1));
+        let error = AudioBlock::new(0, 1, 0.0, Vec::new()).unwrap_err();
+        assert!(matches!(
+            AudioSourceError::from(error),
+            AudioSourceError::InvalidBlock(_)
+        ));
+    }
+
+    #[test]
+    fn a_read_that_needs_more_blocks_than_allowed_fails() {
+        let mut source = source();
+        let cancel = AtomicBool::new(false);
+        // Reaching the end of a clip takes more than zero blocks.
+        assert!(matches!(
+            source.read_within(0, 4096, &cancel, 0),
+            Err(AudioSourceError::DecodeLimit)
+        ));
+    }
+
+    #[test]
+    fn priming_before_time_zero_is_dropped() {
+        let mut source = source();
+        // Four frames starting 2 frames before zero: the first two are priming.
+        source.append(-2.0 / f64::from(RATE), &[1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(source.queue_start_frame, 0);
+        assert_eq!(queued(&source), vec![3.0, 4.0]);
+    }
+
+    #[test]
+    fn a_gap_is_zero_filled_and_an_overlap_is_skipped() {
+        let mut source = source();
+        source.append(0.0, &[1.0, 2.0]);
+        // Starts two frames after the queued end: two zero frames fill the gap.
+        source.append(4.0 / f64::from(RATE), &[5.0, 6.0]);
+        assert_eq!(queued(&source), vec![1.0, 2.0, 0.0, 0.0, 5.0, 6.0]);
+        // Starts one frame before the end: that frame is already queued.
+        source.append(5.0 / f64::from(RATE), &[60.0, 7.0]);
+        assert_eq!(queued(&source), vec![1.0, 2.0, 0.0, 0.0, 5.0, 6.0, 7.0]);
     }
 }

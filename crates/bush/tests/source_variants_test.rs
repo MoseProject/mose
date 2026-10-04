@@ -59,3 +59,30 @@ fn rejects_invalid_variant_sets_before_decode() {
         ))
     );
 }
+
+#[test]
+fn invalid_variants_are_rejected_and_the_list_is_ordered_by_kind() {
+    let mut empty_path = variant(SourceVariantKind::Original, 640, 360);
+    empty_path.path = PathBuf::new();
+    assert_eq!(
+        SourceVariants::new(vec![empty_path]).unwrap_err(),
+        SourceVariantError::EmptyPath
+    );
+    for (width, height) in [(0, 360), (640, 0)] {
+        assert_eq!(
+            SourceVariants::new(vec![variant(SourceVariantKind::Original, width, height)])
+                .unwrap_err(),
+            SourceVariantError::EmptyDimensions
+        );
+    }
+    let variants = SourceVariants::new(vec![
+        variant(SourceVariantKind::Proxy, 320, 180),
+        variant(SourceVariantKind::Original, 640, 360),
+    ])
+    .unwrap();
+    let kinds: Vec<_> = variants.variants().iter().map(|v| v.kind).collect();
+    assert_eq!(
+        kinds,
+        vec![SourceVariantKind::Original, SourceVariantKind::Proxy]
+    );
+}

@@ -108,3 +108,72 @@ fn forget_clears_a_files_tracked_state() {
     // Re-polling after forgetting starts the clock over, even at the same size/time.
     assert!(!tracker.poll(Path::new("a.mp4"), 1000, t1, Duration::from_secs(6)));
 }
+
+fn fixture(name: &str) -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(name)
+}
+
+#[test]
+fn every_process_error_has_a_message() {
+    use crate::loudness::LoudnessError;
+    use crate::probe::ProbeError;
+    use crate::render::RenderError;
+    let missing = || LoudnessError::Bridge(avbridge::LoudnessError::OpenInput);
+    assert!(ProcessError::MeasureBefore(missing())
+        .to_string()
+        .contains("source loudness"));
+    assert!(ProcessError::Probe(ProbeError::Open)
+        .to_string()
+        .contains("probe"));
+    assert!(ProcessError::Render(RenderError::EmptyTimeline)
+        .to_string()
+        .contains("render"));
+    assert!(ProcessError::MeasureAfter(missing())
+        .to_string()
+        .contains("output loudness"));
+}
+
+#[test]
+fn a_watched_file_is_normalised_into_the_output_folder() {
+    let dir = tempfile::tempdir().unwrap();
+    let output = dir.path().join("nested").join("normalised.mp4");
+    let mut last = 0;
+    let (before, after) = process_watched_file(
+        &fixture("video.mp4"),
+        &output,
+        -14.0,
+        &AtomicBool::new(false),
+        |percent| last = percent,
+    )
+    .unwrap()
+    .expect("not cancelled");
+    assert!(output.exists());
+    assert_eq!(last, 100);
+    assert!(before.integrated_lufs.is_finite() && after.integrated_lufs.is_finite());
+}
+
+#[test]
+fn processing_can_be_cancelled_and_bad_sources_are_reported() {
+    let dir = tempfile::tempdir().unwrap();
+    let output = dir.path().join("out.mp4");
+    let cancelled = process_watched_file(
+        &fixture("video.mp4"),
+        &output,
+        -14.0,
+        &AtomicBool::new(true),
+        |_| {},
+    )
+    .unwrap();
+    assert!(cancelled.is_none());
+
+    let missing = process_watched_file(
+        &dir.path().join("missing.mp4"),
+        &output,
+        -14.0,
+        &AtomicBool::new(false),
+        |_| {},
+    );
+    assert!(matches!(missing, Err(ProcessError::MeasureBefore(_))));
+}

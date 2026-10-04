@@ -40,13 +40,13 @@
   "native_dependencies": [
     {
       "name": "FFmpeg",
-      "version": "8.1.2-50-g1a748fe2cd on Windows/Linux; 8.1.2 source build on macOS",
+      "version": "8.1.3-14-g330caae0c1 on Windows/Linux; 8.1.2 source build on macOS",
       "license": "LGPL-2.1-or-later",
       "bundle": "runtime/bin plus shared libav libraries",
-      "windows_url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-02-13-13/ffmpeg-n8.1.2-50-g1a748fe2cd-win64-lgpl-shared-8.1.zip",
-      "windows_sha256": "46744f3ef783805376fbcc72a3067bacd9f78c929e13882e54b2e2fad5f69966",
-      "linux_url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-02-13-13/ffmpeg-n8.1.2-50-g1a748fe2cd-linux64-lgpl-shared-8.1.tar.xz",
-      "linux_sha256": "628c408c13e8fda95a730cba1aa0b250a858e0b35d3c36a9764eaf6141b58cb3",
+      "windows_url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-01-13-06/ffmpeg-n8.1.3-14-g330caae0c1-win64-lgpl-shared-8.1.zip",
+      "windows_sha256": "bf545d8fee9bb6957c1f3dea0f384bf64edead407d763326dbbd2de1b04768a4",
+      "linux_url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-01-13-06/ffmpeg-n8.1.3-14-g330caae0c1-linux64-lgpl-shared-8.1.tar.xz",
+      "linux_sha256": "53c73537be6421f793bb5c0ffbeef2d13498100691adab91a9e5fa9245b31cb9",
       "macos_source_version": "8.1.2",
       "macos_source_url": "https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz",
       "macos_source_sha256": "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c"

@@ -239,3 +239,82 @@ fn synced_ticks_are_ignored_while_paused() {
     );
     assert_eq!(player.position_secs(), 0.0);
 }
+
+fn poll_until(player: &mut Player) -> PlayerEvent {
+    let deadline = std::time::Instant::now() + WAIT;
+    loop {
+        if let Some(event) = player.poll() {
+            return event;
+        }
+        assert!(std::time::Instant::now() < deadline, "no player event");
+        std::thread::sleep(Duration::from_millis(2));
+    }
+}
+
+#[test]
+fn rate_and_pause_are_reflected_and_invalid_rates_are_rejected() {
+    let mut player = player();
+    assert_eq!(player.rate(), 1.0);
+    player.set_rate(2.0).unwrap();
+    assert_eq!(player.rate(), 2.0);
+    assert!(matches!(
+        player.set_rate(0.0),
+        Err(PlayerError::Transport(_))
+    ));
+    assert_eq!(player.rate(), 2.0);
+
+    player.play(Duration::ZERO).unwrap();
+    assert_eq!(player.state(), PlaybackState::Playing);
+    player.pause();
+    assert_eq!(player.state(), PlaybackState::Paused);
+    assert_eq!(player.tick(Duration::from_secs(1)).unwrap(), None);
+    assert_eq!(player.engine().renderer_name(), "cpu");
+}
+
+#[test]
+fn a_shorter_scene_pulls_the_playhead_back_to_its_end() {
+    let mut player = player();
+    player.seek(0.8).unwrap();
+    next_frame(&mut player);
+    player.set_scene(scene(1.0), Vec::new(), 0.5).unwrap();
+    assert_eq!(player.position_secs(), 0.5);
+    assert!(matches!(
+        player.set_scene(scene(1.0), Vec::new(), -1.0),
+        Err(PlayerError::InvalidDuration(_))
+    ));
+}
+
+#[test]
+fn polling_without_blocking_delivers_frames_and_the_end_event() {
+    let mut player = player();
+    assert_eq!(player.poll(), None);
+    player.play(Duration::ZERO).unwrap();
+    assert!(matches!(poll_until(&mut player), PlayerEvent::Frame { .. }));
+    player.tick(Duration::from_secs(30)).unwrap();
+    assert!(matches!(poll_until(&mut player), PlayerEvent::Frame { .. }));
+    assert_eq!(
+        poll_until(&mut player),
+        PlayerEvent::Ended { position_secs: 0.9 }
+    );
+}
+
+#[test]
+fn engine_failures_are_reported_as_failed_events_and_a_dead_engine_as_an_error() {
+    let mut player = player();
+    let mut broken = scene(1.0);
+    let mut contributors = broken.contributors().to_vec();
+    contributors[0].content = ContributorContent::Media(MediaSource {
+        path: PathBuf::from("does-not-exist.mp4"),
+        range: SourceRange::new(0.0, 0.9).unwrap(),
+        version: Version(9),
+    });
+    broken = SceneSnapshot::new(SceneVersions::default(), contributors).unwrap();
+    player.set_scene(broken, Vec::new(), 0.9).unwrap();
+    assert!(matches!(
+        player.wait(WAIT),
+        Some(PlayerEvent::Failed { .. })
+    ));
+
+    player.engine().shutdown();
+    assert!(matches!(player.seek(0.1), Err(PlayerError::Engine(_))));
+}

@@ -129,32 +129,27 @@ pub fn segment_person(
     width: u32,
     height: u32,
 ) -> Result<Vec<f32>, SegmentError> {
-    use ort::session::Session;
-    use ort::value::Value;
+    segment_person_with(rgba, width, height, |input, model_w, model_h| {
+        crate::onnx_models::run_segmentation_model(model_path, input, model_w, model_h)
+    })
+}
 
-    let mut session = Session::builder()
-        .map_err(|e| SegmentError::Onnx(e.to_string()))?
-        .commit_from_file(model_path)
-        .map_err(|e| SegmentError::Onnx(e.to_string()))?;
-
+/// [`segment_person`] with the model run passed in: it receives the preprocessed input and the
+/// model's input size, and returns the model-resolution matte, so the resizing is testable
+/// without a model.
+pub(crate) fn segment_person_with(
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    run: impl FnOnce(Vec<f32>, u32, u32) -> Result<Vec<f32>, SegmentError>,
+) -> Result<Vec<f32>, SegmentError> {
     let (model_w, model_h) = model_input_size(width, height);
-    let input_data = preprocess(rgba, width, height, model_w, model_h);
-    let input = Value::from_array(([1, 3, model_h as usize, model_w as usize], input_data))
-        .map_err(|e| SegmentError::Onnx(e.to_string()))?;
-
-    let outputs = session
-        .run(ort::inputs![input])
-        .map_err(|e| SegmentError::Onnx(e.to_string()))?;
-
-    let (_name, value) = outputs
-        .iter()
-        .next()
-        .ok_or_else(|| SegmentError::Onnx("model produced no output tensors".into()))?;
-    let (_shape, data) = value
-        .try_extract_tensor::<f32>()
-        .map_err(|e| SegmentError::Onnx(e.to_string()))?;
-
-    Ok(resize_matte(data, model_w, model_h, width, height))
+    let matte = run(
+        preprocess(rgba, width, height, model_w, model_h),
+        model_w,
+        model_h,
+    )?;
+    Ok(resize_matte(&matte, model_w, model_h, width, height))
 }
 
 /// Where a project's per-clip AI-background-removal alpha mattes are cached: a hidden sibling

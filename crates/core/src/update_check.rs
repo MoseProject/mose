@@ -31,9 +31,9 @@ use serde::Deserialize;
 /// GitHub's "latest release" endpoint for this project — 404s until the repository has at
 /// least one published (non-draft, non-prerelease) release.
 const RELEASES_API_URL: &str = "https://api.github.com/repos/lucasgmagalhaes/oca/releases/latest";
-const REPO_OWNER: &str = "lucasgmagalhaes";
-const REPO_NAME: &str = "oca";
-const BINARY_NAME: &str = "ui";
+pub(crate) const REPO_OWNER: &str = "lucasgmagalhaes";
+pub(crate) const REPO_NAME: &str = "oca";
+pub(crate) const BINARY_NAME: &str = "ui";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LatestRelease {
@@ -148,8 +148,13 @@ impl std::error::Error for UpdateCheckError {}
 /// `json` Cargo feature this crate doesn't enable, and every other dependency already used here
 /// (`serde`/`serde_json`) covers the same ground without adding one.
 pub fn fetch_latest_release() -> Result<LatestRelease, UpdateCheckError> {
+    fetch_release_from(RELEASES_API_URL)
+}
+
+/// [`fetch_latest_release`] against an explicit endpoint, so tests can serve their own JSON.
+pub(crate) fn fetch_release_from(url: &str) -> Result<LatestRelease, UpdateCheckError> {
     // GitHub's API rejects requests with no User-Agent header.
-    let mut response = ureq::get(RELEASES_API_URL)
+    let mut response = ureq::get(url)
         .header("User-Agent", "oca-update-check")
         .header("Accept", "application/vnd.github+json")
         .call()
@@ -214,15 +219,18 @@ pub fn release_supports_auto_update<'a>(
     asset_names.into_iter().any(|name| name == expected)
 }
 
-/// Downloads the requested GitHub release and atomically replaces the current executable.
-///
-/// This function blocks and must run on a worker thread. It does not restart or exit the
-/// process: the UI remains responsive and can let the user choose when to restart.
-pub fn apply_update(version: &str) -> Result<ApplyUpdateOutcome, ApplyUpdateError> {
-    if !auto_update_supported() {
-        return Err(ApplyUpdateError::UnsupportedPlatform);
-    }
+/// What [`apply_update`] hands to the installer once the request has been validated.
+pub(crate) struct InstallPlan<'a> {
+    pub tag: &'a str,
+    pub target: &'a str,
+    pub package: UpdatePackage,
+    /// The exact release asset name this install must pick, per [`expected_update_asset_name`].
+    pub expected_asset: &'a str,
+}
 
+/// A release version made safe to place into a GitHub tag URL: whitespace and a leading `v`
+/// dropped, only alphanumerics, `.` and `-` allowed.
+pub(crate) fn normalize_update_version(version: &str) -> Result<String, ApplyUpdateError> {
     let normalized = version.trim().trim_start_matches('v');
     if normalized.is_empty()
         || !normalized
@@ -231,87 +239,48 @@ pub fn apply_update(version: &str) -> Result<ApplyUpdateOutcome, ApplyUpdateErro
     {
         return Err(ApplyUpdateError::InvalidVersion);
     }
+    Ok(normalized.to_string())
+}
 
-    let target = self_update::get_target();
-    let package = UpdatePackage::current();
+/// Downloads the requested GitHub release and atomically replaces the current executable.
+///
+/// This function blocks and must run on a worker thread. It does not restart or exit the
+/// process: the UI remains responsive and can let the user choose when to restart.
+pub fn apply_update(version: &str) -> Result<ApplyUpdateOutcome, ApplyUpdateError> {
+    apply_update_with(
+        version,
+        auto_update_supported(),
+        UpdatePackage::current(),
+        self_update::get_target(),
+        crate::update_install::install,
+    )
+}
+
+/// [`apply_update`] with the platform facts and the installer passed in.
+pub(crate) fn apply_update_with(
+    version: &str,
+    supported: bool,
+    package: UpdatePackage,
+    target: &str,
+    install: impl FnOnce(&InstallPlan<'_>) -> Result<ApplyUpdateOutcome, ApplyUpdateError>,
+) -> Result<ApplyUpdateOutcome, ApplyUpdateError> {
+    if !supported {
+        return Err(ApplyUpdateError::UnsupportedPlatform);
+    }
+    let normalized = normalize_update_version(version)?;
     if !package_supports_atomic_update(package) {
         return Err(ApplyUpdateError::UnsupportedPlatform);
     }
     let expected =
         expected_update_asset_name(target, package).ok_or(ApplyUpdateError::UnsupportedPlatform)?;
     let tag = format!("v{normalized}");
-
-    let mut update_builder = self_update::backends::github::Update::configure();
-    update_builder
-        .repo_owner(REPO_OWNER)
-        .repo_name(REPO_NAME)
-        .current_version(env!("CARGO_PKG_VERSION"))
-        .target_version_tag(&tag)
-        .show_download_progress(false)
-        .show_output(false)
-        .no_confirm(true);
-    match package {
-        UpdatePackage::NativeBinary => {
-            update_builder.bin_name(BINARY_NAME);
-        }
-        UpdatePackage::LinuxAppImage => {
-            let appimage = std::env::var_os("APPIMAGE")
-                .filter(|path| !path.is_empty())
-                .ok_or(ApplyUpdateError::UnsupportedPlatform)?;
-            update_builder
-                .identifier("appimage")
-                .bin_name("oca.AppImage")
-                .bin_path_in_archive("oca.AppImage")
-                .bin_install_path(appimage);
-        }
-    }
-    let updater = update_builder
-        .build()
-        .map_err(|error| ApplyUpdateError::Update(error.to_string()))?;
-
-    // `self_update::Release::asset_for` intentionally falls back from a full target match to
-    // OS/arch and finally an identifier. Validate what it would select before update() performs
-    // any download, keeping a malformed release from crossing platform boundaries.
-    let release = updater
-        .get_release_version(&tag)
-        .map_err(|error| ApplyUpdateError::Update(error.to_string()))?;
-    let selected = release.asset_for(target, updater.identifier().as_deref());
-    if selected.as_ref().map(|asset| asset.name.as_str()) != Some(expected.as_str()) {
-        return Err(ApplyUpdateError::MissingAsset { expected });
-    }
-
-    let status = updater
-        .update()
-        .map_err(|error| ApplyUpdateError::Update(error.to_string()))?;
-    if status.updated() {
-        Ok(ApplyUpdateOutcome::Updated {
-            version: status.version().trim_start_matches('v').to_string(),
-        })
-    } else {
-        Ok(ApplyUpdateOutcome::UpToDate)
-    }
+    install(&InstallPlan {
+        tag: &tag,
+        target,
+        package,
+        expected_asset: &expected,
+    })
 }
-
-/// Starts the executable currently installed at this process's path, preserving command-line
-/// arguments. The caller must close the old process only after this returns successfully.
-pub fn restart_application() -> Result<(), ApplyUpdateError> {
-    #[cfg(target_os = "linux")]
-    let executable = match std::env::var_os("APPIMAGE").filter(|path| !path.is_empty()) {
-        Some(path) => std::path::PathBuf::from(path),
-        None => {
-            std::env::current_exe().map_err(|error| ApplyUpdateError::Restart(error.to_string()))?
-        }
-    };
-    #[cfg(not(target_os = "linux"))]
-    let executable =
-        std::env::current_exe().map_err(|error| ApplyUpdateError::Restart(error.to_string()))?;
-    std::process::Command::new(executable)
-        .args(std::env::args_os().skip(1))
-        .spawn()
-        .map_err(|error| ApplyUpdateError::Restart(error.to_string()))?;
-    Ok(())
-}
-
 /// Whether `latest` is a newer version than `current` — both dotted `major.minor.patch`-style
 /// strings. Compares each dot-separated segment's leading digits numerically, left to right;
 /// a segment with no leading digits (e.g. a `-beta` suffix glued onto the last number instead
@@ -343,3 +312,7 @@ pub fn is_newer(current: &str, latest: &str) -> bool {
     }
     false
 }
+
+#[cfg(test)]
+#[path = "update_check/update_check_test.rs"]
+mod flow_tests;

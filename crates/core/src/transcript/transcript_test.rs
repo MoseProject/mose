@@ -230,3 +230,57 @@ fn a_real_transcription_builds_a_valid_document() {
         assert_eq!(word.id, index as u64 + 1);
     }
 }
+
+fn project_at(file_path: Option<PathBuf>) -> Project {
+    Project {
+        id: 1,
+        name: "Test".to_string(),
+        last_edited: crate::Recency::HoursAgo(0),
+        summary: String::new(),
+        media_library: Vec::new(),
+        sequences: Vec::new(),
+        active_sequence: 0,
+        file_path,
+        panel_layout: None,
+        smart_bins: Vec::new(),
+        recent_asset_ids: Vec::new(),
+    }
+}
+
+#[test]
+fn every_validation_and_storage_error_has_a_message() {
+    let version = TranscriptValidationError::UnsupportedSchemaVersion(9);
+    assert!(version.to_string().contains('9'));
+    let duplicate = TranscriptValidationError::DuplicateWordId(4);
+    assert!(duplicate.to_string().contains("duplicate"));
+    let invalid = TranscriptValidationError::InvalidWord {
+        id: 5,
+        reason: "bad timing",
+    };
+    assert!(invalid.to_string().contains("bad timing"));
+
+    assert!(TranscriptStorageError::Io(std::io::Error::other("disk"))
+        .to_string()
+        .contains("disk"));
+    let persist = crate::persistence::from_octr_bytes::<TranscriptDocument>(b"junk").unwrap_err();
+    assert!(!TranscriptStorageError::Persist(persist)
+        .to_string()
+        .is_empty());
+    assert!(TranscriptStorageError::Validation(duplicate)
+        .to_string()
+        .contains("duplicate"));
+}
+
+#[test]
+fn transcripts_are_cached_beside_a_saved_project_or_in_the_temp_folder() {
+    let saved = cache_dir_for_project(&project_at(Some(PathBuf::from("/work/My Game.ocproj"))));
+    assert_eq!(saved, PathBuf::from("/work/.My Game_transcripts"));
+    let unsaved = cache_dir_for_project(&project_at(None));
+    assert_eq!(
+        unsaved,
+        std::env::temp_dir().join("oca_unsaved_transcripts")
+    );
+    // A path without a usable file name falls back to a generic stem.
+    let nameless = cache_dir_for_project(&project_at(Some(PathBuf::from("/"))));
+    assert!(nameless.to_string_lossy().contains("_transcripts"));
+}

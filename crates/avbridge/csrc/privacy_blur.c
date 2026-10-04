@@ -77,6 +77,7 @@ PrivacyBlurStatus avbridge_apply_privacy_blur(const char *in_path, const char *o
     int video_in_idx = -1, audio_in_idx = -1;
     int video_out_idx = -1, audio_out_idx = -1;
     int64_t next_video_pts = 0;
+    int64_t frames_fed = 0; /* frames pushed into the filtergraph */
     AVRational canvas_fps = {canvas_fps_num, canvas_fps_den};
 
     if (open_input(in_path, &in_ctx) != 0) {
@@ -306,6 +307,7 @@ PrivacyBlurStatus avbridge_apply_privacy_blur(const char *in_path, const char *o
                     status = PRIVACY_BLUR_ERR_PIPELINE;
                     goto cleanup_output_io;
                 }
+                frames_fed++;
                 while (1) {
                     ret = av_buffersink_get_frame(buffersink_ctx, filt_frame);
                     if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) break;
@@ -347,6 +349,7 @@ PrivacyBlurStatus avbridge_apply_privacy_blur(const char *in_path, const char *o
         dec_frame->pts = dec_frame->best_effort_timestamp;
         if (av_buffersrc_add_frame_flags(buffersrc_ctx, dec_frame, AV_BUFFERSRC_FLAG_KEEP_REF) >=
             0) {
+            frames_fed++;
             while (av_buffersink_get_frame(buffersink_ctx, filt_frame) >= 0) {
                 filt_frame->pts = next_video_pts++;
                 filt_frame->pict_type = AV_PICTURE_TYPE_NONE;
@@ -361,7 +364,9 @@ PrivacyBlurStatus avbridge_apply_privacy_blur(const char *in_path, const char *o
     if (av_buffersrc_add_frame_flags(buffersrc_ctx, NULL, 0) < 0) {
         status = PRIVACY_BLUR_ERR_PIPELINE;
     }
-    while (av_buffersink_get_frame(buffersink_ctx, filt_frame) >= 0) {
+    /* The matte movie loops forever (`loop=0`), so the graph never reports EOF on its own: stop
+       once one output frame exists per input frame. */
+    while (next_video_pts < frames_fed && av_buffersink_get_frame(buffersink_ctx, filt_frame) >= 0) {
         filt_frame->pts = next_video_pts++;
         filt_frame->pict_type = AV_PICTURE_TYPE_NONE;
         encode_write_packet(out_ctx, venc_ctx, out_ctx->streams[video_out_idx], filt_frame,

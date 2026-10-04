@@ -19,3 +19,9 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = true
+
+# Full debuginfo made linking the ~30 `core` test binaries dominate every rebuild (a one-line
+# change took ~9 min to relink; with line tables only it takes about one). Backtraces keep
+# file:line; use `CARGO_PROFILE_DEV_DEBUG=2` when a debugger needs variables.
+[profile.dev]
+debug = "line-tables-only"

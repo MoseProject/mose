@@ -39,3 +39,7 @@ tokio = { version = "1", features = ["sync"] }
 # Bush, the native preview engine (spec/matrix/bush.md): software decode and CPU compositing by
 # default, wgpu compositing opt-in (`OCA_BUSH_RENDERER=gpu`), cpal for the audio device.
 bush = { path = "../../../crates/bush", features = ["gpu", "cpal"] }
+
+[dev-dependencies]
+# `tauri::test::mock_app` runs commands against a mock runtime instead of a real window.
+tauri = { version = "2.12", features = ["test"] }

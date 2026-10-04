@@ -21,7 +21,7 @@ use std::time::Duration;
 
 use avcore::{MediaAsset, Project};
 use serde::Serialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, Runtime};
 
 /// Event carrying a [`PreviewTick`].
 pub const PREVIEW_TICK: &str = "preview-tick";
@@ -68,7 +68,19 @@ pub struct PreviewEngine {
 }
 
 impl PreviewEngine {
-    pub fn spawn(app: AppHandle) -> Self {
+    pub fn spawn<R: Runtime>(app: AppHandle<R>) -> Self {
+        Self::spawn_with(app, |rx, app, latest, playhead| {
+            crate::bush_adapter::run(rx, app, latest, playhead)
+        })
+    }
+
+    /// [`spawn`] with the playback loop passed in, so tests can run it with a fake audio output.
+    pub(crate) fn spawn_with<R: Runtime>(
+        app: AppHandle<R>,
+        run: impl FnOnce(mpsc::Receiver<Command>, AppHandle<R>, LatestFrame, Arc<AtomicU64>)
+            + Send
+            + 'static,
+    ) -> Self {
         let (tx, rx) = mpsc::channel();
         let latest: LatestFrame = Arc::new(Mutex::new(None));
         let playhead_bits = Arc::new(AtomicU64::new(0f64.to_bits()));
@@ -76,13 +88,38 @@ impl PreviewEngine {
         let engine_playhead = Arc::clone(&playhead_bits);
         std::thread::Builder::new()
             .name("oca-preview-engine".into())
-            .spawn(move || crate::bush_adapter::run(rx, app, engine_latest, engine_playhead))
+            .spawn(move || run(rx, app, engine_latest, engine_playhead))
             .expect("spawning the preview engine thread");
         Self {
             tx,
             latest,
             playhead_bits,
         }
+    }
+
+    /// An engine with no playback thread behind it: the receiver hands back every command a
+    /// test's code under test sent, so assertions can read them in order.
+    #[cfg(test)]
+    pub(crate) fn detached() -> (Self, mpsc::Receiver<Command>) {
+        let (tx, rx) = mpsc::channel();
+        let engine = Self {
+            tx,
+            latest: Arc::new(Mutex::new(None)),
+            playhead_bits: Arc::new(AtomicU64::new(0f64.to_bits())),
+        };
+        (engine, rx)
+    }
+
+    /// Pretends the engine produced `bytes` as its latest preview frame.
+    #[cfg(test)]
+    pub(crate) fn set_latest_frame(&self, bytes: Vec<u8>) {
+        *self.latest.lock().unwrap() = Some(Arc::new(bytes));
+    }
+
+    /// Pretends playback reached `secs`, which is what edits read as the live playhead.
+    #[cfg(test)]
+    pub(crate) fn set_playhead(&self, secs: f64) {
+        self.playhead_bits.store(secs.to_bits(), Ordering::Release);
     }
 
     pub fn set_content(&self, project: Project) {
@@ -126,3 +163,7 @@ pub(crate) fn preview_source_path(asset: &MediaAsset) -> Option<PathBuf> {
         .unwrap_or_else(|| asset.source_path.clone());
     path.exists().then_some(path)
 }
+
+#[cfg(test)]
+#[path = "preview_engine_test.rs"]
+mod tests;

@@ -2,12 +2,12 @@
 //! sequence clears them, while reordering tabs preserves them because the active sequence's
 //! identity and its snapshot history have not changed.
 
-use tauri::AppHandle;
+use tauri::{AppHandle, Runtime};
 
 use super::with_session;
 
 #[tauri::command]
-pub fn add_sequence(app: AppHandle, name: String) -> Result<(), String> {
+pub fn add_sequence<R: Runtime>(app: AppHandle<R>, name: String) -> Result<(), String> {
     with_session(&app, |session| {
         session.project.new_sequence(name);
         reset_sequence_context(session);
@@ -16,7 +16,7 @@ pub fn add_sequence(app: AppHandle, name: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn select_sequence(app: AppHandle, index: usize) -> Result<(), String> {
+pub fn select_sequence<R: Runtime>(app: AppHandle<R>, index: usize) -> Result<(), String> {
     with_session(&app, |session| {
         if index >= session.project.sequences.len() {
             return Err("Sequence does not exist.".into());
@@ -30,7 +30,11 @@ pub fn select_sequence(app: AppHandle, index: usize) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn duplicate_sequence(app: AppHandle, index: usize, name: String) -> Result<(), String> {
+pub fn duplicate_sequence<R: Runtime>(
+    app: AppHandle<R>,
+    index: usize,
+    name: String,
+) -> Result<(), String> {
     with_session(&app, |session| {
         session
             .project
@@ -42,7 +46,11 @@ pub fn duplicate_sequence(app: AppHandle, index: usize, name: String) -> Result<
 }
 
 #[tauri::command]
-pub fn rename_sequence(app: AppHandle, sequence_id: u64, name: String) -> Result<(), String> {
+pub fn rename_sequence<R: Runtime>(
+    app: AppHandle<R>,
+    sequence_id: u64,
+    name: String,
+) -> Result<(), String> {
     with_session(&app, |session| {
         let sequence = session
             .project
@@ -59,7 +67,7 @@ pub fn rename_sequence(app: AppHandle, sequence_id: u64, name: String) -> Result
 }
 
 #[tauri::command]
-pub fn remove_sequence(app: AppHandle, sequence_id: u64) -> Result<(), String> {
+pub fn remove_sequence<R: Runtime>(app: AppHandle<R>, sequence_id: u64) -> Result<(), String> {
     with_session(&app, |session| {
         let index = session
             .project
@@ -88,7 +96,11 @@ pub fn remove_sequence(app: AppHandle, sequence_id: u64) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn move_sequence(app: AppHandle, from_index: usize, target_index: usize) -> Result<(), String> {
+pub fn move_sequence<R: Runtime>(
+    app: AppHandle<R>,
+    from_index: usize,
+    target_index: usize,
+) -> Result<(), String> {
     with_session(&app, |session| {
         if !session.project.move_sequence(from_index, target_index) {
             return Err("Sequence cannot be moved.".into());

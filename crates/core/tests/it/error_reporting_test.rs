@@ -619,3 +619,101 @@ fn null_reporter_composes_with_expectation_of_consent_off() {
     let report = full_report(&clean_builder());
     NullReporter.report(report);
 }
+
+#[test]
+fn every_validation_error_has_a_message_naming_its_subject() {
+    let errors = [
+        (ReportValidationError::UnsupportedSchemaVersion(7), "7"),
+        (ReportValidationError::MissingField("locale"), "locale"),
+        (ReportValidationError::ForbiddenContent("commit"), "commit"),
+        (ReportValidationError::TooManyBreadcrumbs(99), "99"),
+        (
+            ReportValidationError::UnknownStateTransition("weird".to_owned()),
+            "weird",
+        ),
+        (ReportValidationError::StackTraceTooLarge(5000), "5000"),
+        (ReportValidationError::ReportTooLarge(123456), "123456"),
+        (
+            ReportValidationError::Envelope {
+                event_id: "abc123".to_owned(),
+                reason: "expired",
+            },
+            "expired",
+        ),
+    ];
+    for (error, needle) in errors {
+        assert!(error.to_string().contains(needle), "{error}");
+    }
+}
+
+#[test]
+fn reports_with_unsafe_or_oversized_fields_are_rejected() {
+    let builder = clean_builder();
+
+    let mut no_session = full_report(&builder);
+    no_session.session_id = String::new();
+    assert_eq!(
+        validate_report(&no_session),
+        Err(ReportValidationError::MissingField("session_id"))
+    );
+
+    let mut path_in_os = full_report(&builder);
+    path_in_os.os_version = Some(r"C:\Users\Player\secret".to_owned());
+    assert_eq!(
+        validate_report(&path_in_os),
+        Err(ReportValidationError::ForbiddenContent("os_version"))
+    );
+    let mut long_os = full_report(&builder);
+    long_os.os_version = Some("x".repeat(129));
+    assert_eq!(
+        validate_report(&long_os),
+        Err(ReportValidationError::ForbiddenContent("os_version"))
+    );
+
+    let mut flag = full_report(&builder);
+    flag.breadcrumbs = vec![Breadcrumb::FeatureFlag {
+        name: String::new(),
+        enabled: true,
+    }];
+    assert_eq!(
+        validate_report(&flag),
+        Err(ReportValidationError::ForbiddenContent("breadcrumb name"))
+    );
+
+    let mut path_in_release = full_report(&builder);
+    path_in_release.release = "C:/Users/Player/app".to_owned();
+    assert!(matches!(
+        validate_report(&path_in_release),
+        Err(ReportValidationError::ForbiddenContent(_) | ReportValidationError::MissingField(_))
+    ));
+}
+
+#[test]
+fn an_envelope_that_expires_before_it_was_queued_is_rejected() {
+    let builder = clean_builder();
+    let mut envelope = QueueEnvelope::new(full_report(&builder), 1_000);
+    envelope.expires_at_unix = 10;
+    let error = validate_envelope(&envelope, 1_000).unwrap_err();
+    assert!(error.to_string().contains("inverted expiry"), "{error}");
+}
+
+#[test]
+fn builder_setters_reach_the_built_report() {
+    let mut builder = clean_builder();
+    assert!(!builder.session_id().is_empty());
+    builder.set_portable(true);
+    builder.set_os_version("Windows 11 build 26200");
+    builder.set_runtime_environment(RuntimeEnvironment {
+        ffmpeg_version: Some("8.1".to_owned()),
+        gstreamer_version: None,
+        gpu_vendor: Some("vendor".to_owned()),
+        gpu_driver: None,
+        encoder: Some("libopenh264".to_owned()),
+    });
+    let report = full_report(&builder);
+    assert!(report.portable);
+    assert_eq!(report.os_version.as_deref(), Some("Windows 11 build 26200"));
+    assert_eq!(report.environment.ffmpeg_version.as_deref(), Some("8.1"));
+    assert_eq!(report.environment.encoder.as_deref(), Some("libopenh264"));
+    assert_eq!(validate_report(&report), Ok(()));
+}

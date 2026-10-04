@@ -60,3 +60,21 @@ fn new_completion_replaces_unconsumed_result() {
         Some(2.0)
     );
 }
+
+#[test]
+fn discarding_before_a_generation_drops_only_older_work() {
+    let mut mailbox = FrameMailbox::new();
+    assert!(!mailbox.discard_before(Generation(5)), "nothing pending");
+
+    mailbox.publish(frame(2, 0.0));
+    assert!(mailbox.discard_before(Generation(3)));
+    assert!(mailbox.is_empty());
+
+    mailbox.publish(frame(4, 0.0));
+    assert!(
+        !mailbox.discard_before(Generation(4)),
+        "same generation is kept"
+    );
+    assert!(!mailbox.discard_before(Generation(2)), "newer work is kept");
+    assert!(!mailbox.is_empty());
+}
