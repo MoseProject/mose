@@ -2161,3 +2161,144 @@ canvas:focus-visible {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+
+/* ---- projects screen ---- */
+.home {
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 16px;
+  padding: 28px max(24px, calc((100% - 960px) / 2));
+  overflow: auto;
+}
+.home-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.home-head p {
+  margin: 4px 0 0;
+}
+.home-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.home-actions button,
+.home-empty button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.home-current {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+}
+.home-current div {
+  display: flex;
+  flex-direction: column;
+}
+.home-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.home-search {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.home-search input {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  padding: 7px 0;
+  min-width: 0;
+}
+.home-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 56px 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  text-align: center;
+}
+.home-empty h2,
+.home-empty p {
+  margin: 0;
+}
+.home-empty button {
+  margin-top: 10px;
+}
+.project-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.project-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 4px 8px 4px 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.project-row:hover,
+.project-row:focus-within {
+  border-color: var(--accent);
+}
+.project-open {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  text-align: left;
+  padding: 8px 10px;
+  background: transparent;
+  border: 0;
+  min-width: 0;
+}
+.project-open strong {
+  font-size: 14px;
+}
+.project-folder {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-meta {
+  font-size: 11px;
+}
+.project-actions {
+  display: flex;
+  gap: 2px;
+}
+.project-recovery {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 4px 10px 6px;
+  border-top: 1px solid var(--border-subtle);
+}

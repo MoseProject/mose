@@ -439,6 +439,10 @@ export interface RecentProject {
   name: string;
   modifiedUnixSecs: number;
   autosavePath: string | null;
+  folder: string;
+  sequenceCount: number;
+  mediaCount: number;
+  durationSecs: number;
 }
 
 export interface PreviewTick {
