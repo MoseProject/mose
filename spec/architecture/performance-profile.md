@@ -59,8 +59,48 @@ The encoding is positional, so changing the fields of a type inside `Project` re
 `PROJECT_FORMAT_VERSION`; other versions are refused with an error. Prefs, queue and transcript
 files keep the self-describing MessagePack framing (prefs preserve unknown keys).
 
+## Resource profile of the running app (2026-10-04)
+
+`e2e/profile_resources.py` launches the built app through tauri-driver, samples RAM and CPU of
+the whole process tree (app plus WebView2 children) every 0.5 s and GPU (dedicated memory and
+engine utilization, Windows performance counters) in parallel. Same scenario run on the build
+before PR 179 (`411fc4ca`) and after. Machine: Ryzen 9 5950X, RTX 4070, release build without LTO.
+Media: a 1080p60 and a 2160p30 H.264 clip with audio (about 290 MB each).
+
+Peak RSS of the process tree, MB:
+
+| phase | before | after |
+|---|---|---|
+| idle, home screen | 426 | 424 |
+| 2 clips imported | 471 | 459 |
+| scrub, 120 seeks | 692 | 676 |
+| play 30 s across four cuts (3x 1080p60, 1x 4K) | 701 | 682 |
+| 300 edits, 4 clips | 708 | 681 |
+| grow to 604 clips | 1425 | 742 |
+| 300 edits, 604 clips | 1502 | 769 |
+| idle after | 1415 | 760 |
+
+| | before | after |
+|---|---|---|
+| round trip of one `update_clip`, 4 clips | 10.6 ms | 7.7 ms |
+| round trip of one `update_clip`, 604 clips | 41.9 ms | 6.5 ms |
+| webview JS heap after the 604-clip session | 663 MB | 16.7 MB |
+
+- RAM: with a large timeline the webview was the leak-shaped part: every full-session JSON
+  replaced the whole project object graph (663 MB of JS heap). With patches the heap stays at
+  16.7 MB and the process tree at about half. The edit latency no longer grows with the project.
+- CPU: playback of 1080p60 and 4K averages 5-6% of the machine (peak 17-19%, whole tree); an
+  edit burst 7-17%. No difference before and after; the playback path was not changed.
+- GPU: 26-29 MB dedicated and 0% engine utilization in every phase, before and after. The
+  preview composites on the CPU and decodes in software by default (`OCA_BUSH_RENDERER=gpu` and
+  `OCA_BUSH_DECODE=hardware` are developer switches), so the GPU is idle apart from the webview's
+  own compositor. Playback never used it, so there is nothing to optimize on the GPU side
+  without first changing that default.
+- Baseline floor: 424 MB at the home screen is mostly WebView2 (several child processes) plus
+  the app's own working set; not investigated further.
+
 ## Not yet measured
 
-GPU/VRAM and process RAM under real editing, thumbnail/waveform cache pressure, export
-throughput, webview render cost of the Inspector for large sessions. Needs a run of the built
-app with the telemetry sampler on and a trace from the webview.
+Export throughput, thumbnail/waveform cache pressure on a long recording, memory after hours of
+editing (leak check), React render time of the Inspector for large sessions, the GPU renderer and
+hardware decode paths when enabled.
