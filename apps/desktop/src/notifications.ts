@@ -41,7 +41,11 @@ export interface ConfirmRequest {
   cancelLabel: string;
   /** Styles the confirm button as destructive. */
   danger?: boolean;
+  /** A third button between Cancel and the confirm one, for questions with two ways forward. */
+  extraLabel?: string;
   resolve: (confirmed: boolean) => void;
+  /** Called instead of `resolve` when the extra button is pressed. */
+  resolveExtra?: () => void;
 }
 
 export const confirmStore = createStore<ConfirmRequest | null>(null);
@@ -60,4 +64,31 @@ export function answerConfirm(confirmed: boolean) {
   const request = confirmStore.get();
   confirmStore.set(null);
   request?.resolve(confirmed);
+}
+
+export type Choice = "confirm" | "extra" | "cancel";
+
+/** Like [`askConfirm`] with a third answer: the confirm button, the extra one, or neither. */
+export function askChoice(
+  options: Omit<ConfirmRequest, "resolve" | "resolveExtra"> & { extraLabel: string },
+): Promise<Choice> {
+  return new Promise((resolve) => {
+    confirmStore.get()?.resolve(false);
+    confirmStore.set({
+      ...options,
+      resolve: (confirmed) => {
+        resolve(confirmed ? "confirm" : "cancel");
+      },
+      resolveExtra: () => {
+        resolve("extra");
+      },
+    });
+  });
+}
+
+/** Answers the open question with its extra button and closes it. */
+export function answerExtra() {
+  const request = confirmStore.get();
+  confirmStore.set(null);
+  request?.resolveExtra?.();
 }
