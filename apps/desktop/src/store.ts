@@ -19,7 +19,7 @@ import {
   onTranscribe,
   onTts,
 } from "./ipc";
-import { localeFromPrefs, setLocale, t } from "./i18n";
+import { localeFromPrefs, setLocale, t, type TextKey } from "./i18n";
 import type { ExportJobView, LayerTemplate, PreviewTick, SessionView } from "./types";
 
 export interface Store<T> {
@@ -153,11 +153,25 @@ export function patchUi(patch: Partial<UiState>) {
 }
 
 /** Runs a backend call, surfacing a rejection in the error banner instead of dropping it. */
+/** Error codes the backend returns instead of a sentence, with the text that explains them. */
+const ERROR_CODES: Record<string, TextKey> = {
+  assetInUse: "assetInUse",
+  pathMissing: "pathMissing",
+};
+
+/** What to show for a failed call: the translated text for a known backend code, otherwise the
+ *  error as the backend wrote it. */
+export function describeError(error: unknown): string {
+  const text = String(error);
+  const key = ERROR_CODES[text];
+  return key ? t(key) : text;
+}
+
 export async function run<T>(call: Promise<T>): Promise<T | undefined> {
   try {
     return await call;
   } catch (error) {
-    patchUi({ error: String(error) });
+    patchUi({ error: describeError(error) });
     return undefined;
   }
 }
