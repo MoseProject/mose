@@ -82,7 +82,10 @@ desktop-install:
 # the app (Vite + Tauri, hot reload). On Windows it also points bindgen at libclang (core's
 # whisper-rs needs it; override with LIBCLANG_PATH) and puts FFmpeg's DLLs on PATH when FFMPEG_DIR
 # is set. It goes through the Tauri CLI because a bare `cargo build -p desktop` embeds the
-# dev-server URL instead of the built frontend.
+# dev-server URL instead of the built frontend. It runs the optimized (non-LTO) profile from
+# FAST_TEST_ENV: a debug build aborts at startup on Windows (the debug CRT heap validator trips in
+# whisper.cpp's static initialization, see spec/architecture/tauri-migration.md), and a full LTO
+# release build takes minutes per change.
 ifeq ($(OS),Windows_NT)
   LIBCLANG_PATH ?= C:/Program Files/LLVM/bin
   export LIBCLANG_PATH
@@ -93,7 +96,7 @@ endif
 
 desktop-run:
 	@test -d apps/desktop/node_modules || (cd apps/desktop && npm install)
-	cd apps/desktop && npm run tauri dev
+	cd apps/desktop && $(FAST_TEST_ENV) CARGO_TARGET_DIR="$(CURDIR)/target/fast" npm run tauri dev -- --release
 
 # Runs Vite's dev server and the Tauri app with hot reload.
 desktop-dev:
