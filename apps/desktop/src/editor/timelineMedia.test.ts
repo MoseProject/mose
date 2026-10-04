@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildPyramid, frameStepSecs, peakRange } from "./timelineMedia";
 
 describe("frameStepSecs", () => {
@@ -41,5 +42,167 @@ describe("peak pyramid", () => {
     expect(peakRange(pyramid, 100, 101, out)).toBe(false);
     expect(buildPyramid(new Float32Array(0), 10)).toBeNull();
     expect(buildPyramid(pairs, 0)).toBeNull();
+  });
+});
+
+describe("frame cache", () => {
+  class FakeImage {
+    static all: FakeImage[] = [];
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    src = "";
+    constructor() {
+      FakeImage.all.push(this);
+    }
+  }
+
+  async function fresh() {
+    vi.resetModules();
+    vi.doMock("../ipc", () => {
+      return {
+        frameAtUrl: (id: number, millis: number) => {
+          return `frame://${id}/${millis}`;
+        },
+        waveformUrl: (id: number) => {
+          return `wave://${id}`;
+        },
+      };
+    });
+    FakeImage.all = [];
+    vi.stubGlobal("Image", FakeImage);
+    vi.stubGlobal("HTMLImageElement", FakeImage);
+    return import("./timelineMedia");
+  }
+  const asset = (id: number, source_path: string) => {
+    return { id, source_path } as never;
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.doUnmock("../ipc");
+  });
+
+  it("asks again for a frame that failed, but only after the retry window", async () => {
+    const media = await fresh();
+    expect(media.frameAt(1, 2, 1)).toBeNull();
+    expect(FakeImage.all).toHaveLength(1);
+    FakeImage.all[0].onerror?.();
+
+    expect(media.frameAt(1, 2, 1)).toBeNull();
+    expect(FakeImage.all).toHaveLength(1);
+
+    vi.setSystemTime(1_000_000 + 11_000);
+    expect(media.frameAt(1, 2, 1)).toBeNull();
+    expect(FakeImage.all).toHaveLength(2);
+  });
+
+  it("drops what was cached for an id once it names another file", async () => {
+    const media = await fresh();
+    media.syncAssets([asset(1, "C:/a.mp4")]);
+    media.frameAt(1, 2, 1);
+    FakeImage.all[0].onload?.();
+    expect(media.frameAt(1, 2, 1)).toBe(FakeImage.all[0]);
+
+    media.syncAssets([asset(1, "C:/b.mp4")]);
+    expect(media.frameAt(1, 2, 1)).toBeNull();
+    expect(FakeImage.all).toHaveLength(2);
+  });
+
+  it("keeps the cache when the same files are reported again", async () => {
+    const media = await fresh();
+    media.syncAssets([asset(1, "C:/a.mp4")]);
+    media.frameAt(1, 2, 1);
+    FakeImage.all[0].onload?.();
+    media.syncAssets([asset(1, "C:/a.mp4"), asset(2, "C:/c.mp4")]);
+    expect(media.frameAt(1, 2, 1)).toBe(FakeImage.all[0]);
+    expect(FakeImage.all).toHaveLength(1);
+  });
+
+  it("ignores a frame that arrives after its project was replaced", async () => {
+    const media = await fresh();
+    media.syncAssets([asset(1, "C:/a.mp4")]);
+    media.frameAt(1, 2, 1);
+    const late = FakeImage.all[0];
+
+    media.syncAssets([asset(1, "C:/b.mp4")]);
+    late.onload?.();
+
+    expect(media.frameAt(1, 2, 1)).toBeNull();
+    expect(FakeImage.all).toHaveLength(2);
+  });
+});
+
+describe("waveform cache", () => {
+  const audio = (id: number, source_path: string) => {
+    return { id, source_path, has_audio: true, duration_secs: 4, waveform_peaks: null } as never;
+  };
+  const flush = async () => {
+    for (let i = 0; i < 6; i += 1) {
+      await Promise.resolve();
+    }
+  };
+
+  async function fresh(fetchImpl: ReturnType<typeof vi.fn>) {
+    vi.resetModules();
+    vi.doMock("../ipc", () => {
+      return {
+        frameAtUrl: () => {
+          return "x";
+        },
+        waveformUrl: (id: number) => {
+          return `wave://${id}`;
+        },
+      };
+    });
+    vi.stubGlobal("fetch", fetchImpl);
+    return import("./timelineMedia");
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.doUnmock("../ipc");
+  });
+
+  it("retries a failed waveform fetch after the window and not before", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404 });
+    const media = await fresh(fetchMock);
+    media.peaksFor(audio(1, "C:/a.mp4"));
+    await flush();
+    media.peaksFor(audio(1, "C:/a.mp4"));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(1_000_000 + 11_000);
+    media.peaksFor(audio(1, "C:/a.mp4"));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("serves the detailed waveform once fetched and refetches when the id changes file", async () => {
+    const pairs = new Float32Array([-0.5, 0.5, -0.25, 0.25]);
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      arrayBuffer: () => {
+        return Promise.resolve(pairs.buffer);
+      },
+    });
+    const media = await fresh(fetchMock);
+    media.syncAssets([audio(1, "C:/a.mp4")]);
+    media.peaksFor(audio(1, "C:/a.mp4"));
+    await flush();
+    expect(media.peaksFor(audio(1, "C:/a.mp4"))).not.toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    media.syncAssets([audio(1, "C:/other.mp4")]);
+    media.peaksFor(audio(1, "C:/other.mp4"));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
