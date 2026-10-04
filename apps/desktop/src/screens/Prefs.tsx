@@ -8,9 +8,11 @@ export function Prefs() {
   const [prefs, setPrefs] = useState<PrefsView | null>(null);
   const [queuedReports, setQueuedReports] = useState(0);
   const [updateStatus, setUpdateStatus] = useState<UpdateCheckEvent | null>(null);
+  const [gpu, setGpu] = useState("auto");
 
   useEffect(() => {
     void run(api.getPrefs()).then((value) => value && setPrefs(value));
+    void run(api.getGpuEncoderPreference()).then((value) => value && setGpu(value));
     void run(api.getQueuedReportCount()).then((count) => setQueuedReports(count ?? 0));
     const unlisten = onUpdateCheck((event) => setUpdateStatus(event));
     return () => {
@@ -37,6 +39,7 @@ export function Prefs() {
     <h1>{t("preferences")}</h1>
     <label>{t("language")}<select value={prefs.locale} onChange={(e) => update({ locale: e.target.value })}><option value="pt_br">Português</option><option value="en">English</option></select></label>
     <label>{t("defaultLufs")}<select value={prefs.lufsProfile} onChange={(e) => update({ lufsProfile: Number(e.target.value) })}><option value={0}>-14 LUFS | YouTube</option><option value={1}>-16 LUFS | Podcast</option><option value={2}>-23 LUFS | Broadcast</option></select></label>
+    <label>{t("gpuEncoder")}<select value={gpu} title={t("gpuEncoderHint")} onChange={(e) => { setGpu(e.target.value); void run(api.setGpuEncoderPreference(e.target.value)); }}><option value="auto">Auto</option><option value="cpu">CPU</option><option value="nvenc">NVENC</option><option value="quick_sync">Quick Sync</option><option value="amf">AMF</option><option value="vaapi">VAAPI</option><option value="video_toolbox">VideoToolbox</option></select></label>
     <label>{t("outputFolder")}<input value={prefs.outputFolder} onChange={(e) => update({ outputFolder: e.target.value })} /></label>
     <label>{t("autosaveInterval")}<input type="number" min={1} max={60} value={prefs.autosaveMinutes} onChange={(e) => update({ autosaveMinutes: Number(e.target.value) || 1 })} /> {t("minutes")}</label>
     <label>{t("whisperModelPath")}<input value={prefs.whisperModelPath} onChange={(e) => update({ whisperModelPath: e.target.value })} /></label>
@@ -44,8 +47,8 @@ export function Prefs() {
     <label>{t("backgroundRemovalModelPath")}<input value={prefs.backgroundRemovalModelPath} onChange={(e) => update({ backgroundRemovalModelPath: e.target.value })} /></label>
     <label>{t("ttsModelPath")}<input value={prefs.ttsModelPath} onChange={(e) => update({ ttsModelPath: e.target.value })} /></label>
     <label>{t("soundLibraryPath")}<input value={prefs.soundLibraryPath} onChange={(e) => update({ soundLibraryPath: e.target.value })} /></label>
-    <label><input type="checkbox" checked={prefs.telemetryEnabled} onChange={(e) => update({ telemetryEnabled: e.target.checked })} /> {t("telemetryEnabled")}</label>
-    <label>
+    <label className="check"><input type="checkbox" checked={prefs.telemetryEnabled} onChange={(e) => update({ telemetryEnabled: e.target.checked })} /> {t("telemetryEnabled")}</label>
+    <label className="check">
       <input
         type="checkbox"
         checked={prefs.errorReportingConsent === "always_send"}
@@ -67,7 +70,7 @@ export function Prefs() {
       </label>
     )}
     <label>
-      <button className="icon" onClick={() => run(api.checkForUpdate())}>
+      <button onClick={() => run(api.checkForUpdate())}>
         {t("checkForUpdate")}
       </button>
       {updateStatus?.type === "upToDate" && <span className="muted">{t("updateCheckUpToDate")}</span>}

@@ -6,11 +6,15 @@ import { Editor } from "./screens/Editor";
 import { Home } from "./screens/Home";
 import { Prefs } from "./screens/Prefs";
 import { WatchFolder } from "./screens/WatchFolder";
-import { connect, patchUi, run, sessionStore, uiStore, useStore } from "./store";
+import { Icon } from "./editor/Icon";
+import { ExportPanel } from "./editor/ExportPanel";
+import { connect, exportsStore, patchUi, run, sessionStore, uiStore, useStore } from "./store";
 
 export function App() {
   const session = useStore(sessionStore);
   const ui = useStore(uiStore);
+  const exportJobs = useStore(exportsStore);
+  const activeExports = exportJobs.filter((job) => job.status === "Queued" || (typeof job.status === "object" && ("Rendering" in job.status || "Paused" in job.status))).length;
   useSyncExternalStore(subscribeLocale, localeSnapshot);
 
   useEffect(() => {
@@ -41,7 +45,15 @@ export function App() {
               {t("redo")}
             </button>
             <button data-testid="save-project" onClick={() => run(api.saveProject(false))}>{t("save")}</button>
-            <button data-testid="export" className="primary" onClick={() => run(exportActiveSequence(() => window.confirm(t("exportOverwriteConfirm"))))}>
+            <button
+              data-testid="export-queue-toggle"
+              className={`icon ${ui.exportQueueOpen ? "active" : ""}`}
+              aria-expanded={ui.exportQueueOpen}
+              onClick={() => patchUi({ exportQueueOpen: !ui.exportQueueOpen })}
+            >
+              {t("exportQueue")}{activeExports > 0 && <span className="badge">{activeExports}</span>}
+            </button>
+            <button data-testid="export" className="primary" onClick={() => { patchUi({ exportQueueOpen: true }); void run(exportActiveSequence(() => window.confirm(t("exportOverwriteConfirm")))); }}>
               {t("export")}
             </button>
           </>
@@ -61,11 +73,12 @@ export function App() {
           <span>
             {t("errorPrefix")}: {ui.error}
           </span>
-          <button className="icon" onClick={() => patchUi({ error: null })}>
-            ✕
+          <button className="icon" aria-label={t("close")} onClick={() => patchUi({ error: null })}>
+            <Icon name="close" />
           </button>
         </div>
       )}
+      {session && ui.exportQueueOpen && <ExportPanel />}
       <CrashReviewModal />
     </div>
   );

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { formatTime, t } from "../i18n";
 import { api, frameUrl } from "../ipc";
+import { Icon } from "./Icon";
 import { patchUi, previewStore, run, sessionStore, uiStore, useStore } from "../store";
 import {
   activeTimeline,
@@ -254,18 +255,19 @@ export function PreviewPanel() {
         {drawingOverlay}
       </div>
       <div className="transport">
-        <button className="icon" title={t("stepBack")} onClick={() => run(api.step(-1))}>
-          ⏮
+        <button className="icon" title={t("stepBack")} aria-label={t("stepBack")} onClick={() => run(api.step(-1))}>
+          <Icon name="skipBack" />
         </button>
         <button
           className="icon"
           title={tick.playing ? t("pause") : t("play")}
+          aria-label={tick.playing ? t("pause") : t("play")}
           onClick={() => run(api.setPlaying(!tick.playing))}
         >
-          {tick.playing ? "⏸" : "▶"}
+          <Icon name={tick.playing ? "pause" : "play"} filled={!tick.playing} />
         </button>
-        <button className="icon" title={t("stepForward")} onClick={() => run(api.step(1))}>
-          ⏭
+        <button className="icon" title={t("stepForward")} aria-label={t("stepForward")} onClick={() => run(api.step(1))}>
+          <Icon name="skipForward" />
         </button>
         <span className="mono">
           {formatTime(tick.playheadSecs)} <span className="muted">/ {formatTime(duration)}</span>

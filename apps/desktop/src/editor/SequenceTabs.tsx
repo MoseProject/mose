@@ -2,6 +2,8 @@ import { useState } from "react";
 import { formatTime, t } from "../i18n";
 import { api } from "../ipc";
 import { run } from "../store";
+import { Icon } from "./Icon";
+import { Menu } from "./Menu";
 import type { MarkerKind, SessionView } from "../types";
 
 const markerKinds: MarkerKind[] = ["Standard", "ToDo", "Chapter", "Highlight"];
@@ -16,14 +18,16 @@ export function SequenceTabs({ session }: { session: SessionView }) {
           onBlur={(e) => { setRenaming(null); if (e.target.value !== sequence.name) void run(api.renameSequence(sequence.id, e.target.value)); }}
           onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setRenaming(null); }} />
           : <button role="tab" aria-selected={index === project.active_sequence} onClick={() => run(api.selectSequence(index))}>{sequence.name}</button>}
-        <button className="icon" title={t("duplicateSequence")} onClick={() => run(api.duplicateSequence(index, `${sequence.name} ${t("copy")}`))}>+</button>
-        <button className="icon" title={t("renameSequence")} onClick={() => setRenaming(sequence.id)}>R</button>
-        <button className="icon" title={t("removeSequence")} disabled={project.sequences.length === 1} onClick={() => run(api.removeSequence(sequence.id))}>x</button>
-        <button className="icon" title={t("moveSequenceLeft")} disabled={index === 0} onClick={() => run(api.moveSequence(index, index - 1))}>‹</button>
-        <button className="icon" title={t("moveSequenceRight")} disabled={index === project.sequences.length - 1} onClick={() => run(api.moveSequence(index, index + 1))}>›</button>
-        <button className="icon" title={t("insertAsCompoundClip")} disabled={index === project.active_sequence} onClick={() => run(api.insertSequenceAsCompoundClip(sequence.id))}>📦</button>
+        <Menu label={<Icon name="more" />} ariaLabel={`${t("sequenceActions")}: ${sequence.name}`}>
+          <button onClick={() => run(api.duplicateSequence(index, `${sequence.name} ${t("copy")}`))}>{t("duplicateSequence")}</button>
+          <button onClick={() => setRenaming(sequence.id)}>{t("renameSequence")}</button>
+          <button disabled={index === 0} onClick={() => run(api.moveSequence(index, index - 1))}>{t("moveSequenceLeft")}</button>
+          <button disabled={index === project.sequences.length - 1} onClick={() => run(api.moveSequence(index, index + 1))}>{t("moveSequenceRight")}</button>
+          <button disabled={index === project.active_sequence} onClick={() => run(api.insertSequenceAsCompoundClip(sequence.id))}>{t("insertAsCompoundClip")}</button>
+          <button disabled={project.sequences.length === 1} onClick={() => run(api.removeSequence(sequence.id))}>{t("removeSequence")}</button>
+        </Menu>
       </div>)}
-      <button className="icon" title={t("addSequence")} onClick={() => run(api.addSequence(`${t("sequence")} ${project.sequences.length + 1}`))}>+</button>
+      <button className="icon" title={t("addSequence")} aria-label={t("addSequence")} onClick={() => run(api.addSequence(`${t("sequence")} ${project.sequences.length + 1}`))}><Icon name="plus" /></button>
     </div>
     <MarkerList session={session} />
   </div>;
@@ -38,7 +42,7 @@ function MarkerList({ session }: { session: SessionView }) {
       <input defaultValue={marker.label} aria-label={t("markerLabel")} onBlur={(e) => { if (e.target.value !== marker.label) void run(api.updateMarker(marker.id, { label: e.target.value })); }} />
       <select value={marker.kind} aria-label={t("markerKind")} onChange={(e) => run(api.updateMarker(marker.id, { kind: e.target.value as MarkerKind }))}>{markerKinds.map((kind) => <option key={kind}>{kind}</option>)}</select>
       {marker.kind === "ToDo" && <input type="checkbox" checked={marker.completed} aria-label={t("markerCompleted")} onChange={(e) => run(api.updateMarker(marker.id, { completed: e.target.checked }))} />}
-      <button className="icon" title={t("removeMarker")} onClick={() => run(api.removeMarker(marker.id))}>x</button>
+      <button className="icon" title={t("removeMarker")} aria-label={t("removeMarker")} onClick={() => run(api.removeMarker(marker.id))}><Icon name="close" /></button>
     </div>)}
   </details>;
 }

@@ -83,16 +83,16 @@ export function WatchFolder() {
     <main className="prefs" data-testid="screen-watch">
       <h1>{t("watchFolder")}</h1>
       <label>
-        {watchPath ?? t("watchFolderChoose")}
-        <button className="icon" onClick={choose} disabled={running}>
+        <span className={watchPath ? "" : "muted"}>{watchPath ?? t("watchFolderNone")}</span>
+        <button onClick={choose} disabled={running}>
           {t("watchFolderChoose")}
         </button>
       </label>
-      <button className={running ? "icon" : "icon primary"} disabled={!watchPath || running} onClick={start}>
+      <button className={running ? "" : "primary"} disabled={!watchPath || running} onClick={start}>
         {t("watchFolderStart")}
       </button>
       {running && (
-        <button className="icon" onClick={stop}>
+        <button onClick={stop}>
           {t("watchFolderStop")}
         </button>
       )}

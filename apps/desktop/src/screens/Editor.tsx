@@ -1,7 +1,6 @@
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useEffect, useRef, useState } from "react";
 import { Inspector } from "../editor/Inspector";
-import { ExportPanel } from "../editor/ExportPanel";
 import { MediaLibrary } from "../editor/MediaLibrary";
 import { PreviewPanel } from "../editor/PreviewPanel";
 import { Timeline } from "../editor/Timeline";
@@ -178,7 +177,6 @@ export function Editor({ session }: { session: SessionView }) {
       <PreviewPanel />
       <div className="panel-splitter inspector-splitter" onPointerDown={startPanelResize("inspector")} />
       <Inspector session={session} />
-      <ExportPanel />
       <div className="splitter" onPointerDown={startResize} />
       <SequenceTabs session={session} />
       <Timeline session={session} />

@@ -35,12 +35,12 @@ export function Home() {
       <h1>oca</h1>
       <p className="muted">{t("homeSubtitle")}</p>
       <div className="actions">
-        <button data-testid="new-project" className="primary" onClick={createProject}>
+        <button data-testid="new-project" className={session ? "" : "primary"} onClick={createProject}>
           {t("newProject")}
         </button>
         <button onClick={openProject}>{t("openProject")}</button>
         {session && (
-          <button data-testid="back-to-editor" onClick={() => patchUi({ screen: "editor" })}>{t("backToEditor")}</button>
+          <button data-testid="back-to-editor" className="primary" onClick={() => patchUi({ screen: "editor" })}>{t("backToEditor")}</button>
         )}
       </div>
       {recent.length > 0 && <section className="recent-projects">

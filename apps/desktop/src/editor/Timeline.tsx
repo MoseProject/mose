@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { formatTime, t } from "../i18n";
 import { api } from "../ipc";
+import { Icon } from "./Icon";
+import { Menu } from "./Menu";
 import { LayerTemplates } from "./LayerTemplates";
 import { SilenceReviewPanel } from "./SilenceReviewPanel";
 import { TranscriptPanel } from "./TranscriptPanel";
@@ -565,74 +567,56 @@ export function Timeline({ session }: { session: SessionView }) {
         >
           {t("rippleDelete")}
         </button>
-        <button
-          className="icon"
-          disabled={selected.length < 2}
-          onClick={() => run(api.mergeClipsIntoComposite(selected))}
-        >
-          {t("mergeComposite")}
-        </button>
-        <button
-          data-testid="create-compound-clip"
-          className="icon"
-          disabled={selected.length === 0}
-          onClick={() => selected[0] !== undefined && run(api.createCompoundClip(selected[0], selected))}
-        >
-          {t("compoundClip")}
-        </button>
-        <button
-          className="icon"
-          disabled={selected.length !== 1}
-          onClick={() => selected[0] !== undefined && run(api.detectSceneCutsForClip(selected[0]))}
-        >
-          {t("detectChapters")}
-        </button>
-        <button className="icon" onClick={() => run(api.detectHighlights())}>
-          {t("detectHighlightsAction")}
-        </button>
-        <LayerTemplates session={session} />
-        <TranscriptPanel session={session} />
-        <SilenceReviewPanel />
-        <button className="icon" onClick={() => run(api.addTrack("Video"))}>
-          {t("addVideoTrack")}
-        </button>
-        <button className="icon" onClick={() => run(api.addTrack("Audio"))}>
-          {t("addAudioTrack")}
-        </button>
-        <button className="icon" onClick={() => run(api.addTrack("Text"))}>
-          {t("addTextTrack")}
-        </button>
-        <button className="icon" onClick={() => run(api.addTrack("Shape"))}>
-          {t("addShapeTrack")}
-        </button>
-        <button className="icon" onClick={() => void addOverlay(api.addTextClip(t("defaultTextContent")))}>
-          {t("addTextClip")}
-        </button>
-        <button className="icon" onClick={() => void addOverlay(api.addShapeClip())}>
-          {t("addShapeClip")}
-        </button>
-        <button
-          data-testid="draw-custom-shape"
-          className="icon"
-          onClick={() => patchUi({ drawingShapePoints: [] })}
-        >
-          {t("drawCustomShape")}
-        </button>
-        <button className="icon" title={t("addMarker")} onClick={() => run(api.addMarker())}>M</button>
-        <button className="icon" title={t("previousMarker")} onClick={() => {
+        <Menu label={t("menuClip")}>
+          <button disabled={selected.length < 2} onClick={() => run(api.mergeClipsIntoComposite(selected))}>
+            {t("mergeComposite")}
+          </button>
+          <button
+            data-testid="create-compound-clip"
+            disabled={selected.length === 0}
+            onClick={() => selected[0] !== undefined && run(api.createCompoundClip(selected[0], selected))}
+          >
+            {t("compoundClip")}
+          </button>
+          <LayerTemplates session={session} />
+        </Menu>
+        <Menu label={t("menuAnalyze")}>
+          <button
+            disabled={selected.length !== 1}
+            onClick={() => selected[0] !== undefined && run(api.detectSceneCutsForClip(selected[0]))}
+          >
+            {t("detectChapters")}
+          </button>
+          <button onClick={() => run(api.detectHighlights())}>{t("detectHighlightsAction")}</button>
+          <TranscriptPanel session={session} />
+          <SilenceReviewPanel />
+        </Menu>
+        <Menu label={t("menuAdd")}>
+          <button onClick={() => run(api.addTrack("Video"))}>{t("addVideoTrack")}</button>
+          <button onClick={() => run(api.addTrack("Audio"))}>{t("addAudioTrack")}</button>
+          <button onClick={() => run(api.addTrack("Text"))}>{t("addTextTrack")}</button>
+          <button onClick={() => run(api.addTrack("Shape"))}>{t("addShapeTrack")}</button>
+          <button onClick={() => void addOverlay(api.addTextClip(t("defaultTextContent")))}>{t("addTextClip")}</button>
+          <button onClick={() => void addOverlay(api.addShapeClip())}>{t("addShapeClip")}</button>
+          <button data-testid="draw-custom-shape" onClick={() => patchUi({ drawingShapePoints: [] })}>
+            {t("drawCustomShape")}
+          </button>
+        </Menu>
+        <button className="icon" title={t("addMarker")} aria-label={t("addMarker")} onClick={() => run(api.addMarker())}>M</button>
+        <button className="icon" title={t("previousMarker")} aria-label={t("previousMarker")} onClick={() => {
           const previous = markers.filter((m) => m.position_secs < previewStore.get().playheadSecs).sort((a, b) => b.position_secs - a.position_secs)[0];
           if (previous) void run(api.seek(previous.position_secs));
         }}>‹M</button>
-        <button className="icon" title={t("nextMarker")} onClick={() => {
+        <button className="icon" title={t("nextMarker")} aria-label={t("nextMarker")} onClick={() => {
           const next = markers.filter((m) => m.position_secs > previewStore.get().playheadSecs).sort((a, b) => a.position_secs - b.position_secs)[0];
           if (next) void run(api.seek(next.position_secs));
         }}>M›</button>
         <span style={{ flex: 1 }} />
-        <button className="icon" title={t("zoomOut")} onClick={() => zoomBy(1 / 1.5)}>
-          −
+        <button className="icon" title={t("zoomOut")} aria-label={t("zoomOut")} onClick={() => zoomBy(1 / 1.5)}>
+          <Icon name="minus" />
         </button>
-        <button className="icon" title={t("zoomIn")} onClick={() => zoomBy(1.5)}>
-          +
+        <button className="icon" title={t("zoomIn")} aria-label={t("zoomIn")} onClick={() => zoomBy(1.5)}>
+          <Icon name="plus" />
         </button>
       </div>
       <div className="timeline-body">
@@ -682,16 +666,20 @@ function TrackHeader({ track }: { track: Track }) {
       <button
         className={`icon ${track.visible ? "" : "active"}`}
         title={track.visible ? t("hideTrack") : t("showTrack")}
+        aria-label={track.visible ? t("hideTrack") : t("showTrack")}
+        aria-pressed={!track.visible}
         onClick={() => run(api.setTrackFlags(track.id, { visible: !track.visible }))}
       >
-        {track.visible ? "◉" : "○"}
+        <Icon name={track.visible ? "eye" : "eyeOff"} />
       </button>
       <button
         className={`icon ${track.locked ? "active" : ""}`}
         title={track.locked ? t("unlockTrack") : t("lockTrack")}
+        aria-label={track.locked ? t("unlockTrack") : t("lockTrack")}
+        aria-pressed={track.locked}
         onClick={() => run(api.setTrackFlags(track.id, { locked: !track.locked }))}
       >
-        {track.locked ? "🔒" : "🔓"}
+        <Icon name={track.locked ? "lock" : "unlock"} />
       </button>
     </div>
   );

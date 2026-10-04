@@ -67,6 +67,8 @@ export interface UiState {
    *  points`; kept here rather than as backend state since nothing is committed until the
    *  drawing finishes (Enter, >=3 points) or is cancelled (Escape). */
   drawingShapePoints: [number, number][] | null;
+  /** The export queue popover; closed until the user asks for it or starts an export. */
+  exportQueueOpen: boolean;
 }
 
 export const sessionStore = createStore<SessionView | null>(null);
@@ -90,6 +92,7 @@ export const uiStore = createStore<UiState>({
   pxPerSec: 40,
   error: null,
   drawingShapePoints: null,
+  exportQueueOpen: false,
 });
 
 /** An asset being dragged from the media library toward the timeline. */

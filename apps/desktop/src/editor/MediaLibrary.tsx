@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { formatTime, t } from "../i18n";
+import { Icon } from "./Icon";
 import { api, onYoutubeDownload, thumbnailUrl } from "../ipc";
 import { assetDragStore, run, transcribingAssetIdStore, useStore } from "../store";
 import type { LibraryTrack, MediaAsset, SessionView } from "../types";
@@ -290,20 +291,23 @@ function AssetRow({ asset }: { asset: MediaAsset }) {
         <button
           className="icon"
           title={transcribing ? t("transcribing") : t("transcribe")}
+          aria-label={transcribing ? t("transcribing") : t("transcribe")}
           disabled={transcribingAssetId !== null}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={() => run(api.transcribeAsset(asset.id))}
         >
-          {transcribing ? "…" : "📝"}
+          {transcribing ? "…" : <Icon name="document" />}
         </button>
       )}
       <button
         className={`icon ${asset.favorited ? "active" : ""}`}
         title={t("favorite")}
+        aria-label={t("favorite")}
+        aria-pressed={asset.favorited}
         onPointerDown={(e) => e.stopPropagation()}
         onClick={() => run(api.toggleFavorite(asset.id))}
       >
-        {asset.favorited ? "★" : "☆"}
+        <Icon name="star" filled={asset.favorited} />
       </button>
     </div>
   );
