@@ -146,9 +146,11 @@ impl Project {
     /// Whether any sequence has a clip that plays `asset_id`.
     pub fn asset_in_use(&self, asset_id: u64) -> bool {
         self.sequences.iter().any(|sequence| {
-            sequence.timeline.tracks.iter().any(|track| {
-                track.clips.iter().any(|clip| clip.asset_id == asset_id)
-            })
+            sequence
+                .timeline
+                .tracks
+                .iter()
+                .any(|track| track.clips.iter().any(|clip| clip.asset_id == asset_id))
         })
     }
 
