@@ -138,6 +138,12 @@ pub async fn open_project<R: Runtime>(app: AppHandle<R>) -> Result<bool, String>
 #[tauri::command]
 pub async fn open_project_path<R: Runtime>(app: AppHandle<R>, path: String) -> Result<(), String> {
     let path = PathBuf::from(path);
+    if !path.exists() {
+        // The file was moved or deleted: a stale entry in the recent list would fail the same
+        // way forever, so it goes away.
+        let _ = prefs::remove_recent_project(app.clone(), path.display().to_string());
+        return Err("projectMissing".to_string());
+    }
     let mut project = avcore::load_project_from_file(&path).map_err(|e| e.to_string())?;
     project.file_path = Some(path.clone());
     let epoch = with_session(&app, |session| {
