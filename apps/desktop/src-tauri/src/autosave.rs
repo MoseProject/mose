@@ -210,7 +210,7 @@ pub(crate) fn spawn_every<R: tauri::Runtime>(app: tauri::AppHandle<R>, tick: std
         // Serialize and write outside the session lock so editing commands never wait on disk.
         let project = session.project.clone();
         drop(session);
-        if let Ok(bytes) = avcore::to_ocproj_bytes(&project) {
+        if let Ok(bytes) = avcore::to_project_bytes(&project) {
             if let Err(error) = avcore::write_atomic(&recovery, &bytes) {
                 tracing::warn!(path = %recovery.display(), %error, "failed to write autosave");
             }
