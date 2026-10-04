@@ -26,6 +26,9 @@ use crate::preview_engine::PreviewEngine;
 /// Event carrying a fresh [`SessionView`] after any mutation.
 pub const SESSION_CHANGED: &str = "session-changed";
 
+/// Event carrying only what changed since the previous one ([`crate::session_sync::Patch`]).
+pub const SESSION_PATCH: &str = "session-patch";
+
 pub struct Session {
     pub project: Project,
     pub undo: UndoStack,
@@ -97,7 +100,13 @@ impl Session {
     }
 
     pub fn view(&self) -> SessionView<'_> {
+        self.view_at(0)
+    }
+
+    /// The view as the webview's revision `rev` of the session.
+    pub fn view_at(&self, rev: u64) -> SessionView<'_> {
         SessionView {
+            rev,
             project: &self.project,
             file_path: self
                 .project
@@ -116,6 +125,8 @@ impl Session {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionView<'a> {
+    /// Revision of the update stream this snapshot is current as of.
+    pub rev: u64,
     pub project: &'a Project,
     pub file_path: Option<String>,
     pub can_undo: bool,
@@ -211,6 +222,8 @@ pub struct AppState {
     pub services: Arc<dyn crate::services::Services>,
     /// When the project last changed, for the auto-save.
     pub edits: EditClock,
+    /// What the webview has been sent, so the next update can be only the difference.
+    pub sync: Mutex<crate::session_sync::SyncState>,
 }
 
 impl AppState {
@@ -250,6 +263,7 @@ impl AppState {
             nested_sequence_cache: Mutex::new(std::collections::HashMap::new()),
             services,
             edits: EditClock::default(),
+            sync: Mutex::new(crate::session_sync::SyncState::default()),
         }
     }
 
@@ -269,14 +283,49 @@ impl AppState {
 }
 
 /// Emits the current session to the webview and hands the timeline to the preview engine.
-/// Every command that mutates [`Session`] ends with this.
+/// Every command that mutates [`Session`] ends with this. The first update, and the first after
+/// another project was opened, is the whole session; the rest are only what changed.
 pub fn publish<R: Runtime>(app: &AppHandle<R>, session: &Session) {
     let state = app.state::<AppState>();
     if session.dirty {
         state.edits.touch();
     }
-    state.preview.set_content(session.project.clone());
-    let _ = app.emit(SESSION_CHANGED, session.view());
+    let next = Arc::new(session.project.clone());
+    state.preview.set_content_shared(Arc::clone(&next));
+    // Held across the emit so updates leave in the order their revisions were given.
+    let mut sync = lock_or_recover(&state.sync);
+    sync.rev += 1;
+    let rev = sync.rev;
+    let patch = match &sync.published {
+        Some(prev) if sync.epoch == session.project_epoch => {
+            Some(crate::session_sync::diff(prev, &next))
+        }
+        _ => None,
+    };
+    sync.published = Some(next);
+    sync.epoch = session.project_epoch;
+    match patch {
+        Some(ops) => {
+            let view = session.view();
+            let _ = app.emit(
+                SESSION_PATCH,
+                crate::session_sync::Patch {
+                    base: rev - 1,
+                    rev,
+                    flags: crate::session_sync::Flags {
+                        file_path: view.file_path,
+                        can_undo: view.can_undo,
+                        can_redo: view.can_redo,
+                        dirty: view.dirty,
+                    },
+                    ops,
+                },
+            );
+        }
+        None => {
+            let _ = app.emit(SESSION_CHANGED, session.view_at(rev));
+        }
+    }
 }
 
 /// An empty, never-saved project -- what "Novo projeto" builds in the egui shell.

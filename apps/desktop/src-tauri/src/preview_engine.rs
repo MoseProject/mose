@@ -56,7 +56,10 @@ pub(crate) const FALLBACK_FPS: f64 = 30.0;
 pub type LatestFrame = Arc<Mutex<Option<Arc<Vec<u8>>>>>;
 
 pub(crate) enum Command {
-    Content { project: Box<Project> },
+    /// Shared, so the supervisor keeps the latest copy for a restart without cloning it.
+    Content {
+        project: Arc<Project>,
+    },
     Seek(f64),
     Step(i64),
     Playing(bool),
@@ -151,10 +154,14 @@ impl PreviewEngine {
         self.playhead_bits.store(secs.to_bits(), Ordering::Release);
     }
 
+    #[cfg(test)]
     pub fn set_content(&self, project: Project) {
-        let _ = self.tx.send(Command::Content {
-            project: Box::new(project),
-        });
+        self.set_content_shared(Arc::new(project));
+    }
+
+    /// [`set_content`] for a copy that is also held elsewhere, so it is not cloned again.
+    pub fn set_content_shared(&self, project: Arc<Project>) {
+        let _ = self.tx.send(Command::Content { project });
     }
 
     pub fn seek(&self, position_secs: f64) {
@@ -196,7 +203,7 @@ fn supervise<R: Runtime>(
     latest: LatestFrame,
     playhead_bits: Arc<AtomicU64>,
 ) {
-    let mut project: Option<Project> = None;
+    let mut project: Option<Arc<Project>> = None;
     let mut crashes: Vec<Instant> = Vec::new();
     let mut first = true;
     loop {
@@ -204,7 +211,7 @@ fn supervise<R: Runtime>(
         if !first {
             if let Some(project) = &project {
                 let _ = inner_tx.send(Command::Content {
-                    project: Box::new(project.clone()),
+                    project: Arc::clone(project),
                 });
                 let secs = f64::from_bits(playhead_bits.load(Ordering::Acquire));
                 let _ = inner_tx.send(Command::Seek(secs));
@@ -224,7 +231,7 @@ fn supervise<R: Runtime>(
                     match commands.recv_timeout(SUPERVISE_INTERVAL) {
                         Ok(command) => {
                             if let Command::Content { project: content } = &command {
-                                project = Some((**content).clone());
+                                project = Some(Arc::clone(content));
                             }
                             let _ = inner_tx.send(command);
                         }
