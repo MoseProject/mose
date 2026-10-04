@@ -49,6 +49,9 @@ continuous controls (inspector sliders). Timeline drags already commit once on p
 | `Command::Content` carries `Arc<Project>` | two full project clones per edit | one |
 | Undo history bounded by clips held (120k clips total) | 100 full sequence copies regardless of size (about 200 MB at 3000 clips) | about 40 steps at 3000 clips, 100 steps for normal projects |
 
+The coarse waveform (2000 min/max pairs per audio asset) no longer travels in the session JSON: the
+webview gets `has_waveform` and fetches the peaks as bytes from `oca://wave/<id>/coarse`.
+
 Project file (`.ocproj`) is now LZ4-compressed `postcard` (`to_project_bytes`/`from_project_bytes`,
 format version 2) instead of gzip + struct-map MessagePack: save 12.2 -> 1.8 ms, load 11.9 -> 3.0 ms
 at 3000 clips (the old time was MessagePack writing about 70 field names per clip, not gzip).
