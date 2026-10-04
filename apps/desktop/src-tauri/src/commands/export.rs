@@ -135,7 +135,8 @@ pub async fn export_active_sequence_srt<R: Runtime>(app: AppHandle<R>) -> Result
     let Some(path) = crate::dialogs::save_file("SubRip", &["srt"], &format!("{title}.srt")) else {
         return Ok(false);
     };
-    std::fs::write(path, srt).map_err(|error| error.to_string())?;
+    avcore::write_atomic(std::path::Path::new(&path), srt.as_bytes())
+        .map_err(|error| error.to_string())?;
     Ok(true)
 }
 #[tauri::command]

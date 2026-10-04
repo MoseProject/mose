@@ -54,7 +54,7 @@ pub(crate) fn spawn_every<R: tauri::Runtime>(app: tauri::AppHandle<R>, tick: std
         let project = session.project.clone();
         drop(session);
         if let Ok(bytes) = avcore::to_ocproj_bytes(&project) {
-            if let Err(error) = std::fs::write(&recovery, bytes) {
+            if let Err(error) = avcore::write_atomic(&recovery, &bytes) {
                 tracing::warn!(path = %recovery.display(), %error, "failed to write autosave");
             }
         }

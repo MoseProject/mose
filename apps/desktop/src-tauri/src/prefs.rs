@@ -254,7 +254,7 @@ impl PrefsDocument {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
         }
-        std::fs::write(path, bytes).map_err(|error| error.to_string())
+        avcore::write_atomic(path, &bytes).map_err(|error| error.to_string())
     }
 }
 

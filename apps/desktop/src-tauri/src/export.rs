@@ -141,7 +141,8 @@ impl ExportQueue {
         std::fs::create_dir_all(&self.config_dir).map_err(|e| e.to_string())?;
         let b = serde_json::to_vec(&*self.settings.lock().unwrap_or_else(|p| p.into_inner()))
             .map_err(|e| e.to_string())?;
-        std::fs::write(self.config_dir.join("export-settings.json"), b).map_err(|e| e.to_string())
+        avcore::write_atomic(&self.config_dir.join("export-settings.json"), &b)
+            .map_err(|e| e.to_string())
     }
     pub fn enqueue<R: Runtime>(
         self: &Arc<Self>,
