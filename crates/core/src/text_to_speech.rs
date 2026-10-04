@@ -208,70 +208,36 @@ pub fn synthesize_with_phonemizer(
     text: &str,
     phonemizer: &dyn Phonemizer,
 ) -> Result<Vec<f32>, TtsError> {
-    use ort::session::Session;
-    use ort::value::Value;
-
     let sentences = phonemizer
         .phonemize(text, &config.espeak.voice)
         .map_err(TtsError::Phonemization)?;
+    let run = crate::onnx_models::piper_runner(model_path, config)?;
+    assemble_sentences(config, &sentences, run)
+}
 
-    let mut session = Session::builder()
-        .map_err(|e| TtsError::Onnx(e.to_string()))?
-        .commit_from_file(model_path)
-        .map_err(|e| TtsError::Onnx(e.to_string()))?;
-
+/// Turns each phonemized sentence into ids, runs the model on them through `run` (ids in, raw
+/// samples out) and joins the results with a short silence between sentences. Split from
+/// [`synthesize_with_phonemizer`] so the sentence handling is testable without a Piper model.
+pub(crate) fn assemble_sentences(
+    config: &PiperVoiceConfig,
+    sentences: &[String],
+    mut run: impl FnMut(Vec<i64>) -> Result<Vec<f32>, TtsError>,
+) -> Result<Vec<f32>, TtsError> {
     // A quarter-second of silence between sentences reads more naturally than butting them
     // together with no pause at all.
     let gap = vec![0.0f32; (config.audio.sample_rate as usize) / 4];
     let mut samples = Vec::new();
 
-    for sentence in &sentences {
+    for sentence in sentences {
         let ids = phonemes_to_ids(sentence, config);
         if ids.is_empty() {
             continue;
         }
-        let ids_len = ids.len();
-
-        let input =
-            Value::from_array(([1, ids_len], ids)).map_err(|e| TtsError::Onnx(e.to_string()))?;
-        let input_lengths = Value::from_array(([1], vec![ids_len as i64]))
-            .map_err(|e| TtsError::Onnx(e.to_string()))?;
-        let scales = Value::from_array((
-            [3],
-            vec![
-                config.inference.noise_scale,
-                config.inference.length_scale,
-                config.inference.noise_w,
-            ],
-        ))
-        .map_err(|e| TtsError::Onnx(e.to_string()))?;
-
-        let mut inputs = vec![
-            ("input", input.into_dyn()),
-            ("input_lengths", input_lengths.into_dyn()),
-            ("scales", scales.into_dyn()),
-        ];
-        if config.num_speakers > 1 {
-            let sid =
-                Value::from_array(([1], vec![0i64])).map_err(|e| TtsError::Onnx(e.to_string()))?;
-            inputs.push(("sid", sid.into_dyn()));
-        }
-
-        let outputs = session
-            .run(inputs)
-            .map_err(|e| TtsError::Onnx(e.to_string()))?;
-        let (_name, value) = outputs
-            .iter()
-            .next()
-            .ok_or_else(|| TtsError::Onnx("model produced no output tensors".into()))?;
-        let (_shape, data) = value
-            .try_extract_tensor::<f32>()
-            .map_err(|e| TtsError::Onnx(e.to_string()))?;
-
+        let spoken = run(ids)?;
         if !samples.is_empty() {
             samples.extend_from_slice(&gap);
         }
-        samples.extend_from_slice(data);
+        samples.extend_from_slice(&spoken);
     }
 
     if samples.is_empty() {

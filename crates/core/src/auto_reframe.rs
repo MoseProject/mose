@@ -133,47 +133,28 @@ pub fn detect_faces(
     width: u32,
     height: u32,
 ) -> Result<Vec<FaceBox>, ReframeError> {
-    use ort::session::Session;
-    use ort::value::Value;
+    detect_faces_with(rgba, width, height, |input| {
+        crate::onnx_models::run_face_model(model_path, input, MODEL_INPUT_WIDTH, MODEL_INPUT_HEIGHT)
+    })
+}
 
-    let mut session = Session::builder()
-        .map_err(|e| ReframeError::Onnx(e.to_string()))?
-        .commit_from_file(model_path)
-        .map_err(|e| ReframeError::Onnx(e.to_string()))?;
-
-    let input_data = preprocess(rgba, width, height);
-    let input = Value::from_array((
-        [
-            1,
-            3,
-            MODEL_INPUT_HEIGHT as usize,
-            MODEL_INPUT_WIDTH as usize,
-        ],
-        input_data,
-    ))
-    .map_err(|e| ReframeError::Onnx(e.to_string()))?;
-
-    let outputs = session
-        .run(ort::inputs![input])
-        .map_err(|e| ReframeError::Onnx(e.to_string()))?;
-
+/// [`detect_faces`] with the model run passed in: it receives the preprocessed input tensor and
+/// returns every output tensor as `(dims, data)`, so the decoding is testable without a model.
+pub(crate) fn detect_faces_with(
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    run: impl FnOnce(Vec<f32>) -> Result<Vec<(Vec<i64>, Vec<f32>)>, ReframeError>,
+) -> Result<Vec<FaceBox>, ReframeError> {
+    let tensors = run(preprocess(rgba, width, height))?;
     // The model publishes two outputs, "scores" (`1x4420x2`, background/face) and "boxes"
     // (`1x4420x4`, xmin/ymin/xmax/ymax in 0..1 fractions) — told apart here by each tensor's
     // last dimension rather than trusted output order, since ONNX doesn't guarantee that order
     // survives export/re-export.
-    let mut tensors = Vec::new();
-    for (_name, value) in outputs.iter() {
-        let (shape, data) = value
-            .try_extract_tensor::<f32>()
-            .map_err(|e| ReframeError::Onnx(e.to_string()))?;
-        tensors.push((shape.iter().copied().collect::<Vec<i64>>(), data.to_vec()));
-    }
     let (num_anchors, scores, boxes) = select_outputs(tensors)?;
     Ok(decode_faces(num_anchors, &scores, &boxes))
 }
 
-/// Tells the model's two outputs apart by each tensor's last dimension (2 for scores, 4 for
-/// boxes), returning the anchor count with the scores and boxes.
 fn select_outputs(
     tensors: Vec<(Vec<i64>, Vec<f32>)>,
 ) -> Result<(usize, Vec<f32>, Vec<f32>), ReframeError> {

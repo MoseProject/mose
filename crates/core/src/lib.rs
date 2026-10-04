@@ -50,6 +50,7 @@ pub mod motion_template;
 pub mod motion_tracking;
 pub mod multicam_sync;
 pub mod nested_sequence;
+mod onnx_models;
 pub mod overlay_render;
 pub mod persistence;
 pub mod privacy_blur;
