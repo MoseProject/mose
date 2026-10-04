@@ -97,7 +97,15 @@ const ICONS = {
 
 export type IconName = keyof typeof ICONS;
 
-export function Icon({ name, filled = false, size = 14 }: { name: IconName; filled?: boolean; size?: number }) {
+export function Icon({
+  name,
+  filled = false,
+  size = 14,
+}: {
+  name: IconName;
+  filled?: boolean;
+  size?: number;
+}) {
   const Glyph = ICONS[name];
   return (
     <Glyph

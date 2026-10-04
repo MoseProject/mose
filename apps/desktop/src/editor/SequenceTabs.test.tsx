@@ -4,33 +4,40 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n";
 import { makeSession } from "../testSupport";
 
-vi.mock("../ipc", () => ({
-  api: {
-    selectSequence: vi.fn().mockResolvedValue(undefined),
-    duplicateSequence: vi.fn().mockResolvedValue(undefined),
-    renameSequence: vi.fn().mockResolvedValue(undefined),
-    removeSequence: vi.fn().mockResolvedValue(undefined),
-    moveSequence: vi.fn().mockResolvedValue(undefined),
-    insertSequenceAsCompoundClip: vi.fn().mockResolvedValue(true),
-    addSequence: vi.fn().mockResolvedValue(undefined),
-    addMarker: vi.fn().mockResolvedValue(undefined),
-    seek: vi.fn().mockResolvedValue(undefined),
-    updateMarker: vi.fn().mockResolvedValue(undefined),
-    removeMarker: vi.fn().mockResolvedValue(undefined),
-  },
-}));
+vi.mock("../ipc", () => {
+  return {
+    api: {
+      selectSequence: vi.fn().mockResolvedValue(undefined),
+      duplicateSequence: vi.fn().mockResolvedValue(undefined),
+      renameSequence: vi.fn().mockResolvedValue(undefined),
+      removeSequence: vi.fn().mockResolvedValue(undefined),
+      moveSequence: vi.fn().mockResolvedValue(undefined),
+      insertSequenceAsCompoundClip: vi.fn().mockResolvedValue(true),
+      addSequence: vi.fn().mockResolvedValue(undefined),
+      addMarker: vi.fn().mockResolvedValue(undefined),
+      seek: vi.fn().mockResolvedValue(undefined),
+      updateMarker: vi.fn().mockResolvedValue(undefined),
+      removeMarker: vi.fn().mockResolvedValue(undefined),
+    },
+  };
+});
 
 const { SequenceTabs } = await import("./SequenceTabs");
 const { api } = await import("../ipc");
 
-const two = () =>
-  makeSession([
+const two = () => {
+  return makeSession([
     { id: 11, name: "Main" },
     { id: 22, name: "Cut B" },
   ]);
+};
 
-beforeEach(() => vi.clearAllMocks());
-afterEach(() => cleanup());
+beforeEach(() => {
+  return vi.clearAllMocks();
+});
+afterEach(() => {
+  return cleanup();
+});
 
 describe("sequence tabs", () => {
   it("selects, duplicates and adds sequences", () => {
@@ -100,13 +107,15 @@ describe("sequence tabs", () => {
 
   it("will not remove the only sequence", () => {
     render(<SequenceTabs session={makeSession([{ id: 1, name: "Only" }])} />);
-    expect((screen.getByText(t("removeSequence"), { selector: "button" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      (screen.getByText(t("removeSequence"), { selector: "button" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
   });
 });
 
 describe("marker list", () => {
-  const session = () =>
-    makeSession([
+  const session = () => {
+    return makeSession([
       {
         id: 1,
         name: "Main",
@@ -116,11 +125,16 @@ describe("marker list", () => {
         ],
       },
     ]);
+  };
 
   it("lists markers in time order and adds a new one", () => {
     render(<SequenceTabs session={session()} />);
     const labels = screen.getAllByLabelText(t("markerLabel")) as HTMLInputElement[];
-    expect(labels.map((input) => input.value)).toEqual(["early", "late"]);
+    expect(
+      labels.map((input) => {
+        return input.value;
+      }),
+    ).toEqual(["early", "late"]);
     fireEvent.click(screen.getByText(t("addMarker")));
     expect(api.addMarker).toHaveBeenCalledWith();
   });

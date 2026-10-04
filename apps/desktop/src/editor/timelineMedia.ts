@@ -6,7 +6,9 @@ import { frameAtUrl, waveformUrl } from "../ipc";
 import type { MediaAsset } from "../types";
 
 export const MEDIA_EVENT = "oca-timeline-media";
-const notify = () => window.dispatchEvent(new Event(MEDIA_EVENT));
+const notify = () => {
+  return window.dispatchEvent(new Event(MEDIA_EVENT));
+};
 
 // ---- video frames --------------------------------------------------------------------------
 
@@ -24,7 +26,11 @@ let inFlight = 0;
  *  spacing is quantized so the same frames are reused as the user zooms and scrolls. */
 export function frameStepSecs(secsPerTile: number): number {
   let step = FRAME_STEPS[0];
-  for (const candidate of FRAME_STEPS) if (candidate <= secsPerTile) step = candidate;
+  for (const candidate of FRAME_STEPS) {
+    if (candidate <= secsPerTile) {
+      step = candidate;
+    }
+  }
   return step;
 }
 
@@ -39,18 +45,24 @@ function pump() {
       notify();
       pump();
     };
-    image.onload = () => settle(image);
-    image.onerror = () => settle("failed");
+    image.onload = () => {
+      return settle(image);
+    };
+    image.onerror = () => {
+      return settle("failed");
+    };
     image.src = frameAtUrl(job.assetId, job.millis);
   }
 }
 
 /** The decoded frame of `assetId` at `secs`, or `null` while it loads (or if there is none). */
 export function frameAt(assetId: number, secs: number, stepSecs: number): HTMLImageElement | null {
-  const millis = Math.round((Math.floor(Math.max(0, secs) / stepSecs) * stepSecs) * 1000);
+  const millis = Math.round(Math.floor(Math.max(0, secs) / stepSecs) * stepSecs * 1000);
   const key = `${assetId}:${millis}`;
   const entry = frames.get(key);
-  if (entry instanceof HTMLImageElement) return entry;
+  if (entry instanceof HTMLImageElement) {
+    return entry;
+  }
   if (entry === undefined) {
     if (frames.size >= MAX_CACHED_FRAMES) {
       // Oldest first; `Map` iterates in insertion order. Never evict an in-flight entry's slot.
@@ -85,9 +97,11 @@ export interface PeakPyramid {
 
 export function buildPyramid(pairs: Float32Array, durationSecs: number): PeakPyramid | null {
   const buckets = pairs.length >> 1;
-  if (buckets === 0 || durationSecs <= 0) return null;
+  if (buckets === 0 || durationSecs <= 0) {
+    return null;
+  }
   const levels = [pairs];
-  while ((levels[levels.length - 1].length >> 1) > LEVEL_FACTOR) {
+  while (levels[levels.length - 1].length >> 1 > LEVEL_FACTOR) {
     const below = levels[levels.length - 1];
     const count = Math.ceil((below.length >> 1) / LEVEL_FACTOR);
     const next = new Float32Array(count * 2);
@@ -96,8 +110,12 @@ export function buildPyramid(pairs: Float32Array, durationSecs: number): PeakPyr
       let max = -Infinity;
       const end = Math.min(below.length >> 1, (i + 1) * LEVEL_FACTOR);
       for (let j = i * LEVEL_FACTOR; j < end; j += 1) {
-        if (below[2 * j] < min) min = below[2 * j];
-        if (below[2 * j + 1] > max) max = below[2 * j + 1];
+        if (below[2 * j] < min) {
+          min = below[2 * j];
+        }
+        if (below[2 * j + 1] > max) {
+          max = below[2 * j + 1];
+        }
       }
       next[2 * i] = min;
       next[2 * i + 1] = max;
@@ -109,7 +127,12 @@ export function buildPyramid(pairs: Float32Array, durationSecs: number): PeakPyr
 
 /** Min and max amplitude over source time `[from, to)`, written into `out` as `[min, max]`.
  *  Returns false when the range holds no data. */
-export function peakRange(pyramid: PeakPyramid, from: number, to: number, out: [number, number]): boolean {
+export function peakRange(
+  pyramid: PeakPyramid,
+  from: number,
+  to: number,
+  out: [number, number],
+): boolean {
   let level = 0;
   let perSec = pyramid.bucketsPerSec;
   // Coarsest level that still has at least ~1 bucket across the range.
@@ -121,12 +144,18 @@ export function peakRange(pyramid: PeakPyramid, from: number, to: number, out: [
   const count = data.length >> 1;
   const first = Math.max(0, Math.floor(from * perSec));
   const last = Math.min(count - 1, Math.max(first, Math.ceil(to * perSec) - 1));
-  if (first >= count) return false;
+  if (first >= count) {
+    return false;
+  }
   let min = Infinity;
   let max = -Infinity;
   for (let i = first; i <= last; i += 1) {
-    if (data[2 * i] < min) min = data[2 * i];
-    if (data[2 * i + 1] > max) max = data[2 * i + 1];
+    if (data[2 * i] < min) {
+      min = data[2 * i];
+    }
+    if (data[2 * i + 1] > max) {
+      max = data[2 * i + 1];
+    }
   }
   out[0] = min;
   out[1] = max;
@@ -142,20 +171,30 @@ const overview = new WeakMap<object, PeakPyramid | null>();
  *  the coarse one stored with the project until then. */
 export function peaksFor(asset: MediaAsset): PeakPyramid | null {
   const entry = detailed.get(asset.id);
-  if (entry && typeof entry === "object") return entry;
+  if (entry && typeof entry === "object") {
+    return entry;
+  }
   if (asset.has_audio && entry === undefined && typeof fetch === "function") {
     detailed.set(asset.id, "pending");
     void fetch(waveformUrl(asset.id))
-      .then((response) => (response.ok ? response.arrayBuffer() : Promise.reject(new Error(String(response.status)))))
+      .then((response) => {
+        return response.ok
+          ? response.arrayBuffer()
+          : Promise.reject(new Error(String(response.status)));
+      })
       .then((buffer) => {
         const pyramid = buildPyramid(new Float32Array(buffer), asset.duration_secs);
         detailed.set(asset.id, pyramid ?? "failed");
         notify();
       })
-      .catch(() => detailed.set(asset.id, "failed"));
+      .catch(() => {
+        return detailed.set(asset.id, "failed");
+      });
   }
   const coarse = asset.waveform_peaks;
-  if (!coarse || coarse.length === 0) return null;
+  if (!coarse || coarse.length === 0) {
+    return null;
+  }
   if (!overview.has(coarse)) {
     const flat = new Float32Array(coarse.length * 2);
     coarse.forEach(([min, max], i) => {

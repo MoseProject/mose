@@ -6,29 +6,76 @@ import { previewStore, uiStore } from "../store";
 import { makeSession } from "../testSupport";
 import type { SessionView } from "../types";
 
-vi.mock("../editor/Inspector", () => ({ Inspector: () => <div data-testid="inspector" /> }));
-vi.mock("../editor/MediaLibrary", () => ({ MediaLibrary: () => <div data-testid="library" /> }));
-vi.mock("../editor/PreviewPanel", () => ({ PreviewPanel: () => <div data-testid="preview" /> }));
-vi.mock("../editor/Timeline", () => ({ Timeline: () => <div data-testid="timeline" /> }));
+vi.mock("../editor/Inspector", () => {
+  return {
+    Inspector: () => {
+      return <div data-testid="inspector" />;
+    },
+  };
+});
+vi.mock("../editor/MediaLibrary", () => {
+  return {
+    MediaLibrary: () => {
+      return <div data-testid="library" />;
+    },
+  };
+});
+vi.mock("../editor/PreviewPanel", () => {
+  return {
+    PreviewPanel: () => {
+      return <div data-testid="preview" />;
+    },
+  };
+});
+vi.mock("../editor/Timeline", () => {
+  return {
+    Timeline: () => {
+      return <div data-testid="timeline" />;
+    },
+  };
+});
 
 type DragDropHandler = (event: { payload: { type: string; paths?: string[] } }) => void;
-const webview = vi.hoisted(() => ({ handler: null as unknown, unlisten: null as unknown }));
-vi.mock("@tauri-apps/api/webview", () => ({
-  getCurrentWebview: () => ({
-    onDragDropEvent: (handler: DragDropHandler) => {
-      webview.handler = handler;
-      return Promise.resolve(webview.unlisten);
+const webview = vi.hoisted(() => {
+  return { handler: null as unknown, unlisten: null as unknown };
+});
+vi.mock("@tauri-apps/api/webview", () => {
+  return {
+    getCurrentWebview: () => {
+      return {
+        onDragDropEvent: (handler: DragDropHandler) => {
+          webview.handler = handler;
+          return Promise.resolve(webview.unlisten);
+        },
+      };
     },
-  }),
-}));
+  };
+});
 
 vi.mock("../ipc", () => {
   const names = [
-    "setPlaying", "redo", "undo", "saveProject", "importMediaDialog", "copyClipFormatting",
-    "pasteClipFormatting", "copyClip", "cutClip", "splitAtPlayhead", "addMarker", "deleteClips",
-    "step", "seek", "importMedia", "setPanelLayout",
+    "setPlaying",
+    "redo",
+    "undo",
+    "saveProject",
+    "importMediaDialog",
+    "copyClipFormatting",
+    "pasteClipFormatting",
+    "copyClip",
+    "cutClip",
+    "splitAtPlayhead",
+    "addMarker",
+    "deleteClips",
+    "step",
+    "seek",
+    "importMedia",
+    "setPanelLayout",
   ];
-  const api: Record<string, unknown> = Object.fromEntries(names.map((n) => [n, vi.fn().mockResolvedValue(undefined)]));
+  const api: Record<string, unknown> = Object.fromEntries(
+    names.map((n) => {
+      return [n, vi.fn().mockResolvedValue(undefined)];
+    }),
+  );
   api.pasteClip = vi.fn().mockResolvedValue([3, 4]);
   api.addCustomShapeClip = vi.fn().mockResolvedValue(8);
   return { api };
@@ -44,25 +91,61 @@ const sessionWith = (id: number, layout?: Record<string, number>): SessionView =
   return session;
 };
 
-const screenEditor = () => screen.getByTestId("screen-editor");
-const cssVar = (name: string) => screenEditor().style.getPropertyValue(name);
-const emit = (payload: { type: string; paths?: string[] }) => act(() => (webview.handler as DragDropHandler)({ payload }));
+const screenEditor = () => {
+  return screen.getByTestId("screen-editor");
+};
+const cssVar = (name: string) => {
+  return screenEditor().style.getPropertyValue(name);
+};
+const emit = (payload: { type: string; paths?: string[] }) => {
+  return act(() => {
+    return (webview.handler as DragDropHandler)({ payload });
+  });
+};
 const press = (init: KeyboardEventInit & { target?: EventTarget }) => {
   const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
-  act(() => void (init.target ?? window).dispatchEvent(event));
+  act(() => {
+    return void (init.target ?? window).dispatchEvent(event);
+  });
   return event;
 };
-const pointer = (target: Element, type: string, x = 0, y = 0) =>
-  fireEvent(target, new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0 }));
+const pointer = (target: Element, type: string, x = 0, y = 0) => {
+  return fireEvent(
+    target,
+    new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0 }),
+  );
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
   webview.unlisten = vi.fn();
   webview.handler = null;
   Element.prototype.setPointerCapture = vi.fn();
-  Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, get: () => 1000 });
-  uiStore.set({ screen: "editor", selectedClipIds: [], tool: "select", pxPerSec: 40, error: null, drawingShapePoints: null, exportQueueOpen: false });
-  previewStore.set({ frameSeq: 0, playheadSecs: 0, playing: false, hasClip: false, available: true, error: null, peakL: 0, peakR: 0 });
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+    configurable: true,
+    get: () => {
+      return 1000;
+    },
+  });
+  uiStore.set({
+    screen: "editor",
+    selectedClipIds: [],
+    tool: "select",
+    pxPerSec: 40,
+    error: null,
+    drawingShapePoints: null,
+    exportQueueOpen: false,
+  });
+  previewStore.set({
+    frameSeq: 0,
+    playheadSecs: 0,
+    playing: false,
+    hasClip: false,
+    available: true,
+    error: null,
+    peakL: 0,
+    peakR: 0,
+  });
 });
 afterEach(() => {
   cleanup();
@@ -86,7 +169,15 @@ describe("editor screen", () => {
     });
 
     it("restores the stored layout within its bounds", () => {
-      render(<Editor session={sessionWith(1, { lib_panel_width: 9999, props_panel_width: 10, timeline_height: 50 })} />);
+      render(
+        <Editor
+          session={sessionWith(1, {
+            lib_panel_width: 9999,
+            props_panel_width: 10,
+            timeline_height: 50,
+          })}
+        />,
+      );
       expect(cssVar("--library-width")).toBe("640px");
       expect(cssVar("--inspector-width")).toBe("180px");
       expect(cssVar("--timeline-height")).toBe("140px");
@@ -320,7 +411,11 @@ describe("editor screen", () => {
   });
 
   describe("drawing a custom shape", () => {
-    const triangle: [number, number][] = [[0, 0], [1, 0], [0.5, 1]];
+    const triangle: [number, number][] = [
+      [0, 0],
+      [1, 0],
+      [0.5, 1],
+    ];
     beforeEach(() => {
       render(<Editor session={sessionWith(1)} />);
     });
@@ -344,7 +439,13 @@ describe("editor screen", () => {
     });
 
     it("needs three points to finish", () => {
-      uiStore.set({ ...uiStore.get(), drawingShapePoints: [[0, 0], [1, 1]] });
+      uiStore.set({
+        ...uiStore.get(),
+        drawingShapePoints: [
+          [0, 0],
+          [1, 1],
+        ],
+      });
       press({ key: "Enter" });
       expect(calls.addCustomShapeClip).not.toHaveBeenCalled();
       expect(uiStore.get().drawingShapePoints).toHaveLength(2);

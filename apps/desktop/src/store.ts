@@ -31,16 +31,24 @@ export function createStore<T>(initial: T): Store<T> {
   let value = initial;
   const listeners = new Set<() => void>();
   return {
-    get: () => value,
+    get: () => {
+      return value;
+    },
     set: (next) => {
       const resolved = typeof next === "function" ? (next as (prev: T) => T)(value) : next;
-      if (Object.is(resolved, value)) return;
+      if (Object.is(resolved, value)) {
+        return;
+      }
       value = resolved;
-      listeners.forEach((l) => l());
+      listeners.forEach((l) => {
+        return l();
+      });
     },
     subscribe: (listener) => {
       listeners.add(listener);
-      return () => listeners.delete(listener);
+      return () => {
+        return listeners.delete(listener);
+      };
     },
   };
 }
@@ -109,7 +117,9 @@ export const MIN_PX_PER_SEC = 0.01;
 export const MAX_PX_PER_SEC = 600;
 
 export function patchUi(patch: Partial<UiState>) {
-  uiStore.set((prev) => ({ ...prev, ...patch }));
+  uiStore.set((prev) => {
+    return { ...prev, ...patch };
+  });
 }
 
 /** Runs a backend call, surfacing a rejection in the error banner instead of dropping it. */
@@ -126,44 +136,74 @@ let connected = false;
 
 /** Subscribes to backend events once and loads the initial session. */
 export async function connect() {
-  if (connected) return;
+  if (connected) {
+    return;
+  }
   connected = true;
   await onSession((view) => {
     const previous = sessionStore.get();
     sessionStore.set(view);
     const previousId = previous?.project.sequences[previous.project.active_sequence]?.id;
     const activeId = view.project.sequences[view.project.active_sequence]?.id;
-    if (previousId !== undefined && previousId !== activeId) patchUi({ selectedClipIds: [] });
+    if (previousId !== undefined && previousId !== activeId) {
+      patchUi({ selectedClipIds: [] });
+    }
     // Drop selections that no longer exist (undo, delete, project switch).
     const ids = new Set(
-      view.project.sequences[view.project.active_sequence].timeline.tracks.flatMap((t) =>
-        t.clips.map((c) => c.id),
-      ),
+      view.project.sequences[view.project.active_sequence].timeline.tracks.flatMap((t) => {
+        return t.clips.map((c) => {
+          return c.id;
+        });
+      }),
     );
     const selected = uiStore.get().selectedClipIds;
-    if (selected.some((id) => !ids.has(id))) {
-      patchUi({ selectedClipIds: selected.filter((id) => ids.has(id)) });
+    if (
+      selected.some((id) => {
+        return !ids.has(id);
+      })
+    ) {
+      patchUi({
+        selectedClipIds: selected.filter((id) => {
+          return ids.has(id);
+        }),
+      });
     }
   });
-  await onPreview((tick) => previewStore.set(tick));
-  await onExports((jobs) => exportsStore.set(jobs));
+  await onPreview((tick) => {
+    return previewStore.set(tick);
+  });
+  await onExports((jobs) => {
+    return exportsStore.set(jobs);
+  });
   await onSceneCut((count) => {
-    if (count === 0) patchUi({ error: t("sceneCutDetectionNone") });
+    if (count === 0) {
+      patchUi({ error: t("sceneCutDetectionNone") });
+    }
   });
   await onMotionTrack((count) => {
-    if (count === 0) patchUi({ error: t("motionTrackNoFramesDecoded") });
+    if (count === 0) {
+      patchUi({ error: t("motionTrackNoFramesDecoded") });
+    }
   });
   await onAutoReframe((event) => {
-    if (!event.subjectFound) patchUi({ error: t("autoReframeNoSubjectFound") });
+    if (!event.subjectFound) {
+      patchUi({ error: t("autoReframeNoSubjectFound") });
+    }
   });
   await onMatteGeneration((event) => {
-    if (event.type === "failed") patchUi({ error: event.message });
+    if (event.type === "failed") {
+      patchUi({ error: event.message });
+    }
   });
   await onPrivacyBlur((event) => {
-    if (event.type === "failed") patchUi({ error: event.message });
+    if (event.type === "failed") {
+      patchUi({ error: event.message });
+    }
   });
   await onTts((event) => {
-    if (event.type === "failed") patchUi({ error: event.message });
+    if (event.type === "failed") {
+      patchUi({ error: event.message });
+    }
   });
   await onTranscribe((event) => {
     if (event.type === "started") {

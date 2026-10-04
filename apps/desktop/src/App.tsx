@@ -32,11 +32,20 @@ export function App() {
         <Editor session={session} />
       )}
       {ui.error && (
-        <div className="error-banner" role="alert">
+        <div
+          className="error-banner"
+          role="alert"
+        >
           <span>
             {t("errorPrefix")}: {ui.error}
           </span>
-          <button className="icon" aria-label={t("close")} onClick={() => patchUi({ error: null })}>
+          <button
+            className="icon"
+            aria-label={t("close")}
+            onClick={() => {
+              return patchUi({ error: null });
+            }}
+          >
             <Icon name="close" />
           </button>
         </div>

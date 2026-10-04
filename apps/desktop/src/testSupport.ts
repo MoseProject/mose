@@ -22,17 +22,19 @@ export interface FixtureSequence {
 export function makeSession(sequences: FixtureSequence[], active = 0): SessionView {
   return {
     project: {
-      sequences: sequences.map((sequence) => ({
-        id: sequence.id,
-        name: sequence.name,
-        timeline: {
-          tracks: sequence.tracks ?? [],
-          markers: sequence.markers ?? [],
-          playhead_secs: 0,
-          multicam_groups: [],
-        },
-        export_settings: { aspect_ratio: "Original", target_lufs: -14 },
-      })),
+      sequences: sequences.map((sequence) => {
+        return {
+          id: sequence.id,
+          name: sequence.name,
+          timeline: {
+            tracks: sequence.tracks ?? [],
+            markers: sequence.markers ?? [],
+            playhead_secs: 0,
+            multicam_groups: [],
+          },
+          export_settings: { aspect_ratio: "Original", target_lufs: -14 },
+        };
+      }),
       active_sequence: active,
       media_library: [],
     },

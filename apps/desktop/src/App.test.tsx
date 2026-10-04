@@ -6,23 +6,57 @@ import { exportsStore, sessionStore, uiStore } from "./store";
 import { makeSession } from "./testSupport";
 import type { SessionView } from "./types";
 
-vi.mock("./screens/Home", () => ({ Home: () => <div data-testid="screen-home" /> }));
-vi.mock("./screens/Prefs", () => ({ Prefs: () => <div data-testid="screen-prefs" /> }));
-vi.mock("./screens/WatchFolder", () => ({ WatchFolder: () => <div data-testid="screen-watch" /> }));
-vi.mock("./screens/Editor", () => ({ Editor: () => <div data-testid="screen-editor" /> }));
-vi.mock("./screens/CrashReviewModal", () => ({ CrashReviewModal: () => <div data-testid="crash-modal" /> }));
-vi.mock("./ipc", () => ({
-  api: {
-    undo: vi.fn().mockResolvedValue(undefined),
-    redo: vi.fn().mockResolvedValue(undefined),
-    saveProject: vi.fn().mockResolvedValue(undefined),
-  },
-  exportActiveSequence: vi.fn().mockResolvedValue(undefined),
-}));
-vi.mock("./store", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./store")>()),
-  connect: vi.fn().mockResolvedValue(undefined),
-}));
+vi.mock("./screens/Home", () => {
+  return {
+    Home: () => {
+      return <div data-testid="screen-home" />;
+    },
+  };
+});
+vi.mock("./screens/Prefs", () => {
+  return {
+    Prefs: () => {
+      return <div data-testid="screen-prefs" />;
+    },
+  };
+});
+vi.mock("./screens/WatchFolder", () => {
+  return {
+    WatchFolder: () => {
+      return <div data-testid="screen-watch" />;
+    },
+  };
+});
+vi.mock("./screens/Editor", () => {
+  return {
+    Editor: () => {
+      return <div data-testid="screen-editor" />;
+    },
+  };
+});
+vi.mock("./screens/CrashReviewModal", () => {
+  return {
+    CrashReviewModal: () => {
+      return <div data-testid="crash-modal" />;
+    },
+  };
+});
+vi.mock("./ipc", () => {
+  return {
+    api: {
+      undo: vi.fn().mockResolvedValue(undefined),
+      redo: vi.fn().mockResolvedValue(undefined),
+      saveProject: vi.fn().mockResolvedValue(undefined),
+    },
+    exportActiveSequence: vi.fn().mockResolvedValue(undefined),
+  };
+});
+vi.mock("./store", async (importOriginal) => {
+  return {
+    ...(await importOriginal<typeof import("./store")>()),
+    connect: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
 const { App } = await import("./App");
 const { api, exportActiveSequence } = await import("./ipc");
@@ -35,15 +69,28 @@ const session = (overrides: Record<string, unknown> = {}): SessionView => {
   return view;
 };
 
-const goTo = (screenName: "home" | "prefs" | "watch" | "editor") =>
-  act(() => uiStore.set({ ...uiStore.get(), screen: screenName }));
+const goTo = (screenName: "home" | "prefs" | "watch" | "editor") => {
+  return act(() => {
+    return uiStore.set({ ...uiStore.get(), screen: screenName });
+  });
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
   sessionStore.set(null);
-  uiStore.set({ screen: "home", selectedClipIds: [], tool: "select", pxPerSec: 40, error: null, drawingShapePoints: null, exportQueueOpen: false });
+  uiStore.set({
+    screen: "home",
+    selectedClipIds: [],
+    tool: "select",
+    pxPerSec: 40,
+    error: null,
+    drawingShapePoints: null,
+    exportQueueOpen: false,
+  });
 });
-afterEach(() => cleanup());
+afterEach(() => {
+  return cleanup();
+});
 
 describe("app shell", () => {
   it("connects to the backend once on mount", () => {
@@ -117,7 +164,9 @@ describe("app shell", () => {
       render(<App />);
       expect(screen.getByText(/My project/)).toBeTruthy();
       expect(screen.queryByLabelText(t("unsaved"))).toBeNull();
-      act(() => sessionStore.set(session({ dirty: true })));
+      act(() => {
+        return sessionStore.set(session({ dirty: true }));
+      });
       expect(screen.getByLabelText(t("unsaved"))).toBeTruthy();
     });
 
@@ -126,7 +175,9 @@ describe("app shell", () => {
       render(<App />);
       expect((screen.getByTestId("undo") as HTMLButtonElement).disabled).toBe(true);
       expect((screen.getByTestId("redo") as HTMLButtonElement).disabled).toBe(true);
-      act(() => sessionStore.set(session({ canUndo: true, canRedo: true })));
+      act(() => {
+        return sessionStore.set(session({ canUndo: true, canRedo: true }));
+      });
       expect((screen.getByTestId("undo") as HTMLButtonElement).disabled).toBe(false);
       expect((screen.getByTestId("redo") as HTMLButtonElement).disabled).toBe(false);
     });
@@ -176,7 +227,16 @@ describe("app shell", () => {
 describe("export queue popover", () => {
   it("stays closed until toggled, and shows the active job count", () => {
     sessionStore.set(session());
-    exportsStore.set([{ id: 1, title: "a.mp4", outputPath: "a", status: "Queued", percent: 0, elapsedSecs: null }]);
+    exportsStore.set([
+      {
+        id: 1,
+        title: "a.mp4",
+        outputPath: "a",
+        status: "Queued",
+        percent: 0,
+        elapsedSecs: null,
+      },
+    ]);
     render(<App />);
     expect(screen.queryByText(t("noExports"))).toBeNull();
     const toggle = screen.getByTestId("export-queue-toggle");

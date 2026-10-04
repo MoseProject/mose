@@ -7,7 +7,9 @@ const FLOOR_DB = -60;
 
 /** Linear peak to a 0..1 fill of the -60..0 dBFS scale. */
 export function peakFill(peak: number): number {
-  if (!(peak > 0)) return 0;
+  if (!(peak > 0)) {
+    return 0;
+  }
   const db = 20 * Math.log10(peak);
   return Math.min(1, Math.max(0, (db - FLOOR_DB) / -FLOOR_DB));
 }
@@ -16,20 +18,40 @@ export function peakFill(peak: number): number {
 export function AudioMeter() {
   const tick = useStore(previewStore);
   return (
-    <aside className="audio-meter" aria-label={t("audioMeter")}>
-      <div className="meter-scale" aria-hidden="true">
-        {MARKS.map((mark) => (
-          <span key={mark}>{mark}</span>
-        ))}
+    <aside
+      className="audio-meter"
+      aria-label={t("audioMeter")}
+    >
+      <div
+        className="meter-scale"
+        aria-hidden="true"
+      >
+        {MARKS.map((mark) => {
+          return <span key={mark}>{mark}</span>;
+        })}
       </div>
-      <div className="meter-bars" aria-hidden="true">
-        {[tick.peakL, tick.peakR].map((peak, channel) => (
-          <div key={channel} className="meter-bar">
-            <div className="meter-cover" style={{ height: `${(1 - peakFill(peak)) * 100}%` }} />
-          </div>
-        ))}
+      <div
+        className="meter-bars"
+        aria-hidden="true"
+      >
+        {[tick.peakL, tick.peakR].map((peak, channel) => {
+          return (
+            <div
+              key={channel}
+              className="meter-bar"
+            >
+              <div
+                className="meter-cover"
+                style={{ height: `${(1 - peakFill(peak)) * 100}%` }}
+              />
+            </div>
+          );
+        })}
       </div>
-      <div className="meter-channels" aria-hidden="true">
+      <div
+        className="meter-channels"
+        aria-hidden="true"
+      >
         <span>L</span>
         <span>R</span>
       </div>

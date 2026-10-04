@@ -19,48 +19,79 @@ function YoutubeDownloadButton() {
     setOpen(true);
     setError(null);
     void run(api.isYtDlpAvailable()).then((available) => {
-      if (available === false) setError(t("youtubeDownloadToolMissing"));
+      if (available === false) {
+        setError(t("youtubeDownloadToolMissing"));
+      }
     });
   };
 
   const start = () => {
-    if (!url.trim()) return;
+    if (!url.trim()) {
+      return;
+    }
     setDownloading(true);
     setProgress(0);
     setError(null);
     const unlisten = onYoutubeDownload((event) => {
-      if (event.type === "progress") setProgress(event.fraction);
+      if (event.type === "progress") {
+        setProgress(event.fraction);
+      }
       if (event.type === "done") {
         setDownloading(false);
         setOpen(false);
         setUrl("");
-        void unlisten.then((stop) => stop());
+        void unlisten.then((stop) => {
+          return stop();
+        });
       }
       if (event.type === "failed") {
         setDownloading(false);
         setError(event.message);
-        void unlisten.then((stop) => stop());
+        void unlisten.then((stop) => {
+          return stop();
+        });
       }
     });
     // `run` swallows the rejection and resolves undefined, so success is marked explicitly.
-    void run(api.downloadYoutube(url, format, quality).then(() => true)).then((started) => {
-      if (started) return;
+    void run(
+      api.downloadYoutube(url, format, quality).then(() => {
+        return true;
+      }),
+    ).then((started) => {
+      if (started) {
+        return;
+      }
       setDownloading(false);
-      void unlisten.then((stop) => stop());
+      void unlisten.then((stop) => {
+        return stop();
+      });
     });
   };
 
   if (!open) {
     return (
-      <button className="icon" onClick={openModal}>
+      <button
+        className="icon"
+        onClick={openModal}
+      >
         {t("youtubeDownload")}
       </button>
     );
   }
 
   return (
-    <div className="modal-overlay" onClick={() => !downloading && setOpen(false)}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="modal-overlay"
+      onClick={() => {
+        return !downloading && setOpen(false);
+      }}
+    >
+      <div
+        className="modal"
+        onClick={(e) => {
+          return e.stopPropagation();
+        }}
+      >
         <h3>{t("youtubeDownload")}</h3>
         {error && <p style={{ color: "var(--error, #e55)" }}>{error}</p>}
         <input
@@ -68,39 +99,84 @@ function YoutubeDownloadButton() {
           disabled={downloading}
           placeholder={t("youtubeDownloadUrlHint")}
           value={url}
-          onChange={(e) => setUrl(e.target.value)}
+          onChange={(e) => {
+            return setUrl(e.target.value);
+          }}
         />
         <div className="modal-row">
-          <select disabled={downloading} value={format} onChange={(e) => { setFormat(e.target.value as "mp4" | "mp3"); setQuality(e.target.value === "mp4" ? "best" : "192"); }}>
+          <select
+            disabled={downloading}
+            value={format}
+            onChange={(e) => {
+              setFormat(e.target.value as "mp4" | "mp3");
+              setQuality(e.target.value === "mp4" ? "best" : "192");
+            }}
+          >
             <option value="mp4">MP4</option>
             <option value="mp3">MP3</option>
           </select>
-          <select disabled={downloading} value={quality} onChange={(e) => setQuality(e.target.value)}>
+          <select
+            disabled={downloading}
+            value={quality}
+            onChange={(e) => {
+              return setQuality(e.target.value);
+            }}
+          >
             {format === "mp4"
-              ? ["best", "1080", "720", "480", "360"].map((q) => (
-                  <option key={q} value={q}>
-                    {q === "best" ? "Best" : `${q}p`}
-                  </option>
-                ))
-              : ["320", "192", "128"].map((q) => (
-                  <option key={q} value={q}>
-                    {q} kbps
-                  </option>
-                ))}
+              ? ["best", "1080", "720", "480", "360"].map((q) => {
+                  return (
+                    <option
+                      key={q}
+                      value={q}
+                    >
+                      {q === "best" ? "Best" : `${q}p`}
+                    </option>
+                  );
+                })
+              : ["320", "192", "128"].map((q) => {
+                  return (
+                    <option
+                      key={q}
+                      value={q}
+                    >
+                      {q} kbps
+                    </option>
+                  );
+                })}
           </select>
         </div>
-        {downloading && <progress value={progress} max={1} style={{ width: "100%" }} />}
+        {downloading && (
+          <progress
+            value={progress}
+            max={1}
+            style={{ width: "100%" }}
+          />
+        )}
         <div className="modal-actions">
           {downloading ? (
-            <button className="icon" onClick={() => void run(api.cancelYoutubeDownload())}>
+            <button
+              className="icon"
+              onClick={() => {
+                return void run(api.cancelYoutubeDownload());
+              }}
+            >
               {t("youtubeDownloadCancel")}
             </button>
           ) : (
             <>
-              <button className="icon" onClick={() => setOpen(false)}>
+              <button
+                className="icon"
+                onClick={() => {
+                  return setOpen(false);
+                }}
+              >
                 {t("cancel")}
               </button>
-              <button className="icon primary" disabled={url.trim().length === 0} onClick={start}>
+              <button
+                className="icon primary"
+                disabled={url.trim().length === 0}
+                onClick={start}
+              >
                 {t("youtubeDownloadStart")}
               </button>
             </>
@@ -116,39 +192,62 @@ function SoundLibraryButton() {
   const [tracks, setTracks] = useState<LibraryTrack[] | null>(null);
 
   const toggle = () => {
-    if (!open) void run(api.listSoundLibrary()).then((result) => setTracks(result ?? []));
+    if (!open) {
+      void run(api.listSoundLibrary()).then((result) => {
+        return setTracks(result ?? []);
+      });
+    }
     setOpen(!open);
   };
 
   return (
     <>
-      <button className="icon" onClick={toggle}>
+      <button
+        className="icon"
+        onClick={toggle}
+      >
         {t("soundLibrary")}
       </button>
       {open && (
-        <div className="modal-overlay" onClick={() => setOpen(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="modal-overlay"
+          onClick={() => {
+            return setOpen(false);
+          }}
+        >
+          <div
+            className="modal"
+            onClick={(e) => {
+              return e.stopPropagation();
+            }}
+          >
             <h3>{t("soundLibrary")}</h3>
             {!tracks || tracks.length === 0 ? (
               <p className="muted">{t("soundLibraryEmpty")}</p>
             ) : (
               <div style={{ maxHeight: 320, overflowY: "auto" }}>
-                {tracks.map((track) => (
-                  <div className="modal-row" key={track.path}>
-                    <span>
-                      {track.category === "music" ? "🎵" : "🔊"} {track.name} ({formatTime(track.durationSecs)})
-                    </span>
-                    <button
-                      className="icon"
-                      onClick={() => {
-                        void run(api.importMedia([track.path]));
-                        setOpen(false);
-                      }}
+                {tracks.map((track) => {
+                  return (
+                    <div
+                      className="modal-row"
+                      key={track.path}
                     >
-                      {t("importFiles")}
-                    </button>
-                  </div>
-                ))}
+                      <span>
+                        {track.category === "music" ? "🎵" : "🔊"} {track.name} (
+                        {formatTime(track.durationSecs)})
+                      </span>
+                      <button
+                        className="icon"
+                        onClick={() => {
+                          void run(api.importMedia([track.path]));
+                          setOpen(false);
+                        }}
+                      >
+                        {t("importFiles")}
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -162,14 +261,29 @@ function TtsButton() {
   const [text, setText] = useState<string | null>(null);
   if (text === null) {
     return (
-      <button className="icon" onClick={() => setText("")}>
+      <button
+        className="icon"
+        onClick={() => {
+          return setText("");
+        }}
+      >
         {t("ttsButton")}
       </button>
     );
   }
   return (
-    <div className="modal-overlay" onClick={() => setText(null)}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="modal-overlay"
+      onClick={() => {
+        return setText(null);
+      }}
+    >
+      <div
+        className="modal"
+        onClick={(e) => {
+          return e.stopPropagation();
+        }}
+      >
         <h3>{t("ttsModalTitle")}</h3>
         <textarea
           autoFocus
@@ -177,10 +291,17 @@ function TtsButton() {
           style={{ width: "100%" }}
           placeholder={t("ttsPlaceholder")}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            return setText(e.target.value);
+          }}
         />
         <div className="modal-actions">
-          <button className="icon" onClick={() => setText(null)}>
+          <button
+            className="icon"
+            onClick={() => {
+              return setText(null);
+            }}
+          >
             {t("cancel")}
           </button>
           <button
@@ -217,25 +338,67 @@ export function MediaLibrary({ session }: { session: SessionView }) {
 
   const inTab =
     tab === "favorites"
-      ? all.filter((asset) => asset.favorited)
+      ? all.filter((asset) => {
+          return asset.favorited;
+        })
       : tab === "recent"
         ? session.project.recent_asset_ids
-            .map((id) => all.find((asset) => asset.id === id))
-            .filter((asset): asset is MediaAsset => asset !== undefined)
+            .map((id) => {
+              return all.find((asset) => {
+                return asset.id === id;
+              });
+            })
+            .filter((asset): asset is MediaAsset => {
+              return asset !== undefined;
+            })
         : all;
   const needle = query.trim().toLowerCase();
-  const assets = needle ? inTab.filter((asset) => asset.file_name.toLowerCase().includes(needle)) : inTab;
+  const assets = needle
+    ? inTab.filter((asset) => {
+        return asset.file_name.toLowerCase().includes(needle);
+      })
+    : inTab;
 
   return (
-    <section className="panel library" aria-label={t("mediaLibrary")}>
-      <div className="panel-tabs" role="tablist">
-        {TABS.map(([id, label]) => (
-          <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>
-            {t(label)}
+    <section
+      className="panel library"
+      aria-label={t("mediaLibrary")}
+    >
+      <div
+        className="panel-tabs"
+        role="tablist"
+      >
+        {TABS.map(([id, label]) => {
+          return (
+            <button
+              key={id}
+              role="tab"
+              aria-selected={tab === id}
+              className={tab === id ? "active" : ""}
+              onClick={() => {
+                return setTab(id);
+              }}
+            >
+              {t(label)}
+            </button>
+          );
+        })}
+        <Menu
+          label={
+            <Icon
+              name="plus"
+              size={16}
+            />
+          }
+          ariaLabel={t("importFiles")}
+        >
+          <button
+            onClick={() => {
+              return run(api.importMediaDialog());
+            }}
+          >
+            {t("importFiles")}
           </button>
-        ))}
-        <Menu label={<Icon name="plus" size={16} />} ariaLabel={t("importFiles")}>
-          <button onClick={() => run(api.importMediaDialog())}>{t("importFiles")}</button>
           <TtsButton />
           <SoundLibraryButton />
           <YoutubeDownloadButton />
@@ -243,31 +406,69 @@ export function MediaLibrary({ session }: { session: SessionView }) {
       </div>
       <div className="search-row">
         <label className="search">
-          <Icon name="search" size={14} />
+          <Icon
+            name="search"
+            size={14}
+          />
           <input
             type="search"
             value={query}
             placeholder={t("searchMedia")}
             aria-label={t("searchMedia")}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              return setQuery(e.target.value);
+            }}
           />
         </label>
-        <button className={`icon ${view === "grid" ? "active" : ""}`} aria-label={t("viewGrid")} title={t("viewGrid")} aria-pressed={view === "grid"} onClick={() => setView("grid")}>
-          <Icon name="grid" size={16} />
+        <button
+          className={`icon ${view === "grid" ? "active" : ""}`}
+          aria-label={t("viewGrid")}
+          title={t("viewGrid")}
+          aria-pressed={view === "grid"}
+          onClick={() => {
+            return setView("grid");
+          }}
+        >
+          <Icon
+            name="grid"
+            size={16}
+          />
         </button>
-        <button className={`icon ${view === "list" ? "active" : ""}`} aria-label={t("viewList")} title={t("viewList")} aria-pressed={view === "list"} onClick={() => setView("list")}>
-          <Icon name="list" size={16} />
+        <button
+          className={`icon ${view === "list" ? "active" : ""}`}
+          aria-label={t("viewList")}
+          title={t("viewList")}
+          aria-pressed={view === "list"}
+          onClick={() => {
+            return setView("list");
+          }}
+        >
+          <Icon
+            name="list"
+            size={16}
+          />
         </button>
       </div>
       <div className="media-head">
         <span>{t("projectMedia")}</span>
-        <span className="count">{assets.length} {t("items")}</span>
+        <span className="count">
+          {assets.length} {t("items")}
+        </span>
       </div>
       <div className={`asset-list ${view}`}>
         {assets.length === 0 ? (
-          <div className="empty-state">{all.length === 0 ? t("libraryEmpty") : t("libraryNoMatches")}</div>
+          <div className="empty-state">
+            {all.length === 0 ? t("libraryEmpty") : t("libraryNoMatches")}
+          </div>
         ) : (
-          assets.map((asset) => <AssetRow key={asset.id} asset={asset} />)
+          assets.map((asset) => {
+            return (
+              <AssetRow
+                key={asset.id}
+                asset={asset}
+              />
+            );
+          })
         )}
       </div>
     </section>
@@ -282,7 +483,9 @@ function AssetRow({ asset }: { asset: MediaAsset }) {
   // Internal drag onto the timeline uses pointer events: with Tauri's OS file drop enabled,
   // WebView2 does not deliver HTML5 drag-and-drop between elements.
   const onPointerDown = (e: React.PointerEvent) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0) {
+      return;
+    }
     const startX = e.clientX;
     const startY = e.clientY;
     let dragging = false;
@@ -298,7 +501,9 @@ function AssetRow({ asset }: { asset: MediaAsset }) {
       window.removeEventListener("pointerup", up);
       // A macrotask, not a microtask: the timeline's own pointerup listener must still see
       // the drag when it runs after this one.
-      setTimeout(() => assetDragStore.set(null), 0);
+      setTimeout(() => {
+        return assetDragStore.set(null);
+      }, 0);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
@@ -320,8 +525,12 @@ function AssetRow({ asset }: { asset: MediaAsset }) {
           title={transcribing ? t("transcribing") : t("transcribe")}
           aria-label={transcribing ? t("transcribing") : t("transcribe")}
           disabled={transcribingAssetId !== null}
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={() => run(api.transcribeAsset(asset.id))}
+          onPointerDown={(e) => {
+            return e.stopPropagation();
+          }}
+          onClick={() => {
+            return run(api.transcribeAsset(asset.id));
+          }}
         >
           {transcribing ? "…" : <Icon name="document" />}
         </button>
@@ -331,10 +540,17 @@ function AssetRow({ asset }: { asset: MediaAsset }) {
         title={t("favorite")}
         aria-label={t("favorite")}
         aria-pressed={asset.favorited}
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={() => run(api.toggleFavorite(asset.id))}
+        onPointerDown={(e) => {
+          return e.stopPropagation();
+        }}
+        onClick={() => {
+          return run(api.toggleFavorite(asset.id));
+        }}
       >
-        <Icon name="star" filled={asset.favorited} />
+        <Icon
+          name="star"
+          filled={asset.favorited}
+        />
       </button>
     </div>
   );
@@ -344,14 +560,23 @@ function AssetRow({ asset }: { asset: MediaAsset }) {
       className={`asset ${asset.kind === "Audio" ? "audio" : ""}`}
       title={asset.source_path}
       onPointerDown={onPointerDown}
-      onDoubleClick={() => run(api.addAssetToTimeline(asset.id))}
+      onDoubleClick={() => {
+        return run(api.addAssetToTimeline(asset.id));
+      }}
     >
       {asset.kind === "Audio" ? (
         <div className="audio-card">
-          <span className="audio-icon"><Icon name="music" size={20} /></span>
+          <span className="audio-icon">
+            <Icon
+              name="music"
+              size={20}
+            />
+          </span>
           <div className="audio-text">
             <div className="name">{asset.file_name}</div>
-            <div className="meta">{formatTime(asset.duration_secs)} {meta && `· ${meta}`}</div>
+            <div className="meta">
+              {formatTime(asset.duration_secs)} {meta && `· ${meta}`}
+            </div>
           </div>
           {actions}
         </div>
@@ -364,10 +589,17 @@ function AssetRow({ asset }: { asset: MediaAsset }) {
                 src={thumbnailUrl(asset.id)}
                 alt=""
                 draggable={false}
-                onError={() => setThumbFailed(true)}
+                onError={() => {
+                  return setThumbFailed(true);
+                }}
               />
             ) : (
-              <div className="thumb"><Icon name="film" size={22} /></div>
+              <div className="thumb">
+                <Icon
+                  name="film"
+                  size={22}
+                />
+              </div>
             )}
             <span className="duration mono">{formatTime(asset.duration_secs)}</span>
             {actions}

@@ -11,10 +11,14 @@ export function CrashReviewModal() {
   const [showPayload, setShowPayload] = useState(false);
 
   useEffect(() => {
-    void run(api.getPendingCrashReview()).then((result) => setCrash(result ?? null));
+    void run(api.getPendingCrashReview()).then((result) => {
+      return setCrash(result ?? null);
+    });
   }, []);
 
-  if (!crash) return null;
+  if (!crash) {
+    return null;
+  }
 
   const finish = (action: () => Promise<unknown>) => {
     setCrash(null);
@@ -23,24 +27,64 @@ export function CrashReviewModal() {
 
   return (
     <div className="modal-overlay">
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal"
+        onClick={(e) => {
+          return e.stopPropagation();
+        }}
+      >
         <p>{t("crashReviewOffer")}</p>
-        <button className="icon" onClick={() => setShowPayload((v) => !v)}>
+        <button
+          className="icon"
+          onClick={() => {
+            return setShowPayload((v) => {
+              return !v;
+            });
+          }}
+        >
           {t("crashReviewShowPayload")}
         </button>
         {showPayload && (
-          <pre style={{ maxHeight: 220, overflow: "auto", fontSize: 11, whiteSpace: "pre-wrap" }}>
+          <pre
+            style={{
+              maxHeight: 220,
+              overflow: "auto",
+              fontSize: 11,
+              whiteSpace: "pre-wrap",
+            }}
+          >
             {crash.payloadPreview}
           </pre>
         )}
         <div className="modal-actions">
-          <button className="icon" onClick={() => finish(() => api.sendCrashOnce())}>
+          <button
+            className="icon"
+            onClick={() => {
+              return finish(() => {
+                return api.sendCrashOnce();
+              });
+            }}
+          >
             {t("crashReviewSendOnce")}
           </button>
-          <button className="icon" onClick={() => finish(() => api.alwaysSendCrash())}>
+          <button
+            className="icon"
+            onClick={() => {
+              return finish(() => {
+                return api.alwaysSendCrash();
+              });
+            }}
+          >
             {t("crashReviewAlwaysSend")}
           </button>
-          <button className="icon" onClick={() => finish(() => api.dismissCrashReview())}>
+          <button
+            className="icon"
+            onClick={() => {
+              return finish(() => {
+                return api.dismissCrashReview();
+              });
+            }}
+          >
             {t("crashReviewDoNotSend")}
           </button>
         </div>

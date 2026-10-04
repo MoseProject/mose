@@ -17,38 +17,52 @@ export function TranscriptPanel({ session }: { session: SessionView }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [searchProject, setSearchProject] = useState(false);
-  const [document, setDocument] = useState<TranscriptDocument | null>(null);
-  const [hits, setHits] = useState<TranscriptHit[]>([]);
+  const [loadedDocument, setDocument] = useState<TranscriptDocument | null>(null);
+  const [loadedHits, setHits] = useState<TranscriptHit[]>([]);
   const ui = useStore(uiStore);
   const preview = useStore(previewStore);
 
   const clip =
     ui.selectedClipIds.length === 1
-      ? activeTimeline(session.project).tracks
-          .flatMap((track) => track.clips)
-          .find((c) => c.id === ui.selectedClipIds[0])
+      ? activeTimeline(session.project)
+          .tracks.flatMap((track) => {
+            return track.clips;
+          })
+          .find((c) => {
+            return c.id === ui.selectedClipIds[0];
+          })
       : undefined;
 
+  const clipAssetId = clip?.asset_id;
   useEffect(() => {
-    if (!open || searchProject || !clip) {
-      setDocument(null);
+    if (!open || searchProject || clipAssetId === undefined) {
       return;
     }
-    void run(api.getTranscript(clip.asset_id)).then((doc) => setDocument(doc ?? null));
-  }, [open, searchProject, clip?.asset_id]);
+    void run(api.getTranscript(clipAssetId)).then((doc) => {
+      setDocument(doc ?? null);
+    });
+  }, [open, searchProject, clipAssetId]);
 
   const query = search.trim().toLowerCase();
+  const document = open && !searchProject && clipAssetId !== undefined ? loadedDocument : null;
+  const hits = open && searchProject && query.length > 0 ? loadedHits : [];
   useEffect(() => {
     if (!open || !searchProject || query.length === 0) {
-      setHits([]);
       return;
     }
-    void run(api.searchTranscripts(query)).then((result) => setHits(result ?? []));
+    void run(api.searchTranscripts(query)).then((result) => {
+      setHits(result ?? []);
+    });
   }, [open, searchProject, query]);
 
   if (!open) {
     return (
-      <button className="icon" onClick={() => setOpen(true)}>
+      <button
+        className="icon"
+        onClick={() => {
+          return setOpen(true);
+        }}
+      >
         {t("transcriptPanelTitle")}
       </button>
     );
@@ -60,27 +74,52 @@ export function TranscriptPanel({ session }: { session: SessionView }) {
       : clip.source_in_secs +
         (preview.playheadSecs - clip.start_secs) * Math.max(clip.speed_factor, 0.01)
     : undefined;
-  const currentWordId = document?.words.find(
-    (w) => currentSourceSecs !== undefined && currentSourceSecs >= w.start_secs && currentSourceSecs < w.end_secs,
-  )?.id;
+  const currentWordId = document?.words.find((w) => {
+    return (
+      currentSourceSecs !== undefined &&
+      currentSourceSecs >= w.start_secs &&
+      currentSourceSecs < w.end_secs
+    );
+  })?.id;
 
-  const seek = (assetId: number, sourceSecs: number) => void run(api.seekToTranscriptWord(assetId, sourceSecs));
+  const seek = (assetId: number, sourceSecs: number) => {
+    return void run(api.seekToTranscriptWord(assetId, sourceSecs));
+  };
 
   return (
-    <div className="modal-overlay" onClick={() => setOpen(false)}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="modal-overlay"
+      onClick={() => {
+        return setOpen(false);
+      }}
+    >
+      <div
+        className="modal"
+        onClick={(e) => {
+          return e.stopPropagation();
+        }}
+      >
         <h3>{t("transcriptPanelTitle")}</h3>
         <input
           autoFocus
           value={search}
-          placeholder={searchProject ? t("transcriptProjectSearchHint") : t("transcriptPanelSearchHint")}
-          onChange={(e) => setSearch(e.target.value)}
+          placeholder={
+            searchProject ? t("transcriptProjectSearchHint") : t("transcriptPanelSearchHint")
+          }
+          onChange={(e) => {
+            return setSearch(e.target.value);
+          }}
         />
-        <label className="check" style={{ marginTop: 6 }}>
+        <label
+          className="check"
+          style={{ marginTop: 6 }}
+        >
           <input
             type="checkbox"
             checked={searchProject}
-            onChange={(e) => setSearchProject(e.target.checked)}
+            onChange={(e) => {
+              return setSearchProject(e.target.checked);
+            }}
           />
           {t("transcriptSearchProject")}
         </label>
@@ -89,20 +128,31 @@ export function TranscriptPanel({ session }: { session: SessionView }) {
             hits.length === 0 ? (
               <p className="muted">{t("transcriptProjectEmpty")}</p>
             ) : (
-              groupByAsset(hits).map(([assetId, assetName, words]) => (
-                <div key={assetId}>
-                  <div className="muted" style={{ marginTop: 6 }}>{assetName}</div>
-                  {words.map((word) => (
-                    <WordButton
-                      key={word.id}
-                      word={word}
-                      active={word.id === currentWordId}
-                      label={`${formatTime(word.start_secs)} - ${word.text}`}
-                      onClick={() => seek(assetId, word.start_secs)}
-                    />
-                  ))}
-                </div>
-              ))
+              groupByAsset(hits).map(([assetId, assetName, words]) => {
+                return (
+                  <div key={assetId}>
+                    <div
+                      className="muted"
+                      style={{ marginTop: 6 }}
+                    >
+                      {assetName}
+                    </div>
+                    {words.map((word) => {
+                      return (
+                        <WordButton
+                          key={word.id}
+                          word={word}
+                          active={word.id === currentWordId}
+                          label={`${formatTime(word.start_secs)} - ${word.text}`}
+                          onClick={() => {
+                            return seek(assetId, word.start_secs);
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                );
+              })
             )
           ) : !clip ? (
             <p className="muted">{t("transcriptPanelNoClip")}</p>
@@ -110,20 +160,31 @@ export function TranscriptPanel({ session }: { session: SessionView }) {
             <p className="muted">{t("transcriptPanelNoTranscript")}</p>
           ) : (
             document.words
-              .filter((w) => query.length === 0 || w.text.toLowerCase().includes(query))
-              .map((word) => (
-                <WordButton
-                  key={word.id}
-                  word={word}
-                  active={word.id === currentWordId}
-                  label={word.text}
-                  onClick={() => seek(document.asset_id, word.start_secs)}
-                />
-              ))
+              .filter((w) => {
+                return query.length === 0 || w.text.toLowerCase().includes(query);
+              })
+              .map((word) => {
+                return (
+                  <WordButton
+                    key={word.id}
+                    word={word}
+                    active={word.id === currentWordId}
+                    label={word.text}
+                    onClick={() => {
+                      return seek(document.asset_id, word.start_secs);
+                    }}
+                  />
+                );
+              })
           )}
         </div>
         <div className="modal-actions">
-          <button className="icon" onClick={() => setOpen(false)}>
+          <button
+            className="icon"
+            onClick={() => {
+              return setOpen(false);
+            }}
+          >
             {t("cancel")}
           </button>
         </div>
@@ -142,15 +203,25 @@ function groupByAsset(hits: TranscriptHit[]): [number, string, TranscriptWord[]]
     }
     byAsset.get(hit.assetId)!.words.push(hit.word);
   }
-  return order.map((id) => [id, byAsset.get(id)!.name, byAsset.get(id)!.words]);
+  return order.map((id) => {
+    return [id, byAsset.get(id)!.name, byAsset.get(id)!.words];
+  });
 }
 
-function WordButton(props: { word: TranscriptWord; active: boolean; label: string; onClick: () => void }) {
+function WordButton(props: {
+  word: TranscriptWord;
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
   return (
     <button
       className={`icon ${props.active ? "active" : ""}`}
       title={`${formatTime(props.word.start_secs)} (${(props.word.confidence * 100).toFixed(0)}%)`}
-      style={{ margin: "2px 4px 2px 0", opacity: props.word.confidence < 0.5 && !props.active ? 0.6 : 1 }}
+      style={{
+        margin: "2px 4px 2px 0",
+        opacity: props.word.confidence < 0.5 && !props.active ? 0.6 : 1,
+      }}
       onClick={props.onClick}
     >
       {props.label}

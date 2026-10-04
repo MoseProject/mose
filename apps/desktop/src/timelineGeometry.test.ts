@@ -78,25 +78,57 @@ function track(id: number, clips: ClipInstance[]): Track {
 
 function textClip(id: number, start: number, duration: number): TextClip {
   return {
-    id, start_secs: start, duration_secs: duration, text: "Text", font_size: 48, font_family: "lato",
-    font_style: "Regular", font_weight: null, color_rgba: [255, 255, 255, 255],
-    background_rgba: [0, 0, 0, 0], background_padding: 0, background_corner_radius: 0, direction: "Auto",
-    pos_x: 0.1, pos_y: 0.85, pos_x_keyframes: [], pos_y_keyframes: [], scale_keyframes: [],
-    rotation_keyframes: [], opacity_keyframes: [], words: [], highlight_enabled: false,
-    highlight_color_rgba: [255, 220, 0, 255], text_align: "Auto",
+    id,
+    start_secs: start,
+    duration_secs: duration,
+    text: "Text",
+    font_size: 48,
+    font_family: "lato",
+    font_style: "Regular",
+    font_weight: null,
+    color_rgba: [255, 255, 255, 255],
+    background_rgba: [0, 0, 0, 0],
+    background_padding: 0,
+    background_corner_radius: 0,
+    direction: "Auto",
+    pos_x: 0.1,
+    pos_y: 0.85,
+    pos_x_keyframes: [],
+    pos_y_keyframes: [],
+    scale_keyframes: [],
+    rotation_keyframes: [],
+    opacity_keyframes: [],
+    words: [],
+    highlight_enabled: false,
+    highlight_color_rgba: [255, 220, 0, 255],
+    text_align: "Auto",
   };
 }
 
 function shapeClip(id: number, start: number, duration: number): ShapeClip {
   return {
-    id, start_secs: start, duration_secs: duration, shape_kind: "Ellipse", center_x: 0.5, center_y: 0.5,
-    center_x_keyframes: [], center_y_keyframes: [], width: 0.3, height: 0.3, width_keyframes: [],
-    height_keyframes: [], rotation_deg: 0, rotation_keyframes: [], stroke_thickness_px: 0,
+    id,
+    start_secs: start,
+    duration_secs: duration,
+    shape_kind: "Ellipse",
+    center_x: 0.5,
+    center_y: 0.5,
+    center_x_keyframes: [],
+    center_y_keyframes: [],
+    width: 0.3,
+    height: 0.3,
+    width_keyframes: [],
+    height_keyframes: [],
+    rotation_deg: 0,
+    rotation_keyframes: [],
+    stroke_thickness_px: 0,
     color_rgba: [255, 255, 255, 255],
   };
 }
 
-const rowY = (index: number) => RULER_HEIGHT + index * TRACK_HEIGHT + TRACK_HEIGHT / 2;
+const rowY = (index: number) => {
+  return RULER_HEIGHT + index * TRACK_HEIGHT + TRACK_HEIGHT / 2;
+};
 
 describe("coordinate mapping", () => {
   it("round-trips time and x at any zoom and scroll", () => {
@@ -117,7 +149,11 @@ describe("hitTest", () => {
   const tracks = [track(1, [clip(10, 1, 2)]), track(2, [clip(20, 0, 4, 2)])];
 
   it("distinguishes trim handles from the body", () => {
-    expect(hitTest(tracks, 41, rowY(0), 40, 0)).toEqual({ part: "start", clipId: 10, trackIndex: 0 });
+    expect(hitTest(tracks, 41, rowY(0), 40, 0)).toEqual({
+      part: "start",
+      clipId: 10,
+      trackIndex: 0,
+    });
     expect(hitTest(tracks, 80, rowY(0), 40, 0)?.part).toBe("body");
     expect(hitTest(tracks, 119, rowY(0), 40, 0)?.part).toBe("end");
   });
@@ -139,7 +175,11 @@ describe("hitTest", () => {
     const shapeTrack = track(2, []);
     shapeTrack.kind = "Shape";
     shapeTrack.shape_clips = [shapeClip(32, 2, 1)];
-    expect(hitTest([textTrack, shapeTrack], 41, rowY(0), 40, 0)).toEqual({ part: "start", clipId: 31, trackIndex: 0 });
+    expect(hitTest([textTrack, shapeTrack], 41, rowY(0), 40, 0)).toEqual({
+      part: "start",
+      clipId: 31,
+      trackIndex: 0,
+    });
     expect(hitTest([textTrack, shapeTrack], 119, rowY(0), 40, 0)?.part).toBe("end");
     expect(hitTest([textTrack, shapeTrack], 100, rowY(1), 40, 0)?.clipId).toBe(32);
   });
@@ -152,8 +192,16 @@ describe("clip spans", () => {
     textTrack.kind = "Text";
     textTrack.text_clips = [textClip(5, 3, 1.5)];
     const found = findSpan([media, textTrack], 5);
-    expect(found).toEqual({ span: { id: 5, start_secs: 3, duration_secs: 1.5, overlay: true }, trackIndex: 1 });
-    expect(findSpan([media, textTrack], 1)?.span).toEqual({ id: 1, start_secs: 0, duration_secs: 2, overlay: false });
+    expect(found).toEqual({
+      span: { id: 5, start_secs: 3, duration_secs: 1.5, overlay: true },
+      trackIndex: 1,
+    });
+    expect(findSpan([media, textTrack], 1)?.span).toEqual({
+      id: 1,
+      start_secs: 0,
+      duration_secs: 2,
+      overlay: false,
+    });
     expect(findSpan([media, textTrack], 99)).toBeNull();
   });
 });
@@ -240,7 +288,9 @@ describe("long timelines", () => {
 
   it("zooms out far enough to see ten hours in a normal window", () => {
     let px = 40;
-    for (let i = 0; i < 60; i += 1) px = zoomAround(500, px, 0, 1 / 1.5, 0.01, 600).pxPerSec;
+    for (let i = 0; i < 60; i += 1) {
+      px = zoomAround(500, px, 0, 1 / 1.5, 0.01, 600).pxPerSec;
+    }
     expect(px).toBe(0.01);
     expect(36000 * px).toBeLessThan(500);
   });

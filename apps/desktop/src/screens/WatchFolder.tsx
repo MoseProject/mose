@@ -25,7 +25,9 @@ export function WatchFolder() {
   useEffect(() => {
     const unlisten = onWatchFolder((event) => {
       setRows((prev) => {
-        const index = prev.findIndex((r) => r.path === event.path);
+        const index = prev.findIndex((r) => {
+          return r.path === event.path;
+        });
         const patch: Partial<Row> = (() => {
           switch (event.type) {
             case "detected":
@@ -37,7 +39,12 @@ export function WatchFolder() {
             case "progress":
               return { percent: event.percent };
             case "done":
-              return { status: "done", percent: 100, before: event.before, after: event.after };
+              return {
+                status: "done",
+                percent: 100,
+                before: event.before,
+                after: event.after,
+              };
             case "failed":
               return { status: "error", error: event.message };
           }
@@ -63,13 +70,21 @@ export function WatchFolder() {
       });
     });
     return () => {
-      void unlisten.then((stop) => stop());
+      void unlisten.then((stop) => {
+        return stop();
+      });
     };
   }, []);
 
-  const choose = () => void run(api.pickWatchFolder()).then((path) => path && setWatchPath(path));
+  const choose = () => {
+    return void run(api.pickWatchFolder()).then((path) => {
+      return path && setWatchPath(path);
+    });
+  };
   const start = () => {
-    if (!watchPath) return;
+    if (!watchPath) {
+      return;
+    }
     setRunning(true);
     setRows([]);
     void run(api.startWatchingFolder(watchPath));
@@ -80,55 +95,68 @@ export function WatchFolder() {
   };
 
   return (
-    <main className="prefs" data-testid="screen-watch">
+    <main
+      className="prefs"
+      data-testid="screen-watch"
+    >
       <h1>{t("watchFolder")}</h1>
       <label>
         <span className={watchPath ? "" : "muted"}>{watchPath ?? t("watchFolderNone")}</span>
-        <button onClick={choose} disabled={running}>
+        <button
+          onClick={choose}
+          disabled={running}
+        >
           {t("watchFolderChoose")}
         </button>
       </label>
-      <button className={running ? "" : "primary"} disabled={!watchPath || running} onClick={start}>
+      <button
+        className={running ? "" : "primary"}
+        disabled={!watchPath || running}
+        onClick={start}
+      >
         {t("watchFolderStart")}
       </button>
-      {running && (
-        <button onClick={stop}>
-          {t("watchFolderStop")}
-        </button>
-      )}
+      {running && <button onClick={stop}>{t("watchFolderStop")}</button>}
       <div style={{ maxHeight: 400, overflowY: "auto" }}>
         {rows.length === 0 ? (
           <p className="muted">{t("watchFolderEmpty")}</p>
         ) : (
-          rows.map((row) => (
-            <div className="modal-row" key={row.path}>
-              <div>
-                <div>{row.path.split(/[/\\]/).pop()}</div>
-                <div className="muted">
-                  {row.status === "stabilizing" && t("watchFolderStabilizing")}
-                  {row.status === "processing" && `${t("watchFolderProcessing")} ${row.percent}%`}
-                  {row.status === "done" &&
-                    row.before &&
-                    row.after &&
-                    `${t("watchFolderDone")} · ${row.before.integrated_lufs.toFixed(1)} → ${row.after.integrated_lufs.toFixed(1)} LUFS`}
-                  {row.status === "error" && `${t("watchFolderError")}: ${row.error}`}
+          rows.map((row) => {
+            return (
+              <div
+                className="modal-row"
+                key={row.path}
+              >
+                <div>
+                  <div>{row.path.split(/[/\\]/).pop()}</div>
+                  <div className="muted">
+                    {row.status === "stabilizing" && t("watchFolderStabilizing")}
+                    {row.status === "processing" && `${t("watchFolderProcessing")} ${row.percent}%`}
+                    {row.status === "done" &&
+                      row.before &&
+                      row.after &&
+                      `${t("watchFolderDone")} · ${row.before.integrated_lufs.toFixed(1)} → ${row.after.integrated_lufs.toFixed(1)} LUFS`}
+                    {row.status === "error" && `${t("watchFolderError")}: ${row.error}`}
+                  </div>
                 </div>
+                {row.status === "done" && !row.addedToProject && watchPath && (
+                  <button
+                    className="icon"
+                    onClick={() => {
+                      void run(api.addWatchedFileToProject(watchPath, row.path));
+                      setRows((prev) => {
+                        return prev.map((r) => {
+                          return r.path === row.path ? { ...r, addedToProject: true } : r;
+                        });
+                      });
+                    }}
+                  >
+                    {t("watchFolderAddToProject")}
+                  </button>
+                )}
               </div>
-              {row.status === "done" && !row.addedToProject && watchPath && (
-                <button
-                  className="icon"
-                  onClick={() => {
-                    void run(api.addWatchedFileToProject(watchPath, row.path));
-                    setRows((prev) =>
-                      prev.map((r) => (r.path === row.path ? { ...r, addedToProject: true } : r)),
-                    );
-                  }}
-                >
-                  {t("watchFolderAddToProject")}
-                </button>
-              )}
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </main>

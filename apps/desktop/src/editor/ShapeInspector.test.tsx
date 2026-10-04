@@ -4,12 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n";
 import type { OverlayCatalog, ShapeClip, ShapeKind } from "../types";
 
-vi.mock("../ipc", () => ({
-  api: {
-    overlayCatalog: vi.fn(),
-    updateShapeClip: vi.fn().mockResolvedValue(undefined),
-  },
-}));
+vi.mock("../ipc", () => {
+  return {
+    api: {
+      overlayCatalog: vi.fn(),
+      updateShapeClip: vi.fn().mockResolvedValue(undefined),
+    },
+  };
+});
 
 const { ShapeInspector } = await import("./ShapeInspector");
 const { api } = await import("../ipc");
@@ -39,31 +41,37 @@ const catalog = {
   ],
 } as unknown as OverlayCatalog;
 
-const clip = (overrides: Partial<ShapeClip> = {}): ShapeClip => ({
-  id: 8,
-  start_secs: 1,
-  duration_secs: 3,
-  shape_kind: rectangle,
-  center_x: 0.5,
-  center_y: 0.5,
-  center_x_keyframes: [],
-  center_y_keyframes: [],
-  width: 0.4,
-  height: 0.3,
-  width_keyframes: [],
-  height_keyframes: [],
-  rotation_deg: 10,
-  rotation_keyframes: [],
-  stroke_thickness_px: 2,
-  color_rgba: [255, 0, 0, 128],
-  ...overrides,
-});
+const clip = (overrides: Partial<ShapeClip> = {}): ShapeClip => {
+  return {
+    id: 8,
+    start_secs: 1,
+    duration_secs: 3,
+    shape_kind: rectangle,
+    center_x: 0.5,
+    center_y: 0.5,
+    center_x_keyframes: [],
+    center_y_keyframes: [],
+    width: 0.4,
+    height: 0.3,
+    width_keyframes: [],
+    height_keyframes: [],
+    rotation_deg: 10,
+    rotation_keyframes: [],
+    stroke_thickness_px: 2,
+    color_rgba: [255, 0, 0, 128],
+    ...overrides,
+  };
+};
 
-const field = (label: string) =>
-  screen.getByText(label, { selector: "label" }).parentElement as HTMLElement;
-const control = (label: string, selector: string) =>
-  field(label).querySelector(selector) as HTMLInputElement | HTMLSelectElement;
-const lastPatch = () => vi.mocked(api.updateShapeClip).mock.calls.at(-1)![1];
+const field = (label: string) => {
+  return screen.getByText(label, { selector: "label" }).parentElement as HTMLElement;
+};
+const control = (label: string, selector: string) => {
+  return field(label).querySelector(selector) as HTMLInputElement | HTMLSelectElement;
+};
+const lastPatch = () => {
+  return vi.mocked(api.updateShapeClip).mock.calls.at(-1)![1];
+};
 
 function slide(label: string, value: number) {
   const range = control(label, 'input[type="range"]');
@@ -75,11 +83,15 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(api.overlayCatalog).mockResolvedValue(catalog);
 });
-afterEach(() => cleanup());
+afterEach(() => {
+  return cleanup();
+});
 
 async function loaded(overrides: Partial<ShapeClip> = {}) {
   const view = render(<ShapeInspector clip={clip(overrides)} />);
-  await waitFor(() => expect((control(t("shapeKind"), "select") as HTMLSelectElement).disabled).toBe(false));
+  await waitFor(() => {
+    return expect((control(t("shapeKind"), "select") as HTMLSelectElement).disabled).toBe(false);
+  });
   return view;
 }
 
@@ -87,20 +99,34 @@ describe("shape inspector", () => {
   it("keeps the shape picker disabled until the catalog loads", async () => {
     render(<ShapeInspector clip={clip()} />);
     expect((control(t("shapeKind"), "select") as HTMLSelectElement).disabled).toBe(true);
-    await waitFor(() => expect((control(t("shapeKind"), "select") as HTMLSelectElement).disabled).toBe(false));
+    await waitFor(() => {
+      return expect((control(t("shapeKind"), "select") as HTMLSelectElement).disabled).toBe(false);
+    });
   });
 
   it("selects the matching preset and switches to another", async () => {
     await loaded();
     const select = control(t("shapeKind"), "select") as HTMLSelectElement;
     expect(select.value).toBe("Rectangle");
-    expect([...select.options].map((o) => o.value)).toEqual(["Ellipse", "Rectangle", "Triangle"]);
+    expect(
+      [...select.options].map((o) => {
+        return o.value;
+      }),
+    ).toEqual(["Ellipse", "Rectangle", "Triangle"]);
     fireEvent.change(select, { target: { value: "Triangle" } });
     expect(lastPatch()).toEqual({ shapeKind: "Triangle" });
   });
 
   it("shows a non-pickable Custom entry for hand-edited geometry", async () => {
-    await loaded({ shape_kind: { Polygon: [[0, 0], [1, 0], [0.3, 0.9]] } });
+    await loaded({
+      shape_kind: {
+        Polygon: [
+          [0, 0],
+          [1, 0],
+          [0.3, 0.9],
+        ],
+      },
+    });
     const custom = screen.getByText(t("shapeCustom")) as HTMLOptionElement;
     expect(custom.disabled).toBe(true);
     expect((control(t("shapeKind"), "select") as HTMLSelectElement).value).toBe("Custom");
@@ -120,11 +146,21 @@ describe("shape inspector", () => {
     // Vertex 2 is (1, 0): inputs 2 and 3.
     fireEvent.change(inputs[2], { target: { value: "0.8" } });
     expect(lastPatch()).toEqual({
-      polygonVertices: [[0, 0], [0.8, 0], [1, 1], [0, 1]],
+      polygonVertices: [
+        [0, 0],
+        [0.8, 0],
+        [1, 1],
+        [0, 1],
+      ],
     });
     fireEvent.change(inputs[3], { target: { value: "0.2" } });
     expect(lastPatch()).toEqual({
-      polygonVertices: [[0, 0], [1, 0.2], [1, 1], [0, 1]],
+      polygonVertices: [
+        [0, 0],
+        [1, 0.2],
+        [1, 1],
+        [0, 1],
+      ],
     });
   });
 
@@ -132,7 +168,13 @@ describe("shape inspector", () => {
     await loaded();
     const section = screen.getByText(t("shapeVertices")).closest("details")!;
     fireEvent.click(section.querySelectorAll("button")[0]);
-    expect(lastPatch()).toEqual({ polygonVertices: [[1, 0], [1, 1], [0, 1]] });
+    expect(lastPatch()).toEqual({
+      polygonVertices: [
+        [1, 0],
+        [1, 1],
+        [0, 1],
+      ],
+    });
     cleanup();
 
     await loaded({ shape_kind: triangle });
@@ -140,12 +182,18 @@ describe("shape inspector", () => {
       .getByText(t("shapeVertices"))
       .closest("details")!
       .querySelectorAll("button") as NodeListOf<HTMLButtonElement>;
-    expect([...buttons].every((b) => b.disabled)).toBe(true);
+    expect(
+      [...buttons].every((b) => {
+        return b.disabled;
+      }),
+    ).toBe(true);
   });
 
   it("commits color, opacity, position and size", async () => {
     await loaded();
-    fireEvent.change(control(t("shapeColor"), 'input[type="color"]'), { target: { value: "#00ff00" } });
+    fireEvent.change(control(t("shapeColor"), 'input[type="color"]'), {
+      target: { value: "#00ff00" },
+    });
     expect(lastPatch()).toEqual({ colorRgb: [0, 255, 0] });
     slide(t("opacity"), 0.5);
     expect(lastPatch()).toEqual({ opacity: 128 });
@@ -184,7 +232,11 @@ describe("shape inspector", () => {
     const { container } = await loaded({ width_keyframes: key });
     const sections = [...container.querySelectorAll("details")];
     // Vertices (always open for a polygon), then the five keyframe sections.
-    expect(sections.map((d) => d.open)).toEqual([true, false, false, true, false, false]);
+    expect(
+      sections.map((d) => {
+        return d.open;
+      }),
+    ).toEqual([true, false, false, true, false, false]);
 
     const adds = screen.getAllByText(t("addKeyframe"));
     expect(adds).toHaveLength(5);

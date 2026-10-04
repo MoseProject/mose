@@ -4,7 +4,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { previewStore } from "../store";
 import { AudioMeter, peakFill } from "./AudioMeter";
 
-afterEach(() => cleanup());
+afterEach(() => {
+  return cleanup();
+});
 
 describe("peakFill", () => {
   it("maps -60..0 dBFS onto 0..1", () => {
@@ -24,7 +26,9 @@ describe("peakFill", () => {
 describe("AudioMeter", () => {
   it("uncovers each bar in proportion to its channel's peak", () => {
     const { container } = render(<AudioMeter />);
-    act(() => previewStore.set({ ...previewStore.get(), peakL: 1, peakR: 0 }));
+    act(() => {
+      return previewStore.set({ ...previewStore.get(), peakL: 1, peakR: 0 });
+    });
     const covers = container.querySelectorAll<HTMLElement>(".meter-cover");
     expect(covers).toHaveLength(2);
     expect(parseFloat(covers[0].style.height)).toBeCloseTo(0);
@@ -33,7 +37,9 @@ describe("AudioMeter", () => {
 
   it("labels the scale from 0 down to -60", () => {
     const { container } = render(<AudioMeter />);
-    const marks = [...container.querySelectorAll(".meter-scale span")].map((span) => span.textContent);
+    const marks = [...container.querySelectorAll(".meter-scale span")].map((span) => {
+      return span.textContent;
+    });
     expect(marks[0]).toBe("0");
     expect(marks[marks.length - 1]).toBe("-60");
   });

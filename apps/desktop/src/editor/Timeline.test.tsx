@@ -6,20 +6,67 @@ import { assetDragStore, previewStore, uiStore } from "../store";
 import { makeSession } from "../testSupport";
 import type { PreviewTick, SessionView, Track } from "../types";
 
-vi.mock("./LayerTemplates", () => ({ LayerTemplates: () => null }));
-vi.mock("./TranscriptPanel", () => ({ TranscriptPanel: () => null }));
-vi.mock("./SilenceReviewPanel", () => ({ SilenceReviewPanel: () => null }));
+vi.mock("./LayerTemplates", () => {
+  return {
+    LayerTemplates: () => {
+      return null;
+    },
+  };
+});
+vi.mock("./TranscriptPanel", () => {
+  return {
+    TranscriptPanel: () => {
+      return null;
+    },
+  };
+});
+vi.mock("./SilenceReviewPanel", () => {
+  return {
+    SilenceReviewPanel: () => {
+      return null;
+    },
+  };
+});
 vi.mock("../ipc", () => {
   const names = [
-    "seek", "addAssetToTimeline", "selectSequence", "moveOverlayClip", "slideClip", "moveClip",
-    "moveClipGroup", "slipClip", "trimOverlayClip", "rollEditFromStartEdge", "rollEditClip",
-    "trimClip", "splitAtPlayhead", "deleteClips", "mergeClipsIntoComposite", "createCompoundClip",
-    "detectSceneCutsForClip", "detectHighlights", "addTrack", "addMarker", "setTrackFlags",
+    "seek",
+    "addAssetToTimeline",
+    "selectSequence",
+    "moveOverlayClip",
+    "slideClip",
+    "moveClip",
+    "moveClipGroup",
+    "slipClip",
+    "trimOverlayClip",
+    "rollEditFromStartEdge",
+    "rollEditClip",
+    "trimClip",
+    "splitAtPlayhead",
+    "deleteClips",
+    "mergeClipsIntoComposite",
+    "createCompoundClip",
+    "detectSceneCutsForClip",
+    "detectHighlights",
+    "addTrack",
+    "addMarker",
+    "setTrackFlags",
   ];
-  const api: Record<string, unknown> = Object.fromEntries(names.map((n) => [n, vi.fn().mockResolvedValue(undefined)]));
+  const api: Record<string, unknown> = Object.fromEntries(
+    names.map((n) => {
+      return [n, vi.fn().mockResolvedValue(undefined)];
+    }),
+  );
   api.addTextClip = vi.fn().mockResolvedValue(5);
   api.addShapeClip = vi.fn().mockResolvedValue(6);
-  return { api, frameAtUrl: () => "about:blank", waveformUrl: () => "about:blank" };
+  return {
+    api,
+    frameAtUrl: () => {
+      return "about:blank";
+    },
+    waveformUrl: () => {
+      return "about:blank";
+    },
+  };
 });
 
 const { Timeline } = await import("./Timeline");
@@ -33,7 +80,9 @@ const HEIGHT = 300;
 const sets: [string | symbol, unknown][] = [];
 const ctx: Record<string | symbol, unknown> = new Proxy({} as Record<string | symbol, unknown>, {
   get(target, key) {
-    if (!(key in target)) target[key] = vi.fn();
+    if (!(key in target)) {
+      target[key] = vi.fn();
+    }
     return target[key];
   },
   set(target, key, value) {
@@ -54,30 +103,35 @@ class FakeResizeObserver {
 
 let frames: { id: number; callback: () => void }[] = [];
 let nextFrame = 1;
-const flush = () =>
-  act(() => {
+const flush = () => {
+  return act(() => {
     const pending = frames;
     frames = [];
-    pending.forEach((frame) => frame.callback());
+    pending.forEach((frame) => {
+      return frame.callback();
+    });
   });
+};
 
 // ---- fixtures --------------------------------------------------------------------------------
 
-const clip = (overrides: Record<string, unknown>) => ({
-  id: 1,
-  asset_id: 1,
-  start_secs: 0,
-  source_in_secs: 0,
-  source_out_secs: 10,
-  speed_factor: 1,
-  gain_db: 0,
-  color_label: null,
-  frozen: false,
-  nested_sequence_id: null,
-  ...overrides,
-});
-const track = (overrides: Record<string, unknown>) =>
-  ({
+const clip = (overrides: Record<string, unknown>) => {
+  return {
+    id: 1,
+    asset_id: 1,
+    start_secs: 0,
+    source_in_secs: 0,
+    source_out_secs: 10,
+    speed_factor: 1,
+    gain_db: 0,
+    color_label: null,
+    frozen: false,
+    nested_sequence_id: null,
+    ...overrides,
+  };
+};
+const track = (overrides: Record<string, unknown>) => {
+  return {
     id: 10,
     name: "V1",
     kind: "Video",
@@ -89,10 +143,13 @@ const track = (overrides: Record<string, unknown>) =>
     color_label: null,
     locked: false,
     ...overrides,
-  }) as unknown as Track;
+  } as unknown as Track;
+};
 
 // Track rows are 56px tall below a 24px ruler: row i is centered on y = 52 + 56 * i.
-const ROW = (index: number) => 52 + 56 * index;
+const ROW = (index: number) => {
+  return 52 + 56 * index;
+};
 
 function tracks(): Track[] {
   return [
@@ -101,7 +158,14 @@ function tracks(): Track[] {
       name: "V1",
       clips: [
         clip({ id: 1, asset_id: 1 }),
-        clip({ id: 2, asset_id: 2, start_secs: 20, speed_factor: 2, frozen: true, color_label: [1, 2, 3] }),
+        clip({
+          id: 2,
+          asset_id: 2,
+          start_secs: 20,
+          speed_factor: 2,
+          frozen: true,
+          color_label: [1, 2, 3],
+        }),
         clip({ id: 3, asset_id: 1, start_secs: 15, source_out_secs: 0.2 }),
         clip({ id: 8, asset_id: 1, start_secs: 100 }),
       ],
@@ -113,7 +177,13 @@ function tracks(): Track[] {
       kind: "Audio",
       clips: [
         clip({ id: 6, asset_id: 3, nested_sequence_id: 2 }),
-        clip({ id: 9, asset_id: 99, start_secs: 12, source_out_secs: 4, nested_sequence_id: 999 }),
+        clip({
+          id: 9,
+          asset_id: 99,
+          start_secs: 12,
+          source_out_secs: 4,
+          nested_sequence_id: 999,
+        }),
       ],
     }),
     track({
@@ -121,7 +191,13 @@ function tracks(): Track[] {
       name: "Txt",
       kind: "Text",
       text_clips: [
-        { id: 20, start_secs: 2, duration_secs: 4, text: "hi", color_rgba: [255, 0, 0, 255] },
+        {
+          id: 20,
+          start_secs: 2,
+          duration_secs: 4,
+          text: "hi",
+          color_rgba: [255, 0, 0, 255],
+        },
         { id: 21, start_secs: 7, duration_secs: 2, text: "", color_rgba: [0, 255, 0, 255] },
       ],
       shape_clips: [{ id: 22, start_secs: 10, duration_secs: 3, color_rgba: [0, 0, 255, 255] }],
@@ -154,34 +230,57 @@ function world(list: Track[] = tracks()): SessionView {
   return session;
 }
 
-const tick = (overrides: Partial<PreviewTick> = {}): PreviewTick => ({
-  frameSeq: 0,
-  playheadSecs: 0,
-  playing: false,
-  hasClip: false,
-  available: true,
-  error: null,
-  peakL: 0,
-  peakR: 0,
-  ...overrides,
-});
+const tick = (overrides: Partial<PreviewTick> = {}): PreviewTick => {
+  return {
+    frameSeq: 0,
+    playheadSecs: 0,
+    playing: false,
+    hasClip: false,
+    available: true,
+    error: null,
+    peakL: 0,
+    peakR: 0,
+    ...overrides,
+  };
+};
 
-const canvas = () => screen.getByTestId("timeline-canvas");
+const canvas = () => {
+  return screen.getByTestId("timeline-canvas");
+};
 // jsdom's PointerEvent init is unreliable, so build MouseEvents under the pointer event names.
-const ptr = (type: string, x: number, y: number, init: MouseEventInit = {}) =>
-  fireEvent(canvas(), new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0, ...init }));
-const button = (label: string) => screen.getByText(label, { selector: "button" }) as HTMLButtonElement;
-const titled = (title: string) => screen.getByTitle(title) as HTMLButtonElement;
+const ptr = (type: string, x: number, y: number, init: MouseEventInit = {}) => {
+  return fireEvent(
+    canvas(),
+    new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0, ...init }),
+  );
+};
+const button = (label: string) => {
+  return screen.getByText(label, { selector: "button" }) as HTMLButtonElement;
+};
+const titled = (title: string) => {
+  return screen.getByTitle(title) as HTMLButtonElement;
+};
 
 function mount(session: SessionView = world()) {
   const view = render(<Timeline session={session} />);
-  act(() => observerTrigger());
+  act(() => {
+    return observerTrigger();
+  });
   flush();
   return view;
 }
 
-const resetUi = () =>
-  uiStore.set({ screen: "editor", selectedClipIds: [], tool: "select", pxPerSec: 40, error: null, drawingShapePoints: null, exportQueueOpen: false });
+const resetUi = () => {
+  return uiStore.set({
+    screen: "editor",
+    selectedClipIds: [],
+    tool: "select",
+    pxPerSec: 40,
+    error: null,
+    drawingShapePoints: null,
+    exportQueueOpen: false,
+  });
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -195,14 +294,38 @@ beforeEach(() => {
     return id;
   });
   vi.stubGlobal("cancelAnimationFrame", (id: number) => {
-    frames = frames.filter((frame) => frame.id !== id);
+    frames = frames.filter((frame) => {
+      return frame.id !== id;
+    });
   });
-  HTMLCanvasElement.prototype.getContext = vi.fn(() => ctx) as never;
-  HTMLCanvasElement.prototype.getBoundingClientRect = () =>
-    ({ left: 0, top: 0, right: WIDTH, bottom: HEIGHT, width: WIDTH, height: HEIGHT, x: 0, y: 0 }) as DOMRect;
+  HTMLCanvasElement.prototype.getContext = vi.fn(() => {
+    return ctx;
+  }) as never;
+  HTMLCanvasElement.prototype.getBoundingClientRect = () => {
+    return {
+      left: 0,
+      top: 0,
+      right: WIDTH,
+      bottom: HEIGHT,
+      width: WIDTH,
+      height: HEIGHT,
+      x: 0,
+      y: 0,
+    } as DOMRect;
+  };
   Element.prototype.setPointerCapture = vi.fn();
-  Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get: () => WIDTH });
-  Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, get: () => HEIGHT });
+  Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+    configurable: true,
+    get: () => {
+      return WIDTH;
+    },
+  });
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+    configurable: true,
+    get: () => {
+      return HEIGHT;
+    },
+  });
   resetUi();
   previewStore.set(tick());
   assetDragStore.set(null);
@@ -227,15 +350,23 @@ describe("timeline painting", () => {
   it("paints rows, clips, labels, badges and the ruler", () => {
     uiStore.set({ ...uiStore.get(), selectedClipIds: [1, 20] });
     mount();
-    const text = (ctx.fillText as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
+    const text = (ctx.fillText as ReturnType<typeof vi.fn>).mock.calls.map((c) => {
+      return c[0];
+    });
     expect(text).toContain("a.mp4");
     expect(text).toContain("b.mp4  2.00× ❄");
     expect(text).toContain("#99");
     expect(text).toContain("hi");
     expect(text).toContain(t("text"));
     expect(text).toContain(t("shape"));
-    expect(text.some((label) => /^\d+:\d{2}/.test(label as string))).toBe(true);
-    expect((ctx.strokeRect as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(
+      text.some((label) => {
+        return /^\d+:\d{2}/.test(label as string);
+      }),
+    ).toBe(true);
+    expect((ctx.strokeRect as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThanOrEqual(
+      2,
+    );
     expect(sets).toContainEqual(["fillStyle", "rgb(1,2,3)"]);
     expect(sets).toContainEqual(["fillStyle", "rgba(0,0,0,0.45)"]);
   });
@@ -244,29 +375,56 @@ describe("timeline painting", () => {
     mount();
     // Clip 8 starts 100 s in (4000 px), row 5 starts at 304 px, below the 300 px canvas.
     const rects = (ctx.fillRect as ReturnType<typeof vi.fn>).mock.calls;
-    expect(rects.some((c) => c[0] === 4000)).toBe(false);
-    expect(rects.some((c) => c[1] === 24 + 5 * 56)).toBe(false);
+    expect(
+      rects.some((c) => {
+        return c[0] === 4000;
+      }),
+    ).toBe(false);
+    expect(
+      rects.some((c) => {
+        return c[1] === 24 + 5 * 56;
+      }),
+    ).toBe(false);
   });
 
   it("does not label a clip too narrow to hold text", () => {
     mount();
-    const text = (ctx.fillText as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
+    const text = (ctx.fillText as ReturnType<typeof vi.fn>).mock.calls.map((c) => {
+      return c[0];
+    });
     // Clip 3 is 0.2 s (8 px) wide and uses asset 1, whose label is already drawn once by clip 1/7/8.
-    expect(text.filter((label) => label === "a.mp4")).toHaveLength(2);
+    expect(
+      text.filter((label) => {
+        return label === "a.mp4";
+      }),
+    ).toHaveLength(2);
   });
 
   it("repaints on playhead ticks and hides an off-screen playhead", () => {
     mount();
     const before = (ctx.fillRect as ReturnType<typeof vi.fn>).mock.calls.length;
-    act(() => previewStore.set(tick({ playheadSecs: 5 })));
+    act(() => {
+      return previewStore.set(tick({ playheadSecs: 5 }));
+    });
     flush();
     expect((ctx.fillRect as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(before);
-    expect((ctx.fillRect as ReturnType<typeof vi.fn>).mock.calls).toContainEqual([200, 0, 1, HEIGHT]);
+    expect((ctx.fillRect as ReturnType<typeof vi.fn>).mock.calls).toContainEqual([
+      200,
+      0,
+      1,
+      HEIGHT,
+    ]);
 
     (ctx.fillRect as ReturnType<typeof vi.fn>).mockClear();
-    act(() => previewStore.set(tick({ playheadSecs: 9000 })));
+    act(() => {
+      return previewStore.set(tick({ playheadSecs: 9000 }));
+    });
     flush();
-    expect((ctx.fillRect as ReturnType<typeof vi.fn>).mock.calls.some((c) => c[3] === HEIGHT && c[2] === 1)).toBe(false);
+    expect(
+      (ctx.fillRect as ReturnType<typeof vi.fn>).mock.calls.some((c) => {
+        return c[3] === HEIGHT && c[2] === 1;
+      }),
+    ).toBe(false);
   });
 
   it("coalesces repaint requests into one frame", () => {
@@ -280,30 +438,44 @@ describe("timeline painting", () => {
 
   it("shows a ghost block while an asset is dragged over the lanes", () => {
     mount();
-    act(() => assetDragStore.set({ assetId: 1, clientX: 100, clientY: 100 }));
+    act(() => {
+      return assetDragStore.set({ assetId: 1, clientX: 100, clientY: 100 });
+    });
     flush();
     expect(sets).toContainEqual(["globalAlpha", 0.35]);
 
     sets.length = 0;
-    act(() => assetDragStore.set({ assetId: 1, clientX: 100, clientY: 10 }));
+    act(() => {
+      return assetDragStore.set({ assetId: 1, clientX: 100, clientY: 10 });
+    });
     flush();
     expect(sets).not.toContainEqual(["globalAlpha", 0.35]);
-    act(() => assetDragStore.set({ assetId: 777, clientX: 100, clientY: 100 }));
+    act(() => {
+      return assetDragStore.set({ assetId: 777, clientX: 100, clientY: 100 });
+    });
     flush();
     expect(sets).not.toContainEqual(["globalAlpha", 0.35]);
-    act(() => assetDragStore.set({ assetId: 1, clientX: 5000, clientY: 100 }));
+    act(() => {
+      return assetDragStore.set({ assetId: 1, clientX: 5000, clientY: 100 });
+    });
     flush();
     expect(sets).not.toContainEqual(["globalAlpha", 0.35]);
   });
 
   it("copes with a canvas that has no 2d context", () => {
-    HTMLCanvasElement.prototype.getContext = vi.fn(() => null) as never;
-    expect(() => mount()).not.toThrow();
+    HTMLCanvasElement.prototype.getContext = vi.fn(() => {
+      return null;
+    }) as never;
+    expect(() => {
+      return mount();
+    }).not.toThrow();
   });
 
   it("cancels a pending frame on unmount", () => {
     const { unmount } = mount();
-    act(() => previewStore.set(tick({ playheadSecs: 1 })));
+    act(() => {
+      return previewStore.set(tick({ playheadSecs: 1 }));
+    });
     expect(frames).toHaveLength(1);
     unmount();
     expect(frames).toHaveLength(0);
@@ -318,14 +490,24 @@ describe("timeline painting", () => {
 describe("toolbar", () => {
   it("disables selection-bound actions until enough clips are selected", () => {
     mount();
-    for (const label of [t("delete"), t("rippleDelete"), t("mergeComposite"), t("compoundClip"), t("detectChapters")]) {
+    for (const label of [
+      t("delete"),
+      t("rippleDelete"),
+      t("mergeComposite"),
+      t("compoundClip"),
+      t("detectChapters"),
+    ]) {
       expect(button(label).disabled).toBe(true);
     }
-    act(() => uiStore.set({ ...uiStore.get(), selectedClipIds: [1] }));
+    act(() => {
+      return uiStore.set({ ...uiStore.get(), selectedClipIds: [1] });
+    });
     expect(button(t("delete")).disabled).toBe(false);
     expect(button(t("detectChapters")).disabled).toBe(false);
     expect(button(t("mergeComposite")).disabled).toBe(true);
-    act(() => uiStore.set({ ...uiStore.get(), selectedClipIds: [1, 2] }));
+    act(() => {
+      return uiStore.set({ ...uiStore.get(), selectedClipIds: [1, 2] });
+    });
     expect(button(t("mergeComposite")).disabled).toBe(false);
     expect(button(t("detectChapters")).disabled).toBe(true);
   });
@@ -358,7 +540,11 @@ describe("toolbar", () => {
     fireEvent.click(button(t("addAudioTrack")));
     fireEvent.click(button(t("addTextTrack")));
     fireEvent.click(button(t("addShapeTrack")));
-    expect(calls.addTrack.mock.calls.map((c) => c[0])).toEqual(["Video", "Audio", "Text", "Shape"]);
+    expect(
+      calls.addTrack.mock.calls.map((c) => {
+        return c[0];
+      }),
+    ).toEqual(["Video", "Audio", "Text", "Shape"]);
   });
 
   it("creates a text or shape clip and selects it", async () => {
@@ -449,7 +635,9 @@ describe("track headers", () => {
 
   it("lists every track by name", () => {
     mount();
-    for (const name of ["V1", "V2", "A1", "Txt", "V3", "V4"]) expect(screen.getByText(name)).toBeTruthy();
+    for (const name of ["V1", "V2", "A1", "Txt", "V3", "V4"]) {
+      expect(screen.getByText(name)).toBeTruthy();
+    }
   });
 });
 
@@ -457,7 +645,9 @@ describe("ruler", () => {
   let now = 1000;
   beforeEach(() => {
     now = 1000;
-    vi.spyOn(performance, "now").mockImplementation(() => now);
+    vi.spyOn(performance, "now").mockImplementation(() => {
+      return now;
+    });
   });
 
   it("ignores any button but the primary one", () => {
@@ -637,7 +827,9 @@ describe("moving clips", () => {
 });
 
 describe("slipping clips", () => {
-  beforeEach(() => uiStore.set({ ...uiStore.get(), tool: "slip" }));
+  beforeEach(() => {
+    return uiStore.set({ ...uiStore.get(), tool: "slip" });
+  });
 
   it("slips by the pointer travel", () => {
     mount();
@@ -732,7 +924,9 @@ describe("trimming clips", () => {
 });
 
 describe("double click", () => {
-  const dbl = (x: number, y: number) => fireEvent.doubleClick(canvas(), { clientX: x, clientY: y });
+  const dbl = (x: number, y: number) => {
+    return fireEvent.doubleClick(canvas(), { clientX: x, clientY: y });
+  };
 
   it("opens the nested sequence of a compound clip", () => {
     mount();
@@ -751,7 +945,9 @@ describe("double click", () => {
 });
 
 describe("wheel", () => {
-  const wheel = (init: WheelEventInit) => fireEvent.wheel(canvas(), { clientX: 200, clientY: 100, ...init });
+  const wheel = (init: WheelEventInit) => {
+    return fireEvent.wheel(canvas(), { clientX: 200, clientY: 100, ...init });
+  };
 
   it("zooms around the pointer with ctrl", () => {
     mount();
@@ -763,7 +959,10 @@ describe("wheel", () => {
 
   it("scrolls the rows vertically within bounds when they overflow", () => {
     const { container } = mount();
-    const headers = () => (container.querySelector(".track-headers > div:nth-child(2)") as HTMLElement).style.transform;
+    const headers = () => {
+      return (container.querySelector(".track-headers > div:nth-child(2)") as HTMLElement).style
+        .transform;
+    };
     wheel({ deltaY: 20 });
     expect(headers()).toBe("translateY(-20px)");
     wheel({ deltaY: 5000 });
@@ -794,18 +993,26 @@ describe("wheel", () => {
 });
 
 describe("dropping a library asset", () => {
-  const drop = (x: number, y: number) => act(() => void window.dispatchEvent(new MouseEvent("pointerup", { clientX: x, clientY: y })));
+  const drop = (x: number, y: number) => {
+    return act(() => {
+      return void window.dispatchEvent(new MouseEvent("pointerup", { clientX: x, clientY: y }));
+    });
+  };
 
   it("adds the asset to the track under the pointer at the pointer time", () => {
     mount();
-    act(() => assetDragStore.set({ assetId: 1, clientX: 200, clientY: ROW(1) }));
+    act(() => {
+      return assetDragStore.set({ assetId: 1, clientX: 200, clientY: ROW(1) });
+    });
     drop(200, ROW(1));
     expect(calls.addAssetToTimeline).toHaveBeenCalledWith(1, 11, 5);
   });
 
   it("lets the backend pick a track when dropped below the last row", () => {
     mount(world([track({ id: 10 })]));
-    act(() => assetDragStore.set({ assetId: 1, clientX: 200, clientY: 200 }));
+    act(() => {
+      return assetDragStore.set({ assetId: 1, clientX: 200, clientY: 200 });
+    });
     drop(200, 200);
     expect(calls.addAssetToTimeline).toHaveBeenCalledWith(1, undefined, 5);
   });
@@ -813,7 +1020,9 @@ describe("dropping a library asset", () => {
   it("ignores a drop outside the lanes or over the ruler, and a release with no drag", () => {
     mount();
     drop(200, ROW(0));
-    act(() => assetDragStore.set({ assetId: 1, clientX: 200, clientY: ROW(0) }));
+    act(() => {
+      return assetDragStore.set({ assetId: 1, clientX: 200, clientY: ROW(0) });
+    });
     drop(200, 10);
     drop(-5, ROW(0));
     drop(WIDTH + 5, ROW(0));
@@ -824,7 +1033,9 @@ describe("dropping a library asset", () => {
   it("stops listening after unmount", () => {
     const { unmount } = mount();
     unmount();
-    act(() => assetDragStore.set({ assetId: 1, clientX: 200, clientY: ROW(0) }));
+    act(() => {
+      return assetDragStore.set({ assetId: 1, clientX: 200, clientY: ROW(0) });
+    });
     drop(200, ROW(0));
     expect(calls.addAssetToTimeline).not.toHaveBeenCalled();
   });

@@ -18,11 +18,45 @@ export type TransitionType = "None" | "Fade" | "HardCut" | "Slide" | "Zoom";
 /** Industry-standard compositing-mode names, shown untranslated regardless of locale -- mirrors
  *  `crates/ui/src/screens/editor/properties_panel/keyframe_editors.rs`'s `blend_mode_label`. */
 export const BLEND_MODES = [
-  "Normal", "Addition", "And", "Average", "Burn", "Darken", "Difference", "GrainExtract",
-  "Divide", "Dodge", "Exclusion", "HardLight", "Lighten", "Multiply", "Negation", "Or",
-  "Overlay", "Phoenix", "PinLight", "Reflect", "Screen", "SoftLight", "Subtract", "VividLight",
-  "Xor", "HardMix", "LinearLight", "Glow", "GrainMerge", "Multiply128", "Heat", "Freeze",
-  "Extremity", "SoftDifference", "Geometric", "Harmonic", "Bleach", "Stain", "Interpolate",
+  "Normal",
+  "Addition",
+  "And",
+  "Average",
+  "Burn",
+  "Darken",
+  "Difference",
+  "GrainExtract",
+  "Divide",
+  "Dodge",
+  "Exclusion",
+  "HardLight",
+  "Lighten",
+  "Multiply",
+  "Negation",
+  "Or",
+  "Overlay",
+  "Phoenix",
+  "PinLight",
+  "Reflect",
+  "Screen",
+  "SoftLight",
+  "Subtract",
+  "VividLight",
+  "Xor",
+  "HardMix",
+  "LinearLight",
+  "Glow",
+  "GrainMerge",
+  "Multiply128",
+  "Heat",
+  "Freeze",
+  "Extremity",
+  "SoftDifference",
+  "Geometric",
+  "Harmonic",
+  "Bleach",
+  "Stain",
+  "Interpolate",
   "HardOverlay",
 ] as const;
 export type BlendMode = (typeof BLEND_MODES)[number];
@@ -198,11 +232,18 @@ export interface ShapeClipPatch {
   durationSecs?: number;
 }
 
-export type FontCategory = "Sans" | "Display" | "Serif" | "Handwritten" | "Monospace" | "International";
+export type FontCategory =
+  "Sans" | "Display" | "Serif" | "Handwritten" | "Monospace" | "International";
 
 /** `commands::overlays::OverlayCatalog`: static font/shape data owned by `core`. */
 export interface OverlayCatalog {
-  fonts: { id: string; displayName: string; category: FontCategory; supportsBold: boolean; isVariable: boolean }[];
+  fonts: {
+    id: string;
+    displayName: string;
+    category: FontCategory;
+    supportsBold: boolean;
+    isVariable: boolean;
+  }[];
   shapePresets: { preset: ShapePreset; kind: ShapeKind }[];
 }
 
@@ -299,7 +340,12 @@ export interface CrashReview {
 }
 
 export type UpdateCheckEvent =
-  | { type: "newerVersionAvailable"; version: string; htmlUrl: string; autoUpdateAvailable: boolean }
+  | {
+      type: "newerVersionAvailable";
+      version: string;
+      htmlUrl: string;
+      autoUpdateAvailable: boolean;
+    }
   | { type: "upToDate" }
   | { type: "failed" }
   | { type: "installed"; version: string }
@@ -350,21 +396,17 @@ export interface AutoReframeEvent {
 }
 
 export type MatteGenerationEvent =
-  | { type: "done"; clipId: number }
-  | { type: "failed"; clipId: number; message: string };
+  { type: "done"; clipId: number } | { type: "failed"; clipId: number; message: string };
 
 export type PrivacyBlurEvent =
-  | { type: "done"; clipId: number }
-  | { type: "failed"; clipId: number; message: string };
+  { type: "done"; clipId: number } | { type: "failed"; clipId: number; message: string };
 
 export type TtsEvent = { type: "done" } | { type: "failed"; message: string };
 
 export type WatchFolderStatus = "stabilizing" | "processing" | "done" | "error";
 
 export type YoutubeDownloadEvent =
-  | { type: "progress"; fraction: number }
-  | { type: "done" }
-  | { type: "failed"; message: string };
+  { type: "progress"; fraction: number } | { type: "done" } | { type: "failed"; message: string };
 
 export type WatchFolderEvent =
   | { type: "detected"; path: string }
@@ -467,7 +509,10 @@ export function activeTimeline(project: Project): Timeline {
 
 /** Mirrors `avcore::export::ExportAspectRatio::dims_or` -- the canvas dimensions the real
  *  export/compositing pipeline frames everything against. */
-export function aspectRatioDims(ratio: ExportAspectRatio, fallback: [number, number]): [number, number] {
+export function aspectRatioDims(
+  ratio: ExportAspectRatio,
+  fallback: [number, number],
+): [number, number] {
   switch (ratio) {
     case "Landscape":
       return [1920, 1080];

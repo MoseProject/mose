@@ -25,62 +25,108 @@ export function SilenceReviewPanel() {
       return;
     }
     void run(api.detectSilenceGapsForClip(clipId)).then((review) => {
-      if (!review) return;
+      if (!review) {
+        return;
+      }
       setTrackId(review.trackId);
-      setGaps(review.gaps.map((g) => ({ ...g, accepted: true })));
+      setGaps(
+        review.gaps.map((g) => {
+          return { ...g, accepted: true };
+        }),
+      );
     });
   };
 
-  const close = () => setTrackId(null);
+  const close = () => {
+    return setTrackId(null);
+  };
 
   const apply = () => {
-    const accepted = gaps.filter((g) => g.accepted).map(({ startSecs, endSecs }) => ({ startSecs, endSecs }));
-    if (trackId !== null && accepted.length > 0) void run(api.applySilenceGaps(trackId, accepted));
+    const accepted = gaps
+      .filter((g) => {
+        return g.accepted;
+      })
+      .map(({ startSecs, endSecs }) => {
+        return { startSecs, endSecs };
+      });
+    if (trackId !== null && accepted.length > 0) {
+      void run(api.applySilenceGaps(trackId, accepted));
+    }
     close();
   };
 
   if (!open) {
     return (
-      <button className="icon" onClick={begin}>
+      <button
+        className="icon"
+        onClick={begin}
+      >
         {t("silenceReview")}
       </button>
     );
   }
 
   return (
-    <div className="modal-overlay" onClick={close}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="modal-overlay"
+      onClick={close}
+    >
+      <div
+        className="modal"
+        onClick={(e) => {
+          return e.stopPropagation();
+        }}
+      >
         <h3>{t("silenceReviewTitle")}</h3>
         {gaps.length === 0 ? (
           <p className="muted">{t("silenceReviewEmpty")}</p>
         ) : (
           <div style={{ maxHeight: 320, overflowY: "auto" }}>
-            {gaps.map((gap, index) => (
-              <div className="modal-row" key={index}>
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    checked={gap.accepted}
-                    onChange={() => {
-                      const next = [...gaps];
-                      next[index] = { ...gap, accepted: !gap.accepted };
-                      setGaps(next);
+            {gaps.map((gap, index) => {
+              return (
+                <div
+                  className="modal-row"
+                  key={index}
+                >
+                  <label className="check">
+                    <input
+                      type="checkbox"
+                      checked={gap.accepted}
+                      onChange={() => {
+                        const next = [...gaps];
+                        next[index] = { ...gap, accepted: !gap.accepted };
+                        setGaps(next);
+                      }}
+                    />
+                    {`${formatTime(gap.startSecs)} - ${formatTime(gap.endSecs)} (${(gap.endSecs - gap.startSecs).toFixed(1)}s)`}
+                  </label>
+                  <button
+                    className="icon"
+                    aria-label={t("goToGap")}
+                    title={t("goToGap")}
+                    onClick={() => {
+                      return void run(api.seek(gap.startSecs));
                     }}
-                  />
-                  {`${formatTime(gap.startSecs)} - ${formatTime(gap.endSecs)} (${(gap.endSecs - gap.startSecs).toFixed(1)}s)`}
-                </label>
-                <button className="icon" aria-label={t("goToGap")} title={t("goToGap")} onClick={() => void run(api.seek(gap.startSecs))}>
-                  <Icon name="play" />
-                </button>
-              </div>
-            ))}
+                  >
+                    <Icon name="play" />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
         <div className="modal-actions">
-          <button className="icon" onClick={close}>
+          <button
+            className="icon"
+            onClick={close}
+          >
             {t("cancel")}
           </button>
-          <button className="icon primary" disabled={gaps.length === 0} onClick={apply}>
+          <button
+            className="icon primary"
+            disabled={gaps.length === 0}
+            onClick={apply}
+          >
             {t("silenceReviewApply")}
           </button>
         </div>

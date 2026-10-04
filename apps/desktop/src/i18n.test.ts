@@ -9,7 +9,9 @@ import {
   type TextKey,
 } from "./i18n";
 
-afterEach(() => setLocale("pt-BR"));
+afterEach(() => {
+  return setLocale("pt-BR");
+});
 
 describe("locale", () => {
   it("maps stored preferences to a supported locale, defaulting to Portuguese", () => {
@@ -40,7 +42,9 @@ describe("locale", () => {
     const { readFileSync } = await import("node:fs");
     const { resolve } = await import("node:path");
     const source = readFileSync(resolve(__dirname, "i18n.ts"), "utf8");
-    const keys = [...source.matchAll(/^ {2}(\w+): \{/gm)].map((match) => match[1] as TextKey);
+    const keys = [...source.matchAll(/^ {2}(\w+): \{/gm)].map((match) => {
+      return match[1] as TextKey;
+    });
     expect(keys.length).toBeGreaterThan(100);
     for (const locale of ["pt-BR", "en"] as const) {
       setLocale(locale);

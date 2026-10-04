@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { t } from "../i18n";
 import { addShapeOverlay, addTextOverlay, seekToMarker } from "../editing";
 import { api } from "../ipc";
@@ -98,7 +98,9 @@ interface Palette {
 
 function readPalette(): Palette {
   const css = getComputedStyle(document.documentElement);
-  const v = (name: string) => css.getPropertyValue(name).trim();
+  const v = (name: string) => {
+    return css.getPropertyValue(name).trim();
+  };
   return {
     bg: v("--bg-workspace"),
     surface: v("--surface"),
@@ -146,13 +148,18 @@ export function Timeline({ session }: { session: SessionView }) {
 
   // Everything draw() reads, refreshed every render so the rAF callback never sees stale data.
   const stateRef = useRef({ tracks, markers, media, ui, scrollSecs, scrollY });
-  stateRef.current = { tracks, markers, media, ui, scrollSecs, scrollY };
+  useLayoutEffect(() => {
+    stateRef.current = { tracks, markers, media, ui, scrollSecs, scrollY };
+  });
 
   const draw = () => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
-    if (!canvas || !ctx) return;
-    const palette = (paletteRef.current ??= readPalette());
+    if (!canvas || !ctx) {
+      return;
+    }
+    paletteRef.current ??= readPalette();
+    const palette = paletteRef.current;
     const { width, height } = sizeRef.current;
     const { tracks, markers, media, ui, scrollSecs, scrollY } = stateRef.current;
     const px = ui.pxPerSec;
@@ -170,7 +177,9 @@ export function Timeline({ session }: { session: SessionView }) {
     const drag = dragRef.current;
     tracks.forEach((track, index) => {
       const y = RULER_HEIGHT + index * TRACK_HEIGHT;
-      if (y + TRACK_HEIGHT < RULER_HEIGHT + scrollY || y > height + scrollY) return;
+      if (y + TRACK_HEIGHT < RULER_HEIGHT + scrollY || y > height + scrollY) {
+        return;
+      }
       ctx.fillStyle = index % 2 === 0 ? palette.surface : palette.bg;
       ctx.fillRect(0, y, width, TRACK_HEIGHT);
       ctx.fillStyle = palette.border;
@@ -179,27 +188,45 @@ export function Timeline({ session }: { session: SessionView }) {
         let start = clip.start_secs;
         let end = start + clipDuration(clip);
         if (drag && drag.mode !== "scrub" && drag.clipId === clip.id) {
-          if (drag.mode === "move") continue; // drawn as a ghost below
-          if (drag.mode === "trim-start") start = Math.min(drag.ghostEdge, end - 0.1);
-          if (drag.mode === "trim-end") end = Math.max(drag.ghostEdge, start + 0.1);
+          if (drag.mode === "move") {
+            continue;
+          } // drawn as a ghost below
+          if (drag.mode === "trim-start") {
+            start = Math.min(drag.ghostEdge, end - 0.1);
+          }
+          if (drag.mode === "trim-end") {
+            end = Math.max(drag.ghostEdge, start + 0.1);
+          }
         }
         const left = timeToX(start, px, scrollSecs);
         const right = timeToX(end, px, scrollSecs);
-        if (right < 0 || left > width) continue; // horizontal culling before any per-clip work
-        const asset = media.find((a) => a.id === clip.asset_id);
+        if (right < 0 || left > width) {
+          continue;
+        } // horizontal culling before any per-clip work
+        const asset = media.find((a) => {
+          return a.id === clip.asset_id;
+        });
         drawClip(ctx, palette, track, clip, asset, left, right, y, width, ui.selectedClipIds, 1);
       }
       for (const clip of [...track.text_clips, ...track.shape_clips]) {
         let start = clip.start_secs;
         let end = start + clip.duration_secs;
         if (drag && drag.mode !== "scrub" && drag.clipId === clip.id) {
-          if (drag.mode === "move") continue; // drawn as a ghost below
-          if (drag.mode === "trim-start") start = Math.min(drag.ghostEdge, end - 0.1);
-          if (drag.mode === "trim-end") end = Math.max(drag.ghostEdge, start + 0.1);
+          if (drag.mode === "move") {
+            continue;
+          } // drawn as a ghost below
+          if (drag.mode === "trim-start") {
+            start = Math.min(drag.ghostEdge, end - 0.1);
+          }
+          if (drag.mode === "trim-end") {
+            end = Math.max(drag.ghostEdge, start + 0.1);
+          }
         }
         const left = timeToX(start, px, scrollSecs);
         const right = timeToX(end, px, scrollSecs);
-        if (right < 0 || left > width) continue;
+        if (right < 0 || left > width) {
+          continue;
+        }
         drawOverlayClip(ctx, palette, clip, left, right, y, ui.selectedClipIds, 1);
       }
       if (!track.visible) {
@@ -212,12 +239,26 @@ export function Timeline({ session }: { session: SessionView }) {
       const y = RULER_HEIGHT + drag.ghostTrack * TRACK_HEIGHT;
       const left = timeToX(drag.ghostStart, px, scrollSecs);
       const right = timeToX(drag.ghostStart + drag.duration, px, scrollSecs);
-      const clip = tracks.flatMap((t) => t.clips).find((c) => c.id === drag.clipId);
+      const clip = tracks
+        .flatMap((t) => {
+          return t.clips;
+        })
+        .find((c) => {
+          return c.id === drag.clipId;
+        });
       const overlay = clip
         ? undefined
-        : tracks.flatMap((t) => [...t.text_clips, ...t.shape_clips]).find((c) => c.id === drag.clipId);
+        : tracks
+            .flatMap((t) => {
+              return [...t.text_clips, ...t.shape_clips];
+            })
+            .find((c) => {
+              return c.id === drag.clipId;
+            });
       if (clip && track) {
-        const asset = media.find((a) => a.id === clip.asset_id);
+        const asset = media.find((a) => {
+          return a.id === clip.asset_id;
+        });
         drawClip(ctx, palette, track, clip, asset, left, right, y, width, [clip.id], 0.75);
       } else if (overlay && track) {
         drawOverlayClip(ctx, palette, overlay, left, right, y, [overlay.id], 0.75);
@@ -228,7 +269,9 @@ export function Timeline({ session }: { session: SessionView }) {
       const rect = canvas.getBoundingClientRect();
       const x = assetDrag.clientX - rect.left;
       const y = assetDrag.clientY - rect.top + scrollY;
-      const asset = media.find((a) => a.id === assetDrag.assetId);
+      const asset = media.find((a) => {
+        return a.id === assetDrag.assetId;
+      });
       if (asset && x >= 0 && x <= width && y >= RULER_HEIGHT) {
         const rowY = RULER_HEIGHT + Math.floor((y - RULER_HEIGHT) / TRACK_HEIGHT) * TRACK_HEIGHT;
         ctx.globalAlpha = 0.35;
@@ -254,7 +297,9 @@ export function Timeline({ session }: { session: SessionView }) {
     }
     for (const marker of markers) {
       const x = timeToX(marker.position_secs, px, scrollSecs);
-      if (x < -8 || x > width + 8) continue;
+      if (x < -8 || x > width + 8) {
+        continue;
+      }
       ctx.fillStyle = marker.completed ? palette.textMuted : palette.accent;
       ctx.beginPath();
       ctx.moveTo(x, 1);
@@ -277,20 +322,26 @@ export function Timeline({ session }: { session: SessionView }) {
   };
 
   const drawRef = useRef(draw);
-  drawRef.current = draw;
-  const scheduleDraw = useRef(() => {
-    if (frameRef.current) return;
+  useLayoutEffect(() => {
+    drawRef.current = draw;
+  });
+  const scheduleDraw = useCallback(() => {
+    if (frameRef.current) {
+      return;
+    }
     frameRef.current = requestAnimationFrame(() => {
       frameRef.current = 0;
       drawRef.current();
     });
-  }).current;
+  }, []);
 
   // Canvas sizing follows the lanes container.
   useLayoutEffect(() => {
     const lanes = lanesRef.current;
     const canvas = canvasRef.current;
-    if (!lanes || !canvas) return;
+    if (!lanes || !canvas) {
+      return;
+    }
     const observer = new ResizeObserver(() => {
       const dpr = window.devicePixelRatio || 1;
       const width = lanes.clientWidth;
@@ -303,12 +354,16 @@ export function Timeline({ session }: { session: SessionView }) {
       scheduleDraw();
     });
     observer.observe(lanes);
-    return () => observer.disconnect();
+    return () => {
+      return observer.disconnect();
+    };
   }, [scheduleDraw]);
 
   useEffect(() => {
     window.addEventListener(MEDIA_EVENT, scheduleDraw);
-    return () => window.removeEventListener(MEDIA_EVENT, scheduleDraw);
+    return () => {
+      return window.removeEventListener(MEDIA_EVENT, scheduleDraw);
+    };
   }, [scheduleDraw]);
 
   // Playhead ticks and library drags repaint without re-rendering React.
@@ -323,25 +378,33 @@ export function Timeline({ session }: { session: SessionView }) {
     };
   }, [scheduleDraw]);
 
-  useEffect(() => scheduleDraw());
+  useEffect(() => {
+    return scheduleDraw();
+  });
 
   // Library-to-timeline drops.
   useEffect(() => {
     const onUp = (e: PointerEvent) => {
       const drag = assetDragStore.get();
       const canvas = canvasRef.current;
-      if (!drag || !canvas) return;
+      if (!drag || !canvas) {
+        return;
+      }
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
-      if (x < 0 || y < RULER_HEIGHT || x > rect.width || y > rect.height) return;
+      if (x < 0 || y < RULER_HEIGHT || x > rect.width || y > rect.height) {
+        return;
+      }
       const { tracks, ui, scrollSecs, scrollY } = stateRef.current;
       const index = trackIndexAtY(y + scrollY, tracks.length);
       const start = Math.max(0, xToTime(x, ui.pxPerSec, scrollSecs));
       void run(api.addAssetToTimeline(drag.assetId, tracks[index]?.id, start));
     };
     window.addEventListener("pointerup", onUp);
-    return () => window.removeEventListener("pointerup", onUp);
+    return () => {
+      return window.removeEventListener("pointerup", onUp);
+    };
   }, []);
 
   const lanePoint = (e: { clientX: number; clientY: number }) => {
@@ -359,7 +422,9 @@ export function Timeline({ session }: { session: SessionView }) {
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0) {
+      return;
+    }
     const { x, y } = lanePoint(e);
     e.currentTarget.setPointerCapture(e.pointerId);
     if (y < RULER_HEIGHT) {
@@ -381,14 +446,20 @@ export function Timeline({ session }: { session: SessionView }) {
     if (e.ctrlKey || e.metaKey) {
       patchUi({
         selectedClipIds: selected.includes(hit.clipId)
-          ? selected.filter((id) => id !== hit.clipId)
+          ? selected.filter((id) => {
+              return id !== hit.clipId;
+            })
           : [...selected, hit.clipId],
       });
       return;
     }
-    if (!selected.includes(hit.clipId)) patchUi({ selectedClipIds: [hit.clipId] });
+    if (!selected.includes(hit.clipId)) {
+      patchUi({ selectedClipIds: [hit.clipId] });
+    }
     const track = tracks[hit.trackIndex];
-    if (track.locked) return;
+    if (track.locked) {
+      return;
+    }
     const clip = findSpan(tracks, hit.clipId)!.span;
     const end = clip.start_secs + clip.duration_secs;
     const tool: EditorTool = clip.overlay ? "select" : ui.tool;
@@ -428,13 +499,25 @@ export function Timeline({ session }: { session: SessionView }) {
   // common "enter" affordance every NLE with this feature has (ui::App::open_nested_sequence).
   const onDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const { x, y } = lanePoint(e);
-    if (y < RULER_HEIGHT) return;
+    if (y < RULER_HEIGHT) {
+      return;
+    }
     const hit = hitTest(tracks, x, y + scrollY, ui.pxPerSec, scrollSecs);
-    if (!hit) return;
-    const clip = tracks[hit.trackIndex].clips.find((c) => c.id === hit.clipId);
-    if (clip?.nested_sequence_id == null) return;
-    const index = session.project.sequences.findIndex((s) => s.id === clip.nested_sequence_id);
-    if (index >= 0) void run(api.selectSequence(index));
+    if (!hit) {
+      return;
+    }
+    const clip = tracks[hit.trackIndex].clips.find((c) => {
+      return c.id === hit.clipId;
+    });
+    if (clip?.nested_sequence_id == null) {
+      return;
+    }
+    const index = session.project.sequences.findIndex((s) => {
+      return s.id === clip.nested_sequence_id;
+    });
+    if (index >= 0) {
+      void run(api.selectSequence(index));
+    }
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -473,7 +556,9 @@ export function Timeline({ session }: { session: SessionView }) {
   const onPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const drag = dragRef.current;
     dragRef.current = null;
-    if (!drag) return;
+    if (!drag) {
+      return;
+    }
     if (drag.mode === "scrub") {
       scrubTo(lanePoint(e).x, true);
     } else if (drag.mode === "move") {
@@ -494,7 +579,9 @@ export function Timeline({ session }: { session: SessionView }) {
         }
       }
     } else if (drag.mode === "slip") {
-      if (Math.abs(drag.deltaSecs) > 1e-6) void run(api.slipClip(drag.clipId, drag.deltaSecs));
+      if (Math.abs(drag.deltaSecs) > 1e-6) {
+        void run(api.slipClip(drag.clipId, drag.deltaSecs));
+      }
     } else {
       const edge = drag.mode === "trim-start" ? "start" : "end";
       const overlay = findSpan(tracks, drag.clipId)?.span.overlay ?? false;
@@ -526,10 +613,14 @@ export function Timeline({ session }: { session: SessionView }) {
     const viewHeight = sizeRef.current.height - RULER_HEIGHT;
     const horizontal = e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY);
     if (!horizontal && contentHeight > viewHeight) {
-      setScrollY((prev) => Math.max(0, Math.min(contentHeight - viewHeight, prev + e.deltaY)));
+      setScrollY((prev) => {
+        return Math.max(0, Math.min(contentHeight - viewHeight, prev + e.deltaY));
+      });
     } else {
       const delta = e.deltaX !== 0 ? e.deltaX : e.deltaY;
-      setScrollSecs((prev) => Math.max(0, prev + delta / ui.pxPerSec));
+      setScrollSecs((prev) => {
+        return Math.max(0, prev + delta / ui.pxPerSec);
+      });
     }
   };
 
@@ -537,19 +628,36 @@ export function Timeline({ session }: { session: SessionView }) {
   const zoomToFit = () => {
     const end = Math.max(
       0,
-      ...tracks.flatMap((track) => [
-        ...track.clips.map((clip) => clip.start_secs + clipDuration(clip)),
-        ...track.text_clips.map((clip) => clip.start_secs + clip.duration_secs),
-        ...track.shape_clips.map((clip) => clip.start_secs + clip.duration_secs),
-      ]),
+      ...tracks.flatMap((track) => {
+        return [
+          ...track.clips.map((clip) => {
+            return clip.start_secs + clipDuration(clip);
+          }),
+          ...track.text_clips.map((clip) => {
+            return clip.start_secs + clip.duration_secs;
+          }),
+          ...track.shape_clips.map((clip) => {
+            return clip.start_secs + clip.duration_secs;
+          }),
+        ];
+      }),
     );
-    patchUi({ pxPerSec: fitPxPerSec(end, sizeRef.current.width, MIN_PX_PER_SEC, MAX_PX_PER_SEC) });
+    patchUi({
+      pxPerSec: fitPxPerSec(end, sizeRef.current.width, MIN_PX_PER_SEC, MAX_PX_PER_SEC),
+    });
     setScrollSecs(0);
   };
 
   const zoomBy = (factor: number) => {
     const anchor = sizeRef.current.width / 2;
-    const zoom = zoomAround(anchor, ui.pxPerSec, scrollSecs, factor, MIN_PX_PER_SEC, MAX_PX_PER_SEC);
+    const zoom = zoomAround(
+      anchor,
+      ui.pxPerSec,
+      scrollSecs,
+      factor,
+      MIN_PX_PER_SEC,
+      MAX_PX_PER_SEC,
+    );
     patchUi({ pxPerSec: zoom.pxPerSec });
     setScrollSecs(zoom.scrollSecs);
   };
@@ -558,32 +666,48 @@ export function Timeline({ session }: { session: SessionView }) {
   return (
     <section className="panel timeline">
       <div className="timeline-toolbar">
-        <span className="panel-title" style={{ border: 0, padding: "0 8px 0 0" }}>
+        <span
+          className="panel-title"
+          style={{ border: 0, padding: "0 8px 0 0" }}
+        >
           {t("timeline")}
         </span>
         <SequenceTabs session={session} />
         <button
           className="icon"
           disabled={selected.length === 0}
-          onClick={() => run(api.deleteClips(selected, false))}
+          onClick={() => {
+            return run(api.deleteClips(selected, false));
+          }}
         >
           {t("delete")}
         </button>
         <button
           className="icon"
           disabled={selected.length === 0}
-          onClick={() => run(api.deleteClips(selected, true))}
+          onClick={() => {
+            return run(api.deleteClips(selected, true));
+          }}
         >
           {t("rippleDelete")}
         </button>
         <Menu label={t("menuClip")}>
-          <button disabled={selected.length < 2} onClick={() => run(api.mergeClipsIntoComposite(selected))}>
+          <button
+            disabled={selected.length < 2}
+            onClick={() => {
+              return run(api.mergeClipsIntoComposite(selected));
+            }}
+          >
             {t("mergeComposite")}
           </button>
           <button
             data-testid="create-compound-clip"
             disabled={selected.length === 0}
-            onClick={() => selected[0] !== undefined && run(api.createCompoundClip(selected[0], selected))}
+            onClick={() => {
+              return (
+                selected[0] !== undefined && run(api.createCompoundClip(selected[0], selected))
+              );
+            }}
           >
             {t("compoundClip")}
           </button>
@@ -592,51 +716,157 @@ export function Timeline({ session }: { session: SessionView }) {
         <Menu label={t("menuAnalyze")}>
           <button
             disabled={selected.length !== 1}
-            onClick={() => selected[0] !== undefined && run(api.detectSceneCutsForClip(selected[0]))}
+            onClick={() => {
+              return selected[0] !== undefined && run(api.detectSceneCutsForClip(selected[0]));
+            }}
           >
             {t("detectChapters")}
           </button>
-          <button onClick={() => run(api.detectHighlights())}>{t("detectHighlightsAction")}</button>
+          <button
+            onClick={() => {
+              return run(api.detectHighlights());
+            }}
+          >
+            {t("detectHighlightsAction")}
+          </button>
           <TranscriptPanel session={session} />
           <SilenceReviewPanel />
         </Menu>
         <Menu label={t("menuAdd")}>
-          <button onClick={() => run(api.addTrack("Video"))}>{t("addVideoTrack")}</button>
-          <button onClick={() => run(api.addTrack("Audio"))}>{t("addAudioTrack")}</button>
-          <button onClick={() => run(api.addTrack("Text"))}>{t("addTextTrack")}</button>
-          <button onClick={() => run(api.addTrack("Shape"))}>{t("addShapeTrack")}</button>
-          <button onClick={() => void addTextOverlay()}>{t("addTextClip")}</button>
-          <button onClick={() => void addShapeOverlay()}>{t("addShapeClip")}</button>
-          <button data-testid="draw-custom-shape" onClick={() => patchUi({ drawingShapePoints: [] })}>
+          <button
+            onClick={() => {
+              return run(api.addTrack("Video"));
+            }}
+          >
+            {t("addVideoTrack")}
+          </button>
+          <button
+            onClick={() => {
+              return run(api.addTrack("Audio"));
+            }}
+          >
+            {t("addAudioTrack")}
+          </button>
+          <button
+            onClick={() => {
+              return run(api.addTrack("Text"));
+            }}
+          >
+            {t("addTextTrack")}
+          </button>
+          <button
+            onClick={() => {
+              return run(api.addTrack("Shape"));
+            }}
+          >
+            {t("addShapeTrack")}
+          </button>
+          <button
+            onClick={() => {
+              return void addTextOverlay();
+            }}
+          >
+            {t("addTextClip")}
+          </button>
+          <button
+            onClick={() => {
+              return void addShapeOverlay();
+            }}
+          >
+            {t("addShapeClip")}
+          </button>
+          <button
+            data-testid="draw-custom-shape"
+            onClick={() => {
+              return patchUi({ drawingShapePoints: [] });
+            }}
+          >
             {t("drawCustomShape")}
           </button>
         </Menu>
-        <button className="icon" title={t("addMarker")} aria-label={t("addMarker")} onClick={() => run(api.addMarker())}><Icon name="flag" /></button>
-        <button className="icon" title={t("previousMarker")} aria-label={t("previousMarker")} onClick={() => seekToMarker(markers, -1)}><Icon name="chevronLeft" /></button>
-        <button className="icon" title={t("nextMarker")} aria-label={t("nextMarker")} onClick={() => seekToMarker(markers, 1)}><Icon name="chevronRight" /></button>
+        <button
+          className="icon"
+          title={t("addMarker")}
+          aria-label={t("addMarker")}
+          onClick={() => {
+            return run(api.addMarker());
+          }}
+        >
+          <Icon name="flag" />
+        </button>
+        <button
+          className="icon"
+          title={t("previousMarker")}
+          aria-label={t("previousMarker")}
+          onClick={() => {
+            return seekToMarker(markers, -1);
+          }}
+        >
+          <Icon name="chevronLeft" />
+        </button>
+        <button
+          className="icon"
+          title={t("nextMarker")}
+          aria-label={t("nextMarker")}
+          onClick={() => {
+            return seekToMarker(markers, 1);
+          }}
+        >
+          <Icon name="chevronRight" />
+        </button>
         <span style={{ flex: 1 }} />
         <div className="zoom-group">
-        <button className="icon" title={t("zoomOut")} aria-label={t("zoomOut")} onClick={() => zoomBy(1 / 1.5)}>
-          <Icon name="minus" />
-        </button>
-        <button className="icon" title={t("zoomFit")} aria-label={t("zoomFit")} onClick={zoomToFit}>
-          <Icon name="fit" />
-        </button>
-        <button className="icon" title={t("zoomIn")} aria-label={t("zoomIn")} onClick={() => zoomBy(1.5)}>
-          <Icon name="plus" />
-        </button>
+          <button
+            className="icon"
+            title={t("zoomOut")}
+            aria-label={t("zoomOut")}
+            onClick={() => {
+              return zoomBy(1 / 1.5);
+            }}
+          >
+            <Icon name="minus" />
+          </button>
+          <button
+            className="icon"
+            title={t("zoomFit")}
+            aria-label={t("zoomFit")}
+            onClick={zoomToFit}
+          >
+            <Icon name="fit" />
+          </button>
+          <button
+            className="icon"
+            title={t("zoomIn")}
+            aria-label={t("zoomIn")}
+            onClick={() => {
+              return zoomBy(1.5);
+            }}
+          >
+            <Icon name="plus" />
+          </button>
         </div>
       </div>
       <div className="timeline-body">
-        <div className="track-headers" style={{ width: HEADER_WIDTH }}>
+        <div
+          className="track-headers"
+          style={{ width: HEADER_WIDTH }}
+        >
           <div style={{ height: RULER_HEIGHT }} />
           <div style={{ transform: `translateY(${-scrollY}px)` }}>
-            {tracks.map((track) => (
-              <TrackHeader key={track.id} track={track} />
-            ))}
+            {tracks.map((track) => {
+              return (
+                <TrackHeader
+                  key={track.id}
+                  track={track}
+                />
+              );
+            })}
           </div>
         </div>
-        <div className="timeline-lanes" ref={lanesRef}>
+        <div
+          className="timeline-lanes"
+          ref={lanesRef}
+        >
           <canvas
             ref={canvasRef}
             data-testid="timeline-canvas"
@@ -663,14 +893,19 @@ export function Timeline({ session }: { session: SessionView }) {
 
 function TrackHeader({ track }: { track: Track }) {
   return (
-    <div className="track-header" style={{ height: TRACK_HEIGHT }}>
+    <div
+      className="track-header"
+      style={{ height: TRACK_HEIGHT }}
+    >
       <span className="name">{track.name}</span>
       <button
         className={`icon ${track.visible ? "" : "active"}`}
         title={track.visible ? t("hideTrack") : t("showTrack")}
         aria-label={track.visible ? t("hideTrack") : t("showTrack")}
         aria-pressed={!track.visible}
-        onClick={() => run(api.setTrackFlags(track.id, { visible: !track.visible }))}
+        onClick={() => {
+          return run(api.setTrackFlags(track.id, { visible: !track.visible }));
+        }}
       >
         <Icon name={track.visible ? "eye" : "eyeOff"} />
       </button>
@@ -679,7 +914,9 @@ function TrackHeader({ track }: { track: Track }) {
         title={track.locked ? t("unlockTrack") : t("lockTrack")}
         aria-label={track.locked ? t("unlockTrack") : t("lockTrack")}
         aria-pressed={track.locked}
-        onClick={() => run(api.setTrackFlags(track.id, { locked: !track.locked }))}
+        onClick={() => {
+          return run(api.setTrackFlags(track.id, { locked: !track.locked }));
+        }}
       >
         <Icon name={track.locked ? "lock" : "unlock"} />
       </button>
@@ -726,7 +963,9 @@ function drawClip(
     for (let x = left + Math.floor((from - left) / tile) * tile; x < to; x += tile) {
       const secs = clip.source_in_secs + (Math.max(0, x - left) / width) * sourceSpan;
       const frame = frameAt(asset.id, secs, step);
-      if (frame) ctx.drawImage(frame, x, top, tile, height);
+      if (frame) {
+        ctx.drawImage(frame, x, top, tile, height);
+      }
     }
     ctx.fillStyle = body;
     ctx.globalAlpha = alpha * 0.3;
@@ -757,7 +996,10 @@ function drawClip(
     ctx.font = UI_FONT;
     ctx.textBaseline = "top";
     const label = asset?.file_name ?? `#${clip.asset_id}`;
-    const badges = [clip.speed_factor !== 1 ? `${clip.speed_factor.toFixed(2)}×` : "", clip.frozen ? "❄" : ""]
+    const badges = [
+      clip.speed_factor !== 1 ? `${clip.speed_factor.toFixed(2)}×` : "",
+      clip.frozen ? "❄" : "",
+    ]
       .filter(Boolean)
       .join(" ");
     ctx.fillText(badges ? `${label}  ${badges}` : label, Math.max(left, 0) + 5, top + 3);
@@ -827,7 +1069,9 @@ function drawWaveform(
   viewWidth: number,
 ) {
   const pyramid = peaksFor(asset);
-  if (!pyramid || asset.duration_secs <= 0) return;
+  if (!pyramid || asset.duration_secs <= 0) {
+    return;
+  }
   const gain = Math.pow(10, clip.gain_db / 20);
   // Audio tracks use the whole clip body; on video clips the wave is a strip along the bottom.
   const bandTop = fullHeight ? top + 16 : top + height * 0.64;
@@ -841,7 +1085,9 @@ function drawWaveform(
   for (let column = firstColumn; column < lastColumn; column += 1) {
     const from = clip.source_in_secs + (column / width) * sourceSpan;
     const to = clip.source_in_secs + ((column + 1) / width) * sourceSpan;
-    if (!peakRange(pyramid, from, to, peak)) continue;
+    if (!peakRange(pyramid, from, to, peak)) {
+      continue;
+    }
     const high = Math.min(1, peak[1] * gain) * half;
     const low = Math.max(-1, peak[0] * gain) * half;
     ctx.fillRect(left + column, mid - high, 1, Math.max(1, high - low));

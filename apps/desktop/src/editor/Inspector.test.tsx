@@ -15,17 +15,35 @@ vi.mock("../ipc", () => {
     "generateMatteForClip",
     "applyPrivacyBlurToClip",
   ];
-  return { api: Object.fromEntries(names.map((name) => [name, vi.fn().mockResolvedValue(undefined)])) };
+  return {
+    api: Object.fromEntries(
+      names.map((name) => {
+        return [name, vi.fn().mockResolvedValue(undefined)];
+      }),
+    ),
+  };
 });
-vi.mock("./TextInspector", () => ({ TextInspector: ({ clip }: { clip: { id: number } }) => <p>text-inspector-{clip.id}</p> }));
-vi.mock("./ShapeInspector", () => ({ ShapeInspector: ({ clip }: { clip: { id: number } }) => <p>shape-inspector-{clip.id}</p> }));
+vi.mock("./TextInspector", () => {
+  return {
+    TextInspector: ({ clip }: { clip: { id: number } }) => {
+      return <p>text-inspector-{clip.id}</p>;
+    },
+  };
+});
+vi.mock("./ShapeInspector", () => {
+  return {
+    ShapeInspector: ({ clip }: { clip: { id: number } }) => {
+      return <p>shape-inspector-{clip.id}</p>;
+    },
+  };
+});
 
 const { Inspector, Section, Slider } = await import("./Inspector");
 const { api } = await import("../ipc");
 const { patchUi } = await import("../store");
 
-const clip = (overrides: Partial<ClipInstance> = {}): ClipInstance =>
-  ({
+const clip = (overrides: Partial<ClipInstance> = {}): ClipInstance => {
+  return {
     id: 7,
     asset_id: 3,
     gain_db: 0,
@@ -58,9 +76,13 @@ const clip = (overrides: Partial<ClipInstance> = {}): ClipInstance =>
     crop_w_keyframes: [],
     crop_h_keyframes: [],
     ...overrides,
-  }) as unknown as ClipInstance;
+  } as unknown as ClipInstance;
+};
 
-function sessionFor(overrides: Partial<ClipInstance> = {}, extra: Record<string, unknown> = {}): SessionView {
+function sessionFor(
+  overrides: Partial<ClipInstance> = {},
+  extra: Record<string, unknown> = {},
+): SessionView {
   const view = makeSession([
     {
       id: 1,
@@ -81,11 +103,18 @@ function sessionFor(overrides: Partial<ClipInstance> = {}, extra: Record<string,
   return view;
 }
 
-const field = (label: string) =>
-  screen.getByText(label, { selector: "label" }).parentElement as HTMLElement;
-const range = (label: string) => field(label).querySelector('input[type="range"]') as HTMLInputElement;
-const lastPatch = () => vi.mocked(api.updateClip).mock.calls.at(-1)![1];
-const sectionOf = (label: string) => screen.getByText(label, { selector: "summary" }).closest("details")!;
+const field = (label: string) => {
+  return screen.getByText(label, { selector: "label" }).parentElement as HTMLElement;
+};
+const range = (label: string) => {
+  return field(label).querySelector('input[type="range"]') as HTMLInputElement;
+};
+const lastPatch = () => {
+  return vi.mocked(api.updateClip).mock.calls.at(-1)![1];
+};
+const sectionOf = (label: string) => {
+  return screen.getByText(label, { selector: "summary" }).closest("details")!;
+};
 
 function slide(label: string, value: number) {
   fireEvent.change(range(label), { target: { value: String(value) } });
@@ -96,7 +125,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   patchUi({ selectedClipIds: [7] });
 });
-afterEach(() => cleanup());
+afterEach(() => {
+  return cleanup();
+});
 
 describe("inspector selection", () => {
   it("asks for a selection when nothing is selected, or more than one clip", () => {
@@ -138,7 +169,19 @@ describe("inspector selection", () => {
 describe("slider and section", () => {
   it("previews locally and commits on pointer up, key up or blur, only when changed", () => {
     const onCommit = vi.fn();
-    render(<Slider label="Amount" value={1} min={0} max={5} step={1} format={(v) => `${v}!`} onCommit={onCommit} />);
+    render(
+      <Slider
+        label="Amount"
+        value={1}
+        min={0}
+        max={5}
+        step={1}
+        format={(v) => {
+          return `${v}!`;
+        }}
+        onCommit={onCommit}
+      />,
+    );
     const input = range("Amount");
     expect(screen.getByText("1!")).toBeTruthy();
     fireEvent.pointerUp(input);
@@ -153,17 +196,46 @@ describe("slider and section", () => {
   });
 
   it("follows the value the parent hands in", () => {
-    const props = { label: "Amount", min: 0, max: 5, step: 1, format: (v: number) => `${v}`, onCommit: vi.fn() };
-    const { rerender } = render(<Slider {...props} value={1} />);
-    rerender(<Slider {...props} value={4} />);
+    const props = {
+      label: "Amount",
+      min: 0,
+      max: 5,
+      step: 1,
+      format: (v: number) => {
+        return `${v}`;
+      },
+      onCommit: vi.fn(),
+    };
+    const { rerender } = render(
+      <Slider
+        {...props}
+        value={1}
+      />,
+    );
+    rerender(
+      <Slider
+        {...props}
+        value={4}
+      />,
+    );
     expect(range("Amount").value).toBe("4");
   });
 
   it("renders an open or closed section", () => {
     render(
       <>
-        <Section label="Open" defaultOpen={true}>a</Section>
-        <Section label="Closed" defaultOpen={false}>b</Section>
+        <Section
+          label="Open"
+          defaultOpen={true}
+        >
+          a
+        </Section>
+        <Section
+          label="Closed"
+          defaultOpen={false}
+        >
+          b
+        </Section>
       </>,
     );
     expect(sectionOf("Open").open).toBe(true);
@@ -290,7 +362,9 @@ describe("clip controls", () => {
   it("changes the mask, with a corner radius only for rounded rectangles", () => {
     render(<Inspector session={sessionFor()} />);
     expect(screen.queryByText(t("maskCornerRadius"))).toBeNull();
-    fireEvent.change(field(t("mask")).querySelector("select")!, { target: { value: "Circle" } });
+    fireEvent.change(field(t("mask")).querySelector("select")!, {
+      target: { value: "Circle" },
+    });
     expect(lastPatch()).toEqual({ maskShape: "Circle" });
     cleanup();
 
@@ -302,7 +376,9 @@ describe("clip controls", () => {
   it("changes the transition, with a duration only once one is chosen", () => {
     render(<Inspector session={sessionFor()} />);
     expect(screen.queryByText(t("transitionDuration"))).toBeNull();
-    fireEvent.change(field(t("transition")).querySelector("select")!, { target: { value: "Slide" } });
+    fireEvent.change(field(t("transition")).querySelector("select")!, {
+      target: { value: "Slide" },
+    });
     expect(lastPatch()).toEqual({ transitionIn: "Slide" });
     cleanup();
 
@@ -313,7 +389,9 @@ describe("clip controls", () => {
 
   it("changes the blend mode", () => {
     render(<Inspector session={sessionFor()} />);
-    fireEvent.change(field(t("blendMode")).querySelector("select")!, { target: { value: "Multiply" } });
+    fireEvent.change(field(t("blendMode")).querySelector("select")!, {
+      target: { value: "Multiply" },
+    });
     expect(lastPatch()).toEqual({ blendMode: "Multiply" });
   });
 
@@ -336,7 +414,9 @@ describe("clip controls", () => {
           ["cropWKeyframes", 1],
           ["cropHKeyframes", 1],
         ] as [string, number][]
-      ).map(([key, value]) => ({ [key]: [{ time_fraction: 1, value }] })),
+      ).map(([key, value]) => {
+        return { [key]: [{ time_fraction: 1, value }] };
+      }),
     ];
     expect(adds).toHaveLength(expected.length);
     adds.forEach((button, index) => {
@@ -347,8 +427,9 @@ describe("clip controls", () => {
 
   it("runs the AI actions with the chosen region", () => {
     render(<Inspector session={sessionFor()} />);
-    const edit = (title: string, value: string) =>
-      fireEvent.change(screen.getByTitle(t(title as never)), { target: { value } });
+    const edit = (title: string, value: string) => {
+      return fireEvent.change(screen.getByTitle(t(title as never)), { target: { value } });
+    };
     edit("centerX", "0.2");
     edit("centerY", "0.3");
     edit("regionWidth", "0.4");
@@ -374,7 +455,9 @@ describe("inspector tabs", () => {
     expect(body.getAttribute("data-tab")).toBe("inspector");
     fireEvent.click(screen.getByRole("tab", { name: t("inspectorEffects") }));
     expect(body.getAttribute("data-tab")).toBe("effects");
-    expect(screen.getByRole("tab", { name: t("inspectorEffects") }).getAttribute("aria-selected")).toBe("true");
+    expect(
+      screen.getByRole("tab", { name: t("inspectorEffects") }).getAttribute("aria-selected"),
+    ).toBe("true");
     fireEvent.click(screen.getByRole("tab", { name: t("inspectorAudio") }));
     expect(body.getAttribute("data-tab")).toBe("audio");
     expect(screen.getByTestId("section-gain").getAttribute("data-group")).toBe("audio");

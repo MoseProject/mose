@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 import { formatTime, t } from "../i18n";
 import { api, frameUrl } from "../ipc";
 import { Icon } from "./Icon";
@@ -31,7 +37,13 @@ function fitRect(avail: { width: number; height: number }, aspect: number) {
 
 type DragState =
   | { mode: "move"; startClientX: number; startClientY: number; startPos: Position }
-  | { mode: "resize"; startClientX: number; startClientY: number; startScaleX: number; startScaleY: number };
+  | {
+      mode: "resize";
+      startClientX: number;
+      startClientY: number;
+      startScaleX: number;
+      startScaleY: number;
+    };
 
 export function PreviewPanel() {
   const tick = useStore(previewStore);
@@ -45,21 +57,27 @@ export function PreviewPanel() {
 
   useEffect(() => {
     const el = monitorRef.current;
-    if (!el) return;
+    if (!el) {
+      return;
+    }
     const observer = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
       setMonitorSize({ width, height });
     });
     observer.observe(el);
-    return () => observer.disconnect();
+    return () => {
+      return observer.disconnect();
+    };
   }, []);
 
   const duration = session
     ? Math.max(
         0,
-        ...activeTimeline(session.project).tracks.flatMap((track) =>
-          track.clips.map((clip) => clip.start_secs + clipDuration(clip)),
-        ),
+        ...activeTimeline(session.project).tracks.flatMap((track) => {
+          return track.clips.map((clip) => {
+            return clip.start_secs + clipDuration(clip);
+          });
+        }),
       )
     : 0;
 
@@ -67,9 +85,17 @@ export function PreviewPanel() {
   let asset: { resolution: [number, number] | null } | undefined;
   if (session && ui.selectedClipIds.length === 1) {
     clip = activeTimeline(session.project)
-      .tracks.flatMap((track) => track.clips)
-      .find((c) => c.id === ui.selectedClipIds[0]);
-    asset = clip && session.project.media_library.find((a) => a.id === clip!.asset_id);
+      .tracks.flatMap((track) => {
+        return track.clips;
+      })
+      .find((c) => {
+        return c.id === ui.selectedClipIds[0];
+      });
+    asset =
+      clip &&
+      session.project.media_library.find((a) => {
+        return a.id === clip!.asset_id;
+      });
   }
 
   // Canvas rect (letterboxed to the export aspect ratio within the monitor) and the video's own
@@ -85,31 +111,53 @@ export function PreviewPanel() {
   const base = fitRect({ width: canvasRect.width, height: canvasRect.height }, texAspect);
   const hasCanvas = monitorSize.width > 0 && monitorSize.height > 0;
 
-
   const commitMove = (pos: Position) => {
-    if (!clip) return;
+    if (!clip) {
+      return;
+    }
     void run(api.updateClip(clip.id, { positionKeyframes: [{ time_fraction: 0, value: pos }] }));
   };
   const commitResize = (scaleX: number, scaleY: number) => {
-    if (!clip) return;
+    if (!clip) {
+      return;
+    }
     void run(api.updateClip(clip.id, { layerScaleX: scaleX, layerScaleY: scaleY }));
   };
 
   const onLayerPointerDown = (e: ReactPointerEvent, position: Position) => {
     e.currentTarget.setPointerCapture(e.pointerId);
-    setDrag({ mode: "move", startClientX: e.clientX, startClientY: e.clientY, startPos: position });
+    setDrag({
+      mode: "move",
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startPos: position,
+    });
   };
   const onHandlePointerDown = (e: ReactPointerEvent, scaleX: number, scaleY: number) => {
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
-    setDrag({ mode: "resize", startClientX: e.clientX, startClientY: e.clientY, startScaleX: scaleX, startScaleY: scaleY });
+    setDrag({
+      mode: "resize",
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startScaleX: scaleX,
+      startScaleY: scaleY,
+    });
   };
 
   const onCanvasClick = (e: ReactPointerEvent) => {
-    if (!hasCanvas) return;
+    if (!hasCanvas) {
+      return;
+    }
     const rect = e.currentTarget.getBoundingClientRect();
-    const fracX = Math.min(1, Math.max(0, (e.clientX - rect.left - canvasRect.left) / Math.max(1, canvasRect.width)));
-    const fracY = Math.min(1, Math.max(0, (e.clientY - rect.top - canvasRect.top) / Math.max(1, canvasRect.height)));
+    const fracX = Math.min(
+      1,
+      Math.max(0, (e.clientX - rect.left - canvasRect.left) / Math.max(1, canvasRect.width)),
+    );
+    const fracY = Math.min(
+      1,
+      Math.max(0, (e.clientY - rect.top - canvasRect.top) / Math.max(1, canvasRect.height)),
+    );
 
     if (ui.drawingShapePoints !== null) {
       patchUi({ drawingShapePoints: [...ui.drawingShapePoints, [fracX, fracY]] });
@@ -117,7 +165,9 @@ export function PreviewPanel() {
     }
     if (ui.tool === "text") {
       void run(api.addTextClip(t("defaultTextContent"), fracX, fracY)).then((id) => {
-        if (id != null) patchUi({ selectedClipIds: [id] });
+        if (id != null) {
+          patchUi({ selectedClipIds: [id] });
+        }
         patchUi({ tool: "select" });
       });
     }
@@ -126,7 +176,10 @@ export function PreviewPanel() {
   let body: ReactNode = null;
   if (tick.hasClip && tick.error) {
     body = (
-      <span className="muted" title={tick.error}>
+      <span
+        className="muted"
+        title={tick.error}
+      >
         {t("previewUnavailable")}
       </span>
     );
@@ -135,7 +188,14 @@ export function PreviewPanel() {
   }
 
   let overlay: ReactNode = null;
-  if (tick.hasClip && tick.frameSeq > 0 && clip && hasCanvas && ui.drawingShapePoints === null && ui.tool !== "text") {
+  if (
+    tick.hasClip &&
+    tick.frameSeq > 0 &&
+    clip &&
+    hasCanvas &&
+    ui.drawingShapePoints === null &&
+    ui.tool !== "text"
+  ) {
     const position = ghostPos ?? clip.position_keyframes[0]?.value ?? { x: 0, y: 0 };
     const scaleX = ghostScale?.x ?? clip.layer_scale_x;
     const scaleY = ghostScale?.y ?? clip.layer_scale_y;
@@ -149,20 +209,38 @@ export function PreviewPanel() {
     overlay = (
       <div
         className="preview-canvas"
-        style={{ left: canvasRect.left, top: canvasRect.top, width: canvasRect.width, height: canvasRect.height }}
+        style={{
+          left: canvasRect.left,
+          top: canvasRect.top,
+          width: canvasRect.width,
+          height: canvasRect.height,
+        }}
       >
         <div
           data-testid="preview-layer"
           className={`preview-layer ${draggable ? "draggable" : "animated"}`}
-          style={{ left: layerLeft - canvasRect.left, top: layerTop - canvasRect.top, width: layerW, height: layerH }}
-          onPointerDown={draggable ? (e) => onLayerPointerDown(e, position) : undefined}
+          style={{
+            left: layerLeft - canvasRect.left,
+            top: layerTop - canvasRect.top,
+            width: layerW,
+            height: layerH,
+          }}
+          onPointerDown={
+            draggable
+              ? (e) => {
+                  return onLayerPointerDown(e, position);
+                }
+              : undefined
+          }
           title={draggable ? t("layerTransformDragHint") : t("layerTransformAnimatedHint")}
         >
           {draggable && (
             <div
               data-testid="preview-layer-resize-handle"
               className="preview-layer-handle"
-              onPointerDown={(e) => onHandlePointerDown(e, scaleX, scaleY)}
+              onPointerDown={(e) => {
+                return onHandlePointerDown(e, scaleX, scaleY);
+              }}
               title={t("layerTransformResizeHint")}
             />
           )}
@@ -174,22 +252,55 @@ export function PreviewPanel() {
   let drawingOverlay: ReactNode = null;
   if (ui.drawingShapePoints !== null && hasCanvas) {
     const points = ui.drawingShapePoints;
-    const toPx = ([x, y]: [number, number]) => [
-      canvasRect.left + x * canvasRect.width,
-      canvasRect.top + y * canvasRect.height,
-    ];
+    const toPx = ([x, y]: [number, number]) => {
+      return [canvasRect.left + x * canvasRect.width, canvasRect.top + y * canvasRect.height];
+    };
     const pixelPoints = points.map(toPx);
     const pathD =
       pixelPoints.length > 0
-        ? `M ${pixelPoints.map(([x, y]) => `${x} ${y}`).join(" L ")}${points.length >= 3 ? " Z" : ""}`
+        ? `M ${pixelPoints
+            .map(([x, y]) => {
+              return `${x} ${y}`;
+            })
+            .join(" L ")}${points.length >= 3 ? " Z" : ""}`
         : "";
     drawingOverlay = (
-      <div className="preview-canvas" data-testid="shape-drawing-surface" style={{ left: 0, top: 0, width: monitorSize.width, height: monitorSize.height, pointerEvents: "none" }}>
-        <svg width={monitorSize.width} height={monitorSize.height} style={{ position: "absolute", left: 0, top: 0 }}>
-          {pathD && <path d={pathD} fill="none" stroke="var(--accent)" strokeWidth={1.5} strokeDasharray={points.length < 3 ? undefined : "4 3"} />}
-          {pixelPoints.map(([x, y], i) => (
-            <circle key={i} cx={x} cy={y} r={4} fill="var(--accent)" />
-          ))}
+      <div
+        className="preview-canvas"
+        data-testid="shape-drawing-surface"
+        style={{
+          left: 0,
+          top: 0,
+          width: monitorSize.width,
+          height: monitorSize.height,
+          pointerEvents: "none",
+        }}
+      >
+        <svg
+          width={monitorSize.width}
+          height={monitorSize.height}
+          style={{ position: "absolute", left: 0, top: 0 }}
+        >
+          {pathD && (
+            <path
+              d={pathD}
+              fill="none"
+              stroke="var(--accent)"
+              strokeWidth={1.5}
+              strokeDasharray={points.length < 3 ? undefined : "4 3"}
+            />
+          )}
+          {pixelPoints.map(([x, y], i) => {
+            return (
+              <circle
+                key={i}
+                cx={x}
+                cy={y}
+                r={4}
+                fill="var(--accent)"
+              />
+            );
+          })}
         </svg>
         <div className="drawing-shape-hint">
           {t("drawCustomShapeHint")} ({points.length} {points.length === 1 ? "pt" : "pts"})
@@ -199,7 +310,9 @@ export function PreviewPanel() {
   }
 
   const onOverlayPointerMove = (e: ReactPointerEvent) => {
-    if (!drag || !clip) return;
+    if (!drag || !clip) {
+      return;
+    }
     if (drag.mode === "move") {
       const dx = (e.clientX - drag.startClientX) / Math.max(1, canvasRect.width);
       const dy = (e.clientY - drag.startClientY) / Math.max(1, canvasRect.height);
@@ -224,8 +337,12 @@ export function PreviewPanel() {
   };
   const onOverlayPointerUp = (e: ReactPointerEvent) => {
     if (drag) {
-      if (drag.mode === "move" && ghostPos) commitMove(ghostPos);
-      if (drag.mode === "resize" && ghostScale) commitResize(ghostScale.x, ghostScale.y);
+      if (drag.mode === "move" && ghostPos) {
+        commitMove(ghostPos);
+      }
+      if (drag.mode === "resize" && ghostScale) {
+        commitResize(ghostScale.x, ghostScale.y);
+      }
       setDrag(null);
       setGhostPos(null);
       setGhostScale(null);
@@ -241,13 +358,25 @@ export function PreviewPanel() {
         ref={monitorRef}
         className="monitor"
         data-testid="preview-monitor"
-        style={ui.tool === "text" || ui.drawingShapePoints !== null ? { cursor: "crosshair" } : undefined}
-        title={ui.tool === "text" ? t("textToolHint") : ui.drawingShapePoints !== null ? t("drawCustomShapeHint") : undefined}
+        style={
+          ui.tool === "text" || ui.drawingShapePoints !== null ? { cursor: "crosshair" } : undefined
+        }
+        title={
+          ui.tool === "text"
+            ? t("textToolHint")
+            : ui.drawingShapePoints !== null
+              ? t("drawCustomShapeHint")
+              : undefined
+        }
         onPointerMove={onOverlayPointerMove}
         onPointerUp={onOverlayPointerUp}
       >
         {tick.hasClip && tick.frameSeq > 0 && !tick.error && (
-          <img src={frameUrl(tick.frameSeq)} alt="" draggable={false} />
+          <img
+            src={frameUrl(tick.frameSeq)}
+            alt=""
+            draggable={false}
+          />
         )}
         {body}
         {overlay}
@@ -264,31 +393,83 @@ export function PreviewPanel() {
             max={Math.max(duration, 0.01)}
             step={0.01}
             value={Math.min(tick.playheadSecs, Math.max(duration, 0.01))}
-            style={{ "--fill": `${duration > 0 ? Math.min(100, (tick.playheadSecs / duration) * 100) : 0}%` } as React.CSSProperties}
-            onChange={(e) => void run(api.seek(Number(e.target.value)))}
+            style={
+              {
+                "--fill": `${duration > 0 ? Math.min(100, (tick.playheadSecs / duration) * 100) : 0}%`,
+              } as React.CSSProperties
+            }
+            onChange={(e) => {
+              return void run(api.seek(Number(e.target.value)));
+            }}
           />
           <span className="mono muted time-total">{formatTime(duration)}</span>
         </div>
         <div className="transport-controls">
-          <button className="icon" title={t("goToStart")} aria-label={t("goToStart")} onClick={() => run(api.seek(0))}>
-            <Icon name="skipBack" size={18} />
+          <button
+            className="icon"
+            title={t("goToStart")}
+            aria-label={t("goToStart")}
+            onClick={() => {
+              return run(api.seek(0));
+            }}
+          >
+            <Icon
+              name="skipBack"
+              size={18}
+            />
           </button>
-          <button className="icon" title={t("stepBack")} aria-label={t("stepBack")} onClick={() => run(api.step(-1))}>
-            <Icon name="stepBack" size={18} />
+          <button
+            className="icon"
+            title={t("stepBack")}
+            aria-label={t("stepBack")}
+            onClick={() => {
+              return run(api.step(-1));
+            }}
+          >
+            <Icon
+              name="stepBack"
+              size={18}
+            />
           </button>
           <button
             className="play"
             title={tick.playing ? t("pause") : t("play")}
             aria-label={tick.playing ? t("pause") : t("play")}
-            onClick={() => run(api.setPlaying(!tick.playing))}
+            onClick={() => {
+              return run(api.setPlaying(!tick.playing));
+            }}
           >
-            <Icon name={tick.playing ? "pause" : "play"} filled size={20} />
+            <Icon
+              name={tick.playing ? "pause" : "play"}
+              filled
+              size={20}
+            />
           </button>
-          <button className="icon" title={t("stepForward")} aria-label={t("stepForward")} onClick={() => run(api.step(1))}>
-            <Icon name="stepForward" size={18} />
+          <button
+            className="icon"
+            title={t("stepForward")}
+            aria-label={t("stepForward")}
+            onClick={() => {
+              return run(api.step(1));
+            }}
+          >
+            <Icon
+              name="stepForward"
+              size={18}
+            />
           </button>
-          <button className="icon" title={t("goToEnd")} aria-label={t("goToEnd")} onClick={() => run(api.seek(duration))}>
-            <Icon name="skipForward" size={18} />
+          <button
+            className="icon"
+            title={t("goToEnd")}
+            aria-label={t("goToEnd")}
+            onClick={() => {
+              return run(api.seek(duration));
+            }}
+          >
+            <Icon
+              name="skipForward"
+              size={18}
+            />
           </button>
         </div>
       </div>

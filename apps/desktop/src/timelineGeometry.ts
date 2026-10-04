@@ -21,8 +21,16 @@ export function xToTime(x: number, pxPerSec: number, scrollSecs: number): number
 }
 
 /** Marker nearest a ruler coordinate within its visible tick width. */
-export function markerAtX(markers: Marker[], x: number, pxPerSec: number, scrollSecs: number, radius = 6): Marker | undefined {
-  return markers.find((marker) => Math.abs(timeToX(marker.position_secs, pxPerSec, scrollSecs) - x) <= radius);
+export function markerAtX(
+  markers: Marker[],
+  x: number,
+  pxPerSec: number,
+  scrollSecs: number,
+  radius = 6,
+): Marker | undefined {
+  return markers.find((marker) => {
+    return Math.abs(timeToX(marker.position_secs, pxPerSec, scrollSecs) - x) <= radius;
+  });
 }
 
 /** Track row under a y coordinate in the track area (below the ruler), or -1. */
@@ -49,23 +57,37 @@ export interface TimelineSpan {
 
 /** Every clip on `track` as a span. A track only ever holds one kind, so order is stable. */
 export function trackSpans(track: Track): TimelineSpan[] {
-  const spans: TimelineSpan[] = track.clips.map((clip) => ({
-    id: clip.id,
-    start_secs: clip.start_secs,
-    duration_secs: clipDuration(clip),
-    overlay: false,
-  }));
+  const spans: TimelineSpan[] = track.clips.map((clip) => {
+    return {
+      id: clip.id,
+      start_secs: clip.start_secs,
+      duration_secs: clipDuration(clip),
+      overlay: false,
+    };
+  });
   for (const clip of [...track.text_clips, ...track.shape_clips]) {
-    spans.push({ id: clip.id, start_secs: clip.start_secs, duration_secs: clip.duration_secs, overlay: true });
+    spans.push({
+      id: clip.id,
+      start_secs: clip.start_secs,
+      duration_secs: clip.duration_secs,
+      overlay: true,
+    });
   }
   return spans;
 }
 
 /** The span with `clipId` and the index of its track, across every track. */
-export function findSpan(tracks: Track[], clipId: number): { span: TimelineSpan; trackIndex: number } | null {
+export function findSpan(
+  tracks: Track[],
+  clipId: number,
+): { span: TimelineSpan; trackIndex: number } | null {
   for (let trackIndex = 0; trackIndex < tracks.length; trackIndex += 1) {
-    const span = trackSpans(tracks[trackIndex]).find((s) => s.id === clipId);
-    if (span) return { span, trackIndex };
+    const span = trackSpans(tracks[trackIndex]).find((s) => {
+      return s.id === clipId;
+    });
+    if (span) {
+      return { span, trackIndex };
+    }
   }
   return null;
 }
@@ -79,11 +101,15 @@ export function hitTest(
   scrollSecs: number,
 ): ClipHit | null {
   const trackIndex = trackIndexAtY(y, tracks.length);
-  if (trackIndex < 0) return null;
+  if (trackIndex < 0) {
+    return null;
+  }
   for (const clip of trackSpans(tracks[trackIndex])) {
     const left = timeToX(clip.start_secs, pxPerSec, scrollSecs);
     const right = timeToX(clip.start_secs + clip.duration_secs, pxPerSec, scrollSecs);
-    if (x < left || x > right) continue;
+    if (x < left || x > right) {
+      continue;
+    }
     // Narrow clips keep a body zone: handles never cover more than a third each.
     const grab = Math.min(EDGE_GRAB_PX, (right - left) / 3);
     const part = x - left <= grab ? "start" : right - x <= grab ? "end" : "body";
@@ -97,7 +123,9 @@ export function snapCandidates(tracks: Track[], excludeClipId: number, extra: nu
   const points = [0, ...extra];
   for (const track of tracks) {
     for (const clip of trackSpans(track)) {
-      if (clip.id === excludeClipId) continue;
+      if (clip.id === excludeClipId) {
+        continue;
+      }
       points.push(clip.start_secs, clip.start_secs + clip.duration_secs);
     }
   }
@@ -118,14 +146,17 @@ export function snap(secs: number, candidates: number[], thresholdSecs: number):
   return best;
 }
 
-const TICK_STEPS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1200, 1800, 3600, 7200, 14400, 28800];
+const TICK_STEPS = [
+  0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1200, 1800, 3600, 7200, 14400, 28800,
+];
 const MIN_TICK_SPACING_PX = 80;
 
 /** Labelled ruler tick times covering `[scrollSecs, scrollSecs + width / pxPerSec]`. */
 export function rulerTicks(pxPerSec: number, scrollSecs: number, width: number): number[] {
   const step =
-    TICK_STEPS.find((s) => s * pxPerSec >= MIN_TICK_SPACING_PX) ??
-    TICK_STEPS[TICK_STEPS.length - 1];
+    TICK_STEPS.find((s) => {
+      return s * pxPerSec >= MIN_TICK_SPACING_PX;
+    }) ?? TICK_STEPS[TICK_STEPS.length - 1];
   const first = Math.ceil(scrollSecs / step);
   const end = scrollSecs + width / pxPerSec;
   const ticks: number[] = [];
@@ -141,16 +172,32 @@ export function rulerLabel(secs: number): string {
   const hours = Math.floor(whole / 3600);
   const minutes = Math.floor((whole % 3600) / 60);
   const seconds = whole % 60;
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  if (hours > 0) return `${hours}:${pad(minutes)}:${pad(seconds)}`;
+  const pad = (n: number) => {
+    return n.toString().padStart(2, "0");
+  };
+  if (hours > 0) {
+    return `${hours}:${pad(minutes)}:${pad(seconds)}`;
+  }
   const fraction = secs - whole;
-  const tail = fraction >= 0.005 ? `.${Math.round(fraction * 100).toString().padStart(2, "0")}` : "";
+  const tail =
+    fraction >= 0.005
+      ? `.${Math.round(fraction * 100)
+          .toString()
+          .padStart(2, "0")}`
+      : "";
   return `${minutes}:${pad(seconds)}${tail}`;
 }
 
 /** Pixels per second that fit `durationSecs` into `viewWidth` (with a small margin). */
-export function fitPxPerSec(durationSecs: number, viewWidth: number, min: number, max: number): number {
-  if (durationSecs <= 0 || viewWidth <= 0) return min;
+export function fitPxPerSec(
+  durationSecs: number,
+  viewWidth: number,
+  min: number,
+  max: number,
+): number {
+  if (durationSecs <= 0 || viewWidth <= 0) {
+    return min;
+  }
   return Math.min(max, Math.max(min, (viewWidth - 24) / durationSecs));
 }
 

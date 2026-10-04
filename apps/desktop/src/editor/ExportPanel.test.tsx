@@ -5,16 +5,18 @@ import { t } from "../i18n";
 import { exportsStore, patchUi, uiStore } from "../store";
 import type { ExportJobView } from "../types";
 
-vi.mock("../ipc", () => ({
-  api: {
-    exportActiveSequenceSrt: vi.fn().mockResolvedValue(true),
-    matchExportLoudness: vi.fn().mockResolvedValue(undefined),
-    pauseExport: vi.fn().mockResolvedValue(undefined),
-    resumeExport: vi.fn().mockResolvedValue(undefined),
-    cancelExport: vi.fn().mockResolvedValue(undefined),
-    removeExport: vi.fn().mockResolvedValue(undefined),
-  },
-}));
+vi.mock("../ipc", () => {
+  return {
+    api: {
+      exportActiveSequenceSrt: vi.fn().mockResolvedValue(true),
+      matchExportLoudness: vi.fn().mockResolvedValue(undefined),
+      pauseExport: vi.fn().mockResolvedValue(undefined),
+      resumeExport: vi.fn().mockResolvedValue(undefined),
+      cancelExport: vi.fn().mockResolvedValue(undefined),
+      removeExport: vi.fn().mockResolvedValue(undefined),
+    },
+  };
+});
 
 // Imported after the mock so ExportPanel picks up the mocked `../ipc`.
 const { ExportPanel } = await import("./ExportPanel");

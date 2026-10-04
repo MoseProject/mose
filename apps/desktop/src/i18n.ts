@@ -161,7 +161,8 @@ const strings = {
   shapeStrokeHint: { "pt-BR": "0 = preenchido", en: "0 = filled" },
   shapeVertices: { "pt-BR": "Vértices", en: "Vertices" },
   shapeVerticesHint: {
-    "pt-BR": "arraste os valores X/Y para desenhar uma forma personalizada — funciona em qualquer predefinição, já que todas são polígonos por baixo dos panos (exceto elipse/círculo).",
+    "pt-BR":
+      "arraste os valores X/Y para desenhar uma forma personalizada — funciona em qualquer predefinição, já que todas são polígonos por baixo dos panos (exceto elipse/círculo).",
     en: "drag the X/Y values to draw a custom shape — works on any preset, since they're all polygons underneath (except ellipse/circle).",
   },
   gainKeyframes: { "pt-BR": "Keyframes de ganho", en: "Gain keyframes" },
@@ -177,16 +178,22 @@ const strings = {
   transcribing: { "pt-BR": "Transcrevendo…", en: "Transcribing…" },
   transcribeNoSpeechFound: { "pt-BR": "Nenhuma fala encontrada.", en: "No speech found." },
   transcriptPanelTitle: { "pt-BR": "Transcrição", en: "Transcript" },
-  transcriptPanelSearchHint: { "pt-BR": "Buscar nesta transcrição…", en: "Search this transcript…" },
+  transcriptPanelSearchHint: {
+    "pt-BR": "Buscar nesta transcrição…",
+    en: "Search this transcript…",
+  },
   transcriptProjectSearchHint: { "pt-BR": "Buscar no projeto…", en: "Search the project…" },
   transcriptSearchProject: { "pt-BR": "Buscar no projeto", en: "Search project" },
   transcriptProjectEmpty: { "pt-BR": "Nenhum resultado.", en: "No results." },
   transcriptPanelEmpty: { "pt-BR": "Nenhuma palavra encontrada.", en: "No words found." },
   transcriptPanelNoTranscript: {
-    "pt-BR": "Este clipe ainda não tem transcrição. Use \"Transcrever\" na biblioteca de mídia.",
-    en: "This clip has no transcript yet. Use \"Transcribe\" in the media library.",
+    "pt-BR": 'Este clipe ainda não tem transcrição. Use "Transcrever" na biblioteca de mídia.',
+    en: 'This clip has no transcript yet. Use "Transcribe" in the media library.',
   },
-  transcriptPanelNoClip: { "pt-BR": "Selecione um clipe de vídeo ou áudio.", en: "Select a video or audio clip." },
+  transcriptPanelNoClip: {
+    "pt-BR": "Selecione um clipe de vídeo ou áudio.",
+    en: "Select a video or audio clip.",
+  },
   whisperModelPath: { "pt-BR": "Modelo Whisper (.bin)", en: "Whisper model (.bin)" },
   reframeModelPath: { "pt-BR": "Modelo de reenquadramento (.onnx)", en: "Reframe model (.onnx)" },
   backgroundRemovalModelPath: {
@@ -210,7 +217,10 @@ const strings = {
     en: "No files detected yet.",
   },
   watchFolderAddToProject: { "pt-BR": "Adicionar ao projeto", en: "Add to project" },
-  watchFolderStabilizing: { "pt-BR": "Aguardando gravação terminar…", en: "Waiting for recording to finish…" },
+  watchFolderStabilizing: {
+    "pt-BR": "Aguardando gravação terminar…",
+    en: "Waiting for recording to finish…",
+  },
   watchFolderProcessing: { "pt-BR": "Processando…", en: "Processing…" },
   watchFolderDone: { "pt-BR": "Concluído", en: "Done" },
   watchFolderError: { "pt-BR": "Erro", en: "Error" },
@@ -226,7 +236,8 @@ const strings = {
   },
 
   crashReviewOffer: {
-    "pt-BR": "O oca fechou inesperadamente na última vez. Você quer enviar um relatório para ajudar a corrigir isso?",
+    "pt-BR":
+      "O oca fechou inesperadamente na última vez. Você quer enviar um relatório para ajudar a corrigir isso?",
     en: "oca closed unexpectedly last time. Would you like to send a report to help fix this?",
   },
   crashReviewShowPayload: { "pt-BR": "Ver dados do relatório", en: "Show report payload" },
@@ -234,14 +245,26 @@ const strings = {
   crashReviewAlwaysSend: { "pt-BR": "Sempre enviar relatórios", en: "Always send error reports" },
   crashReviewDoNotSend: { "pt-BR": "Não enviar", en: "Do not send" },
 
-  telemetryEnabled: { "pt-BR": "Telemetria local (nunca enviada)", en: "Local telemetry (never sent)" },
-  errorReportingConsent: { "pt-BR": "Sempre enviar relatórios de erro", en: "Always send error reports" },
+  telemetryEnabled: {
+    "pt-BR": "Telemetria local (nunca enviada)",
+    en: "Local telemetry (never sent)",
+  },
+  errorReportingConsent: {
+    "pt-BR": "Sempre enviar relatórios de erro",
+    en: "Always send error reports",
+  },
   queuedReports: { "pt-BR": "relatórios na fila", en: "queued reports" },
   deleteQueuedReports: { "pt-BR": "Excluir relatórios na fila", en: "Delete queued reports" },
 
   checkForUpdate: { "pt-BR": "Verificar atualizações", en: "Check for updates" },
-  updateCheckUpToDate: { "pt-BR": "Você está usando a versão mais recente.", en: "You're up to date." },
-  updateCheckFailed: { "pt-BR": "Falha ao verificar atualizações.", en: "Failed to check for updates." },
+  updateCheckUpToDate: {
+    "pt-BR": "Você está usando a versão mais recente.",
+    en: "You're up to date.",
+  },
+  updateCheckFailed: {
+    "pt-BR": "Falha ao verificar atualizações.",
+    en: "Failed to check for updates.",
+  },
   updateAvailable: { "pt-BR": "Nova versão disponível", en: "New version available" },
   updateInstall: { "pt-BR": "Instalar", en: "Install" },
   updateOpenRelease: { "pt-BR": "Abrir página de lançamento", en: "Open release page" },
@@ -249,7 +272,10 @@ const strings = {
     "pt-BR": "Atualização instalada. Reinicie para aplicar.",
     en: "Update installed. Restart to apply.",
   },
-  updateInstallFailed: { "pt-BR": "Falha ao instalar atualização.", en: "Failed to install update." },
+  updateInstallFailed: {
+    "pt-BR": "Falha ao instalar atualização.",
+    en: "Failed to install update.",
+  },
   updateRestart: { "pt-BR": "Reiniciar", en: "Restart" },
 
   silenceReview: { "pt-BR": "Revisar silêncio", en: "Review silence" },
@@ -428,7 +454,10 @@ const strings = {
   removeRecent: { "pt-BR": "Remover da lista", en: "Remove from list" },
   recoverAutosave: { "pt-BR": "Recuperar salvamento automático", en: "Recover autosave" },
   discardAutosave: { "pt-BR": "Descartar salvamento automático", en: "Discard autosave" },
-  unsavedConfirm: { "pt-BR": "Há alterações não salvas. Deseja continuar?", en: "You have unsaved changes. Continue?" },
+  unsavedConfirm: {
+    "pt-BR": "Há alterações não salvas. Deseja continuar?",
+    en: "You have unsaved changes. Continue?",
+  },
   exportSrt: { "pt-BR": "Exportar SRT", en: "Export SRT" },
   gpuEncoder: { "pt-BR": "Codificador GPU", en: "GPU encoder" },
   matchLoudness: { "pt-BR": "Igualar loudness", en: "Match loudness" },
@@ -448,9 +477,13 @@ let current: Locale = typeof navigator === "undefined" ? "en" : detectLocale();
 const localeListeners = new Set<() => void>();
 
 export function setLocale(locale: Locale) {
-  if (current === locale) return;
+  if (current === locale) {
+    return;
+  }
   current = locale;
-  localeListeners.forEach((listener) => listener());
+  localeListeners.forEach((listener) => {
+    return listener();
+  });
 }
 
 export function localeFromPrefs(locale: string): Locale {
@@ -459,7 +492,9 @@ export function localeFromPrefs(locale: string): Locale {
 
 export function subscribeLocale(listener: () => void) {
   localeListeners.add(listener);
-  return () => localeListeners.delete(listener);
+  return () => {
+    return localeListeners.delete(listener);
+  };
 }
 
 export function localeSnapshot() {
@@ -476,6 +511,8 @@ export function formatTime(secs: number): string {
   const minutes = Math.floor(totalHundredths / 6000);
   const seconds = Math.floor((totalHundredths % 6000) / 100);
   const hundredths = totalHundredths % 100;
-  const pad = (n: number) => n.toString().padStart(2, "0");
+  const pad = (n: number) => {
+    return n.toString().padStart(2, "0");
+  };
   return `${pad(minutes)}:${pad(seconds)}.${pad(hundredths)}`;
 }

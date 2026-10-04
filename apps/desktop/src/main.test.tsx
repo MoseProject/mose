@@ -3,9 +3,19 @@ import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const render = vi.fn();
-const createRoot = vi.fn(() => ({ render }));
-vi.mock("react-dom/client", () => ({ createRoot }));
-vi.mock("./App", () => ({ App: () => null }));
+const createRoot = vi.fn(() => {
+  return { render };
+});
+vi.mock("react-dom/client", () => {
+  return { createRoot };
+});
+vi.mock("./App", () => {
+  return {
+    App: () => {
+      return null;
+    },
+  };
+});
 
 afterEach(() => {
   document.body.innerHTML = "";

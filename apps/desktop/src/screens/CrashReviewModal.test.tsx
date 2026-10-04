@@ -3,29 +3,37 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n";
 
-vi.mock("../ipc", () => ({
-  api: {
-    getPendingCrashReview: vi.fn(),
-    sendCrashOnce: vi.fn().mockResolvedValue(undefined),
-    alwaysSendCrash: vi.fn().mockResolvedValue(undefined),
-    dismissCrashReview: vi.fn().mockResolvedValue(undefined),
-  },
-}));
+vi.mock("../ipc", () => {
+  return {
+    api: {
+      getPendingCrashReview: vi.fn(),
+      sendCrashOnce: vi.fn().mockResolvedValue(undefined),
+      alwaysSendCrash: vi.fn().mockResolvedValue(undefined),
+      dismissCrashReview: vi.fn().mockResolvedValue(undefined),
+    },
+  };
+});
 
 const { CrashReviewModal } = await import("./CrashReviewModal");
 const { api } = await import("../ipc");
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(api.getPendingCrashReview).mockResolvedValue({ payloadPreview: "stack trace" } as never);
+  vi.mocked(api.getPendingCrashReview).mockResolvedValue({
+    payloadPreview: "stack trace",
+  } as never);
 });
-afterEach(() => cleanup());
+afterEach(() => {
+  return cleanup();
+});
 
 describe("crash review modal", () => {
   it("renders nothing when no crash is pending", async () => {
     vi.mocked(api.getPendingCrashReview).mockResolvedValue(undefined as never);
     const { container } = render(<CrashReviewModal />);
-    await waitFor(() => expect(api.getPendingCrashReview).toHaveBeenCalled());
+    await waitFor(() => {
+      return expect(api.getPendingCrashReview).toHaveBeenCalled();
+    });
     expect(container.innerHTML).toBe("");
   });
 

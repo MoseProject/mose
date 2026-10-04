@@ -6,16 +6,20 @@ import { patchUi, previewStore, sessionStore, uiStore } from "../store";
 import { makeSession } from "../testSupport";
 import type { ClipInstance, PreviewTick } from "../types";
 
-vi.mock("../ipc", () => ({
-  api: {
-    updateClip: vi.fn().mockResolvedValue(undefined),
-    addTextClip: vi.fn().mockResolvedValue(9),
-    step: vi.fn().mockResolvedValue(undefined),
-    seek: vi.fn().mockResolvedValue(undefined),
-    setPlaying: vi.fn().mockResolvedValue(undefined),
-  },
-  frameUrl: (seq: number) => `oca://frame/${seq}`,
-}));
+vi.mock("../ipc", () => {
+  return {
+    api: {
+      updateClip: vi.fn().mockResolvedValue(undefined),
+      addTextClip: vi.fn().mockResolvedValue(9),
+      step: vi.fn().mockResolvedValue(undefined),
+      seek: vi.fn().mockResolvedValue(undefined),
+      setPlaying: vi.fn().mockResolvedValue(undefined),
+    },
+    frameUrl: (seq: number) => {
+      return `oca://frame/${seq}`;
+    },
+  };
+});
 
 const { PreviewPanel } = await import("./PreviewPanel");
 const { api } = await import("../ipc");
@@ -23,15 +27,19 @@ const { api } = await import("../ipc");
 let resize: (width: number, height: number) => void = () => {};
 
 class FakeResizeObserver {
-  constructor(private callback: (entries: { contentRect: { width: number; height: number } }[]) => void) {
-    resize = (width, height) => this.callback([{ contentRect: { width, height } }]);
+  constructor(
+    private callback: (entries: { contentRect: { width: number; height: number } }[]) => void,
+  ) {
+    resize = (width, height) => {
+      return this.callback([{ contentRect: { width, height } }]);
+    };
   }
   observe() {}
   disconnect() {}
 }
 
-const clip = (overrides: Partial<ClipInstance> = {}): ClipInstance =>
-  ({
+const clip = (overrides: Partial<ClipInstance> = {}): ClipInstance => {
+  return {
     id: 1,
     asset_id: 1,
     start_secs: 0,
@@ -42,35 +50,48 @@ const clip = (overrides: Partial<ClipInstance> = {}): ClipInstance =>
     layer_scale_x: 1,
     layer_scale_y: 1,
     ...overrides,
-  }) as unknown as ClipInstance;
+  } as unknown as ClipInstance;
+};
 
 const sessionWith = (c: ClipInstance, resolution: [number, number] | null = [1920, 1080]) => {
   const session = makeSession([{ id: 1, name: "Seq", tracks: [{ clips: [c] }] }]);
-  (session.project as unknown as { media_library: unknown[] }).media_library = [{ id: 1, resolution }];
+  (session.project as unknown as { media_library: unknown[] }).media_library = [
+    { id: 1, resolution },
+  ];
   return session;
 };
 
-const tick = (overrides: Partial<PreviewTick> = {}): PreviewTick => ({
-  frameSeq: 1,
-  playheadSecs: 0,
-  playing: false,
-  hasClip: true,
-  available: true,
-  error: null,
-  peakL: 0,
-  peakR: 0,
-  ...overrides,
-});
+const tick = (overrides: Partial<PreviewTick> = {}): PreviewTick => {
+  return {
+    frameSeq: 1,
+    playheadSecs: 0,
+    playing: false,
+    hasClip: true,
+    available: true,
+    error: null,
+    peakL: 0,
+    peakR: 0,
+    ...overrides,
+  };
+};
 
 // jsdom's PointerEvent init is unreliable, so build MouseEvents under the pointer event names.
-const pointer = (target: Element, type: string, x = 0, y = 0) =>
-  fireEvent(target, new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0 }));
+const pointer = (target: Element, type: string, x = 0, y = 0) => {
+  return fireEvent(
+    target,
+    new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0 }),
+  );
+};
 
-const monitor = () => screen.getByTestId("preview-monitor");
+const monitor = () => {
+  return screen.getByTestId("preview-monitor");
+};
 
 function mount() {
   const view = render(<PreviewPanel />);
-  act(() => resize(800, 450));
+  act(() => {
+    return resize(800, 450);
+  });
   return view;
 }
 
@@ -80,7 +101,15 @@ beforeEach(() => {
   Element.prototype.setPointerCapture = vi.fn();
   previewStore.set(tick());
   sessionStore.set(null);
-  uiStore.set({ screen: "editor", selectedClipIds: [], tool: "select", pxPerSec: 40, error: null, drawingShapePoints: null, exportQueueOpen: false });
+  uiStore.set({
+    screen: "editor",
+    selectedClipIds: [],
+    tool: "select",
+    pxPerSec: 40,
+    error: null,
+    drawingShapePoints: null,
+    exportQueueOpen: false,
+  });
 });
 afterEach(() => {
   cleanup();
@@ -188,7 +217,11 @@ describe("preview panel", () => {
     });
 
     it("moves the layer, clamped to the canvas bounds, and commits one keyframe on release", () => {
-      sessionStore.set(sessionWith(clip({ position_keyframes: [{ time_fraction: 0, value: { x: 0.5, y: 0.5 } }] })));
+      sessionStore.set(
+        sessionWith(
+          clip({ position_keyframes: [{ time_fraction: 0, value: { x: 0.5, y: 0.5 } }] }),
+        ),
+      );
       mount();
       const layer = screen.getByTestId("preview-layer");
       pointer(layer, "pointerdown", 100, 100);
@@ -208,7 +241,10 @@ describe("preview panel", () => {
       pointer(monitor(), "pointermove", -5000, 10);
       pointer(monitor(), "pointerup");
       expect(api.updateClip).toHaveBeenCalledTimes(1);
-      const patch = vi.mocked(api.updateClip).mock.calls[0][1] as { layerScaleX: number; layerScaleY: number };
+      const patch = vi.mocked(api.updateClip).mock.calls[0][1] as {
+        layerScaleX: number;
+        layerScaleY: number;
+      };
       expect(patch.layerScaleX).toBe(0.05);
       expect(patch.layerScaleY).toBeGreaterThan(1);
     });
@@ -255,7 +291,9 @@ describe("preview panel", () => {
   });
 
   describe("text tool", () => {
-    beforeEach(() => patchUi({ tool: "text" }));
+    beforeEach(() => {
+      return patchUi({ tool: "text" });
+    });
 
     it("announces itself with a crosshair cursor and a hint", () => {
       mount();
@@ -308,14 +346,27 @@ describe("preview panel", () => {
     });
 
     it("draws an open solid path for two points and a closed dashed one for three", () => {
-      patchUi({ drawingShapePoints: [[0, 0], [1, 1]] });
+      patchUi({
+        drawingShapePoints: [
+          [0, 0],
+          [1, 1],
+        ],
+      });
       mount();
       const surface = screen.getByTestId("shape-drawing-surface");
       expect(surface.querySelectorAll("circle")).toHaveLength(2);
       expect(surface.querySelector("path")!.getAttribute("d")).not.toContain("Z");
       expect(surface.querySelector("path")!.getAttribute("stroke-dasharray")).toBeNull();
       expect(surface.textContent).toContain("2 pts");
-      act(() => patchUi({ drawingShapePoints: [[0, 0], [1, 1], [0, 1]] }));
+      act(() => {
+        return patchUi({
+          drawingShapePoints: [
+            [0, 0],
+            [1, 1],
+            [0, 1],
+          ],
+        });
+      });
       expect(surface.querySelector("path")!.getAttribute("d")).toContain("Z");
       expect(surface.querySelector("path")!.getAttribute("stroke-dasharray")).toBe("4 3");
     });

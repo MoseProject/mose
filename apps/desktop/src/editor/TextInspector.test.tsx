@@ -4,57 +4,77 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n";
 import type { OverlayCatalog, TextClip } from "../types";
 
-vi.mock("../ipc", () => ({
-  api: {
-    overlayCatalog: vi.fn(),
-    updateTextClip: vi.fn().mockResolvedValue(undefined),
-  },
-}));
+vi.mock("../ipc", () => {
+  return {
+    api: {
+      overlayCatalog: vi.fn(),
+      updateTextClip: vi.fn().mockResolvedValue(undefined),
+    },
+  };
+});
 
 const { TextInspector } = await import("./TextInspector");
 const { api } = await import("../ipc");
 
 const catalog = {
   fonts: [
-    { id: "inter", displayName: "Inter", category: "Sans", supportsBold: true, isVariable: true },
-    { id: "mono", displayName: "Mono", category: "Monospace", supportsBold: false, isVariable: false },
+    {
+      id: "inter",
+      displayName: "Inter",
+      category: "Sans",
+      supportsBold: true,
+      isVariable: true,
+    },
+    {
+      id: "mono",
+      displayName: "Mono",
+      category: "Monospace",
+      supportsBold: false,
+      isVariable: false,
+    },
   ],
   shapePresets: [],
 } as unknown as OverlayCatalog;
 
-const clip = (overrides: Partial<TextClip> = {}): TextClip => ({
-  id: 5,
-  start_secs: 1,
-  duration_secs: 3,
-  text: "Hello",
-  font_size: 48,
-  font_family: "inter",
-  font_style: "Regular",
-  font_weight: null,
-  color_rgba: [255, 255, 255, 255],
-  background_rgba: [0, 0, 0, 0],
-  background_padding: 8,
-  background_corner_radius: 4,
-  direction: "Auto",
-  pos_x: 0.5,
-  pos_y: 0.9,
-  pos_x_keyframes: [],
-  pos_y_keyframes: [],
-  scale_keyframes: [],
-  rotation_keyframes: [],
-  opacity_keyframes: [],
-  words: [],
-  highlight_enabled: false,
-  highlight_color_rgba: [255, 255, 0, 255],
-  text_align: "Auto",
-  ...overrides,
-});
+const clip = (overrides: Partial<TextClip> = {}): TextClip => {
+  return {
+    id: 5,
+    start_secs: 1,
+    duration_secs: 3,
+    text: "Hello",
+    font_size: 48,
+    font_family: "inter",
+    font_style: "Regular",
+    font_weight: null,
+    color_rgba: [255, 255, 255, 255],
+    background_rgba: [0, 0, 0, 0],
+    background_padding: 8,
+    background_corner_radius: 4,
+    direction: "Auto",
+    pos_x: 0.5,
+    pos_y: 0.9,
+    pos_x_keyframes: [],
+    pos_y_keyframes: [],
+    scale_keyframes: [],
+    rotation_keyframes: [],
+    opacity_keyframes: [],
+    words: [],
+    highlight_enabled: false,
+    highlight_color_rgba: [255, 255, 0, 255],
+    text_align: "Auto",
+    ...overrides,
+  };
+};
 
-const field = (label: string) =>
-  screen.getByText(label, { selector: "label" }).parentElement as HTMLElement;
-const control = (label: string, selector: string) =>
-  field(label).querySelector(selector) as HTMLInputElement | HTMLSelectElement;
-const lastPatch = () => vi.mocked(api.updateTextClip).mock.calls.at(-1)![1];
+const field = (label: string) => {
+  return screen.getByText(label, { selector: "label" }).parentElement as HTMLElement;
+};
+const control = (label: string, selector: string) => {
+  return field(label).querySelector(selector) as HTMLInputElement | HTMLSelectElement;
+};
+const lastPatch = () => {
+  return vi.mocked(api.updateTextClip).mock.calls.at(-1)![1];
+};
 
 function slide(label: string, value: number) {
   const range = control(label, 'input[type="range"]');
@@ -66,11 +86,15 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(api.overlayCatalog).mockResolvedValue(catalog);
 });
-afterEach(() => cleanup());
+afterEach(() => {
+  return cleanup();
+});
 
 async function loaded(overrides: Partial<TextClip> = {}) {
   const view = render(<TextInspector clip={clip(overrides)} />);
-  await waitFor(() => expect((control(t("font"), "select") as HTMLSelectElement).disabled).toBe(false));
+  await waitFor(() => {
+    return expect((control(t("font"), "select") as HTMLSelectElement).disabled).toBe(false);
+  });
   return view;
 }
 
@@ -78,7 +102,9 @@ describe("text inspector", () => {
   it("keeps the font picker disabled until the catalog loads", async () => {
     render(<TextInspector clip={clip()} />);
     expect((control(t("font"), "select") as HTMLSelectElement).disabled).toBe(true);
-    await waitFor(() => expect((control(t("font"), "select") as HTMLSelectElement).disabled).toBe(false));
+    await waitFor(() => {
+      return expect((control(t("font"), "select") as HTMLSelectElement).disabled).toBe(false);
+    });
   });
 
   it("commits the text content and the timing", async () => {
@@ -102,7 +128,9 @@ describe("text inspector", () => {
 
   it("groups the catalog fonts by category and flags an unknown font", async () => {
     const { container } = await loaded();
-    const groups = [...container.querySelectorAll("optgroup")].map((g) => g.label);
+    const groups = [...container.querySelectorAll("optgroup")].map((g) => {
+      return g.label;
+    });
     expect(groups).toEqual([t("fontCategorySans"), t("fontCategoryMonospace")]);
     expect(screen.queryByText(t("unknownFont"))).toBeNull();
 
@@ -143,7 +171,9 @@ describe("text inspector", () => {
     slide(t("fontSize"), 72);
     expect(lastPatch()).toEqual({ fontSize: 72 });
 
-    fireEvent.change(control(t("textColor"), 'input[type="color"]'), { target: { value: "#ff0000" } });
+    fireEvent.change(control(t("textColor"), 'input[type="color"]'), {
+      target: { value: "#ff0000" },
+    });
     expect(lastPatch()).toEqual({ colorRgba: [255, 0, 0, 255] });
   });
 
@@ -155,7 +185,9 @@ describe("text inspector", () => {
     cleanup();
 
     await loaded({ background_rgba: [10, 20, 30, 100] });
-    fireEvent.change(control(t("backgroundColor"), 'input[type="color"]'), { target: { value: "#ffffff" } });
+    fireEvent.change(control(t("backgroundColor"), 'input[type="color"]'), {
+      target: { value: "#ffffff" },
+    });
     expect(lastPatch()).toEqual({ backgroundRgba: [255, 255, 255, 100] });
     slide(t("backgroundPadding"), 20);
     expect(lastPatch()).toEqual({ backgroundPadding: 20 });
@@ -177,7 +209,9 @@ describe("text inspector", () => {
   it("opens only the keyframe sections that already have keyframes and adds new ones", async () => {
     const key = [{ time_fraction: 0.5, value: 0.4 }];
     const { container } = await loaded({ scale_keyframes: key });
-    const open = [...container.querySelectorAll("details")].map((d) => d.open);
+    const open = [...container.querySelectorAll("details")].map((d) => {
+      return d.open;
+    });
     expect(open).toEqual([false, false, true, false, false]);
 
     const adds = screen.getAllByText(t("addKeyframe"));
@@ -203,7 +237,9 @@ describe("text inspector", () => {
     await loaded({ words: [{}], highlight_color_rgba: [1, 2, 3, 200] });
     fireEvent.click(screen.getByLabelText(t("wordHighlight")));
     expect(lastPatch()).toEqual({ highlightEnabled: true });
-    fireEvent.change(control(t("highlightColor"), 'input[type="color"]'), { target: { value: "#0a0b0c" } });
+    fireEvent.change(control(t("highlightColor"), 'input[type="color"]'), {
+      target: { value: "#0a0b0c" },
+    });
     expect(lastPatch()).toEqual({ highlightColorRgba: [10, 11, 12, 200] });
   });
 });

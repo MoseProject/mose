@@ -3,7 +3,9 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createStore, patchUi, run, uiStore, useStore } from "./store";
 
-afterEach(() => cleanup());
+afterEach(() => {
+  return cleanup();
+});
 
 describe("createStore", () => {
   it("holds a value, replaces it and notifies subscribers once per change", () => {
@@ -13,13 +15,17 @@ describe("createStore", () => {
 
     store.set(2);
     expect(store.get()).toBe(2);
-    store.set((previous) => previous + 3);
+    store.set((previous) => {
+      return previous + 3;
+    });
     expect(store.get()).toBe(5);
     expect(listener).toHaveBeenCalledTimes(2);
 
     // Setting the same value is not a change.
     store.set(5);
-    store.set((previous) => previous);
+    store.set((previous) => {
+      return previous;
+    });
     expect(listener).toHaveBeenCalledTimes(2);
 
     unsubscribe();
@@ -29,15 +35,21 @@ describe("createStore", () => {
 
   it("re-renders a component reading it through useStore", () => {
     const store = createStore("a");
-    const { result } = renderHook(() => useStore(store));
+    const { result } = renderHook(() => {
+      return useStore(store);
+    });
     expect(result.current).toBe("a");
-    act(() => store.set("b"));
+    act(() => {
+      return store.set("b");
+    });
     expect(result.current).toBe("b");
   });
 });
 
 describe("ui state helpers", () => {
-  beforeEach(() => patchUi({ error: null, screen: "home", selectedClipIds: [] }));
+  beforeEach(() => {
+    return patchUi({ error: null, screen: "home", selectedClipIds: [] });
+  });
 
   it("patchUi merges into the transient state", () => {
     patchUi({ screen: "editor", selectedClipIds: [3, 4] });
@@ -68,7 +80,15 @@ describe("connect", () => {
         sequences: [
           {
             id: activeId,
-            timeline: { tracks: [{ clips: clipIds.map((id) => ({ id })) }] },
+            timeline: {
+              tracks: [
+                {
+                  clips: clipIds.map((id) => {
+                    return { id };
+                  }),
+                },
+              ],
+            },
           },
         ],
       },
@@ -78,35 +98,43 @@ describe("connect", () => {
   async function load() {
     vi.resetModules();
     handlers.clear();
-    const subscribe = (name: string) => async (handler: Handler) => {
-      handlers.set(name, handler);
-      return () => undefined;
+    const subscribe = (name: string) => {
+      return async (handler: Handler) => {
+        handlers.set(name, handler);
+        return () => {
+          return undefined;
+        };
+      };
     };
     const api = {
       getSession: vi.fn().mockResolvedValue(session(1, [1, 2, 3])),
       getPrefs: vi.fn().mockResolvedValue({ locale: "en", savedLayerTemplates: [{ name: "t" }] }),
       listExports: vi.fn().mockResolvedValue([{ id: 9 }]),
     };
-    vi.doMock("./ipc", () => ({
-      api,
-      onSession: subscribe("session"),
-      onPreview: subscribe("preview"),
-      onExports: subscribe("exports"),
-      onSceneCut: subscribe("sceneCut"),
-      onMotionTrack: subscribe("motionTrack"),
-      onAutoReframe: subscribe("autoReframe"),
-      onMatteGeneration: subscribe("matte"),
-      onPrivacyBlur: subscribe("privacy"),
-      onTts: subscribe("tts"),
-      onTranscribe: subscribe("transcribe"),
-    }));
+    vi.doMock("./ipc", () => {
+      return {
+        api,
+        onSession: subscribe("session"),
+        onPreview: subscribe("preview"),
+        onExports: subscribe("exports"),
+        onSceneCut: subscribe("sceneCut"),
+        onMotionTrack: subscribe("motionTrack"),
+        onAutoReframe: subscribe("autoReframe"),
+        onMatteGeneration: subscribe("matte"),
+        onPrivacyBlur: subscribe("privacy"),
+        onTts: subscribe("tts"),
+        onTranscribe: subscribe("transcribe"),
+      };
+    });
     const store = await import("./store");
     const i18n = await import("./i18n");
     await store.connect();
     return { store, i18n, api };
   }
 
-  afterEach(() => vi.doUnmock("./ipc"));
+  afterEach(() => {
+    return vi.doUnmock("./ipc");
+  });
 
   it("loads the initial session, language, templates and exports once", async () => {
     const { store, i18n, api } = await load();
@@ -147,8 +175,12 @@ describe("connect", () => {
 
   it("reports analysis events that found nothing or failed", async () => {
     const { store, i18n } = await load();
-    const banner = () => store.uiStore.get().error;
-    const fire = (name: string, payload: unknown) => handlers.get(name)!(payload as never);
+    const banner = () => {
+      return store.uiStore.get().error;
+    };
+    const fire = (name: string, payload: unknown) => {
+      return handlers.get(name)!(payload as never);
+    };
 
     fire("sceneCut", 3);
     expect(banner()).toBeNull();
@@ -176,7 +208,9 @@ describe("connect", () => {
 
   it("tracks which asset is being transcribed and reports its outcome", async () => {
     const { store, i18n } = await load();
-    const fire = (payload: unknown) => handlers.get("transcribe")!(payload as never);
+    const fire = (payload: unknown) => {
+      return handlers.get("transcribe")!(payload as never);
+    };
 
     fire({ type: "started", assetId: 12 });
     expect(store.transcribingAssetIdStore.get()).toBe(12);

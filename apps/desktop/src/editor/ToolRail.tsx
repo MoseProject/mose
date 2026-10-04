@@ -15,27 +15,42 @@ const TOOLS: [EditorTool, TextKey, IconName][] = [
 export function ToolRail() {
   const ui = useStore(uiStore);
   return (
-    <nav className="tool-rail" aria-label={t("tools")}>
-      {TOOLS.map(([tool, label, icon]) => (
-        <button
-          key={tool}
-          className={`icon ${ui.tool === tool ? "active" : ""}`}
-          title={t(label)}
-          aria-label={t(label)}
-          aria-pressed={ui.tool === tool}
-          onClick={() => patchUi({ tool })}
-        >
-          <Icon name={icon} size={18} />
-        </button>
-      ))}
+    <nav
+      className="tool-rail"
+      aria-label={t("tools")}
+    >
+      {TOOLS.map(([tool, label, icon]) => {
+        return (
+          <button
+            key={tool}
+            className={`icon ${ui.tool === tool ? "active" : ""}`}
+            title={t(label)}
+            aria-label={t(label)}
+            aria-pressed={ui.tool === tool}
+            onClick={() => {
+              return patchUi({ tool });
+            }}
+          >
+            <Icon
+              name={icon}
+              size={18}
+            />
+          </button>
+        );
+      })}
       <span className="rail-sep" />
       <button
         className="icon"
         title={t("split")}
         aria-label={t("split")}
-        onClick={() => run(api.splitAtPlayhead(uiStore.get().selectedClipIds))}
+        onClick={() => {
+          return run(api.splitAtPlayhead(uiStore.get().selectedClipIds));
+        }}
       >
-        <Icon name="scissors" size={18} />
+        <Icon
+          name="scissors"
+          size={18}
+        />
       </button>
     </nav>
   );
