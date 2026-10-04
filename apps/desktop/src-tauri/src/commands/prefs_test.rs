@@ -85,6 +85,13 @@ fn recent_projects_list_only_readable_projects_with_their_autosave() {
     assert_eq!(recent[0].path, good.display().to_string());
     assert!(recent[0].modified_unix_secs > 0);
     assert_eq!(
+        recent[0].folder,
+        good.parent().unwrap().display().to_string()
+    );
+    assert_eq!(recent[0].sequence_count, 1);
+    assert_eq!(recent[0].media_count, 0);
+    assert_eq!(recent[0].duration_secs, 0.0);
+    assert_eq!(
         recent[0].autosave_path,
         Some(crate::prefs::autosave_path(&good).display().to_string())
     );

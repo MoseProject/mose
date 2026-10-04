@@ -8,6 +8,7 @@ macro_rules! all_commands {
             $crate::commands::get_session,
             $crate::commands::set_panel_layout,
             $crate::commands::new_project,
+            $crate::commands::create_project,
             $crate::commands::open_project,
             $crate::commands::open_project_path,
             $crate::commands::save_project,

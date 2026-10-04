@@ -182,6 +182,9 @@ export const api = {
   newProject: (name: string, sequenceName: string) => {
     return invoke<void>("new_project", { name, sequenceName });
   },
+  createProject: (name: string, sequenceName: string) => {
+    return invoke<boolean>("create_project", { name, sequenceName });
+  },
   openProject: () => {
     return invoke<boolean>("open_project");
   },
