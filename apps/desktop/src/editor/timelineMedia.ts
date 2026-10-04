@@ -2,7 +2,7 @@
 // from the backend's `oca://` scheme on demand, are cached here, and ask the timeline to repaint
 // when something arrives, so `draw()` itself stays synchronous.
 
-import { frameAtUrl, waveformUrl } from "../ipc";
+import { coarseWaveformUrl, frameAtUrl, waveformUrl } from "../ipc";
 import type { MediaAsset } from "../types";
 
 export const MEDIA_EVENT = "oca-timeline-media";
@@ -54,6 +54,7 @@ export function syncAssets(assets: MediaAsset[]) {
     frames.clear();
     queue.length = 0;
     detailed.clear();
+    overview.clear();
     notify();
   }
 }
@@ -206,54 +207,74 @@ export function peakRange(
 
 type WaveEntry = PeakPyramid | "pending" | Failed;
 const detailed = new Map<number, WaveEntry>();
-const overview = new WeakMap<object, PeakPyramid | null>();
+/** The coarse overviews: one small fetch per asset that has one, answered from memory. */
+const overview = new Map<number, WaveEntry>();
+
+/** Fetches little-endian f32 (min, max) pairs from `url` into `cache` under `assetId`. */
+function fetchPeaks(
+  cache: Map<number, WaveEntry>,
+  assetId: number,
+  url: string,
+  durationSecs: number,
+) {
+  const requestedIn = epoch;
+  cache.set(assetId, "pending");
+  void fetch(url)
+    .then((response) => {
+      return response.ok
+        ? response.arrayBuffer()
+        : Promise.reject(new Error(String(response.status)));
+    })
+    .then((buffer) => {
+      if (requestedIn !== epoch) {
+        return;
+      }
+      const pyramid = buildPyramid(new Float32Array(buffer), durationSecs);
+      cache.set(assetId, pyramid ?? { failedAt: Date.now() });
+      notify();
+    })
+    .catch(() => {
+      if (requestedIn === epoch) {
+        cache.set(assetId, { failedAt: Date.now() });
+      }
+    });
+}
+
+/** The entry of `cache` for `assetId`, forgetting a failure once it is old enough to retry. */
+function entryFor(cache: Map<number, WaveEntry>, assetId: number): WaveEntry | undefined {
+  const entry = cache.get(assetId);
+  if (isFailed(entry) && Date.now() - entry.failedAt >= RETRY_MS) {
+    cache.delete(assetId);
+    return undefined;
+  }
+  return entry;
+}
+
+const isPyramid = (entry: WaveEntry | undefined): entry is PeakPyramid => {
+  return typeof entry === "object" && "levels" in entry;
+};
 
 /** The best peaks available for `asset` right now: the detailed waveform once it has been
  *  fetched (a decode pass over the whole file, so it can take a while on long recordings),
  *  the coarse one stored with the project until then. */
 export function peaksFor(asset: MediaAsset): PeakPyramid | null {
-  let entry = detailed.get(asset.id);
-  if (entry && typeof entry === "object" && "levels" in entry) {
-    return entry;
-  }
-  if (isFailed(entry) && Date.now() - entry.failedAt >= RETRY_MS) {
-    detailed.delete(asset.id);
-    entry = undefined;
-  }
-  if (asset.has_audio && entry === undefined && typeof fetch === "function") {
-    const requestedIn = epoch;
-    detailed.set(asset.id, "pending");
-    void fetch(waveformUrl(asset.id))
-      .then((response) => {
-        return response.ok
-          ? response.arrayBuffer()
-          : Promise.reject(new Error(String(response.status)));
-      })
-      .then((buffer) => {
-        if (requestedIn !== epoch) {
-          return;
-        }
-        const pyramid = buildPyramid(new Float32Array(buffer), asset.duration_secs);
-        detailed.set(asset.id, pyramid ?? { failedAt: Date.now() });
-        notify();
-      })
-      .catch(() => {
-        if (requestedIn === epoch) {
-          detailed.set(asset.id, { failedAt: Date.now() });
-        }
-      });
-  }
-  const coarse = asset.waveform_peaks;
-  if (!coarse || coarse.length === 0) {
+  if (typeof fetch !== "function") {
     return null;
   }
-  if (!overview.has(coarse)) {
-    const flat = new Float32Array(coarse.length * 2);
-    coarse.forEach(([min, max], i) => {
-      flat[2 * i] = min;
-      flat[2 * i + 1] = max;
-    });
-    overview.set(coarse, buildPyramid(flat, asset.duration_secs));
+  const fine = entryFor(detailed, asset.id);
+  if (isPyramid(fine)) {
+    return fine;
   }
-  return overview.get(coarse) ?? null;
+  if (asset.has_audio && fine === undefined) {
+    fetchPeaks(detailed, asset.id, waveformUrl(asset.id), asset.duration_secs);
+  }
+  if (!asset.has_waveform) {
+    return null;
+  }
+  const coarse = entryFor(overview, asset.id);
+  if (coarse === undefined) {
+    fetchPeaks(overview, asset.id, coarseWaveformUrl(asset.id), asset.duration_secs);
+    return null;
+  }
+  return isPyramid(coarse) ? coarse : null;
 }

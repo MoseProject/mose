@@ -67,6 +67,9 @@ vi.mock("../ipc", () => {
     waveformUrl: () => {
       return "about:blank";
     },
+    coarseWaveformUrl: () => {
+      return "about:blank";
+    },
   };
 });
 
@@ -223,10 +226,10 @@ function world(list: Track[] = tracks()): SessionView {
     { id: 2, name: "Nested" },
   ]);
   (session.project as unknown as { media_library: unknown[] }).media_library = [
-    { id: 1, file_name: "a.mp4", duration_secs: 10, waveform_peaks: [[-0.5, 0.5], undefined] },
-    { id: 2, file_name: "b.mp4", duration_secs: 10, waveform_peaks: [] },
-    { id: 3, file_name: "c.wav", duration_secs: 10, waveform_peaks: null },
-    { id: 4, file_name: "d.mp4", duration_secs: 0, waveform_peaks: [[-1, 1]] },
+    { id: 1, file_name: "a.mp4", duration_secs: 10, has_waveform: true },
+    { id: 2, file_name: "b.mp4", duration_secs: 10, has_waveform: false },
+    { id: 3, file_name: "c.wav", duration_secs: 10, has_waveform: false },
+    { id: 4, file_name: "d.mp4", duration_secs: 0, has_waveform: true },
   ];
   return session;
 }

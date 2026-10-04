@@ -85,7 +85,8 @@ export interface MediaAsset {
   fps: number | null;
   sample_rate_khz: number | null;
   loudness: LoudnessMetrics | null;
-  waveform_peaks: [number, number][] | null;
+  /** The asset has a coarse waveform; its peaks are fetched from `coarseWaveformUrl`. */
+  has_waveform: boolean;
   favorited: boolean;
 }
 

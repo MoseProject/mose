@@ -66,6 +66,9 @@ describe("frame cache", () => {
         waveformUrl: (id: number) => {
           return `wave://${id}`;
         },
+        coarseWaveformUrl: (id: number) => {
+          return `coarse://${id}`;
+        },
       };
     });
     FakeImage.all = [];
@@ -139,7 +142,7 @@ describe("frame cache", () => {
 
 describe("waveform cache", () => {
   const audio = (id: number, source_path: string) => {
-    return { id, source_path, has_audio: true, duration_secs: 4, waveform_peaks: null } as never;
+    return { id, source_path, has_audio: true, duration_secs: 4, has_waveform: false } as never;
   };
   const flush = async () => {
     for (let i = 0; i < 6; i += 1) {
@@ -156,6 +159,9 @@ describe("waveform cache", () => {
         },
         waveformUrl: (id: number) => {
           return `wave://${id}`;
+        },
+        coarseWaveformUrl: (id: number) => {
+          return `coarse://${id}`;
         },
       };
     });
@@ -204,5 +210,45 @@ describe("waveform cache", () => {
     media.syncAssets([audio(1, "C:/other.mp4")]);
     media.peaksFor(audio(1, "C:/other.mp4"));
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows the coarse overview at once while the detailed waveform is still being decoded", async () => {
+    const overviewBytes = new Float32Array([-0.5, 0.5, -0.25, 0.25]);
+    const fetchMock = vi.fn((url: string) => {
+      if (url.startsWith("coarse://")) {
+        return Promise.resolve({
+          ok: true,
+          arrayBuffer: () => {
+            return Promise.resolve(overviewBytes.buffer);
+          },
+        });
+      }
+      return new Promise(() => {
+        return undefined;
+      });
+    });
+    const media = await fresh(fetchMock);
+    const withOverview = { ...(audio(1, "C:/a.mp4") as object), has_waveform: true } as never;
+    expect(media.peaksFor(withOverview)).toBeNull();
+    await flush();
+    expect(media.peaksFor(withOverview)).not.toBeNull();
+    const urls = fetchMock.mock.calls.map((call) => {
+      return call[0];
+    });
+    expect(urls.sort()).toEqual(["coarse://1", "wave://1"]);
+  });
+
+  it("does not ask for an overview an asset does not have", async () => {
+    const fetchMock = vi.fn().mockReturnValue(
+      new Promise(() => {
+        return undefined;
+      }),
+    );
+    const media = await fresh(fetchMock);
+    media.peaksFor(audio(1, "C:/a.mp4"));
+    const urls = fetchMock.mock.calls.map((call) => {
+      return call[0];
+    });
+    expect(urls).toEqual(["wave://1"]);
   });
 });

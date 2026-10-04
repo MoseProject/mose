@@ -623,6 +623,11 @@ export async function exportActiveSequence(
 export const frameAtUrl = (assetId: number, millis: number) => {
   return `${schemeBase}/thumb/${assetId}/${millis}`;
 };
+/** The overview waveform stored with the project, same layout as `waveformUrl`; instant, since
+ *  nothing is decoded. */
+export const coarseWaveformUrl = (assetId: number) => {
+  return `${schemeBase}/wave/${assetId}/coarse`;
+};
 /** The asset's detailed waveform: little-endian f32 (min, max) pairs across its duration. */
 export const waveformUrl = (assetId: number) => {
   return `${schemeBase}/wave/${assetId}`;
