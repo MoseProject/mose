@@ -19,7 +19,7 @@ vi.mock("../ipc", () => {
   const api: Record<string, unknown> = Object.fromEntries(names.map((n) => [n, vi.fn().mockResolvedValue(undefined)]));
   api.addTextClip = vi.fn().mockResolvedValue(5);
   api.addShapeClip = vi.fn().mockResolvedValue(6);
-  return { api };
+  return { api, frameAtUrl: () => "about:blank", waveformUrl: () => "about:blank" };
 });
 
 const { Timeline } = await import("./Timeline");
@@ -423,6 +423,14 @@ describe("toolbar", () => {
     expect(uiStore.get().pxPerSec).toBe(60);
     fireEvent.click(titled(t("zoomOut")));
     expect(uiStore.get().pxPerSec).toBeCloseTo(40);
+  });
+
+  it("fits the whole timeline into the lanes", () => {
+    mount();
+    fireEvent.click(titled(t("zoomFit")));
+    const px = uiStore.get().pxPerSec;
+    expect(px).toBeGreaterThan(0);
+    expect(px).toBeLessThan(40);
   });
 });
 

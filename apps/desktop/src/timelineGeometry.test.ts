@@ -3,8 +3,10 @@ import {
   RULER_HEIGHT,
   TRACK_HEIGHT,
   findSpan,
+  fitPxPerSec,
   hitTest,
   markerAtX,
+  rulerLabel,
   rulerTicks,
   snap,
   snapCandidates,
@@ -205,5 +207,41 @@ describe("ruler and zoom", () => {
 
   it("clamps zoom to its bounds", () => {
     expect(zoomAround(0, 500, 0, 4, 2, 600).pxPerSec).toBe(600);
+  });
+});
+
+describe("long timelines", () => {
+  it("spaces ruler ticks by whole hours when zoomed far out", () => {
+    const ticks = rulerTicks(0.02, 0, 1000);
+    expect(ticks[1] - ticks[0]).toBe(7200);
+    expect(rulerTicks(0.01, 0, 1000)[1]).toBe(14400);
+  });
+
+  it("labels seconds, minutes and hours", () => {
+    expect(rulerLabel(3)).toBe("0:03");
+    expect(rulerLabel(2.5)).toBe("0:02.50");
+    expect(rulerLabel(754)).toBe("12:34");
+    expect(rulerLabel(7200)).toBe("2:00:00");
+    expect(rulerLabel(9915)).toBe("2:45:15");
+  });
+
+  it("fits a two-hour timeline into the window", () => {
+    const px = fitPxPerSec(7200, 1224, 0.01, 600);
+    expect(px).toBeCloseTo(1200 / 7200);
+    expect(px * 7200).toBeLessThanOrEqual(1224);
+  });
+
+  it("clamps the fit and copes with an empty timeline", () => {
+    expect(fitPxPerSec(1e9, 1000, 0.01, 600)).toBe(0.01);
+    expect(fitPxPerSec(0.1, 1000, 0.01, 600)).toBe(600);
+    expect(fitPxPerSec(0, 1000, 0.01, 600)).toBe(0.01);
+    expect(fitPxPerSec(10, 0, 0.01, 600)).toBe(0.01);
+  });
+
+  it("zooms out far enough to see ten hours in a normal window", () => {
+    let px = 40;
+    for (let i = 0; i < 60; i += 1) px = zoomAround(500, px, 0, 1 / 1.5, 0.01, 600).pxPerSec;
+    expect(px).toBe(0.01);
+    expect(36000 * px).toBeLessThan(500);
   });
 });
