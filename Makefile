@@ -79,10 +79,18 @@ desktop-dev:
 desktop-build:
 	cd apps/desktop && npm run tauri build
 
+# Test builds of the Rust shell run optimized (its debug test binary aborts at startup on Windows
+# with an MSVC CRT assertion) but without `[profile.release]`'s whole-program LTO and single codegen
+# unit, which made every rebuild take minutes: the same optimized build, 16 codegen units, no LTO,
+# incremental, in its own target dir (`target/fast`, so it never invalidates real release builds).
+# Measured: touching one test file and re-running `cargo test -p desktop --no-run` takes ~9 s here
+# instead of ~6.5 min.
+FAST_TEST_ENV = CARGO_PROFILE_RELEASE_LTO=false CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 	CARGO_PROFILE_RELEASE_OPT_LEVEL=1 CARGO_PROFILE_RELEASE_PANIC=unwind 	CARGO_PROFILE_RELEASE_INCREMENTAL=true CARGO_TARGET_DIR=target/fast
+
 # Frontend typecheck + unit tests, then the Rust shell's own tests.
 test-desktop:
 	cd apps/desktop && npm run typecheck && npm test
-	cargo test -p desktop
+	$(FAST_TEST_ENV) cargo test -p desktop --release
 
 # End-to-end tests (e2e/, pytest + selenium) driving the real built oca-desktop.exe through
 # tauri-driver's WebDriver bridge. Needs a build first via `make desktop-build` (this target
@@ -119,7 +127,7 @@ coverage:
 	cargo llvm-cov -p avbridge --ignore-filename-regex '$(COVERAGE_IGNORE)'
 	cargo llvm-cov -p bush --ignore-filename-regex '$(COVERAGE_IGNORE)'
 	cargo llvm-cov -p core --ignore-run-fail --ignore-filename-regex '$(COVERAGE_IGNORE)'
-	cargo llvm-cov -p desktop --release --ignore-filename-regex '$(COVERAGE_IGNORE)'
+	$(FAST_TEST_ENV) cargo llvm-cov -p desktop --release --ignore-filename-regex '$(COVERAGE_IGNORE)'
 
 # Frontend line coverage (vitest + v8).
 coverage-web:
