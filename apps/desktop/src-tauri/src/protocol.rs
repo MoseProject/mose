@@ -44,10 +44,13 @@ type Bytes = Option<Arc<Vec<u8>>>;
 /// A result with the moment it was produced, so a failure can expire.
 type Stamped = (Bytes, Instant);
 
+/// One shared decode of a waveform and when it was started.
+type WaveSlot = (Instant, Arc<OnceLock<Bytes>>);
+
 pub struct ThumbnailCache {
     entries: Mutex<HashMap<PathBuf, Stamped>>,
     tiles: Mutex<HashMap<(PathBuf, u64), Stamped>>,
-    waves: Mutex<HashMap<PathBuf, (Instant, Arc<OnceLock<Bytes>>)>>,
+    waves: Mutex<HashMap<PathBuf, WaveSlot>>,
     retry_after: Duration,
 }
 
