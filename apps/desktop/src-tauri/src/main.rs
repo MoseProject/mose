@@ -95,19 +95,40 @@ fn main() {
                 Arc::new(services::SystemServices::new(handle.clone())),
             ));
             autosave::spawn(handle.clone());
+            autosave::register_emergency_save(handle.clone());
             autosave::spawn_saver(handle);
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if close_guard::guard_close(window.app_handle()) {
-                    api.prevent_close();
+            match event {
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    if close_guard::guard_close(window.app_handle()) {
+                        api.prevent_close();
+                    }
                 }
+                // Switching to another window is a good moment to put the work on disk.
+                tauri::WindowEvent::Focused(false) => {
+                    let app = window.app_handle().clone();
+                    std::thread::spawn(move || {
+                        autosave::flush_now(&app);
+                    });
+                }
+                _ => {}
             }
         })
         .invoke_handler(handler::all_commands!())
-        .run(tauri::generate_context!())
-        .expect("error while running the oca desktop shell");
+        .build(tauri::generate_context!())
+        .expect("error while building the oca desktop shell")
+        .run(|app, event| {
+            // However the app ends (the window, the tray, the system, `quit_app`), the last
+            // changes are written before the process goes.
+            if matches!(
+                event,
+                tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
+            ) {
+                autosave::flush_now(app);
+            }
+        });
 }
 
 /// Initialises the global tracing subscriber: a rolling daily file in the platform log dir
@@ -206,6 +227,8 @@ fn install_panic_hook() {
         let _ = std::fs::create_dir_all(&log_dir);
         let crash_path = log_dir.join(format!("crash_{timestamp}.txt"));
         let _ = std::fs::write(&crash_path, report.as_bytes());
+        // The crash report is on disk; now try to keep the user's work too.
+        autosave::run_emergency_save();
         default_hook(info);
     }));
 }

@@ -92,3 +92,47 @@ fn a_failed_export_does_not_block_closing() {
         avcore::ExportJobStatus::Failed { .. }
     ));
 }
+
+#[test]
+fn closing_saves_what_the_debounce_still_holds_instead_of_asking() {
+    let h = harness();
+    let path = path_in(&h.dir, "closing.ocproj");
+    crate::commands::new_project(h.handle(), "Saved".into(), "Seq".into()).unwrap();
+    h.session().project.file_path = Some(path.clone());
+    avcore::save_project_to_file(&h.session().project, &path).unwrap();
+    h.session().dirty = false;
+    let seen = collect_requests(&h);
+    crate::commands::set_export_settings(h.handle(), -22.0, avcore::ExportAspectRatio::Original)
+        .unwrap();
+    assert!(
+        h.session().dirty,
+        "the change is still waiting for the debounce"
+    );
+
+    assert!(!guard_close(&h.handle()), "nothing to ask once it is saved");
+
+    assert!(!h.session().dirty);
+    let on_disk = avcore::load_project_from_file(&path).unwrap();
+    assert_eq!(on_disk.active_sequence().export_settings.target_lufs, -22.0);
+    assert!(seen.lock().unwrap().is_empty());
+}
+
+#[test]
+fn closing_still_asks_when_the_project_has_no_file_to_be_saved_to() {
+    let h = harness();
+    crate::commands::new_project(h.handle(), "Loose".into(), "Seq".into()).unwrap();
+    crate::commands::set_export_settings(h.handle(), -22.0, avcore::ExportAspectRatio::Original)
+        .unwrap();
+    assert!(guard_close(&h.handle()));
+}
+
+#[test]
+fn closing_still_asks_when_saving_failed() {
+    let h = harness();
+    crate::commands::new_project(h.handle(), "Doomed".into(), "Seq".into()).unwrap();
+    h.session().project.file_path = Some(path_in(&h.dir, "no-such-dir").join("x.ocproj"));
+    crate::commands::set_export_settings(h.handle(), -22.0, avcore::ExportAspectRatio::Original)
+        .unwrap();
+    assert!(guard_close(&h.handle()));
+    assert!(h.session().dirty);
+}

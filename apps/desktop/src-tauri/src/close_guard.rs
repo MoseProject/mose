@@ -52,6 +52,9 @@ pub fn pending_loss<R: Runtime>(app: &AppHandle<R>) -> Option<CloseRequest> {
 /// Called when the window is asked to close: when something would be lost, asks the webview to
 /// confirm and returns `true` so the close is prevented.
 pub fn guard_close<R: Runtime>(app: &AppHandle<R>) -> bool {
+    // Whatever the debounce still holds goes to disk first; only what cannot be saved is asked
+    // about (a project with no file yet, or a write that failed).
+    crate::autosave::flush_now(app);
     let Some(request) = pending_loss(app) else {
         return false;
     };
