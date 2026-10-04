@@ -57,7 +57,7 @@ export function useStore<T>(store: Store<T>): T {
   return useSyncExternalStore(store.subscribe, store.get);
 }
 
-export type Screen = "home" | "editor" | "prefs" | "watch";
+export type Screen = "home" | "editor";
 
 /** Timeline edit tool -- egui's `EditorTool`. "select" is the default drag-to-move/trim mode;
  *  the others repurpose a body/edge drag into the matching Premiere/DaVinci/FCP-style edit. */
@@ -81,6 +81,19 @@ export interface UiState {
   exportDialogOpen: boolean;
   /** How many modal dialogs are open; global shortcuts stand down while it is above zero. */
   openDialogs: number;
+  /** Timeline in/out marks (seconds) set with I and O; `null` when unset. */
+  markIn: number | null;
+  markOut: number | null;
+  /** Whether dragging clips snaps to edges and markers (toggled with N). */
+  snapEnabled: boolean;
+  shortcutsOpen: boolean;
+  paletteOpen: boolean;
+  settingsOpen: boolean;
+  watchOpen: boolean;
+  /** Program-monitor zoom: fit the window, or a fixed percentage of the canvas size. */
+  monitorZoom: "fit" | "50" | "100";
+  /** Title/action safe-area and center guides over the monitor. */
+  monitorGuides: boolean;
 }
 
 export const sessionStore = createStore<SessionView | null>(null);
@@ -107,6 +120,15 @@ export const uiStore = createStore<UiState>({
   exportQueueOpen: false,
   exportDialogOpen: false,
   openDialogs: 0,
+  markIn: null,
+  markOut: null,
+  snapEnabled: true,
+  shortcutsOpen: false,
+  paletteOpen: false,
+  settingsOpen: false,
+  watchOpen: false,
+  monitorZoom: "fit",
+  monitorGuides: false,
 });
 
 /** An asset being dragged from the media library toward the timeline. */

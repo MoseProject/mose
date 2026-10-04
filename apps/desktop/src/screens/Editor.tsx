@@ -8,8 +8,9 @@ import { PreviewPanel } from "../editor/PreviewPanel";
 import { Timeline } from "../editor/Timeline";
 import { t } from "../i18n";
 import { api } from "../ipc";
+import { commandForEvent } from "../commands";
 import { isActivatableTarget, shouldIgnoreShortcut } from "../keyboard";
-import { patchUi, previewStore, run, uiStore } from "../store";
+import { patchUi, run, uiStore } from "../store";
 import type { SessionView } from "../types";
 
 const MIN_TIMELINE_HEIGHT = 140;
@@ -81,7 +82,6 @@ export function Editor({ session }: { session: SessionView }) {
       if (shouldIgnoreShortcut(e, uiStore.get().openDialogs)) {
         return;
       }
-      const ctrl = e.ctrlKey || e.metaKey;
       const drawingPoints = uiStore.get().drawingShapePoints;
       if (drawingPoints !== null) {
         // Swallows every key while drawing a custom shape -- only Enter (finish, >=3 points,
@@ -100,71 +100,21 @@ export function Editor({ session }: { session: SessionView }) {
         e.preventDefault();
         return;
       }
-      const selected = uiStore.get().selectedClipIds;
-      let handled = true;
       if (e.code === "Space" && isActivatableTarget(e.target)) {
         return;
       }
-      if (e.code === "Space") {
-        void run(api.setPlaying(!previewStore.get().playing));
-      } else if (ctrl && e.key.toLowerCase() === "z") {
-        void run(e.shiftKey ? api.redo() : api.undo());
-      } else if (ctrl && e.key.toLowerCase() === "y") {
-        void run(api.redo());
-      } else if (ctrl && e.key.toLowerCase() === "s") {
-        void run(api.saveProject(e.shiftKey));
-      } else if (ctrl && e.key.toLowerCase() === "e") {
-        patchUi({ exportDialogOpen: true });
-      } else if (ctrl && e.key.toLowerCase() === "i") {
-        void run(api.importMediaDialog());
-      } else if (ctrl && e.shiftKey && e.key.toLowerCase() === "c") {
-        if (selected[0] !== undefined) {
-          void run(api.copyClipFormatting(selected[0]));
-        }
-      } else if (ctrl && e.shiftKey && e.key.toLowerCase() === "v") {
-        if (selected[0] !== undefined) {
-          void run(api.pasteClipFormatting(selected[0]));
-        }
-      } else if (ctrl && e.key.toLowerCase() === "c") {
-        if (selected[0] !== undefined) {
-          void run(api.copyClip(selected[0]));
-        }
-      } else if (ctrl && e.key.toLowerCase() === "x") {
-        if (selected[0] !== undefined) {
-          void run(api.cutClip(selected[0]));
-        }
-      } else if (ctrl && e.key.toLowerCase() === "v") {
-        void run(api.pasteClip()).then((ids) => {
-          if (ids && ids.length > 0) {
-            patchUi({ selectedClipIds: ids });
-          }
-        });
-      } else if (!ctrl && e.key.toLowerCase() === "s") {
-        void run(api.splitAtPlayhead(selected));
-      } else if (!ctrl && e.key.toLowerCase() === "m") {
-        void run(api.addMarker());
-      } else if (!ctrl && e.key.toLowerCase() === "t") {
-        patchUi({ tool: "text" });
-      } else if (e.key === "Delete" || e.key === "Backspace") {
-        if (selected.length > 0) {
-          void run(api.deleteClips(selected, e.shiftKey));
-        }
-      } else if (e.key === "ArrowLeft") {
-        void run(api.step(e.shiftKey ? -10 : -1));
-      } else if (e.key === "ArrowRight") {
-        void run(api.step(e.shiftKey ? 10 : 1));
-      } else if (e.key === "Home") {
-        void run(api.seek(0));
-      } else {
-        handled = false;
+      const command = commandForEvent(e);
+      if (!command) {
+        return;
       }
-      if (handled) {
-        e.preventDefault();
+      if (!command.enabled || command.enabled()) {
+        void command.run();
       }
+      e.preventDefault();
     };
     window.addEventListener("keydown", onKey);
     return () => {
-      return window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keydown", onKey);
     };
   }, []);
 

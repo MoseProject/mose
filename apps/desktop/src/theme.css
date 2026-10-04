@@ -1542,3 +1542,349 @@ body {
   color: var(--error);
   font-size: 11px;
 }
+
+/* ---- context menu, shortcut sheet, palette ---- */
+.context-menu {
+  position: fixed;
+  z-index: 30;
+  min-width: 200px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.context-menu button {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  text-align: left;
+  background: transparent;
+  border-color: transparent;
+  white-space: nowrap;
+}
+.context-menu button:hover:not(:disabled),
+.context-menu button:focus-visible {
+  background: var(--bg-hover);
+}
+.context-menu button.separated {
+  margin-top: 4px;
+  border-top: 1px solid var(--border-subtle);
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+kbd {
+  font: 11px var(--font-mono);
+  color: var(--text-muted);
+  background: var(--bg-workspace);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 5px;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---- timeline overview (minimap) ---- */
+.minimap {
+  position: relative;
+  height: 22px;
+  flex: none;
+  margin: 0 0 0 184px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+  touch-action: none;
+}
+.minimap-clip {
+  position: absolute;
+  background: var(--media-video-edge);
+  opacity: 0.8;
+  min-width: 1px;
+}
+.minimap-clip.audio {
+  background: var(--audio-edge);
+}
+.minimap-clip.text,
+.minimap-clip.shape {
+  background: var(--fx);
+}
+.minimap-window {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--accent-tint);
+  border: 1px solid var(--accent);
+  box-sizing: border-box;
+  pointer-events: none;
+}
+.track-header {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 2px;
+}
+.track-header-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.track-header-row .name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+button.icon.letter {
+  font-size: 11px;
+  font-weight: 600;
+  min-width: 22px;
+  padding: 1px 4px;
+}
+button.icon.letter.muted.active {
+  color: var(--error);
+}
+button.icon.letter.solo.active {
+  color: var(--warning);
+}
+.role-select {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  font-size: 11px;
+  padding: 0 4px;
+}
+
+/* ---- toasts and confirmation ---- */
+.toast-stack {
+  position: fixed;
+  right: 14px;
+  bottom: 34px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(380px, calc(100vw - 28px));
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  font-size: 12px;
+}
+.toast.error {
+  border-color: var(--error);
+}
+.toast span {
+  flex: 1;
+  word-break: break-word;
+}
+button.danger {
+  background: var(--error);
+  border-color: var(--error);
+  color: #fff;
+}
+
+/* ---- shortcut sheet, palette, status bar ---- */
+.modal.wide {
+  width: min(760px, 94vw);
+}
+.dialog-search {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 10px;
+  height: 31px;
+}
+.shortcut-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px 28px;
+  max-height: 60vh;
+  overflow: auto;
+}
+.shortcut-groups h4 {
+  margin: 0 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.shortcut-groups dl {
+  margin: 0;
+}
+.shortcut-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12px;
+}
+.shortcut-row dt {
+  margin: 0;
+}
+.shortcut-row dd {
+  margin: 0;
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.palette-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 50vh;
+  overflow: auto;
+}
+.palette-results li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 12px;
+}
+.palette-results li.active {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+.palette-results li[aria-disabled="true"] {
+  color: var(--text-disabled);
+}
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 12px;
+  height: 24px;
+  background: var(--bg);
+  border-top: 1px solid var(--border-subtle);
+  font-size: 11px;
+}
+.status-bar .task {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--text-secondary);
+}
+.task-bar {
+  width: 80px;
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.task-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.task-bar.indeterminate > span {
+  width: 35%;
+  animation: task-slide 1.2s ease-in-out infinite;
+}
+@keyframes task-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(290%);
+  }
+}
+
+/* ---- settings dialog ---- */
+.prefs {
+  width: auto;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  gap: 4px;
+  max-height: 68vh;
+  overflow: auto;
+  margin: 0;
+}
+.settings-group {
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  margin: 0;
+  padding: 12px 0 8px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.settings-group legend {
+  padding: 0 8px 0 0;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.path-field {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 8px;
+  align-items: end;
+}
+.path-field label {
+  display: grid;
+  gap: 4px;
+  justify-content: stretch;
+}
+.path-field label input {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+.path-field input[aria-invalid="true"] {
+  border-color: var(--error);
+}
+.path-status {
+  grid-column: 1 / -1;
+  font-size: 11px;
+}
+.path-status.ok {
+  color: var(--success);
+}
+.path-status.bad {
+  color: var(--error);
+}
+.settings-saved {
+  margin: 0;
+  min-height: 16px;
+  font-size: 11px;
+  color: var(--success);
+  text-align: right;
+}
+
+/* ---- menu shortcuts ---- */
+.menu-pop > button[data-shortcut] {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+}
+.menu-pop > button[data-shortcut]::after {
+  content: attr(data-shortcut);
+  color: var(--text-muted);
+  font: 11px var(--font-mono);
+}

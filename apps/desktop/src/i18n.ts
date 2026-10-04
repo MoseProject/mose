@@ -444,6 +444,86 @@ const strings = {
     "pt-BR": "O vídeo é exportado com o bitrate da fonte.",
     en: "Video is exported at the source bitrate.",
   },
+  groupPlayback: { "pt-BR": "Reprodução", en: "Playback" },
+  groupEdit: { "pt-BR": "Edição", en: "Editing" },
+  groupTimeline: { "pt-BR": "Timeline", en: "Timeline" },
+  groupTools: { "pt-BR": "Ferramentas", en: "Tools" },
+  groupFile: { "pt-BR": "Arquivo", en: "File" },
+  groupView: { "pt-BR": "Exibição", en: "View" },
+  cmdPlayPause: { "pt-BR": "Reproduzir / pausar", en: "Play / pause" },
+  cmdPlay: { "pt-BR": "Reproduzir", en: "Play" },
+  cmdPause: { "pt-BR": "Pausar", en: "Pause" },
+  cmdBack1s: { "pt-BR": "Voltar 1 segundo", en: "Back 1 second" },
+  cmdForward1s: { "pt-BR": "Avançar 1 segundo", en: "Forward 1 second" },
+  cmdBack10s: { "pt-BR": "Voltar 10 segundos", en: "Back 10 seconds" },
+  cmdForward10s: { "pt-BR": "Avançar 10 segundos", en: "Forward 10 seconds" },
+  cmdStepBack10: { "pt-BR": "Voltar 10 quadros", en: "Back 10 frames" },
+  cmdStepForward10: { "pt-BR": "Avançar 10 quadros", en: "Forward 10 frames" },
+  cmdPrevEdit: { "pt-BR": "Ponto de corte anterior", en: "Previous cut point" },
+  cmdNextEdit: { "pt-BR": "Próximo ponto de corte", en: "Next cut point" },
+  cmdMarkIn: { "pt-BR": "Marcar entrada", en: "Mark in" },
+  cmdMarkOut: { "pt-BR": "Marcar saída", en: "Mark out" },
+  cmdClearMarks: { "pt-BR": "Limpar entrada e saída", en: "Clear in and out" },
+  cmdDeleteRange: {
+    "pt-BR": "Excluir trecho entre entrada e saída",
+    en: "Delete the range between in and out",
+  },
+  cmdSelectAll: { "pt-BR": "Selecionar tudo", en: "Select all" },
+  cmdDeselect: { "pt-BR": "Limpar seleção", en: "Clear selection" },
+  cmdDuplicate: { "pt-BR": "Duplicar clipe", en: "Duplicate clip" },
+  cmdCopyFormat: { "pt-BR": "Copiar formatação", en: "Copy formatting" },
+  cmdPasteFormat: { "pt-BR": "Colar formatação", en: "Paste formatting" },
+  cmdRenameSequence: { "pt-BR": "Renomear sequência", en: "Rename sequence" },
+  cmdToggleSnap: { "pt-BR": "Ligar ou desligar o ímã", en: "Toggle snapping" },
+  cmdShortcuts: { "pt-BR": "Atalhos de teclado", en: "Keyboard shortcuts" },
+  cmdPalette: { "pt-BR": "Paleta de comandos", en: "Command palette" },
+  cmdSettings: { "pt-BR": "Ajustes", en: "Settings" },
+  cmdScrollToPlayhead: { "pt-BR": "Mostrar o cursor na timeline", en: "Show the playhead" },
+  cmdSplit: { "pt-BR": "Dividir no cursor", en: "Split at playhead" },
+  cmdToolSelect: { "pt-BR": "Ferramenta Selecionar", en: "Select tool" },
+  cmdToolRoll: { "pt-BR": "Ferramenta Rolar", en: "Roll tool" },
+  cmdToolSlip: { "pt-BR": "Ferramenta Deslizar origem", en: "Slip tool" },
+  cmdToolSlide: { "pt-BR": "Ferramenta Deslizar", en: "Slide tool" },
+  cmdToolText: { "pt-BR": "Ferramenta Texto", en: "Text tool" },
+  cmdToggleGuides: { "pt-BR": "Mostrar guias no monitor", en: "Show monitor guides" },
+  shortcutsSearch: { "pt-BR": "Buscar atalho…", en: "Search shortcuts…" },
+  shortcutsNone: { "pt-BR": "Nenhum atalho encontrado.", en: "No shortcuts found." },
+  paletteSearch: { "pt-BR": "Digite um comando…", en: "Type a command…" },
+  paletteNone: { "pt-BR": "Nenhum comando encontrado.", en: "No commands found." },
+  keySpace: { "pt-BR": "Espaço", en: "Space" },
+  muteTrack: { "pt-BR": "Silenciar faixa", en: "Mute track" },
+  unmuteTrack: { "pt-BR": "Reativar o som da faixa", en: "Unmute track" },
+  soloTrack: { "pt-BR": "Ouvir só esta faixa", en: "Solo track" },
+  unsoloTrack: { "pt-BR": "Desfazer o solo", en: "Clear solo" },
+  audioRoleLabel: { "pt-BR": "Papel do áudio", en: "Audio role" },
+  roleUnspecified: { "pt-BR": "Sem papel", en: "No role" },
+  roleGame: { "pt-BR": "Jogo", en: "Game" },
+  roleMic: { "pt-BR": "Microfone", en: "Mic" },
+  roleMusic: { "pt-BR": "Música", en: "Music" },
+  timelineCanvas: {
+    "pt-BR": "Timeline. Use as setas para trocar de clipe e Enter para ir até ele.",
+    en: "Timeline. Use the arrow keys to change clip and Enter to go to it.",
+  },
+  timelineClips: { "pt-BR": "Clipes da timeline", en: "Timeline clips" },
+  timelineOverview: { "pt-BR": "Visão geral da timeline", en: "Timeline overview" },
+  notifications: { "pt-BR": "Notificações", en: "Notifications" },
+  confirmOverwriteTitle: { "pt-BR": "Substituir o arquivo?", en: "Replace the file?" },
+  confirmOverwriteAction: { "pt-BR": "Substituir", en: "Replace" },
+  confirmKeepBoth: { "pt-BR": "Salvar com outro nome", en: "Save under another name" },
+  confirmDiscardTitle: { "pt-BR": "Descartar alterações?", en: "Discard changes?" },
+  confirmDiscardAction: { "pt-BR": "Descartar", en: "Discard" },
+  taskAnalyzing: { "pt-BR": "Analisando", en: "Analyzing" },
+  tasks: { "pt-BR": "Tarefas em andamento", en: "Running tasks" },
+  settingsGeneral: { "pt-BR": "Geral", en: "General" },
+  settingsExport: { "pt-BR": "Exportação", en: "Export" },
+  settingsModels: { "pt-BR": "IA e modelos", en: "AI and models" },
+  settingsPrivacy: { "pt-BR": "Privacidade", en: "Privacy" },
+  settingsUpdates: { "pt-BR": "Atualizações", en: "Updates" },
+  browse: { "pt-BR": "Procurar…", en: "Browse…" },
+  pathOk: { "pt-BR": "Encontrado", en: "Found" },
+  pathMissing: { "pt-BR": "Não encontrado", en: "Not found" },
+  pathWrongKind: { "pt-BR": "Tipo de caminho inesperado", en: "Unexpected kind of path" },
+  settingsSaved: { "pt-BR": "Salvo", en: "Saved" },
   close: { "pt-BR": "Fechar", en: "Close" },
   menuAdd: { "pt-BR": "Adicionar", en: "Add" },
   menuClip: { "pt-BR": "Clipe", en: "Clip" },
@@ -520,6 +600,23 @@ export function t(key: TextKey): string {
 }
 
 /** `mm:ss.hh` for timeline/transport readouts (hundredths, not frames: fps varies per clip). */
+/** `HH:MM:SS:FF` at `fps` frames per second (the usual editing timecode). */
+export function formatTimecode(secs: number, fps: number): string {
+  const rate = fps > 0 ? Math.round(fps) : 30;
+  const totalFrames = Math.round(Math.max(0, secs) * rate);
+  const frames = totalFrames % rate;
+  const totalSecs = Math.floor(totalFrames / rate);
+  const pad = (n: number) => {
+    return n.toString().padStart(2, "0");
+  };
+  return [
+    pad(Math.floor(totalSecs / 3600)),
+    pad(Math.floor((totalSecs % 3600) / 60)),
+    pad(totalSecs % 60),
+    pad(frames),
+  ].join(":");
+}
+
 export function formatTime(secs: number): string {
   const totalHundredths = Math.round(Math.max(0, secs) * 100);
   const minutes = Math.floor(totalHundredths / 6000);

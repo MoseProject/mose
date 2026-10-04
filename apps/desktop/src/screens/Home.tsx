@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { t } from "../i18n";
 import { api } from "../ipc";
+import { askConfirm } from "../notifications";
 import { patchUi, run, sessionStore, useStore } from "../store";
 import type { RecentProject } from "../types";
 
@@ -17,11 +18,20 @@ export function Home() {
     loadRecent();
   }, []);
   const confirmDiscard = () => {
-    return !session?.dirty || window.confirm(t("unsavedConfirm"));
+    if (!session?.dirty) {
+      return Promise.resolve(true);
+    }
+    return askConfirm({
+      title: t("confirmDiscardTitle"),
+      message: t("unsavedConfirm"),
+      confirmLabel: t("confirmDiscardAction"),
+      cancelLabel: t("cancel"),
+      danger: true,
+    });
   };
 
   const createProject = async () => {
-    if (!confirmDiscard()) {
+    if (!(await confirmDiscard())) {
       return;
     }
     const created = await run(
@@ -35,7 +45,7 @@ export function Home() {
   };
 
   const openProject = async () => {
-    if (!confirmDiscard()) {
+    if (!(await confirmDiscard())) {
       return;
     }
     if (await run(api.openProject())) {
@@ -44,7 +54,7 @@ export function Home() {
   };
 
   const openRecent = async (path: string) => {
-    if (!confirmDiscard()) {
+    if (!(await confirmDiscard())) {
       return;
     }
     if (

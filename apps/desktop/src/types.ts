@@ -258,6 +258,8 @@ export interface Track {
   audio_role: AudioRole;
   color_label: [number, number, number] | null;
   locked: boolean;
+  muted: boolean;
+  solo: boolean;
 }
 
 export interface Marker {
@@ -524,3 +526,6 @@ export function aspectRatioDims(
       return fallback;
   }
 }
+
+/** What a path currently is on disk, as `check_path` reports it. */
+export type PathStatus = "empty" | "file" | "folder" | "missing";

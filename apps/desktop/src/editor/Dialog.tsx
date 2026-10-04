@@ -10,6 +10,7 @@ export function Dialog({
   title,
   onClose,
   dismissible = true,
+  wide = false,
   children,
   actions,
 }: {
@@ -17,6 +18,8 @@ export function Dialog({
   onClose: () => void;
   /** False for a decision the user must make: Escape and the backdrop do nothing. */
   dismissible?: boolean;
+  /** A wider panel for forms and lists. */
+  wide?: boolean;
   children: ReactNode;
   actions?: ReactNode;
 }) {
@@ -76,7 +79,7 @@ export function Dialog({
     >
       <div
         ref={panel}
-        className="modal"
+        className={wide ? "modal wide" : "modal"}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

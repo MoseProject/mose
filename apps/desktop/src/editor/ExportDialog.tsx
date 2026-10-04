@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { t, type TextKey } from "../i18n";
 import { api, exportActiveSequence } from "../ipc";
+import { askConfirm } from "../notifications";
 import { patchUi, run } from "../store";
 import type { ExportAspectRatio, SessionView } from "../types";
 import { Dialog } from "./Dialog";
@@ -62,7 +63,12 @@ export function ExportDialog({ session }: { session: SessionView }) {
     await run(api.setExportSettings(lufs, aspect));
     await run(
       exportActiveSequence(() => {
-        return window.confirm(t("exportOverwriteConfirm"));
+        return askConfirm({
+          title: t("confirmOverwriteTitle"),
+          message: t("exportOverwriteConfirm"),
+          confirmLabel: t("confirmOverwriteAction"),
+          cancelLabel: t("confirmKeepBoth"),
+        });
       }),
     );
   };

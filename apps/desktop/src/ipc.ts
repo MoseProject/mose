@@ -5,6 +5,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
+  AudioRole,
   AutoReframeEvent,
   ClipPatch,
   ExportAspectRatio,
@@ -15,6 +16,7 @@ import type {
   MatteGenerationEvent,
   OverlayCatalog,
   PreviewTick,
+  PathStatus,
   PrefsView,
   PrivacyBlurEvent,
   RecentProject,
@@ -301,12 +303,33 @@ export const api = {
   addTrack: (kind: TrackKind) => {
     return invoke<void>("add_track", { kind });
   },
-  setTrackFlags: (trackId: number, flags: { visible?: boolean; locked?: boolean }) => {
+  setTrackFlags: (
+    trackId: number,
+    flags: {
+      visible?: boolean;
+      locked?: boolean;
+      muted?: boolean;
+      solo?: boolean;
+      audioRole?: AudioRole;
+    },
+  ) => {
     return invoke<void>("set_track_flags", {
       trackId,
       visible: flags.visible ?? null,
       locked: flags.locked ?? null,
+      muted: flags.muted ?? null,
+      solo: flags.solo ?? null,
+      audioRole: flags.audioRole ?? null,
     });
+  },
+  rippleDeleteRange: (startSecs: number, endSecs: number) => {
+    return invoke<void>("ripple_delete_range", { startSecs, endSecs });
+  },
+  pickPath: (kind: "file" | "folder", extensions: string[] = []) => {
+    return invoke<string | null>("pick_path", { kind, extensions });
+  },
+  checkPath: (path: string) => {
+    return invoke<PathStatus>("check_path", { path });
   },
   addSequence: (name: string) => {
     return invoke<void>("add_sequence", { name });
@@ -523,12 +546,15 @@ export const api = {
 
 /** Asks for an output file and queues the active sequence. An existing file is overwritten
  *  only after the user confirms; otherwise the export goes to an auto-renamed sibling. */
-export async function exportActiveSequence(confirmOverwrite: () => boolean): Promise<void> {
+export async function exportActiveSequence(
+  confirmOverwrite: () => boolean | Promise<boolean>,
+): Promise<void> {
   const target = await api.pickExportPath();
   if (!target) {
     return;
   }
-  await api.startExport(target.path, target.exists && !confirmOverwrite());
+  const replace = target.exists ? await confirmOverwrite() : true;
+  await api.startExport(target.path, target.exists && !replace);
 }
 /** One video frame of an asset at a source time, for the timeline's clip strips. */
 export const frameAtUrl = (assetId: number, millis: number) => {

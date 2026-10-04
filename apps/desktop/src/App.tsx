@@ -1,13 +1,17 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { localeSnapshot, subscribeLocale, t } from "./i18n";
+import { CommandPalette } from "./editor/CommandPalette";
+import { Dialog } from "./editor/Dialog";
+import { ExportDialog } from "./editor/ExportDialog";
+import { ExportPanel } from "./editor/ExportPanel";
+import { ConfirmHost, ToastHost } from "./editor/Notifications";
+import { ShortcutsDialog } from "./editor/ShortcutsDialog";
+import { StatusBar } from "./editor/StatusBar";
 import { CrashReviewModal } from "./screens/CrashReviewModal";
 import { Editor } from "./screens/Editor";
 import { Home } from "./screens/Home";
 import { Prefs } from "./screens/Prefs";
 import { WatchFolder } from "./screens/WatchFolder";
-import { Icon } from "./editor/Icon";
-import { ExportDialog } from "./editor/ExportDialog";
-import { ExportPanel } from "./editor/ExportPanel";
 import { TopBar } from "./TopBar";
 import { connect, patchUi, run, sessionStore, uiStore, useStore } from "./store";
 
@@ -23,36 +27,31 @@ export function App() {
   return (
     <div className="app">
       <TopBar session={session} />
-      {ui.screen === "watch" ? (
-        <WatchFolder />
-      ) : ui.screen === "home" || !session ? (
-        <Home />
-      ) : ui.screen === "prefs" ? (
-        <Prefs />
-      ) : (
-        <Editor session={session} />
-      )}
-      {ui.error && (
-        <div
-          className="error-banner"
-          role="alert"
-        >
-          <span>
-            {t("errorPrefix")}: {ui.error}
-          </span>
-          <button
-            className="icon"
-            aria-label={t("close")}
-            onClick={() => {
-              return patchUi({ error: null });
-            }}
-          >
-            <Icon name="close" />
-          </button>
-        </div>
-      )}
+      {ui.screen === "home" || !session ? <Home /> : <Editor session={session} />}
+      <StatusBar />
       {session && ui.exportQueueOpen && <ExportPanel />}
       {session && ui.exportDialogOpen && <ExportDialog session={session} />}
+      {ui.settingsOpen && (
+        <Dialog
+          title={t("preferences")}
+          wide
+          onClose={() => {
+            patchUi({ settingsOpen: false });
+          }}
+        >
+          <Prefs />
+        </Dialog>
+      )}
+      <WatchFolder
+        open={ui.watchOpen}
+        onClose={() => {
+          patchUi({ watchOpen: false });
+        }}
+      />
+      {ui.shortcutsOpen && <ShortcutsDialog />}
+      {ui.paletteOpen && <CommandPalette />}
+      <ConfirmHost />
+      <ToastHost />
       <CrashReviewModal />
     </div>
   );

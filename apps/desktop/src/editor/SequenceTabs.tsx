@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { TIMELINE_ACTION_EVENT } from "../editing";
 import { formatTime, t } from "../i18n";
 import { api } from "../ipc";
 import { run } from "../store";
@@ -11,6 +12,18 @@ const markerKinds: MarkerKind[] = ["Standard", "ToDo", "Chapter", "Highlight"];
 export function SequenceTabs({ session }: { session: SessionView }) {
   const { project } = session;
   const [renaming, setRenaming] = useState<number | null>(null);
+  const activeId = project.sequences[project.active_sequence]?.id;
+  useEffect(() => {
+    const onAction = (e: Event) => {
+      if ((e as CustomEvent<string>).detail === "renameSequence" && activeId !== undefined) {
+        setRenaming(activeId);
+      }
+    };
+    window.addEventListener(TIMELINE_ACTION_EVENT, onAction);
+    return () => {
+      window.removeEventListener(TIMELINE_ACTION_EVENT, onAction);
+    };
+  }, [activeId]);
   return (
     <div className="sequence-tabs">
       <div

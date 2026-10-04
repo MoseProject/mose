@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { t } from "../i18n";
 import { api, onWatchFolder } from "../ipc";
 import { run } from "../store";
+import { Dialog } from "../editor/Dialog";
 import type { LoudnessMetrics, WatchFolderStatus } from "../types";
 
 interface Row {
@@ -17,7 +18,7 @@ interface Row {
 /** CF-02: watch a folder for new gameplay recordings, normalize each once it stabilizes, and
  *  offer to import the cleaned-up result into the open project -- mirrors `ui::App`'s
  *  `watch_folder.rs` (Limpeza screen). */
-export function WatchFolder() {
+export function WatchFolder({ open = true, onClose }: { open?: boolean; onClose?: () => void }) {
   const [watchPath, setWatchPath] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [rows, setRows] = useState<Row[]>([]);
@@ -94,71 +95,82 @@ export function WatchFolder() {
     void run(api.stopWatchingFolder());
   };
 
+  if (!open) {
+    return null;
+  }
   return (
-    <main
-      className="prefs"
-      data-testid="screen-watch"
+    <Dialog
+      title={t("watchFolder")}
+      wide
+      onClose={() => {
+        onClose?.();
+      }}
     >
-      <h1>{t("watchFolder")}</h1>
-      <label>
-        <span className={watchPath ? "" : "muted"}>{watchPath ?? t("watchFolderNone")}</span>
-        <button
-          onClick={choose}
-          disabled={running}
-        >
-          {t("watchFolderChoose")}
-        </button>
-      </label>
-      <button
-        className={running ? "" : "primary"}
-        disabled={!watchPath || running}
-        onClick={start}
+      <div
+        className="prefs"
+        data-testid="screen-watch"
       >
-        {t("watchFolderStart")}
-      </button>
-      {running && <button onClick={stop}>{t("watchFolderStop")}</button>}
-      <div style={{ maxHeight: 400, overflowY: "auto" }}>
-        {rows.length === 0 ? (
-          <p className="muted">{t("watchFolderEmpty")}</p>
-        ) : (
-          rows.map((row) => {
-            return (
-              <div
-                className="modal-row"
-                key={row.path}
-              >
-                <div>
-                  <div>{row.path.split(/[/\\]/).pop()}</div>
-                  <div className="muted">
-                    {row.status === "stabilizing" && t("watchFolderStabilizing")}
-                    {row.status === "processing" && `${t("watchFolderProcessing")} ${row.percent}%`}
-                    {row.status === "done" &&
-                      row.before &&
-                      row.after &&
-                      `${t("watchFolderDone")} · ${row.before.integrated_lufs.toFixed(1)} → ${row.after.integrated_lufs.toFixed(1)} LUFS`}
-                    {row.status === "error" && `${t("watchFolderError")}: ${row.error}`}
+        <label>
+          <span className={watchPath ? "" : "muted"}>{watchPath ?? t("watchFolderNone")}</span>
+          <button
+            onClick={choose}
+            disabled={running}
+          >
+            {t("watchFolderChoose")}
+          </button>
+        </label>
+        <button
+          className={running ? "" : "primary"}
+          disabled={!watchPath || running}
+          onClick={start}
+        >
+          {t("watchFolderStart")}
+        </button>
+        {running && <button onClick={stop}>{t("watchFolderStop")}</button>}
+        <div style={{ maxHeight: 400, overflowY: "auto" }}>
+          {rows.length === 0 ? (
+            <p className="muted">{t("watchFolderEmpty")}</p>
+          ) : (
+            rows.map((row) => {
+              return (
+                <div
+                  className="modal-row"
+                  key={row.path}
+                >
+                  <div>
+                    <div>{row.path.split(/[/\\]/).pop()}</div>
+                    <div className="muted">
+                      {row.status === "stabilizing" && t("watchFolderStabilizing")}
+                      {row.status === "processing" &&
+                        `${t("watchFolderProcessing")} ${row.percent}%`}
+                      {row.status === "done" &&
+                        row.before &&
+                        row.after &&
+                        `${t("watchFolderDone")} · ${row.before.integrated_lufs.toFixed(1)} → ${row.after.integrated_lufs.toFixed(1)} LUFS`}
+                      {row.status === "error" && `${t("watchFolderError")}: ${row.error}`}
+                    </div>
                   </div>
-                </div>
-                {row.status === "done" && !row.addedToProject && watchPath && (
-                  <button
-                    className="icon"
-                    onClick={() => {
-                      void run(api.addWatchedFileToProject(watchPath, row.path));
-                      setRows((prev) => {
-                        return prev.map((r) => {
-                          return r.path === row.path ? { ...r, addedToProject: true } : r;
+                  {row.status === "done" && !row.addedToProject && watchPath && (
+                    <button
+                      className="icon"
+                      onClick={() => {
+                        void run(api.addWatchedFileToProject(watchPath, row.path));
+                        setRows((prev) => {
+                          return prev.map((r) => {
+                            return r.path === row.path ? { ...r, addedToProject: true } : r;
+                          });
                         });
-                      });
-                    }}
-                  >
-                    {t("watchFolderAddToProject")}
-                  </button>
-                )}
-              </div>
-            );
-          })
-        )}
+                      }}
+                    >
+                      {t("watchFolderAddToProject")}
+                    </button>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
-    </main>
+    </Dialog>
   );
 }

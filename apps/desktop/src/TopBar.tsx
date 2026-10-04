@@ -1,15 +1,31 @@
-import { addShapeOverlay, addTextOverlay, seekToMarker } from "./editing";
 import logo from "./assets/logo.png";
+import { findCommand, shortcutLabel, withShortcut } from "./commands";
 import { Icon } from "./editor/Icon";
 import { Menu } from "./editor/Menu";
-import { formatTime, t } from "./i18n";
+import { formatTimecode, t } from "./i18n";
 import { api } from "./ipc";
 import { exportsStore, patchUi, previewStore, run, uiStore, useStore } from "./store";
 import type { SessionView } from "./types";
 
-const activeTimeline = (session: SessionView) => {
-  return session.project.sequences[session.project.active_sequence].timeline;
-};
+/** A menu entry bound to a command: its label, key binding, enabled state and action all come
+ *  from the command table. */
+function CommandItem({ id }: { id: string }) {
+  const command = findCommand(id);
+  if (!command) {
+    return null;
+  }
+  return (
+    <button
+      data-shortcut={shortcutLabel(id)}
+      disabled={command.enabled ? !command.enabled() : false}
+      onClick={() => {
+        void command.run();
+      }}
+    >
+      {t(command.label)}
+    </button>
+  );
+}
 
 /** Brand, project/sequence, the application menus, the playhead readout and the global actions. */
 export function TopBar({ session }: { session: SessionView | null }) {
@@ -23,10 +39,6 @@ export function TopBar({ session }: { session: SessionView | null }) {
   }).length;
   const sequenceName = session?.project.sequences[session.project.active_sequence]?.name;
   const selected = ui.selectedClipIds;
-  const markers = session ? activeTimeline(session).markers : [];
-  const startExport = () => {
-    patchUi({ exportDialogOpen: true });
-  };
 
   return (
     <header className="topbar">
@@ -64,28 +76,10 @@ export function TopBar({ session }: { session: SessionView | null }) {
             variant="bar"
             label={t("menuFile")}
           >
-            <button
-              onClick={() => {
-                return run(api.importMediaDialog());
-              }}
-            >
-              {t("importFiles")}
-            </button>
-            <button
-              onClick={() => {
-                return run(api.saveProject(false));
-              }}
-            >
-              {t("save")}
-            </button>
-            <button
-              onClick={() => {
-                return run(api.saveProject(true));
-              }}
-            >
-              {t("saveAs")}
-            </button>
-            <button onClick={startExport}>{t("export")}</button>
+            <CommandItem id="import" />
+            <CommandItem id="save" />
+            <CommandItem id="saveAs" />
+            <CommandItem id="export" />
           </Menu>
         )}
         {session && (
@@ -93,55 +87,14 @@ export function TopBar({ session }: { session: SessionView | null }) {
             variant="bar"
             label={t("menuEdit")}
           >
-            <button
-              disabled={!session.canUndo}
-              onClick={() => {
-                return run(api.undo());
-              }}
-            >
-              {t("undo")}
-            </button>
-            <button
-              disabled={!session.canRedo}
-              onClick={() => {
-                return run(api.redo());
-              }}
-            >
-              {t("redo")}
-            </button>
-            <button
-              disabled={selected.length === 0}
-              onClick={() => {
-                return run(api.copyClip(selected[0]));
-              }}
-            >
-              {t("menuCopy")}
-            </button>
-            <button
-              disabled={selected.length === 0}
-              onClick={() => {
-                return run(api.cutClip(selected[0]));
-              }}
-            >
-              {t("menuCut")}
-            </button>
-            <button
-              onClick={() => {
-                return void run(api.pasteClip()).then((ids) => {
-                  return ids && ids.length > 0 && patchUi({ selectedClipIds: ids });
-                });
-              }}
-            >
-              {t("menuPaste")}
-            </button>
-            <button
-              disabled={selected.length === 0}
-              onClick={() => {
-                return run(api.deleteClips(selected, false));
-              }}
-            >
-              {t("delete")}
-            </button>
+            <CommandItem id="undo" />
+            <CommandItem id="redo" />
+            <CommandItem id="copy" />
+            <CommandItem id="cut" />
+            <CommandItem id="paste" />
+            <CommandItem id="duplicate" />
+            <CommandItem id="delete" />
+            <CommandItem id="selectAll" />
           </Menu>
         )}
         <Menu
@@ -159,22 +112,24 @@ export function TopBar({ session }: { session: SessionView | null }) {
           </button>
           <button
             data-testid="nav-prefs"
-            aria-current={ui.screen === "prefs" ? "page" : undefined}
+            data-shortcut={shortcutLabel("settings")}
             onClick={() => {
-              return patchUi({ screen: "prefs" });
+              return patchUi({ settingsOpen: true });
             }}
           >
             {t("preferences")}
           </button>
           <button
             data-testid="nav-watch"
-            aria-current={ui.screen === "watch" ? "page" : undefined}
             onClick={() => {
-              return patchUi({ screen: "watch" });
+              return patchUi({ watchOpen: true });
             }}
           >
             {t("watchFolder")}
           </button>
+          <CommandItem id="toggleGuides" />
+          <CommandItem id="shortcuts" />
+          <CommandItem id="palette" />
         </Menu>
         {session && (
           <Menu
@@ -184,12 +139,13 @@ export function TopBar({ session }: { session: SessionView | null }) {
             <button
               onClick={() => {
                 return run(
-                  api.addSequence(`${t("sequence")} ${session.project.sequences.length + 1}`),
+                  api.addSequence(t("sequence") + " " + (session.project.sequences.length + 1)),
                 );
               }}
             >
               {t("addSequence")}
             </button>
+            <CommandItem id="renameSequence" />
             <button
               onClick={() => {
                 return run(api.addTrack("Video"));
@@ -225,21 +181,8 @@ export function TopBar({ session }: { session: SessionView | null }) {
             variant="bar"
             label={t("menuClip")}
           >
-            <button
-              onClick={() => {
-                return run(api.splitAtPlayhead(selected));
-              }}
-            >
-              {t("split")}
-            </button>
-            <button
-              disabled={selected.length === 0}
-              onClick={() => {
-                return run(api.deleteClips(selected, true));
-              }}
-            >
-              {t("rippleDelete")}
-            </button>
+            <CommandItem id="split" />
+            <CommandItem id="rippleDelete" />
             <button
               disabled={selected.length < 2}
               onClick={() => {
@@ -256,6 +199,8 @@ export function TopBar({ session }: { session: SessionView | null }) {
             >
               {t("compoundClip")}
             </button>
+            <CommandItem id="copyFormat" />
+            <CommandItem id="pasteFormat" />
           </Menu>
         )}
         {session && (
@@ -263,27 +208,13 @@ export function TopBar({ session }: { session: SessionView | null }) {
             variant="bar"
             label={t("markers")}
           >
-            <button
-              onClick={() => {
-                return run(api.addMarker());
-              }}
-            >
-              {t("addMarker")}
-            </button>
-            <button
-              onClick={() => {
-                return seekToMarker(markers, -1);
-              }}
-            >
-              {t("previousMarker")}
-            </button>
-            <button
-              onClick={() => {
-                return seekToMarker(markers, 1);
-              }}
-            >
-              {t("nextMarker")}
-            </button>
+            <CommandItem id="addMarker" />
+            <CommandItem id="prevMarker" />
+            <CommandItem id="nextMarker" />
+            <CommandItem id="markIn" />
+            <CommandItem id="markOut" />
+            <CommandItem id="clearMarks" />
+            <CommandItem id="deleteRange" />
           </Menu>
         )}
         {session && (
@@ -291,20 +222,8 @@ export function TopBar({ session }: { session: SessionView | null }) {
             variant="bar"
             label={t("menuGraphics")}
           >
-            <button
-              onClick={() => {
-                return void addTextOverlay();
-              }}
-            >
-              {t("addTextClip")}
-            </button>
-            <button
-              onClick={() => {
-                return void addShapeOverlay();
-              }}
-            >
-              {t("addShapeClip")}
-            </button>
+            <CommandItem id="addTextClip" />
+            <CommandItem id="addShapeClip" />
             <button
               onClick={() => {
                 return patchUi({ drawingShapePoints: [] });
@@ -323,7 +242,7 @@ export function TopBar({ session }: { session: SessionView | null }) {
             data-testid="undo"
             className="icon"
             aria-label={t("undo")}
-            title={t("undo")}
+            title={withShortcut(t("undo"), "undo")}
             disabled={!session.canUndo}
             onClick={() => {
               return run(api.undo());
@@ -338,7 +257,7 @@ export function TopBar({ session }: { session: SessionView | null }) {
             data-testid="redo"
             className="icon"
             aria-label={t("redo")}
-            title={t("redo")}
+            title={withShortcut(t("redo"), "redo")}
             disabled={!session.canRedo}
             onClick={() => {
               return run(api.redo());
@@ -353,7 +272,7 @@ export function TopBar({ session }: { session: SessionView | null }) {
             data-testid="save-project"
             className="icon"
             aria-label={t("save")}
-            title={t("save")}
+            title={withShortcut(t("save"), "save")}
             onClick={() => {
               return run(api.saveProject(false));
             }}
@@ -365,7 +284,7 @@ export function TopBar({ session }: { session: SessionView | null }) {
           </button>
           <button
             data-testid="export-queue-toggle"
-            className={`icon ${ui.exportQueueOpen ? "active" : ""}`}
+            className={"icon " + (ui.exportQueueOpen ? "active" : "")}
             aria-label={t("exportQueue")}
             title={t("exportQueue")}
             aria-expanded={ui.exportQueueOpen}
@@ -382,7 +301,10 @@ export function TopBar({ session }: { session: SessionView | null }) {
           <button
             data-testid="export"
             className="primary export"
-            onClick={startExport}
+            title={withShortcut(t("export"), "export")}
+            onClick={() => {
+              patchUi({ exportDialogOpen: true });
+            }}
           >
             <Icon
               name="upload"
@@ -395,9 +317,9 @@ export function TopBar({ session }: { session: SessionView | null }) {
       <button
         className="icon"
         aria-label={t("preferences")}
-        title={t("preferences")}
+        title={withShortcut(t("preferences"), "settings")}
         onClick={() => {
-          return patchUi({ screen: "prefs" });
+          return patchUi({ settingsOpen: true });
         }}
       >
         <Icon
@@ -409,7 +331,8 @@ export function TopBar({ session }: { session: SessionView | null }) {
   );
 }
 
-/** Playhead timecode plus the source's frame rate and resolution, read-only. */
+/** Playhead timecode (hours:minutes:seconds:frames) plus the source's frame rate and
+ *  resolution, read-only. */
 function Readout({ session }: { session: SessionView }) {
   const tick = useStore(previewStore);
   const source = session.project.media_library.find((asset) => {
@@ -420,7 +343,7 @@ function Readout({ session }: { session: SessionView }) {
       className="readout"
       aria-label={t("timecode")}
     >
-      <span className="timecode mono">{formatTime(tick.playheadSecs)}</span>
+      <span className="timecode mono">{formatTimecode(tick.playheadSecs, source?.fps ?? 30)}</span>
       {source?.fps != null && <span className="muted mono">{Math.round(source.fps)} FPS</span>}
       {source?.resolution && (
         <span className="muted mono">

@@ -1,8 +1,17 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { t } from "../i18n";
-import { addShapeOverlay, addTextOverlay, seekToMarker } from "../editing";
+import { formatTime, t, type TextKey } from "../i18n";
+import { findCommand, shortcutLabel } from "../commands";
+import {
+  TIMELINE_ACTION_EVENT,
+  addShapeOverlay,
+  addTextOverlay,
+  seekToMarker,
+  type TimelineAction,
+} from "../editing";
 import { api } from "../ipc";
+import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { Icon } from "./Icon";
+import { TimelineMinimap } from "./TimelineMinimap";
 import { SequenceTabs } from "./SequenceTabs";
 import { frameAt, frameStepSecs, MEDIA_EVENT, peakRange, peaksFor } from "./timelineMedia";
 import { Menu } from "./Menu";
@@ -41,6 +50,7 @@ import {
 import {
   activeTimeline,
   clipDuration,
+  type AudioRole,
   type ClipInstance,
   type MediaAsset,
   type SessionView,
@@ -137,6 +147,8 @@ export function Timeline({ session }: { session: SessionView }) {
   const [scrollSecs, setScrollSecs] = useState(0);
   const [scrollY, setScrollY] = useState(0);
   const [cursor, setCursor] = useState("default");
+  const [viewWidth, setViewWidth] = useState(0);
+  const [menu, setMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
 
   const lanesRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -309,6 +321,25 @@ export function Timeline({ session }: { session: SessionView }) {
     }
 
     // Playhead.
+    // In/out marks (I and O): the range between them is shaded, each end gets a flag.
+    const { markIn, markOut } = ui;
+    if (markIn !== null || markOut !== null) {
+      const inX = markIn !== null ? timeToX(markIn, px, scrollSecs) : null;
+      const outX = markOut !== null ? timeToX(markOut, px, scrollSecs) : null;
+      if (inX !== null && outX !== null && outX > inX) {
+        ctx.fillStyle = "rgba(32, 185, 195, 0.14)";
+        ctx.fillRect(inX, RULER_HEIGHT, outX - inX, height - RULER_HEIGHT);
+      }
+      ctx.fillStyle = palette.accent;
+      if (inX !== null) {
+        ctx.fillRect(Math.round(inX), 0, 2, height);
+        ctx.fillRect(Math.round(inX), 0, 7, 3);
+      }
+      if (outX !== null) {
+        ctx.fillRect(Math.round(outX) - 1, 0, 2, height);
+        ctx.fillRect(Math.round(outX) - 6, 0, 7, 3);
+      }
+    }
     const playheadX = timeToX(previewStore.get().playheadSecs, px, scrollSecs);
     if (playheadX >= -6 && playheadX <= width + 6) {
       ctx.fillStyle = palette.playhead;
@@ -347,6 +378,7 @@ export function Timeline({ session }: { session: SessionView }) {
       const width = lanes.clientWidth;
       const height = lanes.clientHeight;
       sizeRef.current = { width, height };
+      setViewWidth(width);
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(height * dpr);
       canvas.style.width = `${width}px`;
@@ -533,7 +565,9 @@ export function Timeline({ session }: { session: SessionView }) {
       scrubTo(x, false);
       return;
     }
-    const candidates = snapCandidates(tracks, drag.clipId, [previewStore.get().playheadSecs]);
+    const candidates = ui.snapEnabled
+      ? snapCandidates(tracks, drag.clipId, [previewStore.get().playheadSecs])
+      : [];
     const threshold = SNAP_PX / px;
     if (drag.mode === "move") {
       const raw = Math.max(0, xToTime(x, px, scrollSecs) - drag.grabOffsetSecs);
@@ -660,6 +694,209 @@ export function Timeline({ session }: { session: SessionView }) {
     );
     patchUi({ pxPerSec: zoom.pxPerSec });
     setScrollSecs(zoom.scrollSecs);
+  };
+
+  const actionRef = useRef<(action: TimelineAction) => void>(() => {
+    return undefined;
+  });
+  useLayoutEffect(() => {
+    actionRef.current = (action) => {
+      if (action === "zoomIn") {
+        zoomBy(1.5);
+      } else if (action === "zoomOut") {
+        zoomBy(1 / 1.5);
+      } else if (action === "zoomFit") {
+        zoomToFit();
+      } else if (action === "scrollToPlayhead") {
+        const visibleSecs = sizeRef.current.width / ui.pxPerSec;
+        setScrollSecs(Math.max(0, previewStore.get().playheadSecs - visibleSecs / 2));
+      }
+    };
+  });
+  useEffect(() => {
+    const onAction = (e: Event) => {
+      actionRef.current((e as CustomEvent<TimelineAction>).detail);
+    };
+    window.addEventListener(TIMELINE_ACTION_EVENT, onAction);
+    return () => {
+      window.removeEventListener(TIMELINE_ACTION_EVENT, onAction);
+    };
+  }, []);
+
+  const cmdItem = (id: string, overrides: Partial<ContextMenuItem> = {}): ContextMenuItem => {
+    const command = findCommand(id);
+    return {
+      label: command ? t(command.label) : id,
+      shortcut: shortcutLabel(id),
+      disabled: command?.enabled ? !command.enabled() : false,
+      onSelect: () => {
+        void command?.run();
+      },
+      ...overrides,
+    };
+  };
+
+  const onContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const { x, y } = lanePoint(e);
+    if (y < RULER_HEIGHT) {
+      const secs = Math.max(0, xToTime(x, ui.pxPerSec, scrollSecs));
+      setMenu({
+        x: e.clientX,
+        y: e.clientY,
+        items: [
+          {
+            label: t("addMarker"),
+            shortcut: shortcutLabel("addMarker"),
+            onSelect: () => {
+              void run(api.seek(secs)).then(() => {
+                return run(api.addMarker());
+              });
+            },
+          },
+          {
+            label: t("cmdMarkIn"),
+            shortcut: shortcutLabel("markIn"),
+            onSelect: () => {
+              patchUi({ markIn: secs });
+            },
+          },
+          {
+            label: t("cmdMarkOut"),
+            shortcut: shortcutLabel("markOut"),
+            onSelect: () => {
+              patchUi({ markOut: secs });
+            },
+          },
+          cmdItem("clearMarks", { separator: true }),
+          cmdItem("deleteRange"),
+        ],
+      });
+      return;
+    }
+    const hit = hitTest(tracks, x, y + scrollY, ui.pxPerSec, scrollSecs);
+    if (hit && !ui.selectedClipIds.includes(hit.clipId)) {
+      patchUi({ selectedClipIds: [hit.clipId] });
+    }
+    setMenu({
+      x: e.clientX,
+      y: e.clientY,
+      items: hit
+        ? [
+            cmdItem("split"),
+            cmdItem("copy", { separator: true }),
+            cmdItem("cut"),
+            cmdItem("paste"),
+            cmdItem("duplicate"),
+            cmdItem("delete", { separator: true }),
+            cmdItem("rippleDelete"),
+          ]
+        : [cmdItem("paste"), cmdItem("selectAll"), cmdItem("zoomFit", { separator: true })],
+    });
+  };
+
+  const trackMenu = (track: Track, e: React.MouseEvent) => {
+    e.preventDefault();
+    const flag = (patch: Parameters<typeof api.setTrackFlags>[1]) => {
+      return () => {
+        void run(api.setTrackFlags(track.id, patch));
+      };
+    };
+    const items: ContextMenuItem[] = [
+      {
+        label: track.visible ? t("hideTrack") : t("showTrack"),
+        onSelect: flag({ visible: !track.visible }),
+      },
+      {
+        label: track.locked ? t("unlockTrack") : t("lockTrack"),
+        onSelect: flag({ locked: !track.locked }),
+      },
+    ];
+    if (track.kind === "Video" || track.kind === "Audio") {
+      items.push(
+        {
+          label: track.muted ? t("unmuteTrack") : t("muteTrack"),
+          onSelect: flag({ muted: !track.muted }),
+        },
+        {
+          label: track.solo ? t("unsoloTrack") : t("soloTrack"),
+          onSelect: flag({ solo: !track.solo }),
+        },
+      );
+    }
+    for (const [kind, label] of [
+      ["Video", "addVideoTrack"],
+      ["Audio", "addAudioTrack"],
+      ["Text", "addTextTrack"],
+      ["Shape", "addShapeTrack"],
+    ] as const) {
+      items.push({
+        label: t(label),
+        separator: kind === "Video",
+        onSelect: () => {
+          void run(api.addTrack(kind));
+        },
+      });
+    }
+    setMenu({ x: e.clientX, y: e.clientY, items });
+  };
+
+  /** Clips in timeline order, for keyboard navigation and the screen-reader list. */
+  const orderedClips = tracks
+    .flatMap((track, row) => {
+      return [
+        ...track.clips.map((clip) => {
+          return {
+            id: clip.id,
+            start: clip.start_secs,
+            row,
+            label:
+              media.find((asset) => {
+                return asset.id === clip.asset_id;
+              })?.file_name ?? "#" + clip.asset_id,
+            track: track.name,
+          };
+        }),
+        ...track.text_clips.map((clip) => {
+          return { id: clip.id, start: clip.start_secs, row, label: clip.text, track: track.name };
+        }),
+        ...track.shape_clips.map((clip) => {
+          return { id: clip.id, start: clip.start_secs, row, label: t("shape"), track: track.name };
+        }),
+      ];
+    })
+    .sort((a, b) => {
+      return a.start - b.start || a.row - b.row;
+    });
+
+  const onCanvasKeyDown = (e: React.KeyboardEvent<HTMLCanvasElement>) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight" && e.key !== "Enter") {
+      return;
+    }
+    if (orderedClips.length === 0 || e.ctrlKey || e.metaKey || e.altKey) {
+      return;
+    }
+    e.preventDefault();
+    // The window-level shortcuts (arrows step the playhead) must not also run.
+    e.nativeEvent.stopPropagation();
+    const current = orderedClips.findIndex((clip) => {
+      return clip.id === ui.selectedClipIds[0];
+    });
+    if (e.key === "Enter") {
+      if (current >= 0) {
+        void run(api.seek(orderedClips[current].start));
+      }
+      return;
+    }
+    const next =
+      current < 0
+        ? 0
+        : Math.min(
+            orderedClips.length - 1,
+            Math.max(0, current + (e.key === "ArrowRight" ? 1 : -1)),
+          );
+    patchUi({ selectedClipIds: [orderedClips[next].id] });
+    void run(api.seek(orderedClips[next].start));
   };
 
   const selected = ui.selectedClipIds;
@@ -846,6 +1083,12 @@ export function Timeline({ session }: { session: SessionView }) {
           </button>
         </div>
       </div>
+      <TimelineMinimap
+        tracks={tracks}
+        scrollSecs={scrollSecs}
+        viewSecs={viewWidth / ui.pxPerSec}
+        onScrollTo={setScrollSecs}
+      />
       <div className="timeline-body">
         <div
           className="track-headers"
@@ -858,6 +1101,9 @@ export function Timeline({ session }: { session: SessionView }) {
                 <TrackHeader
                   key={track.id}
                   track={track}
+                  onContextMenu={(e) => {
+                    trackMenu(track, e);
+                  }}
                 />
               );
             })}
@@ -870,13 +1116,37 @@ export function Timeline({ session }: { session: SessionView }) {
           <canvas
             ref={canvasRef}
             data-testid="timeline-canvas"
+            tabIndex={0}
+            role="application"
+            aria-label={t("timelineCanvas")}
             style={{ cursor }}
+            onKeyDown={onCanvasKeyDown}
+            onContextMenu={onContextMenu}
             onPointerDown={onPointerDown}
             onDoubleClick={onDoubleClick}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onWheel={onWheel}
           />
+          <ul
+            className="sr-only"
+            aria-label={t("timelineClips")}
+          >
+            {orderedClips.map((clip) => {
+              return (
+                <li key={clip.id}>
+                  <button
+                    aria-pressed={ui.selectedClipIds.includes(clip.id)}
+                    onClick={() => {
+                      patchUi({ selectedClipIds: [clip.id] });
+                    }}
+                  >
+                    {clip.label}, {clip.track}, {formatTime(clip.start)}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
           {tracks.length === 0 && (
             <div
               className="empty-state"
@@ -887,39 +1157,114 @@ export function Timeline({ session }: { session: SessionView }) {
           )}
         </div>
       </div>
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={menu.items}
+          onClose={() => {
+            setMenu(null);
+          }}
+        />
+      )}
     </section>
   );
 }
 
-function TrackHeader({ track }: { track: Track }) {
+const AUDIO_ROLES: [AudioRole, TextKey][] = [
+  ["Unspecified", "roleUnspecified"],
+  ["GameAudio", "roleGame"],
+  ["Mic", "roleMic"],
+  ["Music", "roleMusic"],
+];
+
+function TrackHeader({
+  track,
+  onContextMenu,
+}: {
+  track: Track;
+  onContextMenu: (e: React.MouseEvent) => void;
+}) {
+  const carriesAudio = track.kind === "Video" || track.kind === "Audio";
   return (
     <div
       className="track-header"
       style={{ height: TRACK_HEIGHT }}
+      onContextMenu={onContextMenu}
     >
-      <span className="name">{track.name}</span>
-      <button
-        className={`icon ${track.visible ? "" : "active"}`}
-        title={track.visible ? t("hideTrack") : t("showTrack")}
-        aria-label={track.visible ? t("hideTrack") : t("showTrack")}
-        aria-pressed={!track.visible}
-        onClick={() => {
-          return run(api.setTrackFlags(track.id, { visible: !track.visible }));
-        }}
-      >
-        <Icon name={track.visible ? "eye" : "eyeOff"} />
-      </button>
-      <button
-        className={`icon ${track.locked ? "active" : ""}`}
-        title={track.locked ? t("unlockTrack") : t("lockTrack")}
-        aria-label={track.locked ? t("unlockTrack") : t("lockTrack")}
-        aria-pressed={track.locked}
-        onClick={() => {
-          return run(api.setTrackFlags(track.id, { locked: !track.locked }));
-        }}
-      >
-        <Icon name={track.locked ? "lock" : "unlock"} />
-      </button>
+      <div className="track-header-row">
+        <span className="name">{track.name}</span>
+        <button
+          className={`icon ${track.visible ? "" : "active"}`}
+          title={track.visible ? t("hideTrack") : t("showTrack")}
+          aria-label={track.visible ? t("hideTrack") : t("showTrack")}
+          aria-pressed={!track.visible}
+          onClick={() => {
+            return run(api.setTrackFlags(track.id, { visible: !track.visible }));
+          }}
+        >
+          <Icon name={track.visible ? "eye" : "eyeOff"} />
+        </button>
+        <button
+          className={`icon ${track.locked ? "active" : ""}`}
+          title={track.locked ? t("unlockTrack") : t("lockTrack")}
+          aria-label={track.locked ? t("unlockTrack") : t("lockTrack")}
+          aria-pressed={track.locked}
+          onClick={() => {
+            return run(api.setTrackFlags(track.id, { locked: !track.locked }));
+          }}
+        >
+          <Icon name={track.locked ? "lock" : "unlock"} />
+        </button>
+      </div>
+      {carriesAudio && (
+        <div className="track-header-row">
+          <button
+            className={`icon letter ${track.muted ? "active muted" : ""}`}
+            title={track.muted ? t("unmuteTrack") : t("muteTrack")}
+            aria-label={track.muted ? t("unmuteTrack") : t("muteTrack")}
+            aria-pressed={track.muted}
+            onClick={() => {
+              return run(api.setTrackFlags(track.id, { muted: !track.muted }));
+            }}
+          >
+            M
+          </button>
+          <button
+            className={`icon letter ${track.solo ? "active solo" : ""}`}
+            title={track.solo ? t("unsoloTrack") : t("soloTrack")}
+            aria-label={track.solo ? t("unsoloTrack") : t("soloTrack")}
+            aria-pressed={track.solo}
+            onClick={() => {
+              return run(api.setTrackFlags(track.id, { solo: !track.solo }));
+            }}
+          >
+            S
+          </button>
+          {track.kind === "Audio" && (
+            <select
+              className="role-select"
+              aria-label={t("audioRoleLabel")}
+              title={t("audioRoleLabel")}
+              value={track.audio_role}
+              onChange={(e) => {
+                return run(api.setTrackFlags(track.id, { audioRole: e.target.value as AudioRole }));
+              }}
+            >
+              {AUDIO_ROLES.map(([role, label]) => {
+                return (
+                  <option
+                    key={role}
+                    value={role}
+                  >
+                    {t(label)}
+                  </option>
+                );
+              })}
+            </select>
+          )}
+        </div>
+      )}
     </div>
   );
 }
