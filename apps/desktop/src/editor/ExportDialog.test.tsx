@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n";
+import { ConfirmHost } from "./Notifications";
 import { uiStore } from "../store";
 import type { SessionView } from "../types";
 
@@ -81,8 +82,12 @@ describe("ExportDialog", () => {
   });
 
   it("saves the chosen settings, then opens the queue and asks for the file", async () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
-    render(<ExportDialog session={session()} />);
+    render(
+      <>
+        <ExportDialog session={session()} />
+        <ConfirmHost />
+      </>,
+    );
     fireEvent.click(screen.getByRole("radio", { name: t("aspectSquare") }));
     fireEvent.click(screen.getByRole("radio", { name: "-23 LUFS" }));
     fireEvent.click(screen.getByText(t("exportChooseFile")));
@@ -93,10 +98,14 @@ describe("ExportDialog", () => {
     expect(api.setGpuEncoderPreference).toHaveBeenCalledWith("auto");
     expect(uiStore.get().exportDialogOpen).toBe(false);
     expect(uiStore.get().exportQueueOpen).toBe(true);
+    // The overwrite question is an in-app dialog whose buttons name the two outcomes.
     const ask = vi.mocked(exportActiveSequence).mock.calls[0][0];
-    expect(ask()).toBe(true);
-    expect(confirm).toHaveBeenCalledWith(t("exportOverwriteConfirm"));
-    confirm.mockRestore();
+    const answer = ask();
+    fireEvent.click(await screen.findByText(t("confirmOverwriteAction")));
+    expect(await answer).toBe(true);
+    const second = ask();
+    fireEvent.click(await screen.findByText(t("confirmKeepBoth")));
+    expect(await second).toBe(false);
   });
 
   it("accepts a custom loudness target and rejects one out of range", async () => {

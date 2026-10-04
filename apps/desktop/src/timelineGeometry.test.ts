@@ -71,6 +71,8 @@ function track(id: number, clips: ClipInstance[]): Track {
     shape_clips: [],
     visible: true,
     audio_role: "Unspecified",
+    muted: false,
+    solo: false,
     color_label: null,
     locked: false,
   };

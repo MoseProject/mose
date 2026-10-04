@@ -13,6 +13,8 @@ vi.mock("../ipc", () => {
       getPrefs: vi.fn(),
       getQueuedReportCount: vi.fn(),
       getGpuEncoderPreference: vi.fn().mockResolvedValue("auto"),
+      checkPath: vi.fn().mockResolvedValue("file"),
+      pickPath: vi.fn().mockResolvedValue(null),
       setGpuEncoderPreference: vi.fn().mockResolvedValue(undefined),
       setPrefs: vi.fn().mockResolvedValue(undefined),
       setErrorReportingConsent: vi.fn().mockResolvedValue(undefined),
@@ -82,13 +84,13 @@ describe("preferences screen", () => {
     fireEvent.change(language, { target: { value: "pt_br" } });
     expect(lastSaved()).toMatchObject({ locale: "pt_br" });
     // Switching language retranslates the screen immediately.
-    expect(screen.getByRole("heading").textContent).toBe(t("preferences"));
+    expect(screen.getByText(t("settingsGeneral"))).toBeTruthy();
 
     fireEvent.change(lufs, { target: { value: "2" } });
     expect(lastSaved()).toMatchObject({ lufsProfile: 2, locale: "pt_br" });
 
     const text = (label: string) => {
-      return screen.getByText(label).querySelector("input") as HTMLInputElement;
+      return screen.getByLabelText(label) as HTMLInputElement;
     };
     const edits: [string, string][] = [
       ["outputFolder", "D:/new"],
@@ -219,5 +221,51 @@ describe("preferences screen: GPU encoder", () => {
     });
     fireEvent.change(select, { target: { value: "cpu" } });
     expect(api.setGpuEncoderPreference).toHaveBeenCalledWith("cpu");
+  });
+});
+
+describe("preferences screen: paths", () => {
+  beforeEach(() => {
+    vi.mocked(api.getPrefs).mockResolvedValue(prefs());
+    vi.mocked(api.getQueuedReportCount).mockResolvedValue(0);
+  });
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("flags a path that is not on disk and accepts one that is", async () => {
+    vi.mocked(api.checkPath).mockImplementation((path: string) => {
+      return Promise.resolve(path === "w" ? "file" : "missing");
+    });
+    render(<Prefs />);
+    expect(await screen.findAllByText(t("pathMissing"))).not.toHaveLength(0);
+    expect(screen.getAllByText(t("pathOk")).length).toBeGreaterThan(0);
+  });
+
+  it("flags a folder where a file is expected", async () => {
+    vi.mocked(api.checkPath).mockResolvedValue("folder");
+    render(<Prefs />);
+    expect(await screen.findAllByText(t("pathWrongKind"))).not.toHaveLength(0);
+  });
+
+  it("fills a path from the native picker", async () => {
+    vi.mocked(api.checkPath).mockResolvedValue("file");
+    vi.mocked(api.pickPath).mockResolvedValueOnce("D:/models/new.bin");
+    render(<Prefs />);
+    await screen.findByLabelText(t("whisperModelPath"));
+    fireEvent.click(screen.getAllByText(t("browse"))[1]);
+    await waitFor(() => {
+      expect(api.setPrefs).toHaveBeenLastCalledWith(
+        expect.objectContaining({ whisperModelPath: "D:/models/new.bin" }),
+      );
+    });
+    expect(api.pickPath).toHaveBeenCalledWith("file", ["bin"]);
+  });
+
+  it("confirms that a change was saved", async () => {
+    vi.mocked(api.checkPath).mockResolvedValue("file");
+    render(<Prefs />);
+    fireEvent.change(await screen.findByLabelText(t("language")), { target: { value: "en" } });
+    expect(screen.getByRole("status").textContent).toBe(t("settingsSaved"));
   });
 });

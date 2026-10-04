@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ConfirmHost } from "../editor/Notifications";
 import { t } from "../i18n";
 import { makeSession } from "../testSupport";
 
@@ -81,16 +82,30 @@ describe("home screen", () => {
 
   it("asks before discarding unsaved work and respects a refusal", async () => {
     sessionStore.set({ ...makeSession([{ id: 1, name: "A" }]), dirty: true });
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
-    render(<Home />);
+    render(
+      <>
+        <Home />
+        <ConfirmHost />
+      </>,
+    );
     fireEvent.click(screen.getByTestId("new-project"));
-    fireEvent.click(screen.getByText(t("openProject")));
-    expect(confirm).toHaveBeenCalledWith(t("unsavedConfirm"));
+    expect(await screen.findByRole("dialog", { name: t("confirmDiscardTitle") })).toBeTruthy();
+    expect(screen.getByText(t("unsavedConfirm"))).toBeTruthy();
+    fireEvent.click(screen.getByText(t("cancel")));
+    await waitFor(() => {
+      return expect(screen.queryByRole("dialog")).toBeNull();
+    });
     expect(api.newProject).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText(t("openProject")));
+    fireEvent.click(await screen.findByText(t("cancel")));
+    await waitFor(() => {
+      return expect(screen.queryByRole("dialog")).toBeNull();
+    });
     expect(api.openProject).not.toHaveBeenCalled();
 
-    confirm.mockReturnValue(true);
     fireEvent.click(screen.getByTestId("new-project"));
+    fireEvent.click(await screen.findByText(t("confirmDiscardAction")));
     await waitFor(() => {
       return expect(api.newProject).toHaveBeenCalled();
     });

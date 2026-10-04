@@ -281,6 +281,15 @@ const resetUi = () => {
     exportQueueOpen: false,
     exportDialogOpen: false,
     openDialogs: 0,
+    markIn: null,
+    markOut: null,
+    snapEnabled: true,
+    shortcutsOpen: false,
+    paletteOpen: false,
+    settingsOpen: false,
+    watchOpen: false,
+    monitorZoom: "fit",
+    monitorGuides: false,
   });
 };
 

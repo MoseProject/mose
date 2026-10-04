@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "./i18n";
+import { toastStore } from "./notifications";
 import { exportsStore, sessionStore, uiStore } from "./store";
 import { makeSession } from "./testSupport";
 import type { SessionView } from "./types";
@@ -22,8 +23,8 @@ vi.mock("./screens/Prefs", () => {
 });
 vi.mock("./screens/WatchFolder", () => {
   return {
-    WatchFolder: () => {
-      return <div data-testid="screen-watch" />;
+    WatchFolder: ({ open }: { open?: boolean }) => {
+      return open ? <div data-testid="screen-watch" /> : null;
     },
   };
 });
@@ -76,7 +77,7 @@ const session = (overrides: Record<string, unknown> = {}): SessionView => {
   return view;
 };
 
-const goTo = (screenName: "home" | "prefs" | "watch" | "editor") => {
+const goTo = (screenName: "home" | "editor") => {
   return act(() => {
     return uiStore.set({ ...uiStore.get(), screen: screenName });
   });
@@ -85,6 +86,7 @@ const goTo = (screenName: "home" | "prefs" | "watch" | "editor") => {
 beforeEach(() => {
   vi.clearAllMocks();
   sessionStore.set(null);
+  toastStore.set([]);
   uiStore.set({
     screen: "home",
     selectedClipIds: [],
@@ -95,6 +97,15 @@ beforeEach(() => {
     exportQueueOpen: false,
     exportDialogOpen: false,
     openDialogs: 0,
+    markIn: null,
+    markOut: null,
+    snapEnabled: true,
+    shortcutsOpen: false,
+    paletteOpen: false,
+    settingsOpen: false,
+    watchOpen: false,
+    monitorZoom: "fit",
+    monitorGuides: false,
   });
 });
 afterEach(() => {
@@ -126,38 +137,52 @@ describe("app shell", () => {
       expect(screen.getByTestId("screen-home")).toBeTruthy();
     });
 
-    it("shows the editor, preferences, home and watch-folder screens for an open session", () => {
+    it("shows the editor and home for an open session", () => {
       sessionStore.set(session());
       render(<App />);
       goTo("editor");
       expect(screen.getByTestId("screen-editor")).toBeTruthy();
-      goTo("prefs");
-      expect(screen.getByTestId("screen-prefs")).toBeTruthy();
       goTo("home");
       expect(screen.getByTestId("screen-home")).toBeTruthy();
-      goTo("watch");
-      expect(screen.getByTestId("screen-watch")).toBeTruthy();
     });
 
-    it("shows the watch-folder screen without a session", () => {
-      uiStore.set({ ...uiStore.get(), screen: "watch" });
+    it("opens settings as a dialog over whatever screen is showing", () => {
+      render(<App />);
+      expect(screen.queryByTestId("screen-prefs")).toBeNull();
+      act(() => {
+        return uiStore.set({ ...uiStore.get(), settingsOpen: true });
+      });
+      expect(screen.getByRole("dialog", { name: t("preferences") })).toBeTruthy();
+      expect(screen.getByTestId("screen-prefs")).toBeTruthy();
+    });
+
+    it("shows the watch-folder dialog without a session", () => {
+      uiStore.set({ ...uiStore.get(), watchOpen: true });
       render(<App />);
       expect(screen.getByTestId("screen-watch")).toBeTruthy();
     });
 
-    it("navigates from the top bar and marks the current screen", () => {
+    it("navigates from the View menu", () => {
       sessionStore.set(session());
       render(<App />);
       fireEvent.click(screen.getByTestId("nav-prefs"));
-      expect(uiStore.get().screen).toBe("prefs");
-      expect(screen.getByTestId("nav-prefs").getAttribute("aria-current")).toBe("page");
+      expect(uiStore.get().settingsOpen).toBe(true);
       fireEvent.click(screen.getByTestId("nav-watch"));
-      expect(uiStore.get().screen).toBe("watch");
-      expect(screen.getByTestId("nav-watch").getAttribute("aria-current")).toBe("page");
+      expect(uiStore.get().watchOpen).toBe(true);
       fireEvent.click(screen.getByTestId("nav-home"));
       expect(uiStore.get().screen).toBe("home");
       expect(screen.getByTestId("nav-home").getAttribute("aria-current")).toBe("page");
-      expect(screen.getByTestId("nav-prefs").getAttribute("aria-current")).toBeNull();
+    });
+
+    it("opens the shortcut sheet and the command palette from the View menu", () => {
+      sessionStore.set(session());
+      render(<App />);
+      fireEvent.click(screen.getByText(t("cmdShortcuts"), { selector: "button" }));
+      expect(screen.getByRole("dialog", { name: t("cmdShortcuts") })).toBeTruthy();
+      cleanup();
+      uiStore.set({ ...uiStore.get(), shortcutsOpen: false, paletteOpen: true });
+      render(<App />);
+      expect(screen.getByRole("dialog", { name: t("cmdPalette") })).toBeTruthy();
     });
   });
 
@@ -212,15 +237,26 @@ describe("app shell", () => {
     });
   });
 
-  describe("error banner", () => {
-    it("shows the error and dismisses it", () => {
+  describe("error toasts", () => {
+    it("turns an error into a dismissable toast and clears the pending error", () => {
       uiStore.set({ ...uiStore.get(), error: "disk full" });
       render(<App />);
-      const banner = screen.getByRole("alert");
-      expect(banner.textContent).toContain(`${t("errorPrefix")}: disk full`);
-      fireEvent.click(screen.getByLabelText(t("close")));
+      const toast = screen.getByRole("alert");
+      expect(toast.textContent).toContain(t("errorPrefix") + ": disk full");
       expect(uiStore.get().error).toBeNull();
+      fireEvent.click(screen.getByLabelText(t("close")));
       expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("keeps a second error instead of replacing the first", () => {
+      render(<App />);
+      act(() => {
+        return uiStore.set({ ...uiStore.get(), error: "first" });
+      });
+      act(() => {
+        return uiStore.set({ ...uiStore.get(), error: "second" });
+      });
+      expect(screen.getAllByRole("alert")).toHaveLength(2);
     });
 
     it("is absent when there is no error", () => {
