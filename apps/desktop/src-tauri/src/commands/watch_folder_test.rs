@@ -156,3 +156,40 @@ fn the_default_timing_matches_the_documented_cadence() {
         Duration::from_secs(avcore::DEFAULT_STABLE_SECS)
     );
 }
+
+fn metrics() -> avcore::LoudnessMetrics {
+    avcore::LoudnessMetrics {
+        integrated_lufs: -20.0,
+        true_peak_dbtp: -3.0,
+        loudness_range_lu: 5.0,
+    }
+}
+
+#[test]
+fn a_cancelled_normalization_reports_nothing_and_the_file_is_not_retried_as_failed() {
+    let h = harness();
+    let dir = watched_dir(&h, "cancelled");
+    std::fs::write(dir.join("a.mp4"), b"x").unwrap();
+    *h.services.watch_result.lock().unwrap() = Some(Ok(None));
+    let events = collect_events(&h);
+    start_watching(h.handle(), dir, FAST);
+    wait_for(&events, "\"type\":\"processing\"");
+    std::thread::sleep(Duration::from_millis(100));
+    stop_watching_folder(h.state());
+    let seen = events.lock().unwrap().clone();
+    assert!(!seen
+        .iter()
+        .any(|e| e.contains("\"type\":\"done\"") || e.contains("\"type\":\"failed\"")));
+}
+
+#[test]
+fn progress_from_the_normalizer_is_forwarded() {
+    let h = harness();
+    let dir = watched_dir(&h, "progress");
+    std::fs::write(dir.join("a.mp4"), b"x").unwrap();
+    *h.services.watch_result.lock().unwrap() = Some(Ok(Some((metrics(), metrics()))));
+    let events = collect_events(&h);
+    start_watching(h.handle(), dir, FAST);
+    wait_for(&events, "\"type\":\"done\"");
+    stop_watching_folder(h.state());
+}

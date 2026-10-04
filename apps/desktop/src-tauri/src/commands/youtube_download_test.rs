@@ -1,3 +1,4 @@
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -28,6 +29,26 @@ fn wait_for(events: &Arc<Mutex<Vec<String>>>, needle: &str) {
 
 fn running(h: &Harness) -> bool {
     h.state().youtube_download_cancel.lock().unwrap().is_some()
+}
+
+/// Makes the helper "installed" and scripts what the next download does.
+fn script(
+    h: &Harness,
+    run: impl FnOnce(
+            &str,
+            YoutubeDownloadTarget,
+            &AtomicBool,
+            &mut dyn FnMut(f32),
+        ) -> Result<PathBuf, avcore::YoutubeDownloadError>
+        + Send
+        + 'static,
+) {
+    h.services.youtube_available.store(true, Ordering::SeqCst);
+    *h.services.youtube.lock().unwrap() = Some(Box::new(run));
+}
+
+fn start(h: &Harness, url: &str, format: &str, quality: &str) -> Result<(), String> {
+    download_youtube(h.handle(), url.into(), format.into(), quality.into())
 }
 
 #[test]
@@ -62,31 +83,22 @@ fn formats_and_qualities_map_to_download_targets() {
 #[test]
 fn the_command_refuses_blank_urls_unknown_formats_and_a_missing_helper() {
     let h = harness();
+    assert!(!is_yt_dlp_available(h.state()));
     assert_eq!(
-        download_youtube(h.handle(), "   ".into(), "mp4".into(), "best".into()),
+        start(&h, "   ", "mp4", "best"),
         Err("blank URL".to_string())
     );
     assert_eq!(
-        download_youtube(
-            h.handle(),
-            "https://example.com/v".into(),
-            "avi".into(),
-            "best".into()
-        ),
+        start(&h, "https://example.com/v", "avi", "best"),
         Err("invalid format".to_string())
     );
-    // No `ytbridge` sits next to the test binary.
-    assert_eq!(is_yt_dlp_available(), false);
     assert_eq!(
-        download_youtube(
-            h.handle(),
-            "https://example.com/v".into(),
-            "mp4".into(),
-            "best".into()
-        ),
+        start(&h, "https://example.com/v", "mp4", "best"),
         Err("yt-dlp is not installed".to_string())
     );
     assert!(!running(&h));
+    h.services.youtube_available.store(true, Ordering::SeqCst);
+    assert!(is_yt_dlp_available(h.state()));
 }
 
 #[test]
@@ -94,20 +106,13 @@ fn a_finished_download_reports_progress_then_done_and_imports_the_file() {
     let h = harness();
     let events = collect_events(&h);
     let file = fixture("audio.m4a");
-    start_download(
-        h.handle(),
-        " https://example.com/v ".into(),
-        "mp3".into(),
-        "320".into(),
-        true,
-        move |url, target, _dir, _cancel, progress| {
-            assert_eq!(url, "https://example.com/v");
-            assert_eq!(target, YoutubeDownloadTarget::Mp3(Mp3Bitrate::K320));
-            progress(0.5);
-            Ok(file)
-        },
-    )
-    .unwrap();
+    script(&h, move |url, target, _cancel, progress| {
+        assert_eq!(url, "https://example.com/v");
+        assert_eq!(target, YoutubeDownloadTarget::Mp3(Mp3Bitrate::K320));
+        progress(0.5);
+        Ok(file)
+    });
+    start(&h, " https://example.com/v ", "mp3", "320").unwrap();
     wait_for(&events, "\"type\":\"done\"");
     let seen = events.lock().unwrap().clone();
     assert!(seen
@@ -123,15 +128,10 @@ fn a_finished_download_reports_progress_then_done_and_imports_the_file() {
 fn a_failed_download_reports_the_message() {
     let h = harness();
     let events = collect_events(&h);
-    start_download(
-        h.handle(),
-        "https://example.com/v".into(),
-        "mp4".into(),
-        "720".into(),
-        true,
-        |_, _, _, _, _| Err(avcore::YoutubeDownloadError::Failed("no network".into())),
-    )
-    .unwrap();
+    script(&h, |_, _, _, _| {
+        Err(avcore::YoutubeDownloadError::Failed("no network".into()))
+    });
+    start(&h, "https://example.com/v", "mp4", "720").unwrap();
     wait_for(&events, "\"type\":\"failed\"");
     assert!(events
         .lock()
@@ -145,30 +145,16 @@ fn a_failed_download_reports_the_message() {
 fn only_one_download_runs_at_a_time_and_cancelling_stops_it() {
     let h = harness();
     let events = collect_events(&h);
-    start_download(
-        h.handle(),
-        "https://example.com/v".into(),
-        "mp4".into(),
-        "best".into(),
-        true,
-        |_, _, _, cancel, _| {
-            while !cancel.load(std::sync::atomic::Ordering::Relaxed) {
-                std::thread::sleep(Duration::from_millis(5));
-            }
-            Err(avcore::YoutubeDownloadError::Failed("cancelled".into()))
-        },
-    )
-    .unwrap();
+    script(&h, |_, _, cancel, _| {
+        while !cancel.load(Ordering::Relaxed) {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        Err(avcore::YoutubeDownloadError::Failed("cancelled".into()))
+    });
+    start(&h, "https://example.com/v", "mp4", "best").unwrap();
     assert!(running(&h));
     assert_eq!(
-        start_download(
-            h.handle(),
-            "https://example.com/other".into(),
-            "mp4".into(),
-            "best".into(),
-            true,
-            |_, _, _, _, _| unreachable!("a second download must not start"),
-        ),
+        start(&h, "https://example.com/other", "mp4", "best"),
         Err("a download is already running".to_string())
     );
 
