@@ -346,3 +346,38 @@ describe("tools and toggles", () => {
     });
   });
 });
+
+describe("repeatable commands", () => {
+  it("only lets stepping, seeking, zooming, undo and navigation run while a key is held", () => {
+    const repeatable = commands.COMMANDS.filter((command) => {
+      return command.repeatable;
+    }).map((command) => {
+      return command.id;
+    });
+    expect(repeatable.sort()).toEqual(
+      [
+        "back1s",
+        "back10s",
+        "forward10s",
+        "stepBack",
+        "stepForward",
+        "stepBack10",
+        "stepForward10",
+        "undo",
+        "redo",
+        "zoomIn",
+        "zoomOut",
+        "prevEdit",
+        "nextEdit",
+        "prevMarker",
+        "nextMarker",
+      ].sort(),
+    );
+  });
+
+  it("never repeats playback toggles, edits or the shuttle", () => {
+    for (const id of ["playPause", "play", "shuttleBack", "split", "delete", "addMarker"]) {
+      expect(commands.findCommand(id)?.repeatable).toBeFalsy();
+    }
+  });
+});

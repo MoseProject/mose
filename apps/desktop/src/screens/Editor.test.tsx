@@ -532,6 +532,18 @@ describe("editor shortcuts from the command table", () => {
     expect(calls.undo).toHaveBeenCalledTimes(1);
   });
 
+  it("runs a held key once, except for commands that make sense to repeat", () => {
+    const held = press({ key: "m", repeat: true });
+    expect(held.defaultPrevented).toBe(true);
+    expect(calls.addMarker).not.toHaveBeenCalled();
+    press({ key: "m" });
+    expect(calls.addMarker).toHaveBeenCalledTimes(1);
+
+    press({ key: "z", ctrlKey: true, repeat: true });
+    press({ key: "z", ctrlKey: true, repeat: true });
+    expect(calls.undo).toHaveBeenCalledTimes(2);
+  });
+
   it("does nothing for a command the user unbound", () => {
     keymapStore.set({ addMarker: [] });
     expect(press({ key: "m" }).defaultPrevented).toBe(false);
