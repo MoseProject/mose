@@ -1,5 +1,5 @@
 import { t } from "../i18n";
-import { createStore, previewStore, useStore } from "../store";
+import { createStore, previewStore, sessionStore, useStore } from "../store";
 
 /** Scale marks, top to bottom, in dBFS. */
 const MARKS = [0, -6, -12, -18, -24, -30, -36, -42, -48, -54, -60];
@@ -16,6 +16,24 @@ export function peakFill(peak: number): number {
   }
   const db = 20 * Math.log10(peak);
   return Math.min(1, Math.max(0, (db - FLOOR_DB) / -FLOOR_DB));
+}
+
+/** Loudness targets marked on the scale, in LUFS: the platform presets the export offers. */
+const TARGETS = [-14, -16, -23];
+/** How far from the sequence target the reading may drift before it is flagged, in LU. */
+const TOLERANCE_LU = 1;
+
+/** Where a LUFS value sits on the dBFS scale, as 0..1 from the bottom. */
+export function scaleFill(db: number): number {
+  return Math.min(1, Math.max(0, (db - FLOOR_DB) / -FLOOR_DB));
+}
+
+/** "ok" within a tolerance of the target, "hot" above it, "low" below it. */
+export function loudnessState(lufs: number, target: number): "ok" | "hot" | "low" {
+  if (lufs > target + TOLERANCE_LU) {
+    return "hot";
+  }
+  return lufs < target - TOLERANCE_LU ? "low" : "ok";
 }
 
 interface Hold {
@@ -52,6 +70,11 @@ previewStore.subscribe(() => {
 export function AudioMeter() {
   const tick = useStore(previewStore);
   const hold = useStore(holdStore);
+  const session = useStore(sessionStore);
+  const target = session
+    ? session.project.sequences[session.project.active_sequence].export_settings.target_lufs
+    : -14;
+  const lufs = tick.momentaryLufs;
   const channels = [
     { peak: tick.peakL, held: hold.left },
     { peak: tick.peakR, held: hold.right },
@@ -73,6 +96,16 @@ export function AudioMeter() {
         className="meter-bars"
         aria-hidden="true"
       >
+        {TARGETS.map((mark) => {
+          return (
+            <div
+              key={mark}
+              className={"meter-target" + (mark === target ? " active" : "")}
+              style={{ bottom: scaleFill(mark) * 100 + "%" }}
+              data-testid="meter-target"
+            />
+          );
+        })}
         {channels.map(({ peak, held }, channel) => {
           const heldFill = peakFill(held);
           return (
@@ -93,6 +126,14 @@ export function AudioMeter() {
             </div>
           );
         })}
+      </div>
+      <div
+        className={"meter-lufs " + (lufs === null ? "idle" : loudnessState(lufs, target))}
+        title={t("meterLoudness") + " (" + t("meterTarget") + " " + target + " LUFS)"}
+        data-testid="meter-lufs"
+      >
+        {lufs === null ? "-" : lufs.toFixed(1)}
+        <small>LUFS</small>
       </div>
       <div
         className="meter-channels"

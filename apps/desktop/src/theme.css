@@ -2091,3 +2091,62 @@ canvas:focus-visible {
   color: var(--accent);
   font-size: 11px;
 }
+
+/* ---- meter loudness targets and LUFS readout ---- */
+.meter-target {
+  position: absolute;
+  left: -5px;
+  right: -5px;
+  height: 0;
+  border-top: 1px dashed var(--text-muted);
+  pointer-events: none;
+}
+.meter-target.active {
+  border-top: 1px solid var(--accent);
+}
+.meter-lufs {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 11px;
+  line-height: 1.1;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.meter-lufs small {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.meter-lufs.ok {
+  color: var(--success);
+}
+.meter-lufs.hot {
+  color: var(--error);
+}
+.meter-lufs.low {
+  color: #efdb3f;
+}
+
+/* ---- section keyframe diamond ---- */
+.section-keyframe {
+  margin-left: auto;
+  padding: 2px;
+}
+.section-keyframe + .section-reset {
+  margin-left: 0;
+}
+.section-keyframe svg {
+  width: 12px;
+  height: 12px;
+}
+.section-keyframe.active svg {
+  fill: var(--accent);
+  color: var(--accent);
+}
+.section-keyframe:disabled {
+  opacity: 0.4;
+}

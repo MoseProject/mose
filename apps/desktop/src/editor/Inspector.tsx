@@ -3,12 +3,21 @@ import { Icon } from "./Icon";
 import { useDraft } from "../useDraft";
 import { formatTime, t } from "../i18n";
 import { api } from "../ipc";
-import { run, uiStore, useStore } from "../store";
+import { previewStore, run, uiStore, useStore } from "../store";
+import {
+  hasKeyframeAt,
+  playheadFraction,
+  toggleKeyframe,
+  valueAt,
+  withKeyframe,
+  withoutKeyframe,
+} from "../keyframeAt";
 import { F32KeyframeList, PositionKeyframeList } from "./KeyframeEditor";
 import { ShapeInspector } from "./ShapeInspector";
 import { TextInspector } from "./TextInspector";
 import {
   activeTimeline,
+  aspectRatioDims,
   BLEND_MODES,
   type BlendMode,
   type ClipInstance,
@@ -75,6 +84,7 @@ const TRANSITION_TYPES: { value: TransitionType; label: () => string }[] = [
 export function Inspector({ session }: { session: SessionView }) {
   const { selectedClipIds } = useStore(uiStore);
   const timeline = activeTimeline(session.project);
+  const timelineSequence = session.project.sequences[session.project.active_sequence];
   const clip =
     selectedClipIds.length === 1
       ? timeline.tracks
@@ -167,6 +177,10 @@ export function Inspector({ session }: { session: SessionView }) {
             <ClipControls
               key={clip.id}
               clip={clip}
+              canvas={aspectRatioDims(
+                timelineSequence.export_settings.aspect_ratio,
+                asset?.resolution ?? [1920, 1080],
+              )}
             />
           </div>
         ) : textClip ? (
@@ -196,12 +210,22 @@ export function Inspector({ session }: { session: SessionView }) {
  *  `default_open` argument has. */
 export type InspectorGroup = "inspector" | "effects" | "audio";
 
+/** State of a section's keyframe diamond. */
+export interface SectionKeyframe {
+  /** A keyframe already sits at the playhead, so clicking removes it. */
+  active: boolean;
+  /** The playhead is outside the clip. */
+  disabled: boolean;
+  onToggle: () => void;
+}
+
 export function Section({
   label,
   defaultOpen,
   testId,
   group = "inspector",
   onReset,
+  keyframe,
   children,
 }: {
   label: string;
@@ -210,6 +234,8 @@ export function Section({
   group?: InspectorGroup;
   /** Shows a reset button in the header that puts this section back to its defaults. */
   onReset?: () => void;
+  /** Shows a diamond in the header that adds or removes a keyframe at the playhead. */
+  keyframe?: SectionKeyframe;
   children: ReactNode;
 }) {
   return (
@@ -221,6 +247,22 @@ export function Section({
     >
       <summary>
         <span>{label}</span>
+        {keyframe && (
+          <button
+            className={"icon section-keyframe" + (keyframe.active ? " active" : "")}
+            aria-label={t("keyframeToggle") + ": " + label}
+            aria-pressed={keyframe.active}
+            title={keyframe.disabled ? t("keyframeOutside") : t("keyframeToggle")}
+            disabled={keyframe.disabled}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              keyframe.onToggle();
+            }}
+          >
+            <Icon name="keyframe" />
+          </button>
+        )}
         {onReset && (
           <button
             className="icon section-reset"
@@ -241,22 +283,77 @@ export function Section({
   );
 }
 
-function ClipControls({ clip }: { clip: ClipInstance }) {
+function ClipControls({
+  clip,
+  canvas,
+}: {
+  clip: ClipInstance;
+  /** Output canvas size in pixels, for the transform's pixel fields. */
+  canvas: [number, number];
+}) {
   const commit = (patch: ClipPatch) => {
     return run(api.updateClip(clip.id, patch));
   };
   const [region, setRegion] = useState({ centerX: 0.5, centerY: 0.5, width: 0.3, height: 0.3 });
+  const { playheadSecs } = useStore(previewStore);
+  const fraction = playheadFraction(clip, playheadSecs);
+  const gainDiamond: SectionKeyframe = {
+    active: fraction !== null && hasKeyframeAt(clip.gain_keyframes, fraction),
+    disabled: fraction === null,
+    onToggle: () => {
+      if (fraction !== null) {
+        void commit({
+          gainKeyframes: toggleKeyframe(
+            clip.gain_keyframes,
+            fraction,
+            valueAt(clip.gain_keyframes, fraction, clip.gain_db),
+          ),
+        });
+      }
+    },
+  };
+  const colorDiamond: SectionKeyframe = {
+    active:
+      fraction !== null &&
+      (hasKeyframeAt(clip.brightness_keyframes, fraction) ||
+        hasKeyframeAt(clip.contrast_keyframes, fraction) ||
+        hasKeyframeAt(clip.saturation_keyframes, fraction)),
+    disabled: fraction === null,
+    onToggle: () => {
+      if (fraction === null) {
+        return;
+      }
+      const lists = [
+        ["brightnessKeyframes", clip.brightness_keyframes, clip.brightness],
+        ["contrastKeyframes", clip.contrast_keyframes, clip.contrast],
+        ["saturationKeyframes", clip.saturation_keyframes, clip.saturation],
+      ] as const;
+      const remove = lists.some(([, list]) => {
+        return hasKeyframeAt(list, fraction);
+      });
+      const patch: ClipPatch = {};
+      for (const [key, list, base] of lists) {
+        patch[key] = remove
+          ? withoutKeyframe(list, fraction)
+          : withKeyframe(list, fraction, valueAt(list, fraction, base));
+      }
+      void commit(patch);
+    },
+  };
   return (
     <>
       <TransformSection
         clip={clip}
         commit={commit}
+        canvas={canvas}
+        fraction={fraction}
       />
       <Section
         label={t("gain")}
         defaultOpen={clip.gain_db !== 0}
         testId="section-gain"
         group="audio"
+        keyframe={gainDiamond}
         onReset={() => {
           void commit({ gainDb: 0 });
         }}
@@ -320,6 +417,7 @@ function ClipControls({ clip }: { clip: ClipInstance }) {
       <Section
         group="effects"
         label={t("colorAdjust")}
+        keyframe={colorDiamond}
         defaultOpen={clip.brightness !== 0 || clip.contrast !== 1 || clip.saturation !== 1}
         onReset={() => {
           void commit({ brightness: 0, contrast: 1, saturation: 1 });
@@ -933,14 +1031,55 @@ function NumberField({
 function TransformSection({
   clip,
   commit,
+  canvas,
+  fraction,
 }: {
   clip: ClipInstance;
   commit: (patch: ClipPatch) => Promise<unknown>;
+  /** Output canvas size in pixels; positions are stored as fractions of it. */
+  canvas: [number, number];
+  /** The playhead inside the clip (0..1), null outside it. */
+  fraction: number | null;
 }) {
+  const [canvasW, canvasH] = canvas;
   const position = clip.position_keyframes[0]?.value ?? { x: 0, y: 0 };
   const rotation = clip.rotation_keyframes[0]?.value ?? 0;
   const positionAnimated = clip.position_keyframes.length > 1;
   const rotationAnimated = clip.rotation_keyframes.length > 1;
+  const diamond: SectionKeyframe = {
+    active:
+      fraction !== null &&
+      (hasKeyframeAt(clip.position_keyframes, fraction) ||
+        hasKeyframeAt(clip.rotation_keyframes, fraction)),
+    disabled: fraction === null,
+    onToggle: () => {
+      if (fraction === null) {
+        return;
+      }
+      const remove =
+        hasKeyframeAt(clip.position_keyframes, fraction) ||
+        hasKeyframeAt(clip.rotation_keyframes, fraction);
+      const xs = clip.position_keyframes.map((keyframe) => {
+        return { time_fraction: keyframe.time_fraction, value: keyframe.value.x };
+      });
+      const ys = clip.position_keyframes.map((keyframe) => {
+        return { time_fraction: keyframe.time_fraction, value: keyframe.value.y };
+      });
+      const here = {
+        x: valueAt(xs, fraction, 0),
+        y: valueAt(ys, fraction, 0),
+      };
+      const angle = valueAt(clip.rotation_keyframes, fraction, 0);
+      void commit({
+        positionKeyframes: remove
+          ? withoutKeyframe(clip.position_keyframes, fraction)
+          : withKeyframe(clip.position_keyframes, fraction, here),
+        rotationKeyframes: remove
+          ? withoutKeyframe(clip.rotation_keyframes, fraction)
+          : withKeyframe(clip.rotation_keyframes, fraction, angle),
+      });
+    },
+  };
   const setPosition = (x: number, y: number) => {
     void commit({ positionKeyframes: [{ time_fraction: 0, value: { x, y } }] });
   };
@@ -949,6 +1088,7 @@ function TransformSection({
       label={t("transform")}
       defaultOpen
       testId="section-transform"
+      keyframe={diamond}
       onReset={() => {
         void commit({
           positionKeyframes: [],
@@ -961,22 +1101,22 @@ function TransformSection({
       <div className="field-row">
         <NumberField
           label={t("positionX")}
-          value={position.x * 100}
-          step={0.5}
-          suffix="%"
+          value={Math.round(position.x * canvasW)}
+          step={1}
+          suffix="px"
           disabled={positionAnimated}
           onCommit={(value) => {
-            setPosition(value / 100, position.y);
+            setPosition(value / canvasW, position.y);
           }}
         />
         <NumberField
           label={t("positionY")}
-          value={position.y * 100}
-          step={0.5}
-          suffix="%"
+          value={Math.round(position.y * canvasH)}
+          step={1}
+          suffix="px"
           disabled={positionAnimated}
           onCommit={(value) => {
-            setPosition(position.x, value / 100);
+            setPosition(position.x, value / canvasH);
           }}
         />
       </div>

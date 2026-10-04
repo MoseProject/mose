@@ -4,6 +4,7 @@ import { Icon } from "./Icon";
 import { ContextMenu } from "./ContextMenu";
 import { Menu } from "./Menu";
 import { api, onYoutubeDownload, thumbnailUrl } from "../ipc";
+import { askConfirm, pushToast } from "../notifications";
 import { assetDragStore, run, transcribingAssetIdStore, useStore } from "../store";
 import type { LibraryTrack, MediaAsset, SessionView } from "../types";
 import { Dialog } from "./Dialog";
@@ -300,6 +301,34 @@ function TtsButton() {
   );
 }
 
+/** Whether any clip in any sequence plays `assetId`. */
+function assetInUse(session: SessionView, assetId: number): boolean {
+  return session.project.sequences.some((sequence) => {
+    return sequence.timeline.tracks.some((track) => {
+      return track.clips.some((clip) => {
+        return clip.asset_id === assetId;
+      });
+    });
+  });
+}
+
+/** Removes media from the library after a confirmation; media still on a timeline is refused. */
+async function removeAsset(session: SessionView, asset: MediaAsset) {
+  if (assetInUse(session, asset.id)) {
+    pushToast(t("assetInUse"), "error");
+    return;
+  }
+  const confirmed = await askConfirm({
+    title: t("removeFromLibraryTitle"),
+    message: asset.file_name + ". " + t("removeFromLibraryMessage"),
+    confirmLabel: t("removeFromLibrary"),
+    cancelLabel: t("cancel"),
+  });
+  if (confirmed) {
+    await run(api.removeAsset(asset.id));
+  }
+}
+
 /** Pixels the pointer must travel before a press on an asset becomes a drag. */
 const DRAG_THRESHOLD_PX = 4;
 
@@ -483,6 +512,13 @@ export function MediaLibrary({ session }: { session: SessionView }) {
               disabled: !menu.asset.has_audio,
               onSelect: () => {
                 void run(api.transcribeAsset(menu.asset.id));
+              },
+            },
+            {
+              label: t("removeFromLibrary"),
+              separator: true,
+              onSelect: () => {
+                void removeAsset(session, menu.asset);
               },
             },
           ]}

@@ -17,6 +17,7 @@ import {
   EyeOff,
   Film,
   FileText,
+  Diamond,
   Folder,
   Gauge,
   LayoutGrid,
@@ -95,6 +96,7 @@ const ICONS = {
   save: Save,
   folder: Folder,
   gauge: Gauge,
+  keyframe: Diamond,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

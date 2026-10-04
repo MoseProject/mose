@@ -86,8 +86,18 @@ export function ExportPanel() {
     </section>
   );
 }
+/** Seconds left, extrapolated from progress so far; null until the estimate is steady. */
+export function remainingSecs(job: ExportJobView): number | null {
+  const elapsed = job.elapsedSecs ?? 0;
+  if (job.percent < 3 || job.percent >= 100 || elapsed <= 0) {
+    return null;
+  }
+  return (elapsed * (100 - job.percent)) / job.percent;
+}
+
 function Job({ job }: { job: ExportJobView }) {
   const current = label(job);
+  const remaining = current === "Rendering" ? remainingSecs(job) : null;
   return (
     <div
       className="job"
@@ -105,6 +115,7 @@ function Job({ job }: { job: ExportJobView }) {
           />
           <span className="muted">
             {formatTime(job.elapsedSecs ?? 0)} {t("elapsed")}
+            {remaining !== null && " · " + formatTime(remaining) + " " + t("etaRemaining")}
           </span>
         </>
       )}
@@ -144,6 +155,15 @@ function Job({ job }: { job: ExportJobView }) {
               {t("cancel")}
             </button>
           </>
+        )}
+        {current === "Done" && (
+          <button
+            onClick={() => {
+              void run(api.revealInFolder(job.outputPath));
+            }}
+          >
+            {t("openExportFolder")}
+          </button>
         )}
         {(current === "Queued" || current === "Done" || current === "Failed") && (
           <button

@@ -210,6 +210,10 @@ export const api = {
     return invoke<void>("toggle_favorite", { assetId });
   },
 
+  removeAsset: (assetId: number) => {
+    return invoke<void>("remove_asset", { assetId });
+  },
+
   addAssetToTimeline: (assetId: number, trackId?: number, startSecs?: number) => {
     return invoke<void>("add_asset_to_timeline", {
       assetId,
@@ -336,6 +340,9 @@ export const api = {
   },
   checkPath: (path: string) => {
     return invoke<PathStatus>("check_path", { path });
+  },
+  revealInFolder: (path: string) => {
+    return invoke<void>("reveal_in_folder", { path });
   },
   addSequence: (name: string) => {
     return invoke<void>("add_sequence", { name });

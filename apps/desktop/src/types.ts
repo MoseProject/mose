@@ -450,6 +450,8 @@ export interface PreviewTick {
   error: string | null;
   peakL: number;
   peakR: number;
+  /** Momentary loudness in LUFS while playing; null when silent or stopped. */
+  momentaryLufs: number | null;
 }
 
 export type ExportStatus =
