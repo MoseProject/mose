@@ -143,20 +143,23 @@ pub fn load_queue() -> Vec<QueueEnvelope> {
     load_queue_in(&queue_dir())
 }
 
-fn load_queue_in(dir: &std::path::Path) -> Vec<QueueEnvelope> {
+/// The readable `.json` files in `dir`, with their contents; anything else is skipped.
+fn queue_files(dir: &std::path::Path) -> Vec<(PathBuf, Vec<u8>)> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();
     };
+    entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().and_then(|e| e.to_str()) == Some("json"))
+        .filter_map(|path| std::fs::read(&path).ok().map(|bytes| (path, bytes)))
+        .collect()
+}
+
+fn load_queue_in(dir: &std::path::Path) -> Vec<QueueEnvelope> {
     let now = now_unix();
     let mut out = Vec::new();
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("json") {
-            continue;
-        }
-        let Ok(bytes) = std::fs::read(&path) else {
-            continue;
-        };
+    for (path, bytes) in queue_files(dir) {
         match serde_json::from_slice::<QueueEnvelope>(&bytes) {
             Ok(envelope) if avcore::validate_envelope(&envelope, now).is_ok() => {
                 out.push(envelope);
@@ -195,19 +198,9 @@ fn delete_envelope_in(dir: &std::path::Path, event_id: &str) {
 }
 
 fn prune_queue_dir(dir: &std::path::Path) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
-    };
     let now = now_unix();
     let mut records: Vec<(PathBuf, QueueEnvelope, u64)> = Vec::new();
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("json") {
-            continue;
-        }
-        let Ok(bytes) = std::fs::read(&path) else {
-            continue;
-        };
+    for (path, bytes) in queue_files(dir) {
         let len = bytes.len() as u64;
         match serde_json::from_slice::<QueueEnvelope>(&bytes) {
             Ok(envelope) => {
@@ -451,7 +444,15 @@ fn spawn_delivery_worker(
     rx: UnboundedReceiver<avcore::ErrorReport>,
     sender: Arc<dyn EnvelopeSender>,
 ) {
-    let dir = queue_dir();
+    spawn_delivery_worker_in(queue_dir(), rx, sender);
+}
+
+/// [`spawn_delivery_worker`] against an explicit queue folder.
+fn spawn_delivery_worker_in(
+    dir: PathBuf,
+    rx: UnboundedReceiver<avcore::ErrorReport>,
+    sender: Arc<dyn EnvelopeSender>,
+) {
     std::thread::spawn(move || {
         for envelope in load_queue_in(&dir) {
             if deliver_with_retry(sender.as_ref(), &envelope) {
