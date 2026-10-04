@@ -86,7 +86,7 @@ pub fn export_collab_bundle(
     output_zip_path: &Path,
 ) -> Result<(), CollabBundleError> {
     let proxy_dir = proxy::cache_dir_for_project(project);
-    let project_bytes = persistence::to_ocproj_bytes(project)?;
+    let project_bytes = persistence::to_project_bytes(project)?;
 
     let file = File::create(output_zip_path)?;
     let mut zip = zip::ZipWriter::new(file);
@@ -155,7 +155,7 @@ pub fn import_collab_bundle(
     }
     fs::write(dest_project_path, &project_bytes)?;
 
-    let mut project: Project = persistence::from_ocproj_bytes(&project_bytes)?;
+    let mut project: Project = persistence::from_project_bytes(&project_bytes)?;
     project.file_path = Some(dest_project_path.to_path_buf());
 
     let proxy_dir = proxy::cache_dir_for_project(&project);

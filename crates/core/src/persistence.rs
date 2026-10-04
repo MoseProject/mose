@@ -53,6 +53,15 @@ const QUEUE_MAGIC: &[u8; 4] = b"OCQU";
 const TRANSCRIPT_MAGIC: &[u8; 4] = b"OCTR";
 /// Identifies a compressed semantic-search index sidecar file (`crate::semantic_index`, CF-08).
 const SEMANTIC_INDEX_MAGIC: &[u8; 4] = b"OCSI";
+/// Layout of a project file: `OCPJ`, this version, the payload size as a little-endian `u32`, then
+/// the LZ4-compressed `postcard` encoding of the [`Project`]. Projects are written this way
+/// instead of through the generic MessagePack framing because that spends most of its time
+/// (about 70% of a save) writing and reading each field's name for every clip; positional
+/// `postcard` is several times faster to write and read and far smaller before compression.
+/// The price is that the encoding is positional: any change to the fields of a type inside
+/// [`Project`] changes the bytes, so such a change must bump this version, and files from other
+/// versions are refused with a clear error rather than misread.
+const PROJECT_FORMAT_VERSION: u8 = 2;
 /// Bumped only if the on-disk layout (header framing, not the `Project` schema itself —
 /// that's handled by `#[serde(default)]`) ever needs to change.
 const FORMAT_VERSION: u8 = 1;
@@ -71,6 +80,8 @@ pub enum PersistError {
     Io(std::io::Error),
     Encode(rmp_serde::encode::Error),
     Decode(rmp_serde::decode::Error),
+    /// The positional project encoding failed ([`to_project_bytes`]/[`from_project_bytes`]).
+    Project(postcard::Error),
     /// Bytes that don't start with the expected magic, or whose version byte isn't
     /// [`FORMAT_VERSION`].
     Corrupt(&'static str),
@@ -82,6 +93,7 @@ impl std::fmt::Display for PersistError {
             PersistError::Io(e) => write!(f, "failed to access the oca data file: {e}"),
             PersistError::Encode(e) => write!(f, "failed to serialize oca data: {e}"),
             PersistError::Decode(e) => write!(f, "failed to parse oca data: {e}"),
+            PersistError::Project(e) => write!(f, "failed to read or write the project: {e}"),
             PersistError::Corrupt(msg) => write!(f, "not a valid oca binary file: {msg}"),
         }
     }
@@ -208,7 +220,7 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 /// Writes `project` to `path` as `.ocproj`, overwriting any existing file. The write is atomic
 /// (see [`write_atomic`]), so a failure never costs the previously saved copy.
 pub fn save_project_to_file(project: &Project, path: &Path) -> Result<(), PersistError> {
-    let bytes = to_ocproj_bytes(project)?;
+    let bytes = to_project_bytes(project)?;
     write_atomic(path, &bytes).map_err(PersistError::Io)
 }
 
@@ -217,5 +229,41 @@ pub fn save_project_to_file(project: &Project, path: &Path) -> Result<(), Persis
 /// it themselves, since only the caller knows whether `path` should be remembered.
 pub fn load_project_from_file(path: &Path) -> Result<Project, PersistError> {
     let bytes = fs::read(path).map_err(PersistError::Io)?;
-    from_ocproj_bytes(&bytes)
+    from_project_bytes(&bytes)
+}
+
+/// Serializes `project` to the project file layout (see [`PROJECT_FORMAT_VERSION`]).
+pub fn to_project_bytes(project: &Project) -> Result<Vec<u8>, PersistError> {
+    let payload = postcard::to_stdvec(project).map_err(PersistError::Project)?;
+    let size =
+        u32::try_from(payload.len()).map_err(|_| PersistError::Corrupt("project too large"))?;
+    let compressed = lz4_flex::block::compress(&payload);
+    let mut out = Vec::with_capacity(compressed.len() + PROJECT_MAGIC.len() + 5);
+    out.extend_from_slice(PROJECT_MAGIC);
+    out.push(PROJECT_FORMAT_VERSION);
+    out.extend_from_slice(&size.to_le_bytes());
+    out.extend_from_slice(&compressed);
+    Ok(out)
+}
+
+/// Parses bytes produced by [`to_project_bytes`].
+pub fn from_project_bytes(bytes: &[u8]) -> Result<Project, PersistError> {
+    let header = PROJECT_MAGIC.len();
+    if bytes.len() < header + 1 || &bytes[..header] != PROJECT_MAGIC {
+        return Err(PersistError::Corrupt("bad magic bytes"));
+    }
+    if bytes[header] != PROJECT_FORMAT_VERSION {
+        return Err(PersistError::Corrupt("unsupported format version"));
+    }
+    let Some((size, compressed)) = bytes[header + 1..].split_first_chunk::<4>() else {
+        return Err(PersistError::Corrupt("truncated header"));
+    };
+    // The size comes from the file, so it is capped before anything is allocated for it.
+    let size = u64::from(u32::from_le_bytes(*size));
+    if size > MAX_DECOMPRESSED_BYTES {
+        return Err(PersistError::Corrupt("decompressed data too large"));
+    }
+    let payload = lz4_flex::block::decompress(compressed, size as usize)
+        .map_err(|_| PersistError::Corrupt("damaged compressed data"))?;
+    postcard::from_bytes(&payload).map_err(PersistError::Project)
 }
