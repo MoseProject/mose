@@ -27,8 +27,11 @@ fn a_dirty_saved_project_gets_a_recovery_snapshot() {
     }
     spawn_every(h.handle(), TICK);
     let recovery = autosave_path(&project);
-    wait_for("the recovery snapshot", || recovery.exists());
-    assert!(avcore::load_project_from_file(&recovery).is_ok());
+    // The snapshot is replaced on every tick, and Windows refuses a read that lands in the middle
+    // of a replace, so it is read until a read gets through.
+    wait_for("a readable recovery snapshot", || {
+        avcore::load_project_from_file(&recovery).is_ok()
+    });
 }
 
 #[test]
