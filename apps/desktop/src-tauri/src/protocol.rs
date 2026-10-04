@@ -101,12 +101,7 @@ pub(crate) fn handle_with<R: Runtime>(
                 .iter()
                 .find(|asset| asset.id == asset_id)
                 .filter(|asset| asset.kind == avcore::MediaKind::Video)
-                .map(|asset| {
-                    asset
-                        .proxy_path
-                        .clone()
-                        .unwrap_or_else(|| asset.source_path.clone())
-                });
+                .and_then(crate::preview_engine::preview_source_path);
             let Some(source) = source else {
                 respond(not_found());
                 return;

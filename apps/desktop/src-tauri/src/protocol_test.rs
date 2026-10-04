@@ -53,6 +53,16 @@ fn a_thumbnail_comes_from_the_proxy_when_there_is_one() {
 }
 
 #[test]
+fn a_thumbnail_falls_back_to_the_original_when_the_proxy_was_cleaned_away() {
+    let h = harness_with_cache();
+    let mut asset = video_asset(7, 5.0);
+    asset.source_path = fixture("video.mp4");
+    asset.proxy_path = Some(h.dir.join("cleaned-away.mp4"));
+    h.session().project.media_library.push(asset);
+    assert_eq!(answer(&h, "/thumb/7").status(), StatusCode::OK);
+}
+
+#[test]
 fn thumbnails_for_unknown_audio_or_malformed_ids_are_404() {
     let h = harness_with_cache();
     let mut audio = video_asset(8, 5.0);

@@ -159,11 +159,14 @@ impl PreviewEngine {
 /// The source a preview should decode for `asset`: its editing proxy when one exists, else the
 /// original -- `None` if neither is on disk (moved/deleted media).
 pub(crate) fn preview_source_path(asset: &MediaAsset) -> Option<PathBuf> {
-    let path = asset
+    // The proxy is a cache and can be cleaned away while the original is still there, so a proxy
+    // that is not on disk falls back to the original instead of hiding the clip.
+    asset
         .proxy_path
-        .clone()
-        .unwrap_or_else(|| asset.source_path.clone());
-    path.exists().then_some(path)
+        .iter()
+        .chain(std::iter::once(&asset.source_path))
+        .find(|path| path.exists())
+        .cloned()
 }
 
 #[cfg(test)]

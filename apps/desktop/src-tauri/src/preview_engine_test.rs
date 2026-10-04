@@ -98,6 +98,28 @@ fn a_clip_whose_source_file_is_gone_previews_nothing() {
 }
 
 #[test]
+fn a_proxy_that_was_cleaned_away_falls_back_to_the_original() {
+    let mut asset = crate::testing::video_asset(1, 5.0);
+    asset.source_path = crate::testing::fixture("video.mp4");
+    asset.proxy_path = Some(PathBuf::from("cleaned-away-proxy.mp4"));
+    assert_eq!(
+        preview_source_path(&asset),
+        Some(crate::testing::fixture("video.mp4"))
+    );
+}
+
+#[test]
+fn an_existing_proxy_wins_over_the_original() {
+    let mut asset = crate::testing::video_asset(1, 5.0);
+    asset.source_path = crate::testing::fixture("video.mp4");
+    asset.proxy_path = Some(crate::testing::fixture("audio.m4a"));
+    assert_eq!(
+        preview_source_path(&asset),
+        Some(crate::testing::fixture("audio.m4a"))
+    );
+}
+
+#[test]
 fn a_clip_whose_file_is_missing_but_proxy_exists_previews_from_the_proxy() {
     let mut asset = crate::testing::video_asset(1, 5.0);
     asset.source_path = PathBuf::from("gone.mp4");
