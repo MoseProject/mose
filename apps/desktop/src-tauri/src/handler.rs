@@ -117,3 +117,7 @@ macro_rules! all_commands {
 }
 
 pub(crate) use all_commands;
+
+#[cfg(test)]
+#[path = "handler_test.rs"]
+mod tests;

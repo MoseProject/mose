@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex, MutexGuard, Once};
 
-use tauri::test::{mock_app, MockRuntime};
+use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
 use tauri::{App, AppHandle, Listener, Manager, State};
 
 use crate::export::ExportQueue;
@@ -30,6 +30,12 @@ fn scratch_root() -> PathBuf {
 /// Points the per-user config locations (`prefs.oc`) and the error queue at the scratch root.
 fn isolate_user_dirs() {
     ISOLATE.call_once(|| {
+        // Log everything: macro arguments are only evaluated for levels that are enabled, and
+        // the code under test should run them the way a debug build would.
+        let _ = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::TRACE)
+            .with_test_writer()
+            .try_init();
         let root = scratch_root();
         std::fs::create_dir_all(&root).expect("creating the scratch root");
         std::env::set_var("APPDATA", &root);
@@ -198,6 +204,8 @@ impl Services for FakeServices {
 
 pub(crate) struct Harness {
     pub app: App<MockRuntime>,
+    /// A window of the mock app, the target of [`Harness::ipc`].
+    window: tauri::WebviewWindow<MockRuntime>,
     /// What the fake services answer; queue results here before running a command.
     pub services: Arc<FakeServices>,
     /// Every command the code under test sent to the preview engine, oldest first.
@@ -222,6 +230,26 @@ impl Harness {
 
     pub fn prefs(&self) -> MutexGuard<'_, PrefsDocument> {
         self.state().inner().prefs()
+    }
+
+    /// Invokes a command the way the webview does: through the real handler, with the
+    /// arguments as camelCase JSON. `Err` carries what the webview's promise would reject with.
+    pub fn ipc(
+        &self,
+        command: &str,
+        arguments: serde_json::Value,
+    ) -> Result<serde_json::Value, serde_json::Value> {
+        let request = tauri::webview::InvokeRequest {
+            cmd: command.into(),
+            callback: tauri::ipc::CallbackFn(0),
+            error: tauri::ipc::CallbackFn(1),
+            url: "http://tauri.localhost".parse().unwrap(),
+            body: tauri::ipc::InvokeBody::Json(arguments),
+            headers: Default::default(),
+            invoke_key: tauri::test::INVOKE_KEY.to_string(),
+        };
+        tauri::test::get_ipc_response(&self.window, request)
+            .map(|body| body.deserialize::<serde_json::Value>().unwrap())
     }
 
     /// Counts the `session-changed` events published from now on: one per command that
@@ -294,7 +322,13 @@ pub(crate) fn harness() -> Harness {
     isolate_user_dirs();
     let dir = scratch_root().join(format!("h{}", NEXT_DIR.fetch_add(1, Ordering::SeqCst)));
     std::fs::create_dir_all(&dir).expect("creating the harness directory");
-    let app = mock_app();
+    let app = mock_builder()
+        .invoke_handler(crate::handler::all_commands!())
+        .build(mock_context(noop_assets()))
+        .expect("building the mock app");
+    let window = tauri::WebviewWindowBuilder::new(&app, "main", tauri::WebviewUrl::default())
+        .build()
+        .expect("opening the mock window");
     let services = Arc::new(FakeServices::default());
     let (engine, preview) = PreviewEngine::detached();
     app.manage(AppState::new(
@@ -308,6 +342,7 @@ pub(crate) fn harness() -> Harness {
     ));
     Harness {
         app,
+        window,
         services,
         preview,
         dir,
