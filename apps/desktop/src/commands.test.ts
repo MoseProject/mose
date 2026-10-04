@@ -233,6 +233,16 @@ describe("playback", () => {
     expect(api.seek).toHaveBeenNthCalledWith(3, 0);
   });
 
+  it("shuttles with J and L and stops on K", async () => {
+    const { shuttleStore } = await import("./shuttle");
+    await run("shuttleBack");
+    expect(shuttleStore.get()).toEqual({ direction: -1, level: 1 });
+    await run("play");
+    expect(shuttleStore.get()).toEqual({ direction: 1, level: 1 });
+    await run("pause");
+    expect(shuttleStore.get().direction).toBe(0);
+  });
+
   it("plays, pauses and toggles", async () => {
     await run("play");
     await run("pause");
