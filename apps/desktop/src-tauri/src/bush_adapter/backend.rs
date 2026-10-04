@@ -110,10 +110,12 @@ fn hardware_decode_requested() -> bool {
     matches!(std::env::var("OCA_BUSH_DECODE").as_deref(), Ok("hardware"))
 }
 
-fn new_engine(canvas: (u32, u32)) -> Option<Engine> {
-    let hardware_decode = hardware_decode_requested();
-    tracing::info!(hardware_decode, "bush engine decode policy");
-    Engine::new(EngineConfig {
+fn engine_config(
+    canvas: (u32, u32),
+    hardware_decode: bool,
+    renderer: RendererChoice,
+) -> EngineConfig {
+    EngineConfig {
         canvas_width: canvas.0,
         canvas_height: canvas.1,
         max_open_sources: MAX_OPEN_SOURCES,
@@ -123,10 +125,16 @@ fn new_engine(canvas: (u32, u32)) -> Option<Engine> {
         } else {
             DecodePolicy::Software
         },
-        renderer: renderer_choice(),
-    })
-    .map_err(|error| tracing::error!(?error, "bush engine failed to start"))
-    .ok()
+        renderer,
+    }
+}
+
+fn new_engine(canvas: (u32, u32)) -> Option<Engine> {
+    let hardware_decode = hardware_decode_requested();
+    tracing::info!(hardware_decode, "bush engine decode policy");
+    Engine::new(engine_config(canvas, hardware_decode, renderer_choice()))
+        .map_err(|error| tracing::error!(?error, "bush engine failed to start"))
+        .ok()
 }
 
 pub fn run<R: Runtime>(
