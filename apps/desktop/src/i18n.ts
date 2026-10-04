@@ -526,6 +526,14 @@ const strings = {
   confirmKeepBoth: { "pt-BR": "Salvar com outro nome", en: "Save under another name" },
   etaRemaining: { "pt-BR": "restantes", en: "left" },
   openExportFolder: { "pt-BR": "Mostrar na pasta", en: "Show in folder" },
+  exportOutputIsSource: {
+    "pt-BR": "Esse arquivo é uma mídia do projeto. Escolha outro nome para a exportação.",
+    en: "That file is a media file of the project. Pick another name for the export.",
+  },
+  exportOutputInQueue: {
+    "pt-BR": "Já existe uma exportação para esse arquivo na fila.",
+    en: "An export to that file is already in the queue.",
+  },
   importFailed: {
     "pt-BR": "Não foi possível importar o arquivo",
     en: "Could not import the file",

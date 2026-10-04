@@ -157,6 +157,8 @@ export function patchUi(patch: Partial<UiState>) {
 const ERROR_CODES: Record<string, TextKey> = {
   assetInUse: "assetInUse",
   pathMissing: "pathMissing",
+  outputIsSource: "exportOutputIsSource",
+  outputInQueue: "exportOutputInQueue",
 };
 
 /** What to show for a failed call: the translated text for a known backend code, otherwise the
