@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 /** A toolbar dropdown. The popover stays mounted and is only hidden with `visibility`, so a
  *  modal that one of its entries owns (templates, transcript, silence review) survives the menu
  *  closing: `.modal-overlay` re-enables visibility for itself. */
-export function Menu({ label, ariaLabel, children, testId }: { label: ReactNode; ariaLabel?: string; children: ReactNode; testId?: string }) {
+export function Menu({ label, ariaLabel, children, testId, variant }: { label: ReactNode; ariaLabel?: string; children: ReactNode; testId?: string; variant?: "bar" }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ left: 0, top: 0 });
   const root = useRef<HTMLDivElement>(null);
@@ -33,9 +33,9 @@ export function Menu({ label, ariaLabel, children, testId }: { label: ReactNode;
 
   return (
     <div className="menu" ref={root}>
-      <button className="icon menu-trigger" data-testid={testId} aria-label={ariaLabel} aria-haspopup="menu" aria-expanded={open} onClick={toggle}>
+      <button className={variant === "bar" ? "menu-trigger menubar-item" : "icon menu-trigger"} data-testid={testId} aria-label={ariaLabel} aria-haspopup="menu" aria-expanded={open} onClick={toggle}>
         {label}
-        {typeof label === "string" && <Icon name="chevronDown" size={12} />}
+        {typeof label === "string" && variant !== "bar" && <Icon name="chevronDown" size={12} />}
       </button>
       <div
         className={`menu-pop ${open ? "open" : ""}`}

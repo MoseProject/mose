@@ -85,8 +85,6 @@ export function PreviewPanel() {
   const base = fitRect({ width: canvasRect.width, height: canvasRect.height }, texAspect);
   const hasCanvas = monitorSize.width > 0 && monitorSize.height > 0;
 
-  // Square-root the linear peak so quiet speech still visibly moves the bar.
-  const meterWidth = (peak: number) => `${Math.min(1, Math.sqrt(Math.max(0, peak))) * 100}%`;
 
   const commitMove = (pos: Position) => {
     if (!clip) return;
@@ -238,6 +236,7 @@ export function PreviewPanel() {
 
   return (
     <section className="panel preview">
+      <div className="panel-title">{t("programMonitor")}</div>
       <div
         ref={monitorRef}
         className="monitor"
@@ -255,42 +254,42 @@ export function PreviewPanel() {
         {drawingOverlay}
       </div>
       <div className="transport">
-        <input
-          type="range"
-          className="scrubber"
-          aria-label={t("seek")}
-          min={0}
-          max={Math.max(duration, 0.01)}
-          step={0.01}
-          value={Math.min(tick.playheadSecs, Math.max(duration, 0.01))}
-          style={{ "--fill": `${duration > 0 ? Math.min(100, (tick.playheadSecs / duration) * 100) : 0}%` } as React.CSSProperties}
-          onChange={(e) => void run(api.seek(Number(e.target.value)))}
-        />
-        <div className="transport-row">
+        <div className="scrub">
           <span className="mono time-now">{formatTime(tick.playheadSecs)}</span>
-          <div className="transport-controls">
-            <button className="icon" title={t("stepBack")} aria-label={t("stepBack")} onClick={() => run(api.step(-1))}>
-              <Icon name="skipBack" size={16} />
-            </button>
-            <button
-              className="play"
-              title={tick.playing ? t("pause") : t("play")}
-              aria-label={tick.playing ? t("pause") : t("play")}
-              onClick={() => run(api.setPlaying(!tick.playing))}
-            >
-              <Icon name={tick.playing ? "pause" : "play"} filled={!tick.playing} size={16} />
-            </button>
-            <button className="icon" title={t("stepForward")} aria-label={t("stepForward")} onClick={() => run(api.step(1))}>
-              <Icon name="skipForward" size={16} />
-            </button>
-          </div>
-          <div className="transport-right">
-            <span className="mono muted time-total">{formatTime(duration)}</span>
-            <div className="meter" aria-hidden>
-              <div style={{ width: meterWidth(tick.peakL) }} />
-              <div style={{ width: meterWidth(tick.peakR) }} />
-            </div>
-          </div>
+          <input
+            type="range"
+            className="scrubber"
+            aria-label={t("seek")}
+            min={0}
+            max={Math.max(duration, 0.01)}
+            step={0.01}
+            value={Math.min(tick.playheadSecs, Math.max(duration, 0.01))}
+            style={{ "--fill": `${duration > 0 ? Math.min(100, (tick.playheadSecs / duration) * 100) : 0}%` } as React.CSSProperties}
+            onChange={(e) => void run(api.seek(Number(e.target.value)))}
+          />
+          <span className="mono muted time-total">{formatTime(duration)}</span>
+        </div>
+        <div className="transport-controls">
+          <button className="icon" title={t("goToStart")} aria-label={t("goToStart")} onClick={() => run(api.seek(0))}>
+            <Icon name="skipBack" size={18} />
+          </button>
+          <button className="icon" title={t("stepBack")} aria-label={t("stepBack")} onClick={() => run(api.step(-1))}>
+            <Icon name="stepBack" size={18} />
+          </button>
+          <button
+            className="play"
+            title={tick.playing ? t("pause") : t("play")}
+            aria-label={tick.playing ? t("pause") : t("play")}
+            onClick={() => run(api.setPlaying(!tick.playing))}
+          >
+            <Icon name={tick.playing ? "pause" : "play"} filled size={20} />
+          </button>
+          <button className="icon" title={t("stepForward")} aria-label={t("stepForward")} onClick={() => run(api.step(1))}>
+            <Icon name="stepForward" size={18} />
+          </button>
+          <button className="icon" title={t("goToEnd")} aria-label={t("goToEnd")} onClick={() => run(api.seek(duration))}>
+            <Icon name="skipForward" size={18} />
+          </button>
         </div>
       </div>
     </section>

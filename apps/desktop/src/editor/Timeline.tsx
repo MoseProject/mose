@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { t } from "../i18n";
+import { addShapeOverlay, addTextOverlay, seekToMarker } from "../editing";
 import { api } from "../ipc";
 import { Icon } from "./Icon";
 import { frameAt, frameStepSecs, MEDIA_EVENT, peakRange, peaksFor } from "./timelineMedia";
@@ -602,21 +603,15 @@ export function Timeline({ session }: { session: SessionView }) {
           <button onClick={() => run(api.addTrack("Audio"))}>{t("addAudioTrack")}</button>
           <button onClick={() => run(api.addTrack("Text"))}>{t("addTextTrack")}</button>
           <button onClick={() => run(api.addTrack("Shape"))}>{t("addShapeTrack")}</button>
-          <button onClick={() => void addOverlay(api.addTextClip(t("defaultTextContent")))}>{t("addTextClip")}</button>
-          <button onClick={() => void addOverlay(api.addShapeClip())}>{t("addShapeClip")}</button>
+          <button onClick={() => void addTextOverlay()}>{t("addTextClip")}</button>
+          <button onClick={() => void addShapeOverlay()}>{t("addShapeClip")}</button>
           <button data-testid="draw-custom-shape" onClick={() => patchUi({ drawingShapePoints: [] })}>
             {t("drawCustomShape")}
           </button>
         </Menu>
         <button className="icon" title={t("addMarker")} aria-label={t("addMarker")} onClick={() => run(api.addMarker())}><Icon name="flag" /></button>
-        <button className="icon" title={t("previousMarker")} aria-label={t("previousMarker")} onClick={() => {
-          const previous = markers.filter((m) => m.position_secs < previewStore.get().playheadSecs).sort((a, b) => b.position_secs - a.position_secs)[0];
-          if (previous) void run(api.seek(previous.position_secs));
-        }}><Icon name="chevronLeft" /></button>
-        <button className="icon" title={t("nextMarker")} aria-label={t("nextMarker")} onClick={() => {
-          const next = markers.filter((m) => m.position_secs > previewStore.get().playheadSecs).sort((a, b) => a.position_secs - b.position_secs)[0];
-          if (next) void run(api.seek(next.position_secs));
-        }}><Icon name="chevronRight" /></button>
+        <button className="icon" title={t("previousMarker")} aria-label={t("previousMarker")} onClick={() => seekToMarker(markers, -1)}><Icon name="chevronLeft" /></button>
+        <button className="icon" title={t("nextMarker")} aria-label={t("nextMarker")} onClick={() => seekToMarker(markers, 1)}><Icon name="chevronRight" /></button>
         <span style={{ flex: 1 }} />
         <button className="icon" title={t("zoomOut")} aria-label={t("zoomOut")} onClick={() => zoomBy(1 / 1.5)}>
           <Icon name="minus" />
@@ -660,12 +655,6 @@ export function Timeline({ session }: { session: SessionView }) {
       </div>
     </section>
   );
-}
-
-/** Creates a text/shape clip at the playhead and selects it, as egui's "+ Add" buttons do. */
-async function addOverlay(call: Promise<number | null>) {
-  const id = await run(call);
-  if (id != null) patchUi({ selectedClipIds: [id] });
 }
 
 function TrackHeader({ track }: { track: Track }) {

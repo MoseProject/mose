@@ -1,5 +1,6 @@
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useEffect, useRef, useState } from "react";
+import { AudioMeter } from "../editor/AudioMeter";
 import { ToolRail } from "../editor/ToolRail";
 import { Inspector } from "../editor/Inspector";
 import { MediaLibrary } from "../editor/MediaLibrary";
@@ -19,8 +20,8 @@ const MAX_PANEL_WIDTH = 640;
 function initialLayout(session: SessionView) {
   const layout = session.project.panel_layout;
   return {
-    libraryWidth: Math.max(MIN_LIBRARY_WIDTH, Math.min(MAX_PANEL_WIDTH, layout?.lib_panel_width ?? 260)),
-    inspectorWidth: Math.max(MIN_INSPECTOR_WIDTH, Math.min(MAX_PANEL_WIDTH, layout?.props_panel_width ?? 280)),
+    libraryWidth: Math.max(MIN_LIBRARY_WIDTH, Math.min(MAX_PANEL_WIDTH, layout?.lib_panel_width ?? 340)),
+    inspectorWidth: Math.max(MIN_INSPECTOR_WIDTH, Math.min(MAX_PANEL_WIDTH, layout?.props_panel_width ?? 296)),
     timelineHeight: Math.max(MIN_TIMELINE_HEIGHT, layout?.timeline_height ?? 300),
   };
 }
@@ -179,6 +180,7 @@ export function Editor({ session }: { session: SessionView }) {
       <PreviewPanel />
       <div className="panel-splitter inspector-splitter" onPointerDown={startPanelResize("inspector")} />
       <Inspector session={session} />
+      <AudioMeter />
       <div className="splitter" onPointerDown={startResize} />
       <SequenceTabs session={session} />
       <Timeline session={session} />
