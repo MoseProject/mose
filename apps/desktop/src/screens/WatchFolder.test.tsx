@@ -132,3 +132,21 @@ describe("watch folder screen", () => {
     });
   });
 });
+
+describe("watch folder as a dialog", () => {
+  it("is a labelled dialog that asks its owner to close it", () => {
+    const onClose = vi.fn();
+    render(<WatchFolder onClose={onClose} />);
+    const dialog = screen.getByRole("dialog", { name: t("watchFolder") });
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("renders nothing while closed but keeps listening for events", async () => {
+    const { container, rerender } = render(<WatchFolder open={false} />);
+    expect(container.firstChild).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    rerender(<WatchFolder open />);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+});

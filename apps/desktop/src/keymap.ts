@@ -65,7 +65,12 @@ export function parseKeys(text: string): KeySpec | null {
       }
     }
   }
-  if (rest === "" || rest.includes("\u0000") || rest.length > 24) {
+  if (
+    rest === "" ||
+    rest.includes("\u0000") ||
+    rest.length > 24 ||
+    (rest.length > 1 && rest.includes("+"))
+  ) {
     return null;
   }
   if (rest.toLowerCase() === "space") {

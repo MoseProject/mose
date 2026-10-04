@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n";
+import { keymapStore } from "../keymap";
 import { previewStore, uiStore } from "../store";
 import { makeSession } from "../testSupport";
 import type { SessionView } from "../types";
@@ -509,5 +510,64 @@ describe("editor screen", () => {
       expect(calls.setPlaying).not.toHaveBeenCalled();
       expect(calls.addMarker).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("editor shortcuts from the command table", () => {
+  beforeEach(() => {
+    render(<Editor session={sessionWith(1)} />);
+    keymapStore.set({});
+    uiStore.set({ ...uiStore.get(), selectedClipIds: [7] });
+  });
+  afterEach(() => {
+    keymapStore.set({});
+  });
+
+  it("runs a command moved to another key and ignores its old key", () => {
+    keymapStore.set({ undo: ["Alt+U"] });
+    press({ key: "z", ctrlKey: true });
+    expect(calls.undo).not.toHaveBeenCalled();
+    press({ key: "u", altKey: true });
+    expect(calls.undo).toHaveBeenCalledTimes(1);
+  });
+
+  it("does nothing for a command the user unbound", () => {
+    keymapStore.set({ addMarker: [] });
+    expect(press({ key: "m" }).defaultPrevented).toBe(false);
+    expect(calls.addMarker).not.toHaveBeenCalled();
+  });
+
+  it("marks in and out at the playhead and opens the sheet, palette and settings", () => {
+    previewStore.set({ ...previewStore.get(), playheadSecs: 3 });
+    press({ key: "i" });
+    previewStore.set({ ...previewStore.get(), playheadSecs: 9 });
+    press({ key: "o" });
+    expect([uiStore.get().markIn, uiStore.get().markOut]).toEqual([3, 9]);
+    press({ key: "?", shiftKey: true });
+    press({ key: "k", ctrlKey: true });
+    press({ key: ",", ctrlKey: true });
+    const ui = uiStore.get();
+    expect([ui.shortcutsOpen, ui.paletteOpen, ui.settingsOpen]).toEqual([true, true, true]);
+  });
+
+  it("switches tools and toggles snapping from the keyboard", () => {
+    press({ key: "r" });
+    expect(uiStore.get().tool).toBe("roll");
+    press({ key: "v" });
+    expect(uiStore.get().tool).toBe("select");
+    const snap = uiStore.get().snapEnabled;
+    press({ key: "n" });
+    expect(uiStore.get().snapEnabled).toBe(!snap);
+  });
+
+  it("clears the selection with Escape and selects nothing else", () => {
+    press({ key: "Escape" });
+    expect(uiStore.get().selectedClipIds).toEqual([]);
+  });
+
+  it("does not run commands that are disabled", () => {
+    uiStore.set({ ...uiStore.get(), selectedClipIds: [] });
+    press({ key: "Delete" });
+    expect(calls.deleteClips).not.toHaveBeenCalled();
   });
 });

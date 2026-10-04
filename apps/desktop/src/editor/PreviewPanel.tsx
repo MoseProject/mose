@@ -210,7 +210,8 @@ export function PreviewPanel() {
     clip &&
     hasCanvas &&
     ui.drawingShapePoints === null &&
-    ui.tool !== "text"
+    ui.tool !== "text" &&
+    zoomScale === null
   ) {
     const position = ghostPos ?? clip.position_keyframes[0]?.value ?? { x: 0, y: 0 };
     const scaleX = ghostScale?.x ?? clip.layer_scale_x;

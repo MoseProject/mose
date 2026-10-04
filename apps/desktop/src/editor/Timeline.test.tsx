@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { timelineAction } from "../editing";
 import { t } from "../i18n";
 import { assetDragStore, previewStore, uiStore } from "../store";
 import { makeSession } from "../testSupport";
@@ -1049,5 +1050,199 @@ describe("dropping a library asset", () => {
     });
     drop(200, ROW(0));
     expect(calls.addAssetToTimeline).not.toHaveBeenCalled();
+  });
+});
+
+describe("track header controls", () => {
+  const audioWorld = () => {
+    return world([
+      track({ id: 10, name: "V1", kind: "Video" }),
+      track({ id: 11, name: "A1", kind: "Audio", audio_role: "Mic" }),
+      track({ id: 12, name: "T1", kind: "Text" }),
+    ]);
+  };
+
+  it("mutes and solos a track", () => {
+    mount(audioWorld());
+    fireEvent.click(screen.getAllByTitle(t("muteTrack"))[1]);
+    expect(calls.setTrackFlags).toHaveBeenLastCalledWith(11, { muted: true });
+    fireEvent.click(screen.getAllByTitle(t("soloTrack"))[1]);
+    expect(calls.setTrackFlags).toHaveBeenLastCalledWith(11, { solo: true });
+  });
+
+  it("reflects a muted or soloed track and offers the reverse", () => {
+    mount(world([track({ id: 10, kind: "Video", muted: true, solo: true })]));
+    expect(screen.getByTitle(t("unmuteTrack")).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByTitle(t("unmuteTrack")));
+    expect(calls.setTrackFlags).toHaveBeenLastCalledWith(10, { muted: false });
+    fireEvent.click(screen.getByTitle(t("unsoloTrack")));
+    expect(calls.setTrackFlags).toHaveBeenLastCalledWith(10, { solo: false });
+  });
+
+  it("offers the audio role on audio tracks only", () => {
+    mount(audioWorld());
+    const selects = screen.getAllByLabelText(t("audioRoleLabel")) as HTMLSelectElement[];
+    expect(selects).toHaveLength(1);
+    expect(selects[0].value).toBe("Mic");
+    fireEvent.change(selects[0], { target: { value: "Music" } });
+    expect(calls.setTrackFlags).toHaveBeenLastCalledWith(11, { audioRole: "Music" });
+  });
+
+  it("gives overlay tracks no audio controls", () => {
+    mount(world([track({ id: 12, name: "T1", kind: "Text" })]));
+    expect(screen.queryByTitle(t("muteTrack"))).toBeNull();
+    expect(screen.queryByTitle(t("soloTrack"))).toBeNull();
+  });
+});
+
+describe("context menus", () => {
+  const rightClick = (x: number, y: number) => {
+    fireEvent.contextMenu(canvas(), { clientX: x, clientY: y });
+  };
+
+  it("offers the clip actions on a clip and selects it", () => {
+    mount();
+    rightClick(200, ROW(0));
+    expect(document.querySelector(".context-menu")).toBeTruthy();
+    expect(uiStore.get().selectedClipIds).toEqual([1]);
+    for (const label of [t("cmdSplit"), t("menuCopy"), t("delete"), t("rippleDelete")]) {
+      expect(screen.getByText(label, { selector: "span" })).toBeTruthy();
+    }
+    fireEvent.click(screen.getByText(t("cmdSplit"), { selector: "span" }));
+    expect(calls.splitAtPlayhead).toHaveBeenCalledWith([1]);
+    expect(document.querySelector(".context-menu")).toBeNull();
+  });
+
+  it("offers marker and range actions on the ruler", () => {
+    mount();
+    rightClick(200, 10);
+    fireEvent.click(screen.getByText(t("cmdMarkIn"), { selector: "span" }));
+    expect(uiStore.get().markIn).toBeCloseTo(5);
+    rightClick(400, 10);
+    fireEvent.click(screen.getByText(t("cmdMarkOut"), { selector: "span" }));
+    expect(uiStore.get().markOut).toBeCloseTo(10);
+    rightClick(200, 10);
+    fireEvent.click(screen.getByText(t("addMarker"), { selector: "span" }));
+    expect(calls.seek).toHaveBeenCalledWith(5);
+  });
+
+  it("offers general actions on empty space and closes on Escape", () => {
+    mount();
+    rightClick(780, ROW(0));
+    expect(screen.getByText(t("cmdSelectAll"), { selector: "span" })).toBeTruthy();
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(document.querySelector(".context-menu")).toBeNull();
+  });
+
+  it("opens a track menu from a track header", () => {
+    const { container } = mount();
+    fireEvent.contextMenu(container.querySelector(".track-header") as HTMLElement);
+    fireEvent.click(screen.getByText(t("lockTrack"), { selector: "span" }));
+    expect(calls.setTrackFlags).toHaveBeenLastCalledWith(10, { locked: true });
+  });
+});
+
+describe("keyboard and screen readers", () => {
+  it("is focusable and described", () => {
+    mount();
+    expect(canvas().getAttribute("tabindex")).toBe("0");
+    expect(canvas().getAttribute("aria-label")).toBe(t("timelineCanvas"));
+  });
+
+  it("moves the selection between clips with the arrow keys and seeks to it", () => {
+    mount();
+    fireEvent.keyDown(canvas(), { key: "ArrowRight" });
+    expect(uiStore.get().selectedClipIds).toEqual([1]);
+    expect(calls.seek).toHaveBeenLastCalledWith(0);
+    fireEvent.keyDown(canvas(), { key: "ArrowRight" });
+    expect(uiStore.get().selectedClipIds[0]).not.toBe(1);
+    fireEvent.keyDown(canvas(), { key: "ArrowLeft" });
+    expect(uiStore.get().selectedClipIds).toEqual([1]);
+    fireEvent.keyDown(canvas(), { key: "ArrowLeft" });
+    expect(uiStore.get().selectedClipIds).toEqual([1]);
+  });
+
+  it("goes to the selected clip on Enter without the window also stepping", () => {
+    mount();
+    const onWindow = vi.fn();
+    window.addEventListener("keydown", onWindow);
+    fireEvent.keyDown(canvas(), { key: "ArrowRight" });
+    fireEvent.keyDown(canvas(), { key: "Enter" });
+    window.removeEventListener("keydown", onWindow);
+    expect(onWindow).not.toHaveBeenCalled();
+    expect(calls.seek).toHaveBeenLastCalledWith(0);
+  });
+
+  it("leaves modified arrows to the window", () => {
+    mount();
+    const onWindow = vi.fn();
+    window.addEventListener("keydown", onWindow);
+    fireEvent.keyDown(canvas(), { key: "ArrowRight", ctrlKey: true });
+    window.removeEventListener("keydown", onWindow);
+    expect(onWindow).toHaveBeenCalled();
+    expect(uiStore.get().selectedClipIds).toEqual([]);
+  });
+
+  it("lists every clip for screen readers and selects from the list", () => {
+    mount();
+    const items = screen.getByLabelText(t("timelineClips")).querySelectorAll("button");
+    expect(items.length).toBeGreaterThan(3);
+    fireEvent.click(items[0]);
+    expect(uiStore.get().selectedClipIds).toHaveLength(1);
+  });
+});
+
+describe("timeline actions from outside", () => {
+  it("zooms in, out and to fit when asked by a shortcut", () => {
+    mount();
+    act(() => {
+      timelineAction("zoomIn");
+    });
+    expect(uiStore.get().pxPerSec).toBeCloseTo(60);
+    act(() => {
+      timelineAction("zoomOut");
+    });
+    expect(uiStore.get().pxPerSec).toBeCloseTo(40);
+    act(() => {
+      timelineAction("zoomFit");
+    });
+    expect(uiStore.get().pxPerSec).not.toBeCloseTo(40);
+  });
+
+  it("scrolls the playhead into view", () => {
+    mount();
+    previewStore.set(tick({ playheadSecs: 100 }));
+    act(() => {
+      timelineAction("scrollToPlayhead");
+    });
+    ptr("pointerdown", 400, 10);
+    expect(calls.seek.mock.calls.at(-1)![0]).toBeGreaterThan(90);
+  });
+});
+
+describe("in and out marks", () => {
+  it("shades the marked range", () => {
+    uiStore.set({ ...uiStore.get(), markIn: 2, markOut: 8 });
+    mount();
+    expect(sets).toContainEqual(["fillStyle", "rgba(32, 185, 195, 0.14)"]);
+  });
+
+  it("draws nothing for marks that are not set", () => {
+    mount();
+    expect(sets).not.toContainEqual(["fillStyle", "rgba(32, 185, 195, 0.14)"]);
+  });
+});
+
+describe("overview", () => {
+  it("shows the minimap and scrolls the timeline from it", () => {
+    mount();
+    const bar = screen.getByRole("scrollbar");
+    bar.getBoundingClientRect = () => {
+      return { left: 0, width: 400, top: 0, height: 22, right: 400, bottom: 22 } as DOMRect;
+    };
+    bar.setPointerCapture = vi.fn();
+    fireEvent.pointerDown(bar, { clientX: 400, pointerId: 1 });
+    ptr("pointerdown", 0, 10);
+    expect(calls.seek.mock.calls.at(-1)![0]).toBeGreaterThan(5);
   });
 });

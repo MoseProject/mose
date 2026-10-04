@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n";
 import type { SessionView, YoutubeDownloadEvent } from "../types";
@@ -414,5 +414,62 @@ describe("media library tabs, search and view", () => {
     fireEvent.click(screen.getByLabelText(t("viewList")));
     expect(container.querySelector(".asset-list")!.className).toContain("list");
     expect(screen.getByLabelText(t("viewList")).getAttribute("aria-pressed")).toBe("true");
+  });
+});
+
+describe("media card keyboard and context menu", () => {
+  const library = () => {
+    return {
+      project: {
+        media_library: [
+          asset({ id: 1, file_name: "alpha.mp4" }),
+          asset({ id: 2, file_name: "mute.mp4", has_audio: false }),
+        ],
+        recent_asset_ids: [],
+      },
+    } as unknown as SessionView;
+  };
+  const card = (name: string) => {
+    return screen.getByText(name).closest(".asset") as HTMLElement;
+  };
+
+  it("makes each card focusable and adds it to the timeline on Enter", () => {
+    render(<MediaLibrary session={library()} />);
+    expect(card("alpha.mp4").getAttribute("tabindex")).toBe("0");
+    fireEvent.keyDown(card("alpha.mp4"), { key: "Enter" });
+    expect(api.addAssetToTimeline).toHaveBeenCalledWith(1);
+  });
+
+  it("ignores Enter pressed on a button inside the card", () => {
+    render(<MediaLibrary session={library()} />);
+    fireEvent.keyDown(within(card("alpha.mp4")).getAllByRole("button")[0], { key: "Enter" });
+    expect(api.addAssetToTimeline).not.toHaveBeenCalled();
+  });
+
+  it("opens a menu on right click with the card's actions", () => {
+    render(<MediaLibrary session={library()} />);
+    fireEvent.contextMenu(card("alpha.mp4"), { clientX: 30, clientY: 40 });
+    fireEvent.click(screen.getByText(t("addToTimeline"), { selector: "span" }));
+    expect(api.addAssetToTimeline).toHaveBeenCalledWith(1);
+    fireEvent.contextMenu(card("alpha.mp4"));
+    fireEvent.click(screen.getByText(t("favorite"), { selector: "span" }));
+    expect(api.toggleFavorite).toHaveBeenCalledWith(1);
+    fireEvent.contextMenu(card("alpha.mp4"));
+    fireEvent.click(screen.getByText(t("transcribe"), { selector: "span" }));
+    expect(api.transcribeAsset).toHaveBeenCalledWith(1);
+  });
+
+  it("disables transcribing for media without audio", () => {
+    render(<MediaLibrary session={library()} />);
+    fireEvent.contextMenu(card("mute.mp4"));
+    const item = screen.getByText(t("transcribe"), { selector: "span" }).closest("button")!;
+    expect(item.disabled).toBe(true);
+  });
+
+  it("keeps Import one click away and the other sources in a menu", () => {
+    render(<MediaLibrary session={library()} />);
+    fireEvent.click(screen.getByText(t("importFiles"), { selector: "button" }));
+    expect(api.importMediaDialog).toHaveBeenCalled();
+    expect(screen.getByLabelText(t("moreSources"))).toBeTruthy();
   });
 });

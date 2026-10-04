@@ -402,3 +402,74 @@ describe("preview panel", () => {
     });
   });
 });
+
+describe("monitor zoom and guides", () => {
+  beforeEach(() => {
+    sessionStore.set(sessionWith(clip()));
+    previewStore.set(tick({ frameSeq: 3 }));
+    uiStore.set({
+      ...uiStore.get(),
+      selectedClipIds: [1],
+      monitorZoom: "fit",
+      monitorGuides: false,
+    });
+  });
+
+  it("offers Fit, 50% and 100% and marks the active one", () => {
+    mount();
+    const fit = screen.getByText(t("zoomFitShort"));
+    expect(fit.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByText("50%"));
+    expect(uiStore.get().monitorZoom).toBe("50");
+    expect(screen.getByText("50%").getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByText("100%"));
+    expect(uiStore.get().monitorZoom).toBe("100");
+  });
+
+  it("sizes the picture to a fraction of the canvas when zoomed", () => {
+    uiStore.set({ ...uiStore.get(), monitorZoom: "50" });
+    const { container } = mount();
+    const img = container.querySelector(".monitor img") as HTMLImageElement;
+    expect(img.style.width).toBe("960px");
+    expect(img.style.height).toBe("540px");
+  });
+
+  it("leaves the picture to the browser's own fit at Fit", () => {
+    const { container } = mount();
+    expect(
+      (container.querySelector(".monitor img") as HTMLImageElement).getAttribute("style"),
+    ).toBeNull();
+  });
+
+  it("hides the layer handles while zoomed, since they assume the fitted canvas", () => {
+    mount();
+    expect(screen.queryByTestId("preview-layer")).toBeTruthy();
+    cleanup();
+    uiStore.set({ ...uiStore.get(), monitorZoom: "100" });
+    mount();
+    expect(screen.queryByTestId("preview-layer")).toBeNull();
+  });
+
+  it("toggles the safe-area guides over the canvas", () => {
+    mount();
+    expect(screen.queryByTestId("monitor-guides")).toBeNull();
+    fireEvent.click(screen.getByLabelText(t("cmdToggleGuides")));
+    expect(uiStore.get().monitorGuides).toBe(true);
+    const guides = screen.getByTestId("monitor-guides");
+    expect(guides.querySelectorAll(".guide-safe")).toHaveLength(2);
+    expect(guides.querySelectorAll(".guide-line")).toHaveLength(2);
+    expect(guides.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("shows the timecode with the source frame rate", () => {
+    const session = sessionWith(clip());
+    (session.project as unknown as { media_library: unknown[] }).media_library = [
+      { id: 1, kind: "Video", resolution: [1920, 1080], fps: 24 },
+    ];
+    sessionStore.set(session);
+    previewStore.set(tick({ playheadSecs: 1.5 }));
+    const { container } = mount();
+    expect(container.querySelector(".time-now")!.textContent).toBe("00:00:01:12");
+    expect(container.querySelector(".time-total")!.textContent).toBe("00:00:10:00");
+  });
+});
