@@ -17,7 +17,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -28,11 +28,12 @@ use avcore::nested_sequence::{
 use avcore::timeline::{Timeline, TrackKind};
 use avcore::{Lut3D as CoreLut, MediaAsset, MediaKind};
 use bush::{
-    AudioPlayer, AudioRenderer, AudioSink, DecodePolicy, DeviceSink, Engine, EngineConfig, Player,
-    PlayerEvent, RendererChoice, SceneSnapshot, SceneVersions, Version,
+    AudioSink, DecodePolicy, Engine, EngineConfig, Player, PlayerEvent, RendererChoice,
+    SceneSnapshot, SceneVersions, Version,
 };
 use tauri::{AppHandle, Emitter, Runtime};
 
+use super::audio::AudioStack;
 use super::mapper::{map_timeline, Approximation, OverlayCache, SourceResolver};
 use crate::frames::{encode_jpeg_rgba, PREVIEW_MAX_DIM};
 use crate::preview_engine::{
@@ -41,10 +42,8 @@ use crate::preview_engine::{
 };
 
 const DEFAULT_CANVAS: (u32, u32) = (1280, 720);
-const MAX_OPEN_SOURCES: usize = 6;
+pub(super) const MAX_OPEN_SOURCES: usize = 6;
 const FRAME_CACHE_BYTES: usize = 192 * 1024 * 1024;
-const AUDIO_QUEUE_FRAMES: usize = 192_000;
-const AUDIO_BLOCK_FRAMES: usize = 1024;
 /// A render that has not answered after this long is assumed lost and the next frame is asked for.
 const OUTSTANDING_TIMEOUT: Duration = Duration::from_millis(250);
 /// Poll cadence while playing: short enough to request the next frame right after one lands.
@@ -71,73 +70,6 @@ impl SourceResolver for AppResolver {
                     .map(Arc::new)
             })
             .clone()
-    }
-}
-
-/// Audio output kept next to the player: the device queue and the position it was anchored at.
-struct AudioStack {
-    sink: DeviceSink,
-    player: AudioPlayer,
-    anchor_consumed: u64,
-    anchor_secs: f64,
-}
-
-impl AudioStack {
-    fn open(scene: &SceneSnapshot) -> Option<Self> {
-        let sink = DeviceSink::open_default(AUDIO_QUEUE_FRAMES).ok()?;
-        let rate = sink.sample_rate();
-        let renderer = AudioRenderer::new(rate, sink.channels(), 4096, MAX_OPEN_SOURCES).ok()?;
-        let player = AudioPlayer::new(
-            renderer,
-            scene.clone(),
-            AUDIO_BLOCK_FRAMES,
-            rate as usize / 4,
-        );
-        Some(Self {
-            sink,
-            player,
-            anchor_consumed: 0,
-            anchor_secs: 0.0,
-        })
-    }
-
-    fn seek_to(&mut self, secs: f64) {
-        self.sink.clear();
-        self.player.seek(
-            (secs.max(0.0) * f64::from(self.sink.sample_rate())) as u64,
-            &mut self.sink,
-        );
-        self.anchor_consumed = self.sink.consumed_frames();
-        self.anchor_secs = secs;
-    }
-
-    /// Linear peaks of the block the device is playing right now, for the level meter.
-    fn peaks(&self) -> (f32, f32) {
-        let frame = (self.position_secs() * f64::from(self.sink.sample_rate())) as u64;
-        self.player.peaks_at(frame)
-    }
-
-    /// Timeline seconds the device has actually played.
-    fn position_secs(&self) -> f64 {
-        let played = self
-            .sink
-            .consumed_frames()
-            .saturating_sub(self.anchor_consumed);
-        self.anchor_secs + played as f64 / f64::from(self.sink.sample_rate())
-    }
-
-    fn pump(&mut self) {
-        static NEVER: AtomicBool = AtomicBool::new(false);
-        if self.sink.is_failed() {
-            if self.sink.recover().is_ok() {
-                let secs = self.position_secs();
-                self.seek_to(secs);
-            }
-            return;
-        }
-        if let Err(error) = self.player.pump(&mut self.sink, &NEVER) {
-            tracing::warn!(?error, "bush audio pump failed");
-        }
     }
 }
 

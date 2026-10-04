@@ -14,6 +14,7 @@
 //! Developer switches (environment): `OCA_BUSH_RENDERER=gpu` composites on the GPU (CPU
 //! otherwise) and `OCA_BUSH_DECODE=hardware` opts into hardware decode (software otherwise).
 
+mod audio;
 mod backend;
 mod mapper;
 
