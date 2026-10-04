@@ -33,7 +33,7 @@ pub mod update_check;
 pub mod watch_folder;
 pub mod youtube_download;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use avcore::{ExportAspectRatio, PanelLayout, Project};
 use tauri::{AppHandle, Manager, Runtime, State};
@@ -144,7 +144,7 @@ pub async fn open_project_path<R: Runtime>(app: AppHandle<R>, path: String) -> R
         session.replace_project(project);
         Ok(session.project_epoch)
     })?;
-    prefs::record_recent_project(&app, &path)?;
+    note_recent_project(&app, &path);
     // Proxies are a regenerable cache, never serialized: re-attach (or rebuild) them so
     // preview decodes the light file again after a reopen.
     media::rehydrate_proxies(&app, epoch);
@@ -178,8 +178,25 @@ pub async fn save_project<R: Runtime>(app: AppHandle<R>, save_as: bool) -> Resul
         session.dirty = false;
         Ok(true)
     })?;
-    prefs::record_recent_project(&app, &path)?;
+    note_recent_project(&app, &path);
     Ok(true)
+}
+
+/// Adds `path` to the recent list. The project is already open or saved by now, so a failure to
+/// write the list is logged instead of reported as if the whole operation had failed.
+fn note_recent_project<R: Runtime>(app: &AppHandle<R>, path: &Path) {
+    note_recent_with(|| prefs::record_recent_project(app, path));
+}
+
+/// Runs `record`, logging instead of propagating its failure; whether it worked.
+fn note_recent_with(record: impl FnOnce() -> Result<(), String>) -> bool {
+    match record() {
+        Ok(()) => true,
+        Err(error) => {
+            tracing::warn!(%error, "could not record the recent project");
+            false
+        }
+    }
 }
 
 #[tauri::command]

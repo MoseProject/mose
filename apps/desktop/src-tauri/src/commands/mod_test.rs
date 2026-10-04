@@ -181,6 +181,12 @@ fn a_saved_project_reopens_with_its_path_and_joins_the_recent_list() {
 }
 
 #[test]
+fn a_recent_list_that_cannot_be_written_is_logged_not_propagated() {
+    assert!(note_recent_with(|| Ok(())));
+    assert!(!note_recent_with(|| Err("disk full".to_string())));
+}
+
+#[test]
 fn opening_a_missing_project_reports_the_error() {
     let h = harness();
     let missing = path_in(&h.dir, "missing.ocproj");
