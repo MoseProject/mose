@@ -1,5 +1,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { localeSnapshot, subscribeLocale, t } from "./i18n";
+import { COMMANDS } from "./commands";
+import { loadKeymap } from "./keymap";
 import { CommandPalette } from "./editor/CommandPalette";
 import { Dialog } from "./editor/Dialog";
 import { ExportDialog } from "./editor/ExportDialog";
@@ -21,7 +23,15 @@ export function App() {
   useSyncExternalStore(subscribeLocale, localeSnapshot);
 
   useEffect(() => {
-    void run(connect());
+    void run(connect()).then(() => {
+      return loadKeymap(
+        new Set(
+          COMMANDS.map((command) => {
+            return command.id;
+          }),
+        ),
+      );
+    });
   }, []);
 
   return (

@@ -5,9 +5,11 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
-import { formatTime, t } from "../i18n";
+import { formatTimecode, t } from "../i18n";
 import { api, frameUrl } from "../ipc";
 import { Icon } from "./Icon";
+import { withShortcut } from "../commands";
+import { keymapStore } from "../keymap";
 import { patchUi, previewStore, run, sessionStore, uiStore, useStore } from "../store";
 import {
   activeTimeline,
@@ -49,6 +51,7 @@ export function PreviewPanel() {
   const tick = useStore(previewStore);
   const session = useStore(sessionStore);
   const ui = useStore(uiStore);
+  useStore(keymapStore);
   const monitorRef = useRef<HTMLDivElement>(null);
   const [monitorSize, setMonitorSize] = useState({ width: 0, height: 0 });
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -70,6 +73,10 @@ export function PreviewPanel() {
     };
   }, []);
 
+  const timecodeFps =
+    session?.project.media_library.find((item) => {
+      return item.kind === "Video" && item.fps;
+    })?.fps ?? 30;
   const duration = session
     ? Math.max(
         0,
@@ -107,7 +114,16 @@ export function PreviewPanel() {
     ? session.project.sequences[session.project.active_sequence].export_settings.aspect_ratio
     : "Original";
   const [canvasW, canvasH] = aspectRatioDims(aspectRatio, asset?.resolution ?? [1920, 1080]);
-  const canvasRect = fitRect(monitorSize, canvasW / canvasH);
+  const zoomScale = ui.monitorZoom === "fit" ? null : Number(ui.monitorZoom) / 100;
+  const canvasRect =
+    zoomScale === null
+      ? fitRect(monitorSize, canvasW / canvasH)
+      : {
+          width: canvasW * zoomScale,
+          height: canvasH * zoomScale,
+          left: (monitorSize.width - canvasW * zoomScale) / 2,
+          top: (monitorSize.height - canvasH * zoomScale) / 2,
+        };
   const base = fitRect({ width: canvasRect.width, height: canvasRect.height }, texAspect);
   const hasCanvas = monitorSize.width > 0 && monitorSize.height > 0;
 
@@ -353,7 +369,37 @@ export function PreviewPanel() {
 
   return (
     <section className="panel preview">
-      <div className="panel-title">{t("programMonitor")}</div>
+      <div className="panel-title">
+        <span>{t("programMonitor")}</span>
+        <span className="monitor-tools">
+          {(["50", "fit", "100"] as const).map((zoom) => {
+            return (
+              <button
+                key={zoom}
+                className={"chip " + (ui.monitorZoom === zoom ? "active" : "")}
+                aria-pressed={ui.monitorZoom === zoom}
+                title={t("monitorZoom")}
+                onClick={() => {
+                  patchUi({ monitorZoom: zoom });
+                }}
+              >
+                {zoom === "fit" ? t("zoomFitShort") : zoom + "%"}
+              </button>
+            );
+          })}
+          <button
+            className={"icon " + (ui.monitorGuides ? "active" : "")}
+            aria-label={t("cmdToggleGuides")}
+            aria-pressed={ui.monitorGuides}
+            title={withShortcut(t("cmdToggleGuides"), "toggleGuides")}
+            onClick={() => {
+              patchUi({ monitorGuides: !ui.monitorGuides });
+            }}
+          >
+            <Icon name="grid" />
+          </button>
+        </span>
+      </div>
       <div
         ref={monitorRef}
         className="monitor"
@@ -373,10 +419,41 @@ export function PreviewPanel() {
       >
         {tick.hasClip && tick.frameSeq > 0 && !tick.error && (
           <img
+            style={
+              zoomScale === null
+                ? undefined
+                : {
+                    position: "absolute",
+                    maxWidth: "none",
+                    maxHeight: "none",
+                    left: canvasRect.left + base.left,
+                    top: canvasRect.top + base.top,
+                    width: base.width,
+                    height: base.height,
+                  }
+            }
             src={frameUrl(tick.frameSeq)}
             alt=""
             draggable={false}
           />
+        )}
+        {ui.monitorGuides && hasCanvas && (
+          <div
+            className="monitor-guides"
+            data-testid="monitor-guides"
+            aria-hidden="true"
+            style={{
+              left: canvasRect.left,
+              top: canvasRect.top,
+              width: canvasRect.width,
+              height: canvasRect.height,
+            }}
+          >
+            <span className="guide-safe action" />
+            <span className="guide-safe title" />
+            <span className="guide-line v" />
+            <span className="guide-line h" />
+          </div>
         )}
         {body}
         {overlay}
@@ -384,7 +461,7 @@ export function PreviewPanel() {
       </div>
       <div className="transport">
         <div className="scrub">
-          <span className="mono time-now">{formatTime(tick.playheadSecs)}</span>
+          <span className="mono time-now">{formatTimecode(tick.playheadSecs, timecodeFps)}</span>
           <input
             type="range"
             className="scrubber"
@@ -402,7 +479,7 @@ export function PreviewPanel() {
               return void run(api.seek(Number(e.target.value)));
             }}
           />
-          <span className="mono muted time-total">{formatTime(duration)}</span>
+          <span className="mono muted time-total">{formatTimecode(duration, timecodeFps)}</span>
         </div>
         <div className="transport-controls">
           <button

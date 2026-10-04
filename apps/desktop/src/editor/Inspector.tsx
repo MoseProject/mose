@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { Icon } from "./Icon";
 import { useDraft } from "../useDraft";
 import { formatTime, t } from "../i18n";
 import { api } from "../ipc";
@@ -178,6 +179,8 @@ export function Inspector({ session }: { session: SessionView }) {
             key={shapeClip.id}
             clip={shapeClip}
           />
+        ) : selectedClipIds.length > 1 ? (
+          <MultiSelection ids={selectedClipIds} />
         ) : (
           <div className="empty-state">{t("noClipSelected")}</div>
         )}
@@ -198,12 +201,15 @@ export function Section({
   defaultOpen,
   testId,
   group = "inspector",
+  onReset,
   children,
 }: {
   label: string;
   defaultOpen: boolean;
   testId?: string;
   group?: InspectorGroup;
+  /** Shows a reset button in the header that puts this section back to its defaults. */
+  onReset?: () => void;
   children: ReactNode;
 }) {
   return (
@@ -213,7 +219,23 @@ export function Section({
       data-testid={testId}
       data-group={group}
     >
-      <summary>{label}</summary>
+      <summary>
+        <span>{label}</span>
+        {onReset && (
+          <button
+            className="icon section-reset"
+            aria-label={t("resetSection") + ": " + label}
+            title={t("resetSection")}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onReset();
+            }}
+          >
+            <Icon name="reset" />
+          </button>
+        )}
+      </summary>
       <div className="property-section-body">{children}</div>
     </details>
   );
@@ -226,11 +248,18 @@ function ClipControls({ clip }: { clip: ClipInstance }) {
   const [region, setRegion] = useState({ centerX: 0.5, centerY: 0.5, width: 0.3, height: 0.3 });
   return (
     <>
+      <TransformSection
+        clip={clip}
+        commit={commit}
+      />
       <Section
         label={t("gain")}
         defaultOpen={clip.gain_db !== 0}
         testId="section-gain"
         group="audio"
+        onReset={() => {
+          void commit({ gainDb: 0 });
+        }}
       >
         <Slider
           label={t("gain")}
@@ -249,6 +278,9 @@ function ClipControls({ clip }: { clip: ClipInstance }) {
       <Section
         label={t("speed")}
         defaultOpen={clip.speed_factor !== 1}
+        onReset={() => {
+          void commit({ speedFactor: 1 });
+        }}
       >
         <Slider
           label={t("speed")}
@@ -289,6 +321,9 @@ function ClipControls({ clip }: { clip: ClipInstance }) {
         group="effects"
         label={t("colorAdjust")}
         defaultOpen={clip.brightness !== 0 || clip.contrast !== 1 || clip.saturation !== 1}
+        onReset={() => {
+          void commit({ brightness: 0, contrast: 1, saturation: 1 });
+        }}
       >
         <Slider
           label={t("brightness")}
@@ -330,42 +365,55 @@ function ClipControls({ clip }: { clip: ClipInstance }) {
           }}
         />
       </Section>
-      <label className="check">
-        <input
-          type="checkbox"
-          checked={clip.frozen}
-          onChange={(e) => {
-            return commit({ frozen: e.target.checked });
-          }}
-        />
-        {t("freeze")}
-      </label>
-      <label className="check">
-        <input
-          type="checkbox"
-          checked={clip.flipped_h}
-          onChange={(e) => {
-            return commit({ flippedH: e.target.checked });
-          }}
-        />
-        {t("flip")}
-      </label>
-      <label className="check">
-        <input
-          type="checkbox"
-          checked={clip.voice_cleanup_enabled}
-          onChange={(e) => {
-            return commit({ voiceCleanupEnabled: e.target.checked });
-          }}
-        />
-        {t("voiceCleanup")}
-      </label>
+      <div
+        className="clip-checks"
+        data-group="inspector"
+      >
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={clip.frozen}
+            onChange={(e) => {
+              return commit({ frozen: e.target.checked });
+            }}
+          />
+          {t("freeze")}
+        </label>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={clip.flipped_h}
+            onChange={(e) => {
+              return commit({ flippedH: e.target.checked });
+            }}
+          />
+          {t("flip")}
+        </label>
+      </div>
+      <div
+        className="clip-checks"
+        data-group="audio"
+      >
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={clip.voice_cleanup_enabled}
+            onChange={(e) => {
+              return commit({ voiceCleanupEnabled: e.target.checked });
+            }}
+          />
+          {t("voiceCleanup")}
+        </label>
+      </div>
 
       <Section
         label={t("crop")}
         defaultOpen={
           clip.crop_x !== 0 || clip.crop_y !== 0 || clip.crop_w !== 1 || clip.crop_h !== 1
         }
+        onReset={() => {
+          void commit({ cropX: 0, cropY: 0, cropW: 1, cropH: 1 });
+        }}
       >
         <Slider
           label="x"
@@ -825,6 +873,179 @@ export function Slider(props: {
         onBlur={commit}
       />
       <span className="mono">{props.format(draft)}</span>
+    </div>
+  );
+}
+
+/** One numeric inspector field, committed on blur or Enter rather than per keystroke. */
+function NumberField({
+  label,
+  value,
+  step,
+  disabled,
+  suffix,
+  onCommit,
+}: {
+  label: string;
+  value: number;
+  step: number;
+  disabled?: boolean;
+  suffix?: string;
+  onCommit: (value: number) => void;
+}) {
+  const shown = String(Number(value.toFixed(2)));
+  const [draft, setDraft] = useDraft(shown);
+  const commit = () => {
+    const parsed = Number(draft);
+    if (draft.trim() !== "" && Number.isFinite(parsed) && String(parsed) !== shown) {
+      onCommit(parsed);
+    } else {
+      setDraft(shown);
+    }
+  };
+  return (
+    <label className="number-field">
+      <span>{label}</span>
+      <input
+        type="number"
+        aria-label={label}
+        step={step}
+        value={draft}
+        disabled={disabled}
+        onChange={(e) => {
+          setDraft(e.target.value);
+        }}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.currentTarget.blur();
+          }
+        }}
+      />
+      {suffix && <span className="muted">{suffix}</span>}
+    </label>
+  );
+}
+
+/** Position, scale and rotation as plain numbers. Position is the layer's top-left corner in
+ *  percent of the canvas, as the on-canvas handle moves it; an animated value (several keyframes)
+ *  is edited in the Keyframes section instead. */
+function TransformSection({
+  clip,
+  commit,
+}: {
+  clip: ClipInstance;
+  commit: (patch: ClipPatch) => Promise<unknown>;
+}) {
+  const position = clip.position_keyframes[0]?.value ?? { x: 0, y: 0 };
+  const rotation = clip.rotation_keyframes[0]?.value ?? 0;
+  const positionAnimated = clip.position_keyframes.length > 1;
+  const rotationAnimated = clip.rotation_keyframes.length > 1;
+  const setPosition = (x: number, y: number) => {
+    void commit({ positionKeyframes: [{ time_fraction: 0, value: { x, y } }] });
+  };
+  return (
+    <Section
+      label={t("transform")}
+      defaultOpen
+      testId="section-transform"
+      onReset={() => {
+        void commit({
+          positionKeyframes: [],
+          layerScaleX: 1,
+          layerScaleY: 1,
+          rotationKeyframes: [],
+        });
+      }}
+    >
+      <div className="field-row">
+        <NumberField
+          label={t("positionX")}
+          value={position.x * 100}
+          step={0.5}
+          suffix="%"
+          disabled={positionAnimated}
+          onCommit={(value) => {
+            setPosition(value / 100, position.y);
+          }}
+        />
+        <NumberField
+          label={t("positionY")}
+          value={position.y * 100}
+          step={0.5}
+          suffix="%"
+          disabled={positionAnimated}
+          onCommit={(value) => {
+            setPosition(position.x, value / 100);
+          }}
+        />
+      </div>
+      <NumberField
+        label={t("scale")}
+        value={clip.layer_scale_x * 100}
+        step={1}
+        suffix="%"
+        onCommit={(value) => {
+          const scale = Math.max(1, value) / 100;
+          void commit({ layerScaleX: scale, layerScaleY: scale });
+        }}
+      />
+      <NumberField
+        label={t("rotation")}
+        value={rotation}
+        step={1}
+        suffix="°"
+        disabled={rotationAnimated}
+        onCommit={(value) => {
+          void commit({ rotationKeyframes: [{ time_fraction: 0, value }] });
+        }}
+      />
+      <p className="muted">
+        {positionAnimated || rotationAnimated ? t("transformAnimated") : t("transformHint")}
+      </p>
+    </Section>
+  );
+}
+
+/** What the inspector shows for several selected clips: how many, and the actions that apply to
+ *  a group. */
+function MultiSelection({ ids }: { ids: number[] }) {
+  return (
+    <div
+      className="multi-selection"
+      data-testid="inspector-multi"
+    >
+      <p className="clip-name">
+        {ids.length} {t("clipsSelected")}
+      </p>
+      <button
+        onClick={() => {
+          return run(api.mergeClipsIntoComposite(ids));
+        }}
+      >
+        {t("mergeComposite")}
+      </button>
+      <button
+        onClick={() => {
+          return run(api.createCompoundClip(ids[0], ids));
+        }}
+      >
+        {t("compoundClip")}
+      </button>
+      <button
+        onClick={() => {
+          return run(api.deleteClips(ids, false));
+        }}
+      >
+        {t("delete")}
+      </button>
+      <button
+        onClick={() => {
+          return run(api.deleteClips(ids, true));
+        }}
+      >
+        {t("rippleDelete")}
+      </button>
     </div>
   );
 }

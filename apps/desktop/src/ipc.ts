@@ -322,6 +322,12 @@ export const api = {
       audioRole: flags.audioRole ?? null,
     });
   },
+  getKeybindings: () => {
+    return invoke<Record<string, string[]>>("get_keybindings");
+  },
+  setKeybindings: (keybindings: Record<string, string[]>) => {
+    return invoke<Record<string, string[]>>("set_keybindings", { keybindings });
+  },
   rippleDeleteRange: (startSecs: number, endSecs: number) => {
     return invoke<void>("ripple_delete_range", { startSecs, endSecs });
   },

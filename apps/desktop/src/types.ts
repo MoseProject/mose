@@ -329,6 +329,8 @@ export interface PrefsView {
   errorReportingConsent: ErrorReportingConsent;
   lastReviewedCrashUnix: number;
   telemetryEnabled: boolean;
+  /** Changed keyboard shortcuts, command id to stored bindings (see keymap.ts). */
+  keybindings: Record<string, string[]>;
 }
 
 export type ErrorReportingConsent = "disabled" | "always_send";

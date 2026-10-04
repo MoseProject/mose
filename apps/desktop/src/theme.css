@@ -507,7 +507,7 @@ input[type="range"] {
   padding: 0 4px;
   border-radius: 3px;
   background: rgba(0, 0, 0, 0.65);
-  font-size: 10px;
+  font-size: 11px;
 }
 .asset-actions {
   position: absolute;
@@ -1177,7 +1177,7 @@ button.icon:has(> .glyph) {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  font-size: 9px;
+  font-size: 10px;
   color: var(--text-muted);
 }
 .meter-bars {
@@ -1209,7 +1209,7 @@ button.icon:has(> .glyph) {
   bottom: 28px;
   display: flex;
   gap: 12px;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-secondary);
 }
 
@@ -1359,7 +1359,7 @@ button.icon:has(> .glyph) {
   color: var(--text-primary);
 }
 .asset .meta {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-muted);
 }
 
@@ -1887,4 +1887,207 @@ button.danger {
   content: attr(data-shortcut);
   color: var(--text-muted);
   font: 11px var(--font-mono);
+}
+
+/* ---- tool rail trim group ---- */
+.trim-group {
+  position: relative;
+}
+.trim-group .menu-trigger {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.trim-group.active .menu-trigger {
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--accent-active);
+  color: var(--accent);
+}
+.trim-group .menu-trigger::after {
+  content: "";
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  border: 3px solid transparent;
+  border-right-color: currentColor;
+  border-bottom-color: currentColor;
+  opacity: 0.6;
+}
+
+/* ---- monitor zoom chips and guides ---- */
+.preview .panel-title {
+  align-items: center;
+}
+.monitor-tools {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+button.chip {
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+button.chip.active,
+button.chip[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.monitor {
+  overflow: hidden;
+}
+.monitor-guides {
+  position: absolute;
+  pointer-events: none;
+}
+.guide-safe {
+  position: absolute;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-sizing: border-box;
+}
+.guide-safe.action {
+  inset: 5%;
+}
+.guide-safe.title {
+  inset: 10%;
+  border-style: dashed;
+}
+.guide-line {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.18);
+}
+.guide-line.v {
+  width: 1px;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+}
+.guide-line.h {
+  height: 1px;
+  left: 0;
+  right: 0;
+  top: 50%;
+}
+
+/* ---- meter peak hold ---- */
+.meter-hold {
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  height: 2px;
+  background: var(--text-primary);
+  transform: translateY(1px);
+}
+.meter-hold.clip {
+  background: var(--error);
+  box-shadow: 0 0 4px var(--error);
+}
+
+/* ---- library import button, focusable cards ---- */
+.import-btn {
+  margin-left: auto;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  font-size: 12px;
+}
+.panel-tabs > .import-btn + .menu {
+  margin-left: 4px;
+}
+.panel-tabs > .menu:not(.import-btn + .menu) {
+  margin-left: auto;
+}
+.asset:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 5px;
+}
+
+/* ---- accessibility: visible focus, reduced motion ---- */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+input:focus-visible,
+select:focus-visible {
+  outline-offset: 0;
+}
+canvas:focus-visible {
+  outline-offset: -2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .task-bar.indeterminate > span {
+    width: 100%;
+    opacity: 0.45;
+    transform: none;
+  }
+}
+
+/* ---- shortcut editor ---- */
+.shortcut-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.shortcut-toolbar .dialog-search {
+  margin: 0;
+  flex: 1;
+}
+.shortcut-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  border: 1px solid var(--warning);
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+.shortcut-notice.error {
+  border-color: var(--error);
+}
+.shortcut-notice span {
+  flex: 1;
+}
+.shortcut-row dd {
+  align-items: center;
+}
+.shortcut-row.customized dt::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.key-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.key-chip button.icon {
+  padding: 0 2px;
+}
+.shortcut-row .recording {
+  color: var(--accent);
+  font-size: 11px;
 }

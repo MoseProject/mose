@@ -4,6 +4,7 @@ import { Icon } from "./editor/Icon";
 import { Menu } from "./editor/Menu";
 import { formatTimecode, t } from "./i18n";
 import { api } from "./ipc";
+import { keymapStore } from "./keymap";
 import { exportsStore, patchUi, previewStore, run, uiStore, useStore } from "./store";
 import type { SessionView } from "./types";
 
@@ -30,6 +31,7 @@ function CommandItem({ id }: { id: string }) {
 /** Brand, project/sequence, the application menus, the playhead readout and the global actions. */
 export function TopBar({ session }: { session: SessionView | null }) {
   const ui = useStore(uiStore);
+  useStore(keymapStore); // shortcut hints follow the user's changes
   const jobs = useStore(exportsStore);
   const activeExports = jobs.filter((job) => {
     return (

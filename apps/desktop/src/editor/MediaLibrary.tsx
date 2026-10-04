@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { formatTime, t } from "../i18n";
 import { Icon } from "./Icon";
+import { ContextMenu } from "./ContextMenu";
 import { Menu } from "./Menu";
 import { api, onYoutubeDownload, thumbnailUrl } from "../ipc";
 import { assetDragStore, run, transcribingAssetIdStore, useStore } from "../store";
@@ -313,6 +314,7 @@ export function MediaLibrary({ session }: { session: SessionView }) {
   const [tab, setTab] = useState<LibraryTab>("media");
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"grid" | "list">("grid");
+  const [menu, setMenu] = useState<{ x: number; y: number; asset: MediaAsset } | null>(null);
   const all = session.project.media_library;
 
   const inTab =
@@ -362,22 +364,27 @@ export function MediaLibrary({ session }: { session: SessionView }) {
             </button>
           );
         })}
+        <button
+          className="import-btn"
+          onClick={() => {
+            return run(api.importMediaDialog());
+          }}
+        >
+          <Icon
+            name="plus"
+            size={14}
+          />{" "}
+          {t("importFiles")}
+        </button>
         <Menu
           label={
             <Icon
-              name="plus"
+              name="more"
               size={16}
             />
           }
-          ariaLabel={t("importFiles")}
+          ariaLabel={t("moreSources")}
         >
-          <button
-            onClick={() => {
-              return run(api.importMediaDialog());
-            }}
-          >
-            {t("importFiles")}
-          </button>
           <TtsButton />
           <SoundLibraryButton />
           <YoutubeDownloadButton />
@@ -444,17 +451,57 @@ export function MediaLibrary({ session }: { session: SessionView }) {
             return (
               <AssetRow
                 key={asset.id}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setMenu({ x: e.clientX, y: e.clientY, asset });
+                }}
                 asset={asset}
               />
             );
           })
         )}
       </div>
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={[
+            {
+              label: t("addToTimeline"),
+              onSelect: () => {
+                void run(api.addAssetToTimeline(menu.asset.id));
+              },
+            },
+            {
+              label: t("favorite"),
+              onSelect: () => {
+                void run(api.toggleFavorite(menu.asset.id));
+              },
+            },
+            {
+              label: t("transcribe"),
+              disabled: !menu.asset.has_audio,
+              onSelect: () => {
+                void run(api.transcribeAsset(menu.asset.id));
+              },
+            },
+          ]}
+          onClose={() => {
+            setMenu(null);
+          }}
+        />
+      )}
     </section>
   );
 }
 
-function AssetRow({ asset }: { asset: MediaAsset }) {
+function AssetRow({
+  asset,
+  onContextMenu,
+}: {
+  asset: MediaAsset;
+  onContextMenu: (e: React.MouseEvent) => void;
+}) {
   const [thumbFailed, setThumbFailed] = useState(false);
   const transcribingAssetId = useStore(transcribingAssetIdStore);
   const transcribing = transcribingAssetId === asset.id;
@@ -538,6 +585,14 @@ function AssetRow({ asset }: { asset: MediaAsset }) {
     <div
       className={`asset ${asset.kind === "Audio" ? "audio" : ""}`}
       title={asset.source_path}
+      tabIndex={0}
+      onContextMenu={onContextMenu}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && e.target === e.currentTarget) {
+          e.preventDefault();
+          void run(api.addAssetToTimeline(asset.id));
+        }
+      }}
       onPointerDown={onPointerDown}
       onDoubleClick={() => {
         return run(api.addAssetToTimeline(asset.id));

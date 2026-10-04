@@ -14,6 +14,7 @@ import {
 } from "./editing";
 import { t, type TextKey } from "./i18n";
 import { api } from "./ipc";
+import { effectiveKeys, keymapStore, type Bindable } from "./keymap";
 import { formatKeys, matchesKeys, type KeySpec } from "./shortcuts";
 import { patchUi, previewStore, run, sessionStore, uiStore, type EditorTool } from "./store";
 
@@ -622,22 +623,35 @@ export function findCommand(id: string): Command | undefined {
   return BY_ID.get(id);
 }
 
+/** The bindings a command answers to now: the user's changes over its defaults. */
+export function keysOf(command: Command): KeySpec[] {
+  return effectiveKeys(command.id, command.keys, keymapStore.get());
+}
+
+/** Every command as a plain `{ id, keys }` row, for the shortcut editor's conflict checks. */
+export function bindables(): Bindable[] {
+  return COMMANDS.map((command) => {
+    return { id: command.id, keys: command.keys };
+  });
+}
+
 /** The binding shown for a command (`Ctrl+Z`), or `undefined` when it has none. */
 export function shortcutLabel(id: string): string | undefined {
-  const keys = BY_ID.get(id)?.keys;
-  return keys && keys.length > 0 ? formatKeys(keys[0]) : undefined;
+  const command = BY_ID.get(id);
+  const keys = command ? keysOf(command) : [];
+  return keys.length > 0 ? formatKeys(keys[0]) : undefined;
 }
 
 /** `Label (Ctrl+Z)` for a tooltip. */
 export function withShortcut(label: string, id: string): string {
   const keys = shortcutLabel(id);
-  return keys ? `${label} (${keys})` : label;
+  return keys ? label + " (" + keys + ")" : label;
 }
 
 /** The command a key press is bound to, if any. */
 export function commandForEvent(e: KeyboardEvent): Command | undefined {
   return COMMANDS.find((command) => {
-    return command.keys?.some((spec) => {
+    return keysOf(command).some((spec) => {
       return matchesKeys(e, spec);
     });
   });

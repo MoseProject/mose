@@ -524,6 +524,54 @@ const strings = {
   pathMissing: { "pt-BR": "Não encontrado", en: "Not found" },
   pathWrongKind: { "pt-BR": "Tipo de caminho inesperado", en: "Unexpected kind of path" },
   settingsSaved: { "pt-BR": "Salvo", en: "Saved" },
+  trimTools: { "pt-BR": "Ferramentas de aparo", en: "Trim tools" },
+  monitorZoom: { "pt-BR": "Zoom do monitor", en: "Monitor zoom" },
+  zoomFitShort: { "pt-BR": "Ajustar", en: "Fit" },
+  moreSources: { "pt-BR": "Mais fontes de mídia", en: "More media sources" },
+  transform: { "pt-BR": "Transformar", en: "Transform" },
+  scale: { "pt-BR": "Escala", en: "Scale" },
+  rotation: { "pt-BR": "Rotação", en: "Rotation" },
+  transformAnimated: {
+    "pt-BR": "Valor animado: edite nos keyframes.",
+    en: "Animated value: edit it in the keyframes.",
+  },
+  transformHint: {
+    "pt-BR": "Também dá para arrastar a camada no monitor.",
+    en: "You can also drag the layer in the monitor.",
+  },
+  resetSection: { "pt-BR": "Restaurar padrão", en: "Reset to default" },
+  clipsSelected: { "pt-BR": "clipes selecionados", en: "clips selected" },
+  keymapReserved: {
+    "pt-BR": "Esse atalho é reservado pelo sistema ou pelos campos de texto.",
+    en: "That shortcut is reserved by the system or by text fields.",
+  },
+  keymapDuplicate: {
+    "pt-BR": "Esse comando já usa esse atalho.",
+    en: "That command already uses this shortcut.",
+  },
+  keymapFull: {
+    "pt-BR": "Cada comando aceita no máximo 4 atalhos.",
+    en: "Each command takes at most 4 shortcuts.",
+  },
+  keymapUsedBy: { "pt-BR": "já é usado por", en: "is already used by" },
+  keymapReplace: { "pt-BR": "Substituir", en: "Replace" },
+  keymapUnbound: { "pt-BR": "Sem atalho", en: "No shortcut" },
+  keymapRemove: { "pt-BR": "Remover atalho", en: "Remove shortcut" },
+  keymapAdd: { "pt-BR": "Adicionar atalho", en: "Add shortcut" },
+  keymapReset: { "pt-BR": "Restaurar o atalho padrão", en: "Restore the default shortcut" },
+  keymapPress: {
+    "pt-BR": "Pressione as teclas… (Esc cancela)",
+    en: "Press the keys… (Esc cancels)",
+  },
+  keymapResetAll: { "pt-BR": "Restaurar todos os padrões", en: "Restore all defaults" },
+  keymapResetAllTitle: {
+    "pt-BR": "Restaurar os atalhos padrão?",
+    en: "Restore the default shortcuts?",
+  },
+  keymapResetAllMessage: {
+    "pt-BR": "Todos os atalhos que você alterou voltam ao padrão. Isso não pode ser desfeito.",
+    en: "Every shortcut you changed goes back to its default. This cannot be undone.",
+  },
   close: { "pt-BR": "Fechar", en: "Close" },
   menuAdd: { "pt-BR": "Adicionar", en: "Add" },
   menuClip: { "pt-BR": "Clipe", en: "Clip" },
@@ -575,6 +623,9 @@ export function setLocale(locale: Locale) {
     return;
   }
   current = locale;
+  if (typeof document !== "undefined") {
+    document.documentElement.lang = locale;
+  }
   localeListeners.forEach((listener) => {
     return listener();
   });
