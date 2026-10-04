@@ -1,34 +1,38 @@
 /* Dark/teal palette ported 1:1 from crates/ui/src/theme.rs so both shells look the same while
    they coexist. Change a token there and here together. */
 :root {
-  --bg: #090a0d;
-  --bg-workspace: #0d0e12;
-  --surface: #101216;
-  --bg-elevated: #151820;
-  --surface-2: #191c23;
-  --bg-hover: #1d2027;
-  --border-subtle: #1b1c23;
-  --border: #252932;
-  --border-strong: #343945;
-  --text-primary: #e5e7eb;
-  --text-secondary: #969ba6;
-  --text-muted: #626874;
-  --text-disabled: #41454e;
-  --accent: #159ead;
-  --accent-hover: #1baebd;
-  --accent-active: #128b99;
-  --accent-tint: rgba(21, 158, 173, 0.1);
-  --icon-default: #777a86;
-  --icon-hover: #c5c7cf;
-  --media-video: #3d5f91;
-  --audio-tint: #3d8a62;
-  --error: #d95c5c;
+  /* Palette from the Mose reference mockup (mockup/mose_pixel_mockup/src/styles.css). */
+  --bg: #070d10;
+  --bg-workspace: #081014;
+  --surface: #0b1317;
+  --bg-elevated: #101a1f;
+  --surface-2: #162026;
+  --bg-hover: #1a262c;
+  --border-subtle: #18262c;
+  --border: #24363d;
+  --border-strong: #35494f;
+  --text-primary: #e6ecef;
+  --text-secondary: #bfc8cb;
+  --text-muted: #8d9aa0;
+  --text-disabled: #46545a;
+  --accent: #20b9c3;
+  --accent-hover: #2bc7d1;
+  --accent-active: #0f7f86;
+  --accent-tint: rgba(32, 185, 195, 0.1);
+  --icon-default: #9aa7ac;
+  --icon-hover: #e3e8e9;
+  --media-video: #203f59;
+  --media-video-edge: #426485;
+  --audio-tint: #1f5b46;
+  --audio-edge: #34775f;
+  --fx: #754115;
+  --error: #ff5f49;
   --warning: #d5a84a;
-  --success: #62b982;
-  --playhead: #ff5b67;
+  --success: #36e76e;
+  --playhead: #ff5d44;
 
   --radius: 4px;
-  --font-ui: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-ui: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
   --font-mono: "Cascadia Mono", "Consolas", ui-monospace, monospace;
   color-scheme: dark;
 }
@@ -700,15 +704,6 @@ button.icon:has(> .glyph) { display: inline-flex; align-items: center; justify-c
   text-align: center;
 }
 .menu { position: relative; display: inline-block; }
-.menu-trigger::after {
-  content: "";
-  display: inline-block;
-  margin-left: 6px;
-  vertical-align: middle;
-  border: 4px solid transparent;
-  border-top-color: currentColor;
-  border-bottom-width: 0;
-}
 .menu-pop {
   position: fixed;
   visibility: hidden;
@@ -730,7 +725,6 @@ button.icon:has(> .glyph) { display: inline-flex; align-items: center; justify-c
 .menu-pop > .modal-overlay { position: fixed; }
 .prefs label.check { justify-content: flex-start; }
 .prefs button { justify-self: start; }
-.menu-trigger:has(> .glyph)::after { display: none; }
 
 /* ---- tool rail ---- */
 .tool-rail {

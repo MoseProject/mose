@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { formatTime, t } from "../i18n";
 import { api } from "../ipc";
+import { Icon } from "./Icon";
 import { patchUi, run, uiStore, useStore } from "../store";
 import type { SilenceGap } from "../types";
 
@@ -68,8 +69,8 @@ export function SilenceReviewPanel() {
                   />
                   {`${formatTime(gap.startSecs)} - ${formatTime(gap.endSecs)} (${(gap.endSecs - gap.startSecs).toFixed(1)}s)`}
                 </label>
-                <button className="icon" onClick={() => void run(api.seek(gap.startSecs))}>
-                  ▶
+                <button className="icon" aria-label={t("goToGap")} title={t("goToGap")} onClick={() => void run(api.seek(gap.startSecs))}>
+                  <Icon name="play" />
                 </button>
               </div>
             ))}

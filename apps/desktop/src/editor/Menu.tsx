@@ -1,3 +1,4 @@
+import { Icon } from "./Icon";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 /** A toolbar dropdown. The popover stays mounted and is only hidden with `visibility`, so a
@@ -34,6 +35,7 @@ export function Menu({ label, ariaLabel, children, testId }: { label: ReactNode;
     <div className="menu" ref={root}>
       <button className="icon menu-trigger" data-testid={testId} aria-label={ariaLabel} aria-haspopup="menu" aria-expanded={open} onClick={toggle}>
         {label}
+        {typeof label === "string" && <Icon name="chevronDown" size={12} />}
       </button>
       <div
         className={`menu-pop ${open ? "open" : ""}`}

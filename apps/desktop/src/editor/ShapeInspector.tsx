@@ -3,6 +3,7 @@
 // `update_shape_clip` call, so one undo step; the preview engine reopens with the new overlay.
 
 import { t, type TextKey } from "../i18n";
+import { Icon } from "./Icon";
 import { api } from "../ipc";
 import { shapePresetOf } from "../overlays";
 import { run } from "../store";
@@ -84,10 +85,12 @@ export function ShapeInspector({ clip }: { clip: ShapeClip }) {
                 />
                 <button
                   className="icon"
+                  aria-label={t("removeVertex")}
+                  title={t("removeVertex")}
                   disabled={vertices.length <= 3}
                   onClick={() => commit({ polygonVertices: vertices.filter((_, j) => j !== i) })}
                 >
-                  ✕
+                  <Icon name="close" />
                 </button>
               </div>
             </div>

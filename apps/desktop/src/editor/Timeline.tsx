@@ -88,7 +88,9 @@ interface Palette {
   textMuted: string;
   accent: string;
   video: string;
+  videoEdge: string;
   audio: string;
+  audioEdge: string;
   playhead: string;
 }
 
@@ -104,7 +106,9 @@ function readPalette(): Palette {
     textMuted: v("--text-muted"),
     accent: v("--accent"),
     video: v("--media-video"),
+    videoEdge: v("--media-video-edge"),
     audio: v("--audio-tint"),
+    audioEdge: v("--audio-edge"),
     playhead: v("--playhead"),
   };
 }
@@ -604,15 +608,15 @@ export function Timeline({ session }: { session: SessionView }) {
             {t("drawCustomShape")}
           </button>
         </Menu>
-        <button className="icon" title={t("addMarker")} aria-label={t("addMarker")} onClick={() => run(api.addMarker())}>M</button>
+        <button className="icon" title={t("addMarker")} aria-label={t("addMarker")} onClick={() => run(api.addMarker())}><Icon name="flag" /></button>
         <button className="icon" title={t("previousMarker")} aria-label={t("previousMarker")} onClick={() => {
           const previous = markers.filter((m) => m.position_secs < previewStore.get().playheadSecs).sort((a, b) => b.position_secs - a.position_secs)[0];
           if (previous) void run(api.seek(previous.position_secs));
-        }}>‹M</button>
+        }}><Icon name="chevronLeft" /></button>
         <button className="icon" title={t("nextMarker")} aria-label={t("nextMarker")} onClick={() => {
           const next = markers.filter((m) => m.position_secs > previewStore.get().playheadSecs).sort((a, b) => a.position_secs - b.position_secs)[0];
           if (next) void run(api.seek(next.position_secs));
-        }}>M›</button>
+        }}><Icon name="chevronRight" /></button>
         <span style={{ flex: 1 }} />
         <button className="icon" title={t("zoomOut")} aria-label={t("zoomOut")} onClick={() => zoomBy(1 / 1.5)}>
           <Icon name="minus" />
@@ -743,6 +747,13 @@ function drawClip(
   ctx.fillStyle = "rgba(0,0,0,0.38)";
   ctx.fillRect(left, top, width, 16);
   ctx.restore();
+  if (!clip.color_label) {
+    ctx.strokeStyle = track.kind === "Audio" ? palette.audioEdge : palette.videoEdge;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(left + 0.5, top + 0.5, width - 1, height - 1, 4);
+    ctx.stroke();
+  }
 
   if (width > 24) {
     ctx.save();

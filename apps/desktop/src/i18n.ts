@@ -378,6 +378,8 @@ const strings = {
   timecode: { "pt-BR": "Posição do cursor", en: "Playhead position" },
   seek: { "pt-BR": "Posição de reprodução", en: "Playback position" },
   zoomFit: { "pt-BR": "Ajustar a timeline à janela", en: "Fit timeline to window" },
+  removeVertex: { "pt-BR": "Remover vértice", en: "Remove vertex" },
+  goToGap: { "pt-BR": "Ir para o trecho", en: "Go to gap" },
   close: { "pt-BR": "Fechar", en: "Close" },
   menuAdd: { "pt-BR": "Adicionar", en: "Add" },
   menuClip: { "pt-BR": "Clipe", en: "Clip" },
