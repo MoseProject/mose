@@ -140,6 +140,24 @@ describe("event subscriptions", () => {
   });
 });
 
+describe("import failures and media commands", () => {
+  it("hands only the file name of a failed import to the handler", async () => {
+    const handler = vi.fn();
+    await ipc.onImportFailed(handler);
+    listeners.get(ipc.events.importFailed)!({ payload: { fileName: "broken.mp4" } });
+    expect(handler).toHaveBeenCalledWith("broken.mp4");
+  });
+
+  it("calls the commands that remove media, reveal a path and lift a range", async () => {
+    await ipc.api.removeAsset(4);
+    expect(invoke).toHaveBeenLastCalledWith("remove_asset", { assetId: 4 });
+    await ipc.api.revealInFolder("C:/out/a.mp4");
+    expect(invoke).toHaveBeenLastCalledWith("reveal_in_folder", { path: "C:/out/a.mp4" });
+    await ipc.api.liftRange(2, 6);
+    expect(invoke).toHaveBeenLastCalledWith("lift_range", { startSecs: 2, endSecs: 6 });
+  });
+});
+
 describe("export helper", () => {
   it("does nothing when the save dialog is dismissed", async () => {
     invoke.mockResolvedValueOnce(null);
