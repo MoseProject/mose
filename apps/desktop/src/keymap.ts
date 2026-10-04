@@ -315,13 +315,22 @@ export function applyReset(id: string, overrides: Overrides): Overrides {
   return next;
 }
 
-/** Applies `next` at once and saves it. The backend returns what it kept, which wins. */
+let saveSeq = 0;
+
+/** Applies `next` at once and saves it. The backend returns what it kept, which wins. When the
+ *  save fails the previous table comes back, so the sheet never shows a binding that would be
+ *  gone after a restart. Only the latest save may touch the table, so a slow earlier answer
+ *  cannot undo a newer change. */
 export async function saveOverrides(next: Overrides): Promise<void> {
+  const previous = keymapStore.get();
+  saveSeq += 1;
+  const mine = saveSeq;
   keymapStore.set(next);
   const saved = await run(api.setKeybindings(next));
-  if (saved) {
-    keymapStore.set(saved);
+  if (mine !== saveSeq) {
+    return;
   }
+  keymapStore.set(saved ?? previous);
 }
 
 /** Loads the saved changes, dropping unknown commands and unreadable bindings. Returns how many
