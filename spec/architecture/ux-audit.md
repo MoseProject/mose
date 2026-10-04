@@ -300,6 +300,10 @@ mais usado em NLEs para acessar exatamente essas ações.
 | UX-19 | P3 | Agrupar Rolar/Deslizar origem/Deslizar num submenu do trilho | S |
 | UX-20 | P3 | `:focus-visible`, `prefers-reduced-motion`, fonte mínima de 11px | S |
 
+**Status (2026-10-04):** UX-01, UX-02 e UX-03 estão implementados: `ExportDialog`
+(Ctrl+E ou botão Exportar), `Dialog` único em todos os modais, e os atalhos globais respeitam
+diálogos abertos, campos editáveis e botões focados.
+
 Esforço: S até meio dia, M de 1 a 3 dias, L mais de 3 dias.
 
 ## 10. O que já está bom (preservar)

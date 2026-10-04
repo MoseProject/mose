@@ -41,6 +41,13 @@ vi.mock("./screens/CrashReviewModal", () => {
     },
   };
 });
+vi.mock("./editor/ExportDialog", () => {
+  return {
+    ExportDialog: () => {
+      return <div data-testid="export-dialog" />;
+    },
+  };
+});
 vi.mock("./ipc", () => {
   return {
     api: {
@@ -195,16 +202,13 @@ describe("app shell", () => {
       expect(api.saveProject).toHaveBeenCalledWith(false);
     });
 
-    it("exports, asking before overwriting through window.confirm", () => {
-      const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    it("opens the export options dialog instead of exporting at once", () => {
       sessionStore.set(session());
       render(<App />);
       fireEvent.click(screen.getByTestId("export"));
-      expect(exportActiveSequence).toHaveBeenCalledTimes(1);
-      const ask = vi.mocked(exportActiveSequence).mock.calls[0][0];
-      expect(ask()).toBe(false);
-      expect(confirm).toHaveBeenCalledWith(t("exportOverwriteConfirm"));
-      confirm.mockRestore();
+      expect(uiStore.get().exportDialogOpen).toBe(true);
+      expect(screen.getByTestId("export-dialog")).toBeTruthy();
+      expect(exportActiveSequence).not.toHaveBeenCalled();
     });
   });
 
