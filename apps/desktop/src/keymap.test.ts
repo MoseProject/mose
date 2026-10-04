@@ -210,6 +210,31 @@ describe("saving and loading", () => {
     expect(keymap.keymapStore.get()).toEqual({ marker: ["Q"] });
   });
 
+  it("puts the previous table back when the save fails", async () => {
+    keymap.keymapStore.set({ undo: ["U"] });
+    vi.mocked(api.setKeybindings).mockRejectedValue(new Error("disk full"));
+    const save = keymap.saveOverrides({ undo: ["U"], marker: ["Q"] });
+    expect(keymap.keymapStore.get()).toEqual({ undo: ["U"], marker: ["Q"] });
+    await save;
+    expect(keymap.keymapStore.get()).toEqual({ undo: ["U"] });
+  });
+
+  it("lets only the latest save decide, whatever order the answers arrive in", async () => {
+    const answers: ((table: Record<string, string[]>) => void)[] = [];
+    vi.mocked(api.setKeybindings).mockImplementation(() => {
+      return new Promise((resolve) => {
+        answers.push(resolve);
+      });
+    });
+    const first = keymap.saveOverrides({ marker: ["A"] });
+    const second = keymap.saveOverrides({ marker: ["B"] });
+    answers[1]({ marker: ["B"] });
+    await second;
+    answers[0]({ marker: ["A"] });
+    await first;
+    expect(keymap.keymapStore.get()).toEqual({ marker: ["B"] });
+  });
+
   it("loads saved changes and drops unknown commands and unreadable bindings", async () => {
     vi.mocked(api.getKeybindings).mockResolvedValue({ marker: ["Q", ""], gone: ["A"] });
     vi.mocked(api.setKeybindings).mockImplementation((table) => {
