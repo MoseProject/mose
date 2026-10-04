@@ -514,3 +514,37 @@ fn the_report_builder_is_shared_and_seeded_with_a_start_breadcrumb() {
     let guard = builder().lock().unwrap_or_else(|p| p.into_inner());
     assert!(!guard.breadcrumbs().is_empty());
 }
+
+#[test]
+fn the_build_channel_follows_the_debug_flag() {
+    assert_eq!(build_channel(true), "debug");
+    assert_eq!(build_channel(false), "stable");
+}
+
+#[test]
+fn the_queue_folder_is_the_override_or_the_platform_log_folder() {
+    assert_eq!(
+        queue_dir_from(Some("custom".into())),
+        PathBuf::from("custom")
+    );
+    assert_eq!(
+        queue_dir_from(None),
+        crate::platform_log_dir().join("error_reports")
+    );
+}
+
+#[test]
+fn an_unreadable_queue_entry_is_skipped() {
+    let dir = temp_dir("unreadable-entry");
+    std::fs::create_dir_all(dir.join("looks-like-a-report.json")).unwrap();
+    assert!(load_queue_in(&dir).is_empty());
+}
+
+#[test]
+fn only_crash_files_with_a_numeric_timestamp_are_considered() {
+    let dir = temp_dir("odd-crash-names");
+    std::fs::write(dir.join("notes.txt"), b"x").unwrap();
+    std::fs::write(dir.join("crash_abc.txt"), b"x").unwrap();
+    std::fs::write(dir.join("other_9.txt"), b"x").unwrap();
+    assert!(find_latest_unreviewed_crash(&dir, 0).is_none());
+}

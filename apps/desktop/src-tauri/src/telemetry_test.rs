@@ -71,12 +71,14 @@ fn enabled_telemetry_appends_records_to_the_file_and_disabled_writes_none() {
         on.clone(),
         Arc::new(AtomicBool::new(true)),
         Duration::from_millis(10),
+        Some(|| Some(sample())),
     );
     let off = h.dir.join("off.jsonl");
     spawn_to(
         off.clone(),
         Arc::new(AtomicBool::new(false)),
         Duration::from_millis(10),
+        None::<fn() -> Option<avcore::TelemetryEvent>>,
     );
     let started = std::time::Instant::now();
     while !on.exists() {
@@ -93,4 +95,19 @@ fn enabled_telemetry_appends_records_to_the_file_and_disabled_writes_none() {
 #[test]
 fn the_default_launch_does_not_write_when_telemetry_is_off() {
     spawn(Arc::new(AtomicBool::new(false)));
+}
+
+#[test]
+fn a_record_that_cannot_be_written_is_dropped_without_stopping_the_sampler() {
+    let h = harness();
+    let blocker = h.dir.join("a-file");
+    std::fs::write(&blocker, b"x").unwrap();
+    spawn_to(
+        blocker.join("inside").join("t.jsonl"),
+        Arc::new(AtomicBool::new(true)),
+        Duration::from_millis(5),
+        None::<fn() -> Option<avcore::TelemetryEvent>>,
+    );
+    std::thread::sleep(Duration::from_millis(120));
+    assert!(!blocker.join("inside").exists());
 }

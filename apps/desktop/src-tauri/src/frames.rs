@@ -109,6 +109,12 @@ mod tests {
     }
 
     #[test]
+    fn empty_or_truncated_frames_cannot_be_downscaled() {
+        assert!(downscale_to_rgb(0, 4, &[0; 64], 100).is_none());
+        assert!(downscale_to_rgb(4, 0, &[0; 64], 100).is_none());
+        assert!(downscale_to_rgb(4, 4, &[0; 10], 100).is_none());
+    }
+    #[test]
     fn downscale_keeps_aspect_and_caps_longest_side() {
         let frame = solid(1920, 1080);
         let (w, h, rgb) = downscale_to_rgb(frame.width, frame.height, &frame.rgba, 1280).unwrap();
