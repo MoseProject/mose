@@ -660,6 +660,25 @@ fn blend_layer(
                 destination_y >= layer.y as i64 && source_y < (crop_y0 + crop_h) as usize
             );
             let row_start = ((destination_y - band_start) as usize) * canvas_width * 4;
+            if layer.blend == BlendMode::Normal && layer.opacity >= 1.0 {
+                // An opaque row replaces the backdrop outright: one copy instead of a blend per
+                // pixel.
+                let source_start = source_y * source.stride_bytes()
+                    + (crop_x0 + start_x - layer.x as i64) as usize * 4;
+                let length = (end_x - start_x) as usize * 4;
+                let source_row = &source.pixels()[source_start..source_start + length];
+                if source_row
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .all(|pixel| pixel[3] == 255)
+                {
+                    let destination_start = row_start + start_x as usize * 4;
+                    canvas[destination_start..destination_start + length]
+                        .copy_from_slice(source_row);
+                    continue;
+                }
+            }
             for destination_x in start_x..end_x {
                 let source_x = crop_x0 + destination_x - layer.x as i64;
                 debug_assert!(source_x >= crop_x0 && source_x < crop_x0 + crop_w);
@@ -764,6 +783,19 @@ fn blend_pixel(destination: &mut [u8], source: &[u8], opacity: f32, mode: BlendM
     }
     let destination_alpha = destination[3] as f32 / 255.0;
     let output_alpha = source_alpha + destination_alpha * (1.0 - source_alpha);
+    if mode == BlendMode::Normal && destination_alpha == 1.0 && output_alpha == 1.0 {
+        // Over an opaque backdrop the general formula below reduces to this, with the same
+        // floating point result: the `(1 - ab)` term is exactly zero, the blend is the source and
+        // dividing by an alpha of exactly one changes nothing.
+        let keep = 1.0 - source_alpha;
+        for channel in 0..3 {
+            let premultiplied = source_alpha * (source[channel] as f32 / 255.0)
+                + keep * (destination[channel] as f32 / 255.0);
+            destination[channel] = (premultiplied * 255.0).round() as u8;
+        }
+        destination[3] = 255;
+        return;
+    }
     for channel in 0..3 {
         let source_color = source[channel] as f32 / 255.0;
         let destination_color = destination[channel] as f32 / 255.0;
