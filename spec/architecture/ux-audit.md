@@ -303,15 +303,30 @@ mais usado em NLEs para acessar exatamente essas ações.
 **Status (2026-10-04):** UX-01 a UX-20 estão implementados, mais a funcionalidade nova de
 atalhos editáveis (`keymap.ts`, `ShortcutsDialog`, persistência em `keybindings` nas
 preferências, conflito/reservados/duplicados, máximo de 4 por comando, restaurar padrão por
-comando e global). Limites conhecidos:
+comando e global).
 
-- Zoom do monitor 50/100 sem pan (centralizado, recortado; alças ocultas com zoom).
-- J/K/L aproximados: K pausa, L toca, J volta 1 s, Shift ±10 s.
-- Marcas I/O servem só ao apagar intervalo com ripple.
-- Medidor mostra pico (dBFS) com retenção, sem alvos de LUFS.
-- Posição da transformação exibida em % do canvas.
-- Fila de exportação sem ETA/abrir pasta; inspetor de texto não reagrupado.
-- Sem diamante de keyframe por seção; menu de contexto sem remover mídia (falta API).
+Pendências que ficaram do primeiro fechamento e foram resolvidas depois:
+
+- Pan do monitor com zoom 50/100: arrastar, roda do mouse e clique duplo para centralizar. As
+  alças da camada continuam ocultas com zoom, porque assumem o canvas ajustado.
+- Shuttle JKL: J e L aceleram 1x, 2x, 4x, 8x em cada sentido e K para, com selo de velocidade no
+  monitor. O motor de preview só toca em frente a 1x, então os demais passos andam o cursor com
+  seeks temporizados (mostra o quadro sob o cursor, sem áudio).
+- Marcas I/O: além de apagar com ripple, há remover deixando o vão (`lift_range`), ir para
+  entrada/saída (Shift+I/O) e reproduzir de entrada a saída (Shift+P).
+- Medidor: leitura de loudness momentâneo em LUFS (K-weighting da BS.1770 no `bush`), marcas dos
+  alvos -14/-16/-23 e destaque do alvo da sequência, mais a cor da leitura (ok/alto/baixo).
+- Transformação: posição em pixels do canvas de saída.
+- Fila de exportação: tempo restante estimado e "Mostrar na pasta" (`reveal_in_folder`).
+- Inspetor de texto: agrupado em Tipografia, Fundo, Posição, Keyframes e Tempo (mais Destaque).
+- Diamante de keyframe no cursor nas seções Transformação, Ganho e Cor.
+- Remover mídia da biblioteca (`remove_asset`), recusado enquanto algum clipe usa o arquivo.
+
+Limites que restam, por serem de natureza e não de escopo:
+
+- O LUFS é momentâneo (400 ms), sem a janela curta de 3 s nem o valor integrado.
+- O shuttle de 2x a 8x e o reverso não têm áudio.
+- As alças da camada não aparecem com zoom no monitor.
 
 Esforço: S até meio dia, M de 1 a 3 dias, L mais de 3 dias.
 
@@ -320,4 +335,4 @@ Esforço: S até meio dia, M de 1 a 3 dias, L mais de 3 dias.
 - Fila de exportação fora do caminho; ícones coesos; paleta escura legível.
 - Biblioteca com busca, abas e grade/lista; zoom e frames/ondas na timeline reais.
 - Menus da barra superior reaproveitam comandos existentes, sem duplicar lógica.
-- Cobertura de testes alta no frontend (572 testes), o que permite refatorar com segurança.
+- Cobertura de testes alta no frontend (616 testes), o que permite refatorar com segurança.
