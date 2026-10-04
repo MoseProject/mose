@@ -498,6 +498,22 @@ describe("transform section", () => {
     });
   });
 
+  it("keeps a typed position within one canvas of the frame", () => {
+    render(<Inspector session={sessionFor()} />);
+    const x = screen.getByLabelText(t("positionX"));
+    fireEvent.change(x, { target: { value: "999999" } });
+    fireEvent.blur(x);
+    expect(lastPatch()).toEqual({
+      positionKeyframes: [{ time_fraction: 0, value: { x: 2, y: 0 } }],
+    });
+    const y = screen.getByLabelText(t("positionY"));
+    fireEvent.change(y, { target: { value: "-999999" } });
+    fireEvent.blur(y);
+    expect(lastPatch()).toEqual({
+      positionKeyframes: [{ time_fraction: 0, value: { x: 0, y: -1 } }],
+    });
+  });
+
   it("scales both axes together and never below 1 percent", () => {
     render(<Inspector session={sessionFor()} />);
     const scale = screen.getByLabelText(t("scale"));

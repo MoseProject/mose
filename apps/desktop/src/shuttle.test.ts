@@ -96,6 +96,19 @@ describe("shuttle", () => {
     expect(vi.mocked(api.seek).mock.calls.at(-1)![0]).toBe(0);
   });
 
+  it("ends the shuttle when a seek fails instead of repeating the error", async () => {
+    vi.mocked(api.seek).mockRejectedValue("seek failed");
+    await shuttle(-1);
+    vi.advanceTimersByTime(80);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(shuttleStore.get().direction).toBe(0);
+    vi.advanceTimersByTime(400);
+    expect(api.seek).toHaveBeenCalledTimes(1);
+    expect(uiStore.get().error).toBe("seek failed");
+    vi.mocked(api.seek).mockResolvedValue(undefined);
+  });
+
   it("stops walking once stopShuttle is called", async () => {
     await shuttle(-1);
     vi.advanceTimersByTime(80);

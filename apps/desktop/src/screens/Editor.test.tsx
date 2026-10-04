@@ -532,6 +532,14 @@ describe("editor shortcuts from the command table", () => {
     expect(calls.undo).toHaveBeenCalledTimes(1);
   });
 
+  it("stops a running shuttle when the editor goes away", async () => {
+    const { shuttleStore, shuttle } = await import("../shuttle");
+    await shuttle(-1);
+    expect(shuttleStore.get().direction).toBe(-1);
+    cleanup();
+    expect(shuttleStore.get().direction).toBe(0);
+  });
+
   it("runs a held key once, except for commands that make sense to repeat", () => {
     const held = press({ key: "m", repeat: true });
     expect(held.defaultPrevented).toBe(true);
