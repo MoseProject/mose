@@ -286,7 +286,7 @@ pub fn map_timeline(
                 id: ContributorId(clip.id),
                 layer: i32::try_from(index).unwrap_or(i32::MAX),
                 visible: on_video_track && asset.kind == MediaKind::Video,
-                audible: asset.has_audio && !clip.frozen,
+                audible: asset.has_audio && !clip.frozen && timeline.track_is_audible(track),
                 content: ContributorContent::Media(MediaSource {
                     path,
                     range: mapped.range,

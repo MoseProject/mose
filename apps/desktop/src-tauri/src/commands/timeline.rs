@@ -496,6 +496,9 @@ pub fn set_track_flags<R: Runtime>(
     track_id: u64,
     visible: Option<bool>,
     locked: Option<bool>,
+    muted: Option<bool>,
+    solo: Option<bool>,
+    audio_role: Option<AudioRole>,
 ) -> Result<(), String> {
     undoable(&app, |project| {
         let Some(track) = project
@@ -506,11 +509,55 @@ pub fn set_track_flags<R: Runtime>(
         else {
             return false;
         };
-        let before = (track.visible, track.locked);
+        let before = (
+            track.visible,
+            track.locked,
+            track.muted,
+            track.solo,
+            track.audio_role,
+        );
         track.visible = visible.unwrap_or(track.visible);
         track.locked = locked.unwrap_or(track.locked);
-        before != (track.visible, track.locked)
+        track.muted = muted.unwrap_or(track.muted);
+        track.solo = solo.unwrap_or(track.solo);
+        track.audio_role = audio_role.unwrap_or(track.audio_role);
+        before
+            != (
+                track.visible,
+                track.locked,
+                track.muted,
+                track.solo,
+                track.audio_role,
+            )
     })
+}
+
+/// Removes `[start_secs, end_secs)` from every unlocked video and audio track and closes the
+/// gap (the I/O range delete). Overlay tracks are left alone, as in [`delete`] with ripple.
+#[tauri::command]
+pub fn ripple_delete_range<R: Runtime>(
+    app: AppHandle<R>,
+    start_secs: f64,
+    end_secs: f64,
+) -> Result<(), String> {
+    undoable(&app, |project| {
+        delete_range(project.timeline_mut(), start_secs, end_secs)
+    })
+}
+
+pub(crate) fn delete_range(timeline: &mut Timeline, start_secs: f64, end_secs: f64) -> bool {
+    if !start_secs.is_finite() || !end_secs.is_finite() || end_secs <= start_secs {
+        return false;
+    }
+    let mut next_id = timeline.next_clip_id();
+    let mut changed = false;
+    for track in &mut timeline.tracks {
+        if track.locked || !matches!(track.kind, TrackKind::Video | TrackKind::Audio) {
+            continue;
+        }
+        changed |= track.ripple_delete_range(start_secs, end_secs, &mut next_id);
+    }
+    changed
 }
 
 pub(crate) fn add_asset(

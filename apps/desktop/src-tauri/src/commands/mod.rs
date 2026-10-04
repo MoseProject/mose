@@ -19,6 +19,7 @@ pub mod markers;
 pub mod media;
 pub mod motion_tracking;
 pub mod overlays;
+pub mod paths;
 pub mod prefs;
 pub mod privacy_blur;
 pub mod scene_detection;
