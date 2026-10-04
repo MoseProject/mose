@@ -170,6 +170,37 @@ describe("asset dragging", () => {
     expect(assetDragStore.get()).toBeNull();
   });
 
+  it.each([
+    [
+      "the pointer is cancelled",
+      () => {
+        return fireEvent(window, new MouseEvent("pointercancel"));
+      },
+    ],
+    [
+      "Escape is pressed",
+      () => {
+        return fireEvent.keyDown(window, { key: "Escape" });
+      },
+    ],
+    [
+      "the window loses focus",
+      () => {
+        return fireEvent(window, new Event("blur"));
+      },
+    ],
+  ])("drops the drag at once when %s", (_name, interrupt) => {
+    render(<MediaLibrary session={sessionWith([asset()])} />);
+    press(screen.getByText("clip.mp4"), 10, 10);
+    move(60, 60);
+    expect(assetDragStore.get()).not.toBeNull();
+
+    interrupt();
+    expect(assetDragStore.get()).toBeNull();
+    move(90, 90);
+    expect(assetDragStore.get()).toBeNull();
+  });
+
   it("ignores presses other than the primary button", () => {
     render(<MediaLibrary session={sessionWith([asset()])} />);
     press(screen.getByText("clip.mp4"), 10, 10, 2);
