@@ -63,6 +63,8 @@ pub fn remove_asset<R: Runtime>(app: AppHandle<R>, asset_id: u64) -> Result<(), 
         }
         if session.project.remove_asset(asset_id) {
             session.dirty = true;
+            // An older undo step could bring back a clip of this asset, which is gone now.
+            session.undo.clear();
         }
         Ok(())
     })
@@ -98,14 +100,7 @@ fn import_one<R: Runtime>(app: &AppHandle<R>, path: &Path, epoch: u64, proxy_dir
         .unwrap_or_default();
 
     let Some((asset_id, kind)) = with_current_project(app, epoch, |session| {
-        let id = session
-            .project
-            .media_library
-            .iter()
-            .map(|a| a.id)
-            .max()
-            .unwrap_or(0)
-            + 1;
+        let id = session.allocate_asset_id();
         let asset = probed.into_media_asset(id, file_name, path.to_path_buf());
         let kind = asset.kind;
         session.project.media_library.push(asset);

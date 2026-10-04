@@ -34,6 +34,10 @@ pub struct Session {
     /// Bumped whenever the project is replaced (new/open) so import enrichment results for the
     /// previous project are dropped instead of patched into the wrong media library.
     pub project_epoch: u64,
+    /// Highest media id handed out in this session. Ids never go back down, so removing the
+    /// newest asset cannot let a later import reuse its id while background work for the removed
+    /// one is still running.
+    pub last_asset_id: u64,
 }
 
 impl Session {
@@ -43,7 +47,22 @@ impl Session {
             undo: UndoStack::new(),
             dirty: false,
             project_epoch: 0,
+            last_asset_id: 0,
         }
+    }
+
+    /// A media id no asset in the library has, and none handed out before in this session.
+    pub fn allocate_asset_id(&mut self) -> u64 {
+        let in_library = self
+            .project
+            .media_library
+            .iter()
+            .map(|asset| asset.id)
+            .max()
+            .unwrap_or(0);
+        let id = in_library.max(self.last_asset_id) + 1;
+        self.last_asset_id = id;
+        id
     }
 
     /// Replaces the open project, resetting undo history and invalidating in-flight imports.
@@ -52,6 +71,7 @@ impl Session {
         self.undo.clear();
         self.dirty = false;
         self.project_epoch = self.project_epoch.wrapping_add(1);
+        self.last_asset_id = 0;
     }
 
     pub fn undo(&mut self) -> bool {

@@ -46,6 +46,47 @@ fn removing_media_is_refused_while_a_clip_uses_it() {
 }
 
 #[test]
+fn removing_media_drops_the_undo_history_that_could_bring_its_clips_back() {
+    let h = harness();
+    h.session().project.media_library.push(video_asset(1, 5.0));
+    h.session().project.media_library.push(video_asset(2, 5.0));
+    crate::commands::timeline::add_asset_to_timeline(h.handle(), 1, None, None).unwrap();
+    assert!(h.session().undo.can_undo());
+
+    remove_asset(h.handle(), 2).unwrap();
+    assert!(!h.session().undo.can_undo());
+}
+
+#[test]
+fn asking_to_remove_unknown_media_keeps_the_undo_history() {
+    let h = harness();
+    h.session().project.media_library.push(video_asset(1, 5.0));
+    crate::commands::timeline::add_asset_to_timeline(h.handle(), 1, None, None).unwrap();
+    remove_asset(h.handle(), 404).unwrap();
+    assert!(h.session().undo.can_undo());
+}
+
+#[test]
+fn media_ids_are_never_reused_after_a_removal() {
+    let h = harness();
+    h.session().project.media_library.push(video_asset(1, 5.0));
+    let mut session = h.session();
+    let second = session.allocate_asset_id();
+    assert_eq!(second, 2);
+    session.project.media_library.push(video_asset(second, 5.0));
+    assert!(session.project.remove_asset(second));
+    assert_eq!(session.allocate_asset_id(), 3, "2 is not handed out again");
+
+    let project = session.project.clone();
+    session.replace_project(project);
+    assert_eq!(
+        session.allocate_asset_id(),
+        2,
+        "a new project starts from its own library"
+    );
+}
+
+#[test]
 fn an_imported_video_gets_its_loudness_proxy_and_waveform() {
     let h = saved_harness();
     import_media(h.handle(), vec![fixture("video.mp4").display().to_string()]);
