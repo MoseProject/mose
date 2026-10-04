@@ -10,7 +10,6 @@ vi.mock("../editor/Inspector", () => ({ Inspector: () => <div data-testid="inspe
 vi.mock("../editor/MediaLibrary", () => ({ MediaLibrary: () => <div data-testid="library" /> }));
 vi.mock("../editor/PreviewPanel", () => ({ PreviewPanel: () => <div data-testid="preview" /> }));
 vi.mock("../editor/Timeline", () => ({ Timeline: () => <div data-testid="timeline" /> }));
-vi.mock("../editor/SequenceTabs", () => ({ SequenceTabs: () => <div data-testid="tabs" /> }));
 
 type DragDropHandler = (event: { payload: { type: string; paths?: string[] } }) => void;
 const webview = vi.hoisted(() => ({ handler: null as unknown, unlisten: null as unknown }));
@@ -73,7 +72,7 @@ afterEach(() => {
 describe("editor screen", () => {
   it("composes every panel", () => {
     render(<Editor session={sessionWith(1)} />);
-    for (const id of ["library", "preview", "inspector", "tabs", "timeline"]) {
+    for (const id of ["library", "preview", "inspector", "timeline"]) {
       expect(screen.getByTestId(id)).toBeTruthy();
     }
   });
@@ -83,7 +82,7 @@ describe("editor screen", () => {
       render(<Editor session={sessionWith(1)} />);
       expect(cssVar("--library-width")).toBe("340px");
       expect(cssVar("--inspector-width")).toBe("296px");
-      expect(cssVar("--timeline-height")).toBe("300px");
+      expect(cssVar("--timeline-height")).toBe("392px");
     });
 
     it("restores the stored layout within its bounds", () => {
@@ -107,7 +106,7 @@ describe("editor screen", () => {
       const splitter = container.querySelector(".splitter")!;
       pointer(splitter, "pointerdown", 0, 500);
       pointer(splitter, "pointermove", 0, 400);
-      expect(cssVar("--timeline-height")).toBe("400px");
+      expect(cssVar("--timeline-height")).toBe("492px");
       pointer(splitter, "pointermove", 0, -5000);
       expect(cssVar("--timeline-height")).toBe("800px");
       pointer(splitter, "pointermove", 0, 9000);
@@ -140,7 +139,7 @@ describe("editor screen", () => {
       pointer(splitter, "pointermove", -5000, 0);
       expect(cssVar("--library-width")).toBe("160px");
       pointer(splitter, "pointerup", -5000, 0);
-      expect(calls.setPanelLayout).toHaveBeenCalledWith(160, 296, 300);
+      expect(calls.setPanelLayout).toHaveBeenCalledWith(160, 296, 392);
     });
 
     it("drags the inspector splitter the opposite way", () => {
@@ -155,7 +154,7 @@ describe("editor screen", () => {
       pointer(splitter, "pointermove", -5000, 0);
       expect(cssVar("--inspector-width")).toBe("640px");
       pointer(splitter, "pointerup", -5000, 0);
-      expect(calls.setPanelLayout).toHaveBeenCalledWith(340, 640, 300);
+      expect(calls.setPanelLayout).toHaveBeenCalledWith(340, 640, 392);
     });
   });
 

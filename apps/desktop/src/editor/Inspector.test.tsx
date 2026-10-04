@@ -366,3 +366,24 @@ describe("clip controls", () => {
     expect(api.generateMatteForClip).toHaveBeenCalledWith(7);
   });
 });
+
+describe("inspector tabs", () => {
+  it("groups the clip's sections under Inspector, Effects and Audio", () => {
+    const { container } = render(<Inspector session={sessionFor()} />);
+    const body = container.querySelector(".inspector-body")!;
+    expect(body.getAttribute("data-tab")).toBe("inspector");
+    fireEvent.click(screen.getByRole("tab", { name: t("inspectorEffects") }));
+    expect(body.getAttribute("data-tab")).toBe("effects");
+    expect(screen.getByRole("tab", { name: t("inspectorEffects") }).getAttribute("aria-selected")).toBe("true");
+    fireEvent.click(screen.getByRole("tab", { name: t("inspectorAudio") }));
+    expect(body.getAttribute("data-tab")).toBe("audio");
+    expect(screen.getByTestId("section-gain").getAttribute("data-group")).toBe("audio");
+    expect(container.querySelector('[data-group="effects"]')).toBeTruthy();
+  });
+
+  it("offers only the Inspector tab for text and shape overlays", () => {
+    patchUi({ selectedClipIds: [20] });
+    render(<Inspector session={sessionFor()} />);
+    expect(screen.getAllByRole("tab")).toHaveLength(1);
+  });
+});

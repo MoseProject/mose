@@ -83,7 +83,8 @@ describe("media library", () => {
     );
     fireEvent.error(container.querySelector("img")!);
     expect(container.querySelector("img")).toBeNull();
-    expect(container.querySelectorAll(".thumb svg")).toHaveLength(2);
+    expect(container.querySelectorAll(".thumb svg")).toHaveLength(1);
+    expect(container.querySelectorAll(".audio-icon svg")).toHaveLength(1);
     expect(screen.getByText(t("analyzing"), { exact: false })).toBeTruthy();
   });
 
@@ -309,5 +310,52 @@ describe("YouTube download", () => {
     fireEvent.click(screen.getByText(t("youtubeDownload")));
     fireEvent.click(container.querySelector(".modal-overlay")!);
     expect(screen.queryByPlaceholderText(t("youtubeDownloadUrlHint"))).toBeNull();
+  });
+});
+
+describe("media library tabs, search and view", () => {
+  const library = () =>
+    ({
+      project: {
+        media_library: [
+          asset({ id: 1, file_name: "alpha.mp4", favorited: true }),
+          asset({ id: 2, file_name: "beta.mp4" }),
+          asset({ id: 3, file_name: "gamma.mp4" }),
+        ],
+        recent_asset_ids: [3, 1, 99],
+      },
+    }) as unknown as SessionView;
+
+  it("filters by the favorites tab", () => {
+    render(<MediaLibrary session={library()} />);
+    fireEvent.click(screen.getByRole("tab", { name: t("libraryTabFavorites") }));
+    expect(screen.getByText("alpha.mp4")).toBeTruthy();
+    expect(screen.queryByText("beta.mp4")).toBeNull();
+  });
+
+  it("lists recent assets in recency order and ignores ids that no longer exist", () => {
+    const { container } = render(<MediaLibrary session={library()} />);
+    fireEvent.click(screen.getByRole("tab", { name: t("libraryTabRecent") }));
+    const names = [...container.querySelectorAll(".asset .name")].map((n) => n.textContent);
+    expect(names).toEqual(["gamma.mp4", "alpha.mp4"]);
+  });
+
+  it("searches by name, counts the matches and explains an empty result", () => {
+    const { container } = render(<MediaLibrary session={library()} />);
+    expect(container.querySelector(".media-head .count")!.textContent).toContain(`3 ${t("items")}`);
+    fireEvent.change(screen.getByLabelText(t("searchMedia")), { target: { value: "ET" } });
+    expect(screen.getByText("beta.mp4")).toBeTruthy();
+    expect(screen.queryByText("alpha.mp4")).toBeNull();
+    expect(container.querySelector(".media-head .count")!.textContent).toContain(`1 ${t("items")}`);
+    fireEvent.change(screen.getByLabelText(t("searchMedia")), { target: { value: "zzz" } });
+    expect(screen.getByText(t("libraryNoMatches"))).toBeTruthy();
+  });
+
+  it("switches between grid and list", () => {
+    const { container } = render(<MediaLibrary session={library()} />);
+    expect(container.querySelector(".asset-list")!.className).toContain("grid");
+    fireEvent.click(screen.getByLabelText(t("viewList")));
+    expect(container.querySelector(".asset-list")!.className).toContain("list");
+    expect(screen.getByLabelText(t("viewList")).getAttribute("aria-pressed")).toBe("true");
   });
 });
