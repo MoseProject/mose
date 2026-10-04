@@ -74,6 +74,8 @@ describe("describeError", () => {
   it("translates the codes the backend uses instead of a sentence", () => {
     expect(describeError("assetInUse")).toBe(t("assetInUse"));
     expect(describeError("pathMissing")).toBe(t("pathMissing"));
+    expect(describeError("outputIsSource")).toBe(t("exportOutputIsSource"));
+    expect(describeError("outputInQueue")).toBe(t("exportOutputInQueue"));
   });
 
   it("passes any other error through as the backend wrote it", () => {
