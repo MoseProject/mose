@@ -59,6 +59,8 @@ pub struct PreviewTick {
     pub error: Option<String>,
     pub peak_l: f32,
     pub peak_r: f32,
+    /// Momentary loudness in LUFS while playing; `None` when silent or stopped.
+    pub momentary_lufs: Option<f32>,
 }
 
 pub struct PreviewEngine {

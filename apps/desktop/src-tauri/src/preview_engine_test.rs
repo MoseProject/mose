@@ -265,6 +265,10 @@ impl crate::bush_adapter::AudioOutput for FakeAudio {
         (0.4, 0.6)
     }
 
+    fn momentary_lufs(&self) -> Option<f32> {
+        Some(-18.0)
+    }
+
     fn position_secs(&self) -> f64 {
         self.anchor + self.origin.elapsed().as_secs_f64()
     }

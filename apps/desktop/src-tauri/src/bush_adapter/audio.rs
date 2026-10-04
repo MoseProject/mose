@@ -26,6 +26,8 @@ pub(crate) trait AudioOutput {
     fn seek_to(&mut self, secs: f64);
     /// Linear peaks of the block being played right now, for the level meter.
     fn peaks(&self) -> (f32, f32);
+    /// Momentary loudness (LUFS) around the block being played, `None` when silent.
+    fn momentary_lufs(&self) -> Option<f32>;
     /// Timeline seconds the output has actually played.
     fn position_secs(&self) -> f64;
     /// Feeds the queue; recovers a failed device.
@@ -89,6 +91,11 @@ impl AudioOutput for AudioStack {
     fn peaks(&self) -> (f32, f32) {
         let frame = (self.position_secs() * f64::from(self.sink.sample_rate())) as u64;
         self.player.peaks_at(frame)
+    }
+
+    fn momentary_lufs(&self) -> Option<f32> {
+        let frame = (self.position_secs() * f64::from(self.sink.sample_rate())) as u64;
+        self.player.momentary_lufs_at(frame)
     }
 
     /// Timeline seconds the device has actually played.

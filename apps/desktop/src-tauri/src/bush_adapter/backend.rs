@@ -420,6 +420,10 @@ pub(crate) fn run_with_audio<R: Runtime>(
                 .as_ref()
                 .filter(|_| playing)
                 .map_or((0.0, 0.0), |audio| audio.peaks());
+            let lufs = audio
+                .as_ref()
+                .filter(|_| playing)
+                .and_then(|audio| audio.momentary_lufs());
             let tick = PreviewTick {
                 frame_seq: frame_seq.wrapping_add(encoded),
                 playhead_secs: f64::from_bits(playhead_bits.load(Ordering::Acquire)),
@@ -429,6 +433,7 @@ pub(crate) fn run_with_audio<R: Runtime>(
                 error: error.clone(),
                 peak_l,
                 peak_r,
+                momentary_lufs: lufs,
             };
             if let Err(error) = app.emit(PREVIEW_TICK, tick) {
                 tracing::warn!(%error, "failed to emit preview tick");
