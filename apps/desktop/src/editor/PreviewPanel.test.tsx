@@ -21,7 +21,8 @@ vi.mock("../ipc", () => {
   };
 });
 
-const { PreviewPanel } = await import("./PreviewPanel");
+const { PreviewPanel, clampPan } = await import("./PreviewPanel");
+const { shuttleStore } = await import("../shuttle");
 const { api } = await import("../ipc");
 
 let resize: (width: number, height: number) => void = () => {};
@@ -472,5 +473,87 @@ describe("monitor zoom and guides", () => {
     const { container } = mount();
     expect(container.querySelector(".time-now")!.textContent).toBe("00:00:01:12");
     expect(container.querySelector(".time-total")!.textContent).toBe("00:00:10:00");
+  });
+});
+
+describe("monitor pan", () => {
+  beforeEach(() => {
+    sessionStore.set(sessionWith(clip()));
+    previewStore.set(tick({ frameSeq: 3 }));
+    uiStore.set({ ...uiStore.get(), selectedClipIds: [1], monitorZoom: "100" });
+  });
+
+  const imageLeft = (container: HTMLElement) => {
+    return parseFloat((container.querySelector(".monitor img") as HTMLImageElement).style.left);
+  };
+
+  it("keeps a margin of the canvas in view on every side", () => {
+    const canvas = { width: 1000, height: 500 };
+    const monitor = { width: 400, height: 300 };
+    expect(clampPan({ x: 0, y: 0 }, canvas, monitor)).toEqual({ x: 0, y: 0 });
+    expect(clampPan({ x: 9999, y: -9999 }, canvas, monitor)).toEqual({ x: 652, y: -352 });
+  });
+
+  it("drags the zoomed picture and recenters on a double click", () => {
+    const { container } = mount();
+    const monitor = screen.getByTestId("preview-monitor");
+    const before = imageLeft(container);
+    fireEvent.pointerDown(monitor, { clientX: 100, clientY: 100, button: 0 });
+    fireEvent.pointerMove(monitor, { clientX: 60, clientY: 90 });
+    fireEvent.pointerUp(monitor, { clientX: 60, clientY: 90 });
+    expect(imageLeft(container)).toBe(before - 40);
+
+    fireEvent.doubleClick(monitor);
+    expect(imageLeft(container)).toBe(before);
+  });
+
+  it("pans with the wheel and recenters when the zoom changes", () => {
+    const { container } = mount();
+    const monitor = screen.getByTestId("preview-monitor");
+    const before = imageLeft(container);
+    fireEvent.wheel(monitor, { deltaX: 30, deltaY: 0 });
+    expect(imageLeft(container)).toBe(before - 30);
+    act(() => {
+      uiStore.set({ ...uiStore.get(), monitorZoom: "50" });
+    });
+    act(() => {
+      uiStore.set({ ...uiStore.get(), monitorZoom: "100" });
+    });
+    expect(imageLeft(container)).toBe(before);
+  });
+
+  it("does not pan at Fit", () => {
+    uiStore.set({ ...uiStore.get(), monitorZoom: "fit" });
+    mount();
+    const monitor = screen.getByTestId("preview-monitor");
+    fireEvent.wheel(monitor, { deltaX: 30, deltaY: 30 });
+    expect(monitor.title).not.toBe(t("monitorPanHint"));
+  });
+});
+
+describe("shuttle badge", () => {
+  beforeEach(() => {
+    sessionStore.set(sessionWith(clip()));
+    previewStore.set(tick({ frameSeq: 3 }));
+  });
+  afterEach(() => {
+    shuttleStore.set({ direction: 0, level: 1 });
+  });
+
+  it("shows the speed while shuttling and hides it for plain forward play", () => {
+    mount();
+    expect(screen.queryByTestId("shuttle-badge")).toBeNull();
+    act(() => {
+      shuttleStore.set({ direction: 1, level: 1 });
+    });
+    expect(screen.queryByTestId("shuttle-badge")).toBeNull();
+    act(() => {
+      shuttleStore.set({ direction: -1, level: 4 });
+    });
+    expect(screen.getByTestId("shuttle-badge").textContent).toBe("-4x");
+    act(() => {
+      shuttleStore.set({ direction: 1, level: 2 });
+    });
+    expect(screen.getByTestId("shuttle-badge").textContent).toBe("2x");
   });
 });
