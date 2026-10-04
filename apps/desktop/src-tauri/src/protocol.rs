@@ -17,7 +17,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tauri::http::{header, Response, StatusCode};
 use tauri::{AppHandle, Manager, Runtime};
@@ -34,13 +34,27 @@ const THUMBNAIL_AT_SECS: f64 = 1.0;
 /// dropped wholesale (a tile is ~10 KB, so this bounds it near 15 MB) and refills as needed.
 const MAX_TILE_ENTRIES: usize = 1500;
 
+/// How long a failed extraction is remembered before it is tried again. A failure is cached so a
+/// timeline redraw does not repeat an expensive decode that cannot work, but not forever: the
+/// file may have been offline, still being written, or its proxy not ready yet.
+const RETRY_AFTER: Duration = Duration::from_secs(10);
+
 type Bytes = Option<Arc<Vec<u8>>>;
 
-#[derive(Default)]
+/// A result with the moment it was produced, so a failure can expire.
+type Stamped = (Bytes, Instant);
+
 pub struct ThumbnailCache {
-    entries: Mutex<HashMap<PathBuf, Bytes>>,
-    tiles: Mutex<HashMap<(PathBuf, u64), Bytes>>,
-    waves: Mutex<HashMap<PathBuf, Arc<OnceLock<Bytes>>>>,
+    entries: Mutex<HashMap<PathBuf, Stamped>>,
+    tiles: Mutex<HashMap<(PathBuf, u64), Stamped>>,
+    waves: Mutex<HashMap<PathBuf, (Instant, Arc<OnceLock<Bytes>>)>>,
+    retry_after: Duration,
+}
+
+impl Default for ThumbnailCache {
+    fn default() -> Self {
+        Self::with_retry(RETRY_AFTER)
+    }
 }
 
 /// Answers one `oca://` request through `respond`; `main` hands it the scheme responder.
@@ -123,17 +137,38 @@ fn find_asset<R: Runtime>(app: &AppHandle<R>, asset_id: u64) -> Option<avcore::M
 }
 
 impl ThumbnailCache {
+    fn with_retry(retry_after: Duration) -> Self {
+        Self {
+            entries: Mutex::default(),
+            tiles: Mutex::default(),
+            waves: Mutex::default(),
+            retry_after,
+        }
+    }
+
+    /// Whether a remembered result can still be served: a success always, a failure until it
+    /// is old enough to be tried again.
+    fn is_fresh(&self, entry: &Stamped) -> bool {
+        entry.0.is_some() || entry.1.elapsed() < self.retry_after
+    }
+
     fn get_or_extract_at(&self, source: &Path, millis: u64) -> Bytes {
         let key = (source.to_path_buf(), millis);
-        if let Some(cached) = self.tiles.lock().ok()?.get(&key) {
-            return cached.clone();
+        if let Some(cached) = self
+            .tiles
+            .lock()
+            .ok()?
+            .get(&key)
+            .filter(|entry| self.is_fresh(entry))
+        {
+            return cached.0.clone();
         }
         let extracted = extract_frame_at(source, millis as f64 / 1000.0).map(Arc::new);
         if let Ok(mut tiles) = self.tiles.lock() {
             if tiles.len() >= MAX_TILE_ENTRIES {
                 tiles.clear();
             }
-            tiles.insert(key, extracted.clone());
+            tiles.insert(key, (extracted.clone(), Instant::now()));
         }
         extracted
     }
@@ -143,7 +178,15 @@ impl ThumbnailCache {
     fn get_or_wave(&self, source: &Path, duration_secs: f64) -> Bytes {
         let cell = {
             let mut waves = self.waves.lock().ok()?;
-            waves.entry(source.to_path_buf()).or_default().clone()
+            let slot = waves
+                .entry(source.to_path_buf())
+                .or_insert_with(|| (Instant::now(), Arc::default()));
+            // A decode that failed long enough ago starts over with a fresh cell.
+            let failed = slot.1.get().is_some_and(Option::is_none);
+            if failed && slot.0.elapsed() >= self.retry_after {
+                *slot = (Instant::now(), Arc::default());
+            }
+            slot.1.clone()
         };
         cell.get_or_init(|| {
             let peaks = avcore::generate_detailed_waveform(source, duration_secs)
@@ -160,12 +203,18 @@ impl ThumbnailCache {
     }
 
     fn get_or_extract(&self, source: &Path) -> Option<Arc<Vec<u8>>> {
-        if let Some(cached) = self.entries.lock().ok()?.get(source) {
-            return cached.clone();
+        if let Some(cached) = self
+            .entries
+            .lock()
+            .ok()?
+            .get(source)
+            .filter(|entry| self.is_fresh(entry))
+        {
+            return cached.0.clone();
         }
         let extracted = extract_thumbnail(source).map(Arc::new);
         if let Ok(mut entries) = self.entries.lock() {
-            entries.insert(source.to_path_buf(), extracted.clone());
+            entries.insert(source.to_path_buf(), (extracted.clone(), Instant::now()));
         }
         extracted
     }
@@ -255,6 +304,58 @@ mod tests {
             "the miss is cached too"
         );
         assert!(cache.entries.lock().unwrap().contains_key(missing));
+    }
+
+    #[test]
+    fn a_failed_thumbnail_is_tried_again_once_the_file_appears() {
+        let cache = ThumbnailCache::with_retry(Duration::ZERO);
+        let late = std::env::temp_dir().join(format!("oca_late_{}.mp4", std::process::id()));
+        let _ = std::fs::remove_file(&late);
+
+        assert!(cache.get_or_extract(&late).is_none());
+        assert!(cache.get_or_extract_at(&late, 500).is_none());
+        std::fs::copy(fixture(), &late).unwrap();
+
+        assert!(
+            cache.get_or_extract(&late).is_some(),
+            "the poster is found on the next request"
+        );
+        assert!(cache.get_or_extract_at(&late, 500).is_some());
+        let _ = std::fs::remove_file(&late);
+    }
+
+    #[test]
+    fn a_failed_thumbnail_is_not_retried_within_the_window() {
+        let cache = ThumbnailCache::with_retry(Duration::from_secs(3600));
+        let late = std::env::temp_dir().join(format!("oca_early_{}.mp4", std::process::id()));
+        let _ = std::fs::remove_file(&late);
+
+        assert!(cache.get_or_extract(&late).is_none());
+        std::fs::copy(fixture(), &late).unwrap();
+        assert!(
+            cache.get_or_extract(&late).is_none(),
+            "still remembered as a miss"
+        );
+        let _ = std::fs::remove_file(&late);
+    }
+
+    #[test]
+    fn a_failed_waveform_decode_starts_over_after_the_window_but_a_good_one_is_kept() {
+        let cache = ThumbnailCache::with_retry(Duration::ZERO);
+        let late = std::env::temp_dir().join(format!("oca_wave_{}.mp4", std::process::id()));
+        let _ = std::fs::remove_file(&late);
+        assert!(cache.get_or_wave(&late, 5.0).is_none());
+
+        std::fs::copy(fixture(), &late).unwrap();
+        let wave = cache
+            .get_or_wave(&late, 5.0)
+            .expect("decodes once the file exists");
+        let again = cache.get_or_wave(&late, 5.0).unwrap();
+        assert!(
+            Arc::ptr_eq(&wave, &again),
+            "a success is shared, not recomputed"
+        );
+        let _ = std::fs::remove_file(&late);
     }
 
     #[test]
