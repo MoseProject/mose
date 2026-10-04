@@ -2,7 +2,15 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n";
-import { askConfirm, confirmStore, pushToast, toastStore } from "../notifications";
+import {
+  answerConfirm,
+  answerExtra,
+  askChoice,
+  askConfirm,
+  confirmStore,
+  pushToast,
+  toastStore,
+} from "../notifications";
 import { uiStore } from "../store";
 import { ConfirmHost, ToastHost } from "./Notifications";
 
@@ -97,5 +105,64 @@ describe("ConfirmHost", () => {
     });
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     expect(await second).toBe(false);
+  });
+});
+
+describe("questions with a third answer", () => {
+  it("shows the extra button and reports which answer was given", async () => {
+    confirmStore.set(null);
+    const asked = askChoice({
+      title: "Quit?",
+      message: "Unsaved.",
+      confirmLabel: "Save",
+      extraLabel: "Discard",
+      cancelLabel: "Stay",
+    });
+    render(<ConfirmHost />);
+    expect(screen.getByText("Discard")).toBeTruthy();
+    fireEvent.click(screen.getByText("Discard"));
+    await expect(asked).resolves.toBe("extra");
+    expect(confirmStore.get()).toBeNull();
+  });
+
+  it("resolves confirm and cancel like a plain question", async () => {
+    const first = askChoice({
+      title: "t",
+      message: "m",
+      confirmLabel: "Save",
+      extraLabel: "Discard",
+      cancelLabel: "Stay",
+    });
+    answerConfirm(true);
+    await expect(first).resolves.toBe("confirm");
+
+    const second = askChoice({
+      title: "t",
+      message: "m",
+      confirmLabel: "Save",
+      extraLabel: "Discard",
+      cancelLabel: "Stay",
+    });
+    answerConfirm(false);
+    await expect(second).resolves.toBe("cancel");
+  });
+
+  it("answers an open question as cancelled when another one replaces it", async () => {
+    const first = askChoice({
+      title: "t",
+      message: "m",
+      confirmLabel: "a",
+      extraLabel: "b",
+      cancelLabel: "c",
+    });
+    void askConfirm({ title: "n", message: "n", confirmLabel: "y", cancelLabel: "n" });
+    await expect(first).resolves.toBe("cancel");
+  });
+
+  it("does nothing when there is no extra answer to give", () => {
+    confirmStore.set(null);
+    expect(() => {
+      answerExtra();
+    }).not.toThrow();
   });
 });

@@ -333,9 +333,7 @@ pub(crate) fn run_with_audio<R: Runtime>(
                         scene = None;
                         playing = false;
                         available = false;
-                        if let Ok(mut frame) = latest.lock() {
-                            *frame = None;
-                        }
+                        *crate::state::lock_or_recover(&latest) = None;
                         frame_seq = frame_seq.wrapping_add(1);
                     }
                 }
@@ -484,9 +482,7 @@ fn spawn_encoder(latest: LatestFrame) -> Encoder {
                 worker.micros_total.fetch_add(micros, Ordering::Relaxed);
                 worker.micros_max.fetch_max(micros, Ordering::Relaxed);
                 if let Some(jpeg) = jpeg {
-                    if let Ok(mut slot) = latest.lock() {
-                        *slot = Some(Arc::new(jpeg));
-                    }
+                    *crate::state::lock_or_recover(&latest) = Some(Arc::new(jpeg));
                     worker.encoded_seq.fetch_add(1, Ordering::Release);
                 }
             }

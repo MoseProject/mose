@@ -123,6 +123,13 @@ pub struct SessionView<'a> {
     pub dirty: bool,
 }
 
+/// Locks `mutex` even when another thread panicked while holding it. What these locks guard
+/// (caches, single-slot buffers) is still a usable value afterwards, and giving up on it would
+/// turn one panic into a feature that stays broken until the app restarts.
+pub(crate) fn lock_or_recover<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(|poison| poison.into_inner())
+}
+
 pub struct AppState {
     pub session: Mutex<Session>,
     pub prefs: Mutex<PrefsDocument>,

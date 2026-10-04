@@ -357,3 +357,122 @@ fn playback_follows_the_audio_clock_and_tells_the_output_what_happens() {
         );
     }
 }
+
+fn collect_recoveries(h: &Harness) -> Arc<Mutex<Vec<serde_json::Value>>> {
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&seen);
+    h.app.listen(PREVIEW_RECOVERY, move |event| {
+        sink.lock()
+            .unwrap()
+            .push(serde_json::from_str(event.payload()).unwrap());
+    });
+    seen
+}
+
+fn wait_for_recovery(seen: &Arc<Mutex<Vec<serde_json::Value>>>, count: usize) {
+    let started = Instant::now();
+    while seen.lock().unwrap().len() < count {
+        assert!(
+            started.elapsed() < Duration::from_secs(30),
+            "no recovery event"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[test]
+fn a_crashed_playback_thread_is_restarted_with_its_scene_and_playhead() {
+    use std::sync::atomic::AtomicUsize;
+
+    static ATTEMPTS: AtomicUsize = AtomicUsize::new(0);
+    static RECEIVED: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
+    ATTEMPTS.store(0, Ordering::SeqCst);
+    RECEIVED.lock().unwrap().clear();
+
+    let h = harness();
+    let recoveries = collect_recoveries(&h);
+    let engine = PreviewEngine::spawn_with(h.handle(), |rx, _app, _latest, playhead| {
+        let attempt = ATTEMPTS.fetch_add(1, Ordering::SeqCst);
+        if attempt == 0 {
+            // The first loop takes the project, notes where playback was, and dies.
+            let _ = rx.recv();
+            playhead.store(4.25f64.to_bits(), Ordering::Release);
+            panic!("a decoder edge case");
+        }
+        while let Ok(command) = rx.recv() {
+            let name = match command {
+                Command::Content { .. } => "content",
+                Command::Seek(secs) => {
+                    assert_eq!(secs, 4.25, "the playhead where the crash left it");
+                    "seek"
+                }
+                Command::Step(_) => "step",
+                Command::Playing(_) => "playing",
+            };
+            RECEIVED.lock().unwrap().push(name);
+        }
+    });
+
+    engine.set_content(h.session().project.clone());
+    wait_for_recovery(&recoveries, 1);
+    assert_eq!(recoveries.lock().unwrap()[0]["restarted"], true);
+
+    // A command sent after the crash reaches the new loop, behind the replayed scene.
+    engine.set_playing(true);
+    let started = Instant::now();
+    while RECEIVED.lock().unwrap().len() < 3 {
+        assert!(
+            started.elapsed() < Duration::from_secs(30),
+            "the new loop got nothing"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(
+        *RECEIVED.lock().unwrap(),
+        vec!["content", "seek", "playing"]
+    );
+    assert_eq!(ATTEMPTS.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn a_playback_thread_that_keeps_crashing_is_given_up_on() {
+    use std::sync::atomic::AtomicUsize;
+
+    static ATTEMPTS: AtomicUsize = AtomicUsize::new(0);
+    ATTEMPTS.store(0, Ordering::SeqCst);
+
+    let h = harness();
+    let recoveries = collect_recoveries(&h);
+    let _engine = PreviewEngine::spawn_with(h.handle(), |_rx, _app, _latest, _playhead| {
+        ATTEMPTS.fetch_add(1, Ordering::SeqCst);
+        panic!("crashes every time");
+    });
+
+    wait_for_recovery(&recoveries, MAX_RESTARTS + 1);
+    let seen = recoveries.lock().unwrap();
+    assert!(seen[..MAX_RESTARTS].iter().all(|e| e["restarted"] == true));
+    assert_eq!(seen[MAX_RESTARTS]["restarted"], false);
+    assert_eq!(ATTEMPTS.load(Ordering::SeqCst), MAX_RESTARTS + 1);
+}
+
+#[test]
+fn dropping_the_engine_lets_the_supervised_loop_finish() {
+    use std::sync::atomic::AtomicBool;
+
+    static FINISHED: AtomicBool = AtomicBool::new(false);
+    FINISHED.store(false, Ordering::SeqCst);
+    let h = harness();
+    let engine = PreviewEngine::spawn_with(h.handle(), |rx, _app, _latest, _playhead| {
+        while rx.recv().is_ok() {}
+        FINISHED.store(true, Ordering::SeqCst);
+    });
+    drop(engine);
+    let started = Instant::now();
+    while !FINISHED.load(Ordering::SeqCst) {
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "the loop never ended"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}

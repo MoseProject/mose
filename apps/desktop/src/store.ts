@@ -10,6 +10,7 @@ import {
   onAutoReframe,
   onExports,
   onImportFailed,
+  onPreviewRecovery,
   onMatteGeneration,
   onMotionTrack,
   onPreview,
@@ -224,6 +225,9 @@ export async function connect() {
   });
   await onImportFailed((fileName) => {
     patchUi({ error: t("importFailed") + ": " + fileName });
+  });
+  await onPreviewRecovery((restarted) => {
+    patchUi({ error: t(restarted ? "previewRestarted" : "previewGaveUp") });
   });
   await onSceneCut((count) => {
     if (count === 0) {

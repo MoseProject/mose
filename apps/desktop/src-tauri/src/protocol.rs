@@ -23,7 +23,7 @@ use tauri::http::{header, Response, StatusCode};
 use tauri::{AppHandle, Manager, Runtime};
 
 use crate::frames::{encode_jpeg, THUMBNAIL_MAX_DIM};
-use crate::state::AppState;
+use crate::state::{lock_or_recover, AppState};
 
 pub const SCHEME: &str = "oca";
 
@@ -152,17 +152,15 @@ impl ThumbnailCache {
 
     fn get_or_extract_at(&self, source: &Path, millis: u64) -> Bytes {
         let key = (source.to_path_buf(), millis);
-        if let Some(cached) = self
-            .tiles
-            .lock()
-            .ok()?
+        if let Some(cached) = lock_or_recover(&self.tiles)
             .get(&key)
             .filter(|entry| self.is_fresh(entry))
         {
             return cached.0.clone();
         }
         let extracted = extract_frame_at(source, millis as f64 / 1000.0).map(Arc::new);
-        if let Ok(mut tiles) = self.tiles.lock() {
+        {
+            let mut tiles = lock_or_recover(&self.tiles);
             if tiles.len() >= MAX_TILE_ENTRIES {
                 tiles.clear();
             }
@@ -175,7 +173,7 @@ impl ThumbnailCache {
     /// requests for one file share a single decode pass.
     fn get_or_wave(&self, source: &Path, duration_secs: f64) -> Bytes {
         let cell = {
-            let mut waves = self.waves.lock().ok()?;
+            let mut waves = lock_or_recover(&self.waves);
             let slot = waves
                 .entry(source.to_path_buf())
                 .or_insert_with(|| (Instant::now(), Arc::default()));
@@ -201,19 +199,15 @@ impl ThumbnailCache {
     }
 
     fn get_or_extract(&self, source: &Path) -> Option<Arc<Vec<u8>>> {
-        if let Some(cached) = self
-            .entries
-            .lock()
-            .ok()?
+        if let Some(cached) = lock_or_recover(&self.entries)
             .get(source)
             .filter(|entry| self.is_fresh(entry))
         {
             return cached.0.clone();
         }
         let extracted = extract_thumbnail(source).map(Arc::new);
-        if let Ok(mut entries) = self.entries.lock() {
-            entries.insert(source.to_path_buf(), (extracted.clone(), Instant::now()));
-        }
+        lock_or_recover(&self.entries)
+            .insert(source.to_path_buf(), (extracted.clone(), Instant::now()));
         extracted
     }
 }
@@ -354,6 +348,45 @@ mod tests {
             "a success is shared, not recomputed"
         );
         let _ = std::fs::remove_file(&late);
+    }
+
+    /// Panics in another thread while it holds `mutex`, which poisons it.
+    fn poison<T: Send>(mutex: &Mutex<T>) {
+        std::thread::scope(|scope| {
+            let _ = scope
+                .spawn(|| {
+                    let _guard = mutex.lock().unwrap();
+                    panic!("poisoning on purpose");
+                })
+                .join();
+        });
+        assert!(mutex.is_poisoned());
+    }
+
+    #[test]
+    fn a_poisoned_cache_keeps_serving_thumbnails_tiles_and_waveforms() {
+        let cache = ThumbnailCache::default();
+        poison(&cache.entries);
+        poison(&cache.tiles);
+        poison(&cache.waves);
+
+        assert!(cache.get_or_extract(&fixture()).is_some());
+        assert!(cache.get_or_extract_at(&fixture(), 500).is_some());
+        assert!(cache.get_or_wave(&fixture(), 5.0).is_some());
+    }
+
+    #[test]
+    fn a_poisoned_frame_slot_still_hands_out_the_latest_frame() {
+        let (engine, _commands) = crate::preview_engine::PreviewEngine::detached();
+        engine.set_latest_frame(vec![1, 2, 3]);
+        poison(&engine_latest(&engine));
+        assert_eq!(engine.latest_frame().as_deref(), Some(&vec![1, 2, 3]));
+    }
+
+    fn engine_latest(
+        engine: &crate::preview_engine::PreviewEngine,
+    ) -> std::sync::Arc<Mutex<Option<Arc<Vec<u8>>>>> {
+        engine.latest_slot()
     }
 
     #[test]

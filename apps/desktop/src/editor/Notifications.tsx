@@ -1,6 +1,13 @@
 import { useEffect } from "react";
 import { t } from "../i18n";
-import { answerConfirm, confirmStore, dismissToast, pushToast, toastStore } from "../notifications";
+import {
+  answerConfirm,
+  answerExtra,
+  confirmStore,
+  dismissToast,
+  pushToast,
+  toastStore,
+} from "../notifications";
 import { patchUi, uiStore, useStore } from "../store";
 import { Dialog } from "./Dialog";
 import { Icon } from "./Icon";
@@ -29,8 +36,18 @@ export function ConfirmHost() {
           >
             {request.cancelLabel}
           </button>
+          {request.extraLabel && (
+            <button
+              className="danger"
+              onClick={() => {
+                answerExtra();
+              }}
+            >
+              {request.extraLabel}
+            </button>
+          )}
           <button
-            className={request.danger ? "danger" : "primary"}
+            className={request.danger && !request.extraLabel ? "danger" : "primary"}
             onClick={() => {
               answerConfirm(true);
             }}

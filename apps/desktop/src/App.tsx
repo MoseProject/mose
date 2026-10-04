@@ -16,7 +16,7 @@ import { Prefs } from "./screens/Prefs";
 import { WatchFolder } from "./screens/WatchFolder";
 import { TopBar } from "./TopBar";
 import { api, onCloseRequested } from "./ipc";
-import { askConfirm } from "./notifications";
+import { askChoice, askConfirm } from "./notifications";
 import { connect, patchUi, run, sessionStore, uiStore, useStore } from "./store";
 
 export function App() {
@@ -36,21 +36,42 @@ export function App() {
     });
   }, []);
 
-  // Closing the window with unsaved changes or exports still running asks first.
+  // Closing the window with unsaved changes or exports still running asks first. With unsaved
+  // changes the user can save and quit, quit without saving, or stay.
   useEffect(() => {
+    const quit = () => {
+      void run(api.quitApp());
+    };
     const stop = onCloseRequested((request) => {
       const reasons = [
         request.dirty ? t("confirmQuitDirty") : "",
         request.exporting ? t("confirmQuitExporting") : "",
       ].filter(Boolean);
-      void askConfirm({
+      const base = {
         title: t("confirmQuitTitle"),
         message: reasons.join(" "),
-        confirmLabel: t("confirmQuitAction"),
         cancelLabel: t("cancel"),
-      }).then((confirmed) => {
-        if (confirmed) {
-          void run(api.quitApp());
+      };
+      if (!request.dirty) {
+        void askConfirm({ ...base, confirmLabel: t("confirmQuitAction") }).then((confirmed) => {
+          if (confirmed) {
+            quit();
+          }
+        });
+        return;
+      }
+      void askChoice({
+        ...base,
+        confirmLabel: t("confirmQuitSave"),
+        extraLabel: t("confirmQuitAction"),
+      }).then(async (choice) => {
+        if (choice === "extra") {
+          quit();
+        } else if (choice === "confirm") {
+          // A cancelled save dialog means the user changed their mind about quitting.
+          if (await run(api.saveProject(false))) {
+            quit();
+          }
         }
       });
     });

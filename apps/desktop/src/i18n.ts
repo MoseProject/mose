@@ -535,6 +535,16 @@ const strings = {
     en: "An export to that file is already in the queue.",
   },
   confirmQuitTitle: { "pt-BR": "Sair do oca?", en: "Quit oca?" },
+  confirmQuitSave: { "pt-BR": "Salvar e sair", en: "Save and quit" },
+  previewRestarted: {
+    "pt-BR":
+      "A reprodução travou e foi reiniciada. Se voltar a acontecer, salve e reabra o projeto.",
+    en: "Playback crashed and was restarted. If it happens again, save and reopen the project.",
+  },
+  previewGaveUp: {
+    "pt-BR": "A reprodução travou várias vezes e foi desligada. Salve o projeto e reabra o app.",
+    en: "Playback crashed repeatedly and was turned off. Save the project and restart the app.",
+  },
   confirmQuitAction: { "pt-BR": "Sair mesmo assim", en: "Quit anyway" },
   confirmQuitDirty: {
     "pt-BR": "O projeto tem alterações que não foram salvas.",

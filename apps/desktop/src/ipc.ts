@@ -51,6 +51,7 @@ export const events = {
   watchFolder: "watch-folder-event",
   importFailed: "import-failed",
   closeRequested: "close-requested",
+  previewRecovery: "preview-recovery",
   youtubeDownload: "youtube-download-event",
   updateCheck: "update-check-event",
 } as const;
@@ -120,6 +121,13 @@ export function onTts(handler: (event: TtsEvent) => void): Promise<UnlistenFn> {
 export function onImportFailed(handler: (fileName: string) => void): Promise<UnlistenFn> {
   return listen<{ fileName: string }>(events.importFailed, (e) => {
     return handler(e.payload.fileName);
+  });
+}
+
+/** The playback thread crashed; `restarted` is false once it was given up on. */
+export function onPreviewRecovery(handler: (restarted: boolean) => void): Promise<UnlistenFn> {
+  return listen<{ restarted: boolean }>(events.previewRecovery, (e) => {
+    return handler(e.payload.restarted);
   });
 }
 
