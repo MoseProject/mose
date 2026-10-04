@@ -109,6 +109,8 @@ beforeEach(() => {
     error: null,
     drawingShapePoints: null,
     exportQueueOpen: false,
+    exportDialogOpen: false,
+    openDialogs: 0,
   });
 });
 afterEach(() => {

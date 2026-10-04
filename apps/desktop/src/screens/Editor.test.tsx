@@ -135,6 +135,8 @@ beforeEach(() => {
     error: null,
     drawingShapePoints: null,
     exportQueueOpen: false,
+    exportDialogOpen: false,
+    openDialogs: 0,
   });
   previewStore.set({
     frameSeq: 0,
@@ -295,6 +297,40 @@ describe("editor screen", () => {
       previewStore.set({ ...previewStore.get(), playing: true });
       press({ code: "Space", key: " " });
       expect(calls.setPlaying).toHaveBeenLastCalledWith(false);
+    });
+
+    it("leaves Space to a focused button instead of starting playback", () => {
+      const button = document.createElement("button");
+      document.body.appendChild(button);
+      const event = press({ code: "Space", key: " ", target: button });
+      expect(event.defaultPrevented).toBe(false);
+      expect(calls.setPlaying).not.toHaveBeenCalled();
+      button.remove();
+    });
+
+    it("does nothing while a dialog is open", () => {
+      uiStore.set({ ...uiStore.get(), openDialogs: 1 });
+      press({ key: "Delete" });
+      press({ key: "s" });
+      press({ code: "Space", key: " " });
+      expect(calls.deleteClips).not.toHaveBeenCalled();
+      expect(calls.splitAtPlayhead).not.toHaveBeenCalled();
+      expect(calls.setPlaying).not.toHaveBeenCalled();
+      uiStore.set({ ...uiStore.get(), openDialogs: 0 });
+    });
+
+    it("does nothing inside a text area", () => {
+      const area = document.createElement("textarea");
+      document.body.appendChild(area);
+      press({ key: "Delete", target: area });
+      expect(calls.deleteClips).not.toHaveBeenCalled();
+      area.remove();
+    });
+
+    it("opens the export dialog with Ctrl+E", () => {
+      press({ key: "e", ctrlKey: true });
+      expect(uiStore.get().exportDialogOpen).toBe(true);
+      uiStore.set({ ...uiStore.get(), exportDialogOpen: false });
     });
 
     it("undoes and redoes", () => {

@@ -279,6 +279,8 @@ const resetUi = () => {
     error: null,
     drawingShapePoints: null,
     exportQueueOpen: false,
+    exportDialogOpen: false,
+    openDialogs: 0,
   });
 };
 
