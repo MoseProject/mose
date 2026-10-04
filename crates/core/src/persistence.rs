@@ -32,6 +32,7 @@
 use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
@@ -176,10 +177,39 @@ pub fn from_ocsi_bytes<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, PersistEr
     from_framed_bytes(bytes, SEMANTIC_INDEX_MAGIC)
 }
 
-/// Writes `project` to `path` as `.ocproj`, overwriting any existing file.
+/// Writes `bytes` to `path` so a crash or a full disk cannot leave a half-written file: the data
+/// goes to a sibling temporary file first, is flushed to disk, and only then replaces `path`. A
+/// failed attempt leaves the previous file untouched and removes the temporary one.
+pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let mut name = path
+        .file_name()
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "no file name"))?
+        .to_os_string();
+    // Unique per call, so two writers of the same file never share (and delete) one another's
+    // temporary file.
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    name.push(format!(
+        ".tmp-{}-{}",
+        std::process::id(),
+        COUNTER.fetch_add(1, Ordering::Relaxed)
+    ));
+    let temporary = path.with_file_name(name);
+    let written = fs::File::create(&temporary).and_then(|mut file| {
+        file.write_all(bytes)?;
+        file.sync_all()
+    });
+    let replaced = written.and_then(|()| fs::rename(&temporary, path));
+    if replaced.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    replaced
+}
+
+/// Writes `project` to `path` as `.ocproj`, overwriting any existing file. The write is atomic
+/// (see [`write_atomic`]), so a failure never costs the previously saved copy.
 pub fn save_project_to_file(project: &Project, path: &Path) -> Result<(), PersistError> {
     let bytes = to_ocproj_bytes(project)?;
-    fs::write(path, bytes).map_err(PersistError::Io)
+    write_atomic(path, &bytes).map_err(PersistError::Io)
 }
 
 /// Reads and parses a project from `path`. The returned [`Project::file_path`] is `None` —
