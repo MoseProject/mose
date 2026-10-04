@@ -43,7 +43,7 @@ vi.mock("./ShapeInspector", () => {
 
 const { Inspector, Section, Slider } = await import("./Inspector");
 const { api } = await import("../ipc");
-const { patchUi } = await import("../store");
+const { patchUi, previewStore } = await import("../store");
 
 const clip = (overrides: Partial<ClipInstance> = {}): ClipInstance => {
   return {
@@ -471,7 +471,7 @@ describe("inspector tabs", () => {
 });
 
 describe("transform section", () => {
-  it("shows position, scale and rotation as plain numbers", () => {
+  it("shows position in canvas pixels, scale and rotation as plain numbers", () => {
     render(
       <Inspector
         session={sessionFor({
@@ -481,8 +481,8 @@ describe("transform section", () => {
         })}
       />,
     );
-    expect((screen.getByLabelText(t("positionX")) as HTMLInputElement).value).toBe("25");
-    expect((screen.getByLabelText(t("positionY")) as HTMLInputElement).value).toBe("50");
+    expect((screen.getByLabelText(t("positionX")) as HTMLInputElement).value).toBe("480");
+    expect((screen.getByLabelText(t("positionY")) as HTMLInputElement).value).toBe("540");
     expect((screen.getByLabelText(t("scale")) as HTMLInputElement).value).toBe("50");
     expect((screen.getByLabelText(t("rotation")) as HTMLInputElement).value).toBe("30");
   });
@@ -490,7 +490,7 @@ describe("transform section", () => {
   it("commits an edited position on blur as one keyframe, in canvas fractions", () => {
     render(<Inspector session={sessionFor()} />);
     const x = screen.getByLabelText(t("positionX"));
-    fireEvent.change(x, { target: { value: "40" } });
+    fireEvent.change(x, { target: { value: "768" } });
     expect(api.updateClip).not.toHaveBeenCalled();
     fireEvent.blur(x);
     expect(lastPatch()).toEqual({
@@ -592,5 +592,67 @@ describe("inspector grouping and selection", () => {
     expect(api.createCompoundClip).toHaveBeenCalledWith(7, [7, 20]);
     expect(api.deleteClips).toHaveBeenCalledWith([7, 20], false);
     expect(api.deleteClips).toHaveBeenCalledWith([7, 20], true);
+  });
+});
+
+describe("keyframe diamond", () => {
+  const placed = { start_secs: 0, source_in_secs: 0, source_out_secs: 10 };
+  const atSecs = (playheadSecs: number) => {
+    previewStore.set({ ...previewStore.get(), playheadSecs });
+  };
+  const diamond = (label: string) => {
+    return sectionOf(label).querySelector(".section-keyframe") as HTMLButtonElement;
+  };
+
+  it("is disabled while the playhead is outside the clip", () => {
+    atSecs(20);
+    render(<Inspector session={sessionFor(placed)} />);
+    expect(diamond(t("gain")).disabled).toBe(true);
+  });
+
+  it("adds a gain keyframe at the playhead carrying the current gain", () => {
+    atSecs(5);
+    render(<Inspector session={sessionFor({ ...placed, gain_db: 3 })} />);
+    fireEvent.click(diamond(t("gain")));
+    expect(lastPatch()).toEqual({ gainKeyframes: [{ time_fraction: 0.5, value: 3 }] });
+  });
+
+  it("removes the keyframe when one already sits at the playhead", () => {
+    atSecs(5);
+    render(
+      <Inspector
+        session={sessionFor({
+          ...placed,
+          gain_keyframes: [
+            { time_fraction: 0.5, value: 3 },
+            { time_fraction: 1, value: 6 },
+          ],
+        })}
+      />,
+    );
+    expect(diamond(t("gain")).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(diamond(t("gain")));
+    expect(lastPatch()).toEqual({ gainKeyframes: [{ time_fraction: 1, value: 6 }] });
+  });
+
+  it("keys position and rotation together from the transform section", () => {
+    atSecs(2.5);
+    render(<Inspector session={sessionFor(placed)} />);
+    fireEvent.click(diamond(t("transform")));
+    expect(lastPatch()).toEqual({
+      positionKeyframes: [{ time_fraction: 0.25, value: { x: 0, y: 0 } }],
+      rotationKeyframes: [{ time_fraction: 0.25, value: 0 }],
+    });
+  });
+
+  it("keys brightness, contrast and saturation together from the color section", () => {
+    atSecs(10);
+    render(<Inspector session={sessionFor({ ...placed, contrast: 1.2 })} />);
+    fireEvent.click(diamond(t("colorAdjust")));
+    expect(lastPatch()).toEqual({
+      brightnessKeyframes: [{ time_fraction: 1, value: 0 }],
+      contrastKeyframes: [{ time_fraction: 1, value: 1.2 }],
+      saturationKeyframes: [{ time_fraction: 1, value: 1 }],
+    });
   });
 });

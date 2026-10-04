@@ -2,7 +2,7 @@
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { previewStore } from "../store";
-import { AudioMeter, holdStore, nextHold, peakFill } from "./AudioMeter";
+import { AudioMeter, holdStore, loudnessState, nextHold, peakFill, scaleFill } from "./AudioMeter";
 
 afterEach(() => {
   return cleanup();
@@ -94,5 +94,30 @@ describe("peak hold marker", () => {
     });
     expect(holdStore.get().left).toBeGreaterThanOrEqual(0.7);
     expect(holdStore.get().right).toBeGreaterThanOrEqual(0.3);
+  });
+});
+
+describe("loudness readout", () => {
+  it("shows the momentary LUFS and a mark for each preset target", () => {
+    const { getByTestId, getAllByTestId } = render(<AudioMeter />);
+    expect(getByTestId("meter-lufs").textContent).toContain("-");
+    act(() => {
+      return previewStore.set({ ...previewStore.get(), momentaryLufs: -14.26 });
+    });
+    expect(getByTestId("meter-lufs").textContent).toContain("-14.3");
+    expect(getAllByTestId("meter-target")).toHaveLength(3);
+  });
+
+  it("classifies a reading against the target with a tolerance", () => {
+    expect(loudnessState(-14.5, -14)).toBe("ok");
+    expect(loudnessState(-12, -14)).toBe("hot");
+    expect(loudnessState(-18, -14)).toBe("low");
+  });
+
+  it("places a target on the same scale as the peaks", () => {
+    expect(scaleFill(-60)).toBe(0);
+    expect(scaleFill(0)).toBe(1);
+    expect(scaleFill(-30)).toBeCloseTo(0.5);
+    expect(scaleFill(-14)).toBeCloseTo(peakFill(10 ** (-14 / 20)));
   });
 });

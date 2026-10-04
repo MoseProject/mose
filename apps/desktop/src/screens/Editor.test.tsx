@@ -157,6 +157,7 @@ beforeEach(() => {
     error: null,
     peakL: 0,
     peakR: 0,
+    momentaryLufs: null,
   });
 });
 afterEach(() => {

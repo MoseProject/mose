@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n";
+import { answerConfirm, confirmStore, toastStore } from "../notifications";
 import type { SessionView, YoutubeDownloadEvent } from "../types";
 
 let emitDownload: (event: YoutubeDownloadEvent) => void = () => {};
@@ -20,6 +21,7 @@ vi.mock("../ipc", () => {
       addAssetToTimeline: vi.fn().mockResolvedValue(undefined),
       transcribeAsset: vi.fn().mockResolvedValue(undefined),
       toggleFavorite: vi.fn().mockResolvedValue(undefined),
+      removeAsset: vi.fn().mockResolvedValue(undefined),
     },
     onYoutubeDownload: vi.fn((handler: (event: YoutubeDownloadEvent) => void) => {
       emitDownload = handler;
@@ -471,5 +473,69 @@ describe("media card keyboard and context menu", () => {
     fireEvent.click(screen.getByText(t("importFiles"), { selector: "button" }));
     expect(api.importMediaDialog).toHaveBeenCalled();
     expect(screen.getByLabelText(t("moreSources"))).toBeTruthy();
+  });
+});
+
+describe("removing media from the library", () => {
+  const sessionWithClip = (usedAssetId: number) => {
+    return {
+      project: {
+        media_library: [asset({ id: 1, file_name: "alpha.mp4" })],
+        recent_asset_ids: [],
+        sequences: [
+          {
+            timeline: {
+              tracks: [{ clips: [{ asset_id: usedAssetId }], text_clips: [], shape_clips: [] }],
+            },
+          },
+        ],
+      },
+    } as unknown as SessionView;
+  };
+  const openRemove = () => {
+    const card = screen.getByText("alpha.mp4").closest(".asset") as HTMLElement;
+    fireEvent.contextMenu(card);
+    fireEvent.click(screen.getByText(t("removeFromLibrary"), { selector: "span" }));
+  };
+
+  beforeEach(() => {
+    toastStore.set([]);
+    confirmStore.set(null);
+  });
+
+  it("asks first, then removes the asset", async () => {
+    render(<MediaLibrary session={sessionWithClip(99)} />);
+    openRemove();
+    await waitFor(() => {
+      expect(confirmStore.get()).not.toBeNull();
+    });
+    expect(api.removeAsset).not.toHaveBeenCalled();
+    answerConfirm(true);
+    await waitFor(() => {
+      expect(api.removeAsset).toHaveBeenCalledWith(1);
+    });
+  });
+
+  it("does nothing when the question is dismissed", async () => {
+    render(<MediaLibrary session={sessionWithClip(99)} />);
+    openRemove();
+    await waitFor(() => {
+      expect(confirmStore.get()).not.toBeNull();
+    });
+    answerConfirm(false);
+    await Promise.resolve();
+    expect(api.removeAsset).not.toHaveBeenCalled();
+  });
+
+  it("refuses with a message while a clip still uses the media", () => {
+    render(<MediaLibrary session={sessionWithClip(1)} />);
+    openRemove();
+    expect(confirmStore.get()).toBeNull();
+    expect(api.removeAsset).not.toHaveBeenCalled();
+    expect(
+      toastStore.get().some((toast) => {
+        return toast.message === t("assetInUse");
+      }),
+    ).toBe(true);
   });
 });

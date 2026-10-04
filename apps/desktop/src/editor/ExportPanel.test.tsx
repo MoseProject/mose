@@ -14,12 +14,13 @@ vi.mock("../ipc", () => {
       resumeExport: vi.fn().mockResolvedValue(undefined),
       cancelExport: vi.fn().mockResolvedValue(undefined),
       removeExport: vi.fn().mockResolvedValue(undefined),
+      revealInFolder: vi.fn().mockResolvedValue(undefined),
     },
   };
 });
 
 // Imported after the mock so ExportPanel picks up the mocked `../ipc`.
-const { ExportPanel } = await import("./ExportPanel");
+const { ExportPanel, remainingSecs } = await import("./ExportPanel");
 const { api } = await import("../ipc");
 
 function job(overrides: Partial<ExportJobView>): ExportJobView {
@@ -136,5 +137,47 @@ describe("ExportPanel", () => {
     fireEvent.click(buttons[1]);
     expect(api.removeExport).toHaveBeenCalledWith(1);
     expect(api.removeExport).toHaveBeenCalledWith(2);
+  });
+});
+
+describe("export ETA and folder", () => {
+  beforeEach(() => {
+    exportsStore.set([]);
+    vi.clearAllMocks();
+  });
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("extrapolates the time left from progress and elapsed time", () => {
+    expect(remainingSecs(job({ percent: 25, elapsedSecs: 30 }))).toBeCloseTo(90);
+    expect(remainingSecs(job({ percent: 50, elapsedSecs: 30 }))).toBeCloseTo(30);
+  });
+
+  it("has no estimate before progress is steady or once finished", () => {
+    expect(remainingSecs(job({ percent: 1, elapsedSecs: 5 }))).toBeNull();
+    expect(remainingSecs(job({ percent: 100, elapsedSecs: 5 }))).toBeNull();
+    expect(remainingSecs(job({ percent: 40, elapsedSecs: null }))).toBeNull();
+  });
+
+  it("shows the estimate on a rendering job", () => {
+    exportsStore.set([
+      job({ status: { Rendering: { percent: 50 } }, percent: 50, elapsedSecs: 30 }),
+    ]);
+    render(<ExportPanel />);
+    expect(screen.getByText(new RegExp(t("etaRemaining")))).toBeTruthy();
+  });
+
+  it("opens the output folder of a finished job", () => {
+    exportsStore.set([job({ status: "Done", percent: 100 })]);
+    render(<ExportPanel />);
+    fireEvent.click(screen.getByText(t("openExportFolder")));
+    expect(api.revealInFolder).toHaveBeenCalledWith("C:/out/clip.mp4");
+  });
+
+  it("offers no folder button for a job that has not finished", () => {
+    exportsStore.set([job({ status: "Queued" })]);
+    render(<ExportPanel />);
+    expect(screen.queryByText(t("openExportFolder"))).toBeNull();
   });
 });
