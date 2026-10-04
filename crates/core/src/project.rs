@@ -143,6 +143,28 @@ impl Project {
         &mut self.sequences[self.active_sequence].timeline
     }
 
+    /// Whether any sequence has a clip that plays `asset_id`.
+    pub fn asset_in_use(&self, asset_id: u64) -> bool {
+        self.sequences.iter().any(|sequence| {
+            sequence.timeline.tracks.iter().any(|track| {
+                track.clips.iter().any(|clip| clip.asset_id == asset_id)
+            })
+        })
+    }
+
+    /// Drops `asset_id` from the media library. Refused (returns `false`, library untouched)
+    /// while a clip still uses it, so removing media can never leave a dangling clip.
+    /// Unknown ids are a no-op that also returns `false`.
+    pub fn remove_asset(&mut self, asset_id: u64) -> bool {
+        if self.asset_in_use(asset_id) {
+            return false;
+        }
+        let before = self.media_library.len();
+        self.media_library.retain(|asset| asset.id != asset_id);
+        self.recent_asset_ids.retain(|id| *id != asset_id);
+        self.media_library.len() != before
+    }
+
     /// The active tab itself — for whole-sequence operations (undo/redo snapshots) that
     /// `timeline()` doesn't cover, since [`Sequence`] also carries `export_settings`.
     pub fn active_sequence(&self) -> &Sequence {
