@@ -11,6 +11,7 @@ vi.mock("../ipc", () => ({
     updateClip: vi.fn().mockResolvedValue(undefined),
     addTextClip: vi.fn().mockResolvedValue(9),
     step: vi.fn().mockResolvedValue(undefined),
+    seek: vi.fn().mockResolvedValue(undefined),
     setPlaying: vi.fn().mockResolvedValue(undefined),
   },
   frameUrl: (seq: number) => `oca://frame/${seq}`,
@@ -111,9 +112,13 @@ describe("preview panel", () => {
     sessionStore.set(sessionWith(clip({ start_secs: 5, source_out_secs: 10 })));
     previewStore.set(tick({ playheadSecs: 3, peakL: 0.25, peakR: 4 }));
     const { container } = mount();
-    const readout = container.querySelector(".transport .mono")!.textContent!;
-    expect(readout).toContain("0:03");
-    expect(readout).toContain("0:15");
+    expect(container.querySelector(".time-now")!.textContent).toContain("0:03");
+    expect(container.querySelector(".time-total")!.textContent).toContain("0:15");
+    const scrubber = screen.getByLabelText(t("seek")) as HTMLInputElement;
+    expect(Number(scrubber.max)).toBe(15);
+    expect(Number(scrubber.value)).toBe(3);
+    fireEvent.change(scrubber, { target: { value: "7" } });
+    expect(api.seek).toHaveBeenCalledWith(7);
     const bars = container.querySelectorAll<HTMLElement>(".meter > div");
     expect(bars[0].style.width).toBe("50%");
     expect(bars[1].style.width).toBe("100%");
@@ -121,7 +126,7 @@ describe("preview panel", () => {
 
   it("has a zero length without a session", () => {
     const { container } = mount();
-    expect(container.querySelector(".transport .mono .muted")!.textContent).toContain("0:00");
+    expect(container.querySelector(".time-total")!.textContent).toContain("0:00");
   });
 
   it("steps and toggles playback from the transport", () => {

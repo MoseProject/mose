@@ -120,7 +120,7 @@ describe("inspector selection", () => {
     const view = sessionFor();
     view.project.media_library = [];
     render(<Inspector session={view} />);
-    expect(screen.getByText(`${t("source")}: —`)).toBeTruthy();
+    expect(screen.getByText("—")).toBeTruthy();
   });
 
   it("hands text and shape overlays to their own inspectors", () => {

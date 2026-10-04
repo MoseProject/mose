@@ -83,8 +83,7 @@ describe("media library", () => {
     );
     fireEvent.error(container.querySelector("img")!);
     expect(container.querySelector("img")).toBeNull();
-    expect(screen.getByText("▶")).toBeTruthy();
-    expect(screen.getByText("♪")).toBeTruthy();
+    expect(container.querySelectorAll(".thumb svg")).toHaveLength(2);
     expect(screen.getByText(t("analyzing"), { exact: false })).toBeTruthy();
   });
 

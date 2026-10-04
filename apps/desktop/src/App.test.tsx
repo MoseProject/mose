@@ -116,9 +116,9 @@ describe("app shell", () => {
       sessionStore.set(session({ dirty: false }));
       render(<App />);
       expect(screen.getByText("My project")).toBeTruthy();
-      expect(screen.queryByText(new RegExp(t("unsaved")))).toBeNull();
+      expect(screen.queryByLabelText(t("unsaved"))).toBeNull();
       act(() => sessionStore.set(session({ dirty: true })));
-      expect(screen.getByText(new RegExp(t("unsaved")))).toBeTruthy();
+      expect(screen.getByLabelText(t("unsaved"))).toBeTruthy();
     });
 
     it("enables undo and redo only when there is something to undo or redo", () => {

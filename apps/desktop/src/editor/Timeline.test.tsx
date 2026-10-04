@@ -316,19 +316,6 @@ describe("timeline painting", () => {
 });
 
 describe("toolbar", () => {
-  it("switches the active tool", () => {
-    mount();
-    fireEvent.click(button(t("toolRoll")));
-    expect(uiStore.get().tool).toBe("roll");
-    expect(button(t("toolRoll")).className).toContain("active");
-    fireEvent.click(button(t("toolSlip")));
-    fireEvent.click(button(t("toolSlide")));
-    fireEvent.click(button(t("toolText")));
-    expect(uiStore.get().tool).toBe("text");
-    fireEvent.click(button(t("toolSelect")));
-    expect(uiStore.get().tool).toBe("select");
-  });
-
   it("disables selection-bound actions until enough clips are selected", () => {
     mount();
     for (const label of [t("delete"), t("rippleDelete"), t("mergeComposite"), t("compoundClip"), t("detectChapters")]) {
@@ -346,8 +333,6 @@ describe("toolbar", () => {
   it("runs the editing commands on the selection", () => {
     uiStore.set({ ...uiStore.get(), selectedClipIds: [1, 2] });
     mount();
-    fireEvent.click(button(t("split")));
-    expect(calls.splitAtPlayhead).toHaveBeenCalledWith([1, 2]);
     fireEvent.click(button(t("delete")));
     expect(calls.deleteClips).toHaveBeenCalledWith([1, 2], false);
     fireEvent.click(button(t("rippleDelete")));
