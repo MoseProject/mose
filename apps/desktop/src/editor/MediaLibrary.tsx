@@ -558,17 +558,34 @@ function AssetRow({
       dragging = true;
       assetDragStore.set({ assetId: asset.id, clientX: ev.clientX, clientY: ev.clientY });
     };
-    const up = () => {
+    const end = () => {
       window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", cancel);
+      window.removeEventListener("blur", cancel);
+      window.removeEventListener("keydown", onKey);
       // A macrotask, not a microtask: the timeline's own pointerup listener must still see
       // the drag when it runs after this one.
       setTimeout(() => {
         return assetDragStore.set(null);
       }, 0);
     };
+    // A drag that is cancelled (Escape, the window losing focus, the system taking the pointer)
+    // must not drop the asset anywhere, and must not leave the drag ghost on screen.
+    const cancel = () => {
+      assetDragStore.set(null);
+      end();
+    };
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") {
+        cancel();
+      }
+    };
     window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", cancel);
+    window.addEventListener("blur", cancel);
+    window.addEventListener("keydown", onKey);
   };
 
   const meta = [
