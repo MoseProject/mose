@@ -58,6 +58,8 @@ fn track(id: u64, kind: TrackKind, clips: Vec<ClipInstance>) -> Track {
         shape_clips: Vec::new(),
         visible: true,
         audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
         color_label: None,
         locked: false,
     }
@@ -139,6 +141,36 @@ fn audio_tracks_are_audible_only_and_layers_follow_track_order() {
     assert!(by_id(10).visible);
     assert!(!by_id(11).visible && by_id(11).audible);
     assert!(by_id(12).layer > by_id(10).layer);
+}
+
+#[test]
+fn muted_and_not_soloed_tracks_are_silent_but_still_drawn() {
+    let mut muted = track(1, TrackKind::Video, vec![clip(0.0, 0.0, 4.0)]);
+    muted.muted = true;
+    let mapped = map_with(vec![muted], Vec::new());
+    let contributor = &mapped.scene.contributors()[0];
+    assert!(contributor.visible && !contributor.audible);
+
+    let mut solo = track(
+        2,
+        TrackKind::Audio,
+        vec![ClipInstance::new(11, 2, 0.0, 0.0, 4.0)],
+    );
+    solo.solo = true;
+    let mapped = map_with(
+        vec![track(1, TrackKind::Video, vec![clip(0.0, 0.0, 4.0)]), solo],
+        Vec::new(),
+    );
+    let by_id = |id: u64| {
+        mapped
+            .scene
+            .contributors()
+            .iter()
+            .find(|c| c.id.0 == id)
+            .unwrap()
+    };
+    assert!(!by_id(10).audible, "a track outside the solo is silent");
+    assert!(by_id(11).audible);
 }
 
 #[test]

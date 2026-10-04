@@ -52,6 +52,8 @@ fn timeline_with(kind: TrackKind, visible: bool, clip_asset: u64) -> Timeline {
             shape_clips: Vec::new(),
             visible,
             audio_role: AudioRole::Unspecified,
+            muted: false,
+            solo: false,
             color_label: None,
             locked: false,
         }],

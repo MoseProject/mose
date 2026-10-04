@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use avcore::timeline::{ClipInstance, TrackKind};
 use avcore::{MediaAsset, MediaKind, Project};
 
-use super::{add_asset, delete, move_clip_in, split};
+use super::{add_asset, delete, delete_range, move_clip_in, split};
 use crate::state::blank_project;
 
 fn asset(id: u64, kind: MediaKind, duration_secs: f64) -> MediaAsset {
@@ -124,6 +124,41 @@ fn ripple_delete_closes_the_gap() {
     assert_eq!(clips[0].start_secs, 0.0);
 }
 
+#[test]
+fn deleting_a_range_closes_the_gap_on_every_unlocked_media_track() {
+    let mut project = project_with(vec![
+        asset(1, MediaKind::Video, 10.0),
+        asset(2, MediaKind::Audio, 10.0),
+    ]);
+    add_asset(&mut project, 1, None, None).unwrap();
+    add_asset(&mut project, 2, None, None).unwrap();
+    let timeline = project.timeline_mut();
+
+    assert!(delete_range(timeline, 2.0, 5.0));
+    for track in &timeline.tracks {
+        let end = track
+            .clips
+            .iter()
+            .map(|c| c.start_secs + c.duration_secs())
+            .fold(0.0, f64::max);
+        assert!((end - 7.0).abs() < 1e-6, "track {} ends at {end}", track.id);
+    }
+}
+
+#[test]
+fn deleting_a_range_skips_locked_tracks_and_rejects_bad_ranges() {
+    let mut project = project_with(vec![asset(1, MediaKind::Video, 10.0)]);
+    add_asset(&mut project, 1, None, None).unwrap();
+    let timeline = project.timeline_mut();
+    timeline.tracks[0].locked = true;
+    assert!(!delete_range(timeline, 2.0, 5.0));
+    timeline.tracks[0].locked = false;
+    assert!(!delete_range(timeline, 5.0, 5.0));
+    assert!(!delete_range(timeline, 5.0, 2.0));
+    assert!(!delete_range(timeline, f64::NAN, 2.0));
+    assert!(!delete_range(timeline, 0.0, f64::INFINITY));
+}
+
 mod commands {
     use avcore::timeline::{MaskShape, Timeline, TrackKind, TransitionType};
     use avcore::{Keyframe, Position};
@@ -237,7 +272,7 @@ mod commands {
         let h = setup();
         let (first, _) = two_clips(&h);
         let track_id = timeline(&h).tracks[0].id;
-        set_track_flags(h.handle(), track_id, None, Some(true)).unwrap();
+        set_track_flags(h.handle(), track_id, None, Some(true), None, None, None).unwrap();
         let before = timeline(&h);
         trim_clip(h.handle(), first, TrimEdge::Start, 2.0).unwrap();
         trim_clip(h.handle(), 999, TrimEdge::End, 2.0).unwrap();
@@ -423,7 +458,7 @@ mod commands {
         apply_speed_ramp_to_clip(h.handle(), first, 0.5, 2.0, 1).unwrap();
         apply_speed_ramp_to_clip(h.handle(), 999, 0.5, 2.0, 4).unwrap();
         let track_id = before.tracks[0].id;
-        set_track_flags(h.handle(), track_id, None, Some(true)).unwrap();
+        set_track_flags(h.handle(), track_id, None, Some(true), None, None, None).unwrap();
         let locked = timeline(&h);
         apply_speed_ramp_to_clip(h.handle(), first, 0.5, 2.0, 4).unwrap();
         assert_eq!(timeline(&h), locked);
@@ -525,7 +560,7 @@ mod commands {
         .unwrap();
         assert_eq!(events.load(Ordering::SeqCst), 0);
         let track_id = timeline(&h).tracks[0].id;
-        set_track_flags(h.handle(), track_id, None, Some(true)).unwrap();
+        set_track_flags(h.handle(), track_id, None, Some(true), None, None, None).unwrap();
         assert_eq!(events.load(Ordering::SeqCst), 1);
         update_clip(
             h.handle(),
@@ -544,14 +579,48 @@ mod commands {
         let h = setup();
         add_track(h.handle(), TrackKind::Video).unwrap();
         let id = timeline(&h).tracks[0].id;
-        set_track_flags(h.handle(), id, Some(false), Some(true)).unwrap();
+        set_track_flags(h.handle(), id, Some(false), Some(true), None, None, None).unwrap();
         let tl = timeline(&h);
         assert!(!tl.tracks[0].visible && tl.tracks[0].locked);
         let events = h.count_session_events();
-        set_track_flags(h.handle(), id, Some(false), Some(true)).unwrap();
-        set_track_flags(h.handle(), id, None, None).unwrap();
-        set_track_flags(h.handle(), 999, Some(true), None).unwrap();
+        set_track_flags(h.handle(), id, Some(false), Some(true), None, None, None).unwrap();
+        set_track_flags(h.handle(), id, None, None, None, None, None).unwrap();
+        set_track_flags(h.handle(), 999, Some(true), None, None, None, None).unwrap();
         assert_eq!(events.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn mute_solo_and_the_audio_role_are_saved_as_one_undo_step() {
+        let h = setup();
+        add_track(h.handle(), TrackKind::Audio).unwrap();
+        let id = timeline(&h).tracks[0].id;
+        set_track_flags(
+            h.handle(),
+            id,
+            None,
+            None,
+            Some(true),
+            Some(true),
+            Some(avcore::timeline::AudioRole::Mic),
+        )
+        .unwrap();
+        let tl = timeline(&h);
+        assert!(tl.tracks[0].muted && tl.tracks[0].solo);
+        assert_eq!(tl.tracks[0].audio_role, avcore::timeline::AudioRole::Mic);
+        let events = h.count_session_events();
+        set_track_flags(h.handle(), id, None, None, Some(true), None, None).unwrap();
+        assert_eq!(events.load(Ordering::SeqCst), 0, "no change, no undo step");
+    }
+
+    #[test]
+    fn the_range_delete_command_is_one_undo_step() {
+        let h = setup();
+        add_asset_to_timeline(h.handle(), 1, None, None).unwrap();
+        let events = h.count_session_events();
+        ripple_delete_range(h.handle(), 1.0, 3.0).unwrap();
+        assert_eq!(events.load(Ordering::SeqCst), 1);
+        ripple_delete_range(h.handle(), 3.0, 3.0).unwrap();
+        assert_eq!(events.load(Ordering::SeqCst), 1);
     }
 }
 
@@ -577,7 +646,7 @@ mod edge_cases {
         let h = with_asset(5.0);
         add_asset_to_timeline(h.handle(), 1, None, None).unwrap();
         let track = h.session().project.timeline().tracks[0].id;
-        set_track_flags(h.handle(), track, None, Some(true)).unwrap();
+        set_track_flags(h.handle(), track, None, Some(true), None, None, None).unwrap();
         let events = h.count_session_events();
         add_asset_to_timeline(h.handle(), 1, Some(track), Some(1.0)).unwrap();
         assert_eq!(events.load(Ordering::SeqCst), 0);
