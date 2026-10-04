@@ -13,7 +13,14 @@ import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { Icon } from "./Icon";
 import { TimelineMinimap } from "./TimelineMinimap";
 import { SequenceTabs } from "./SequenceTabs";
-import { frameAt, frameStepSecs, MEDIA_EVENT, peakRange, peaksFor } from "./timelineMedia";
+import {
+  frameAt,
+  frameStepSecs,
+  MEDIA_EVENT,
+  peakRange,
+  peaksFor,
+  syncAssets,
+} from "./timelineMedia";
 import { Menu } from "./Menu";
 import { LayerTemplates } from "./LayerTemplates";
 import { SilenceReviewPanel } from "./SilenceReviewPanel";
@@ -159,6 +166,10 @@ export function Timeline({ session }: { session: SessionView }) {
   const lastScrubSeekRef = useRef(0);
 
   // Everything draw() reads, refreshed every render so the rAF callback never sees stale data.
+  // Cached frames and waveforms belong to an asset id; a new project reuses the ids.
+  useLayoutEffect(() => {
+    syncAssets(media);
+  }, [media]);
   const stateRef = useRef({ tracks, markers, media, ui, scrollSecs, scrollY });
   useLayoutEffect(() => {
     stateRef.current = { tracks, markers, media, ui, scrollSecs, scrollY };

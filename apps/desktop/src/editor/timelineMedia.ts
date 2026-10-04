@@ -17,10 +17,46 @@ const MAX_IN_FLIGHT = 4;
 const MAX_QUEUED = 48;
 const MAX_CACHED_FRAMES = 600;
 
-type FrameEntry = HTMLImageElement | "pending" | "failed";
+/** A load that failed, with when, so it can be asked for again later: the file may have been
+ *  offline or still arriving, and the backend retries after a while too. */
+interface Failed {
+  failedAt: number;
+}
+const RETRY_MS = 10_000;
+const isFailed = (entry: unknown): entry is Failed => {
+  return typeof entry === "object" && entry !== null && "failedAt" in entry;
+};
+
+type FrameEntry = HTMLImageElement | "pending" | Failed;
 const frames = new Map<string, FrameEntry>();
-const queue: { key: string; assetId: number; millis: number }[] = [];
+const queue: { key: string; assetId: number; millis: number; epoch: number }[] = [];
 let inFlight = 0;
+
+// Asset ids restart from 1 in every project, so what is cached under an id is only valid while
+// the id still means the same file. `epoch` bumps when that stops being true, and answers that
+// were requested before the bump are dropped when they arrive.
+const sources = new Map<number, string>();
+let epoch = 0;
+
+/** Tells the cache which file each asset id stands for now; drops everything cached for ids
+ *  that point to a different file than before (another project, a re-linked file). */
+export function syncAssets(assets: MediaAsset[]) {
+  let stale = false;
+  for (const asset of assets) {
+    const known = sources.get(asset.id);
+    if (known !== undefined && known !== asset.source_path) {
+      stale = true;
+    }
+    sources.set(asset.id, asset.source_path);
+  }
+  if (stale) {
+    epoch += 1;
+    frames.clear();
+    queue.length = 0;
+    detailed.clear();
+    notify();
+  }
+}
 
 /** The coarsest frame spacing that still gives every tile of `secsPerTile` its own frame. The
  *  spacing is quantized so the same frames are reused as the user zooms and scrolls. */
@@ -40,7 +76,9 @@ function pump() {
     inFlight += 1;
     const image = new Image();
     const settle = (entry: FrameEntry) => {
-      frames.set(job.key, entry);
+      if (job.epoch === epoch) {
+        frames.set(job.key, entry);
+      }
       inFlight -= 1;
       notify();
       pump();
@@ -49,7 +87,7 @@ function pump() {
       return settle(image);
     };
     image.onerror = () => {
-      return settle("failed");
+      return settle({ failedAt: Date.now() });
     };
     image.src = frameAtUrl(job.assetId, job.millis);
   }
@@ -59,9 +97,13 @@ function pump() {
 export function frameAt(assetId: number, secs: number, stepSecs: number): HTMLImageElement | null {
   const millis = Math.round(Math.floor(Math.max(0, secs) / stepSecs) * stepSecs * 1000);
   const key = `${assetId}:${millis}`;
-  const entry = frames.get(key);
+  let entry = frames.get(key);
   if (entry instanceof HTMLImageElement) {
     return entry;
+  }
+  if (isFailed(entry) && Date.now() - entry.failedAt >= RETRY_MS) {
+    frames.delete(key);
+    entry = undefined;
   }
   if (entry === undefined) {
     if (frames.size >= MAX_CACHED_FRAMES) {
@@ -74,7 +116,7 @@ export function frameAt(assetId: number, secs: number, stepSecs: number): HTMLIm
       }
     }
     frames.set(key, "pending");
-    queue.push({ key, assetId, millis });
+    queue.push({ key, assetId, millis, epoch });
     if (queue.length > MAX_QUEUED) {
       const dropped = queue.shift()!;
       frames.delete(dropped.key);
@@ -162,7 +204,7 @@ export function peakRange(
   return true;
 }
 
-type WaveEntry = PeakPyramid | "pending" | "failed";
+type WaveEntry = PeakPyramid | "pending" | Failed;
 const detailed = new Map<number, WaveEntry>();
 const overview = new WeakMap<object, PeakPyramid | null>();
 
@@ -170,11 +212,16 @@ const overview = new WeakMap<object, PeakPyramid | null>();
  *  fetched (a decode pass over the whole file, so it can take a while on long recordings),
  *  the coarse one stored with the project until then. */
 export function peaksFor(asset: MediaAsset): PeakPyramid | null {
-  const entry = detailed.get(asset.id);
-  if (entry && typeof entry === "object") {
+  let entry = detailed.get(asset.id);
+  if (entry && typeof entry === "object" && "levels" in entry) {
     return entry;
   }
+  if (isFailed(entry) && Date.now() - entry.failedAt >= RETRY_MS) {
+    detailed.delete(asset.id);
+    entry = undefined;
+  }
   if (asset.has_audio && entry === undefined && typeof fetch === "function") {
+    const requestedIn = epoch;
     detailed.set(asset.id, "pending");
     void fetch(waveformUrl(asset.id))
       .then((response) => {
@@ -183,12 +230,17 @@ export function peaksFor(asset: MediaAsset): PeakPyramid | null {
           : Promise.reject(new Error(String(response.status)));
       })
       .then((buffer) => {
+        if (requestedIn !== epoch) {
+          return;
+        }
         const pyramid = buildPyramid(new Float32Array(buffer), asset.duration_secs);
-        detailed.set(asset.id, pyramid ?? "failed");
+        detailed.set(asset.id, pyramid ?? { failedAt: Date.now() });
         notify();
       })
       .catch(() => {
-        return detailed.set(asset.id, "failed");
+        if (requestedIn === epoch) {
+          detailed.set(asset.id, { failedAt: Date.now() });
+        }
       });
   }
   const coarse = asset.waveform_peaks;
