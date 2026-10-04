@@ -139,6 +139,7 @@ describe("connect", () => {
         onPreview: subscribe("preview"),
         onExports: subscribe("exports"),
         onImportFailed: subscribe("importFailed"),
+        onAutosaveFailed: subscribe("autosaveFailed"),
         onPreviewRecovery: subscribe("previewRecovery"),
         onSceneCut: subscribe("sceneCut"),
         onMotionTrack: subscribe("motionTrack"),
@@ -176,6 +177,12 @@ describe("connect", () => {
     const { store, i18n } = await load();
     handlers.get("importFailed")!("broken.mp4" as never);
     expect(store.uiStore.get().error).toBe(i18n.t("importFailed") + ": broken.mp4");
+  });
+
+  it("tells the user when saving in the background failed", async () => {
+    const { store, i18n } = await load();
+    handlers.get("autosaveFailed")!("disk full" as never);
+    expect(store.uiStore.get().error).toBe(i18n.t("autosaveFailed") + ": disk full");
   });
 
   it("tells the user when playback crashed and whether it came back", async () => {

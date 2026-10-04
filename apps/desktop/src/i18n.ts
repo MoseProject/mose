@@ -535,6 +535,13 @@ const strings = {
     en: "An export to that file is already in the queue.",
   },
   confirmQuitTitle: { "pt-BR": "Sair do oca?", en: "Quit oca?" },
+  anotherName: { "pt-BR": "Sugerir outro nome", en: "Suggest another name" },
+  savingProject: { "pt-BR": "Salvando…", en: "Saving…" },
+  projectSaved: { "pt-BR": "Salvo", en: "Saved" },
+  autosaveFailed: {
+    "pt-BR": "Não foi possível salvar o projeto automaticamente",
+    en: "Could not save the project automatically",
+  },
   confirmQuitSave: { "pt-BR": "Salvar e sair", en: "Save and quit" },
   previewRestarted: {
     "pt-BR":

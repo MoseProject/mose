@@ -9,6 +9,7 @@ import {
   api,
   onAutoReframe,
   onExports,
+  onAutosaveFailed,
   onImportFailed,
   onPreviewRecovery,
   onMatteGeneration,
@@ -226,6 +227,9 @@ export async function connect() {
   });
   await onImportFailed((fileName) => {
     patchUi({ error: t("importFailed") + ": " + fileName });
+  });
+  await onAutosaveFailed((message) => {
+    patchUi({ error: t("autosaveFailed") + ": " + message });
   });
   await onPreviewRecovery((restarted) => {
     patchUi({ error: t(restarted ? "previewRestarted" : "previewGaveUp") });

@@ -123,6 +123,40 @@ pub struct SessionView<'a> {
     pub dirty: bool,
 }
 
+/// Counts the edits made to the open project and remembers when the last one happened, so the
+/// auto-save knows both that something changed and that the changes have settled.
+pub struct EditClock {
+    seq: std::sync::atomic::AtomicU64,
+    last: Mutex<std::time::Instant>,
+}
+
+impl Default for EditClock {
+    fn default() -> Self {
+        Self {
+            seq: std::sync::atomic::AtomicU64::new(0),
+            last: Mutex::new(std::time::Instant::now()),
+        }
+    }
+}
+
+impl EditClock {
+    /// Records an edit now.
+    pub fn touch(&self) {
+        self.seq.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        *lock_or_recover(&self.last) = std::time::Instant::now();
+    }
+
+    /// How many edits so far.
+    pub fn seq(&self) -> u64 {
+        self.seq.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// The edit count and how long ago the last edit was.
+    pub fn snapshot(&self) -> (u64, std::time::Duration) {
+        (self.seq(), lock_or_recover(&self.last).elapsed())
+    }
+}
+
 /// Locks `mutex` even when another thread panicked while holding it. What these locks guard
 /// (caches, single-slot buffers) is still a usable value afterwards, and giving up on it would
 /// turn one panic into a feature that stays broken until the app restarts.
@@ -175,6 +209,8 @@ pub struct AppState {
     pub nested_sequence_cache: Mutex<HashMap<u64, avcore::nested_sequence::NestedSequenceCache>>,
     /// Calls that leave the process or need model files; faked in tests.
     pub services: Arc<dyn crate::services::Services>,
+    /// When the project last changed, for the auto-save.
+    pub edits: EditClock,
 }
 
 impl AppState {
@@ -213,6 +249,7 @@ impl AppState {
             telemetry_enabled,
             nested_sequence_cache: Mutex::new(std::collections::HashMap::new()),
             services,
+            edits: EditClock::default(),
         }
     }
 
@@ -235,6 +272,9 @@ impl AppState {
 /// Every command that mutates [`Session`] ends with this.
 pub fn publish<R: Runtime>(app: &AppHandle<R>, session: &Session) {
     let state = app.state::<AppState>();
+    if session.dirty {
+        state.edits.touch();
+    }
     state.preview.set_content(session.project.clone());
     let _ = app.emit(SESSION_CHANGED, session.view());
 }
