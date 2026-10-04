@@ -553,6 +553,11 @@ const strings = {
     "pt-BR": "Também dá para arrastar a camada no monitor.",
     en: "You can also drag the layer in the monitor.",
   },
+  textTypography: { "pt-BR": "Tipografia", en: "Typography" },
+  textBackground: { "pt-BR": "Fundo", en: "Background" },
+  textPosition: { "pt-BR": "Posição", en: "Position" },
+  textHighlight: { "pt-BR": "Destaque", en: "Highlight" },
+  textTiming: { "pt-BR": "Tempo", en: "Timing" },
   keyframeToggle: { "pt-BR": "Keyframe no cursor", en: "Keyframe at the playhead" },
   keyframeOutside: {
     "pt-BR": "Posicione o cursor dentro do clipe para criar um keyframe.",

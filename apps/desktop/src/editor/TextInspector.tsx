@@ -75,207 +75,232 @@ export function TextInspector({ clip }: { clip: TextClip }) {
           return commit({ text });
         }}
       />
-      <SelectField
-        label={t("font")}
-        value={clip.font_family}
-        disabled={!catalog}
-        onChange={(fontFamily) => {
-          return commit({ fontFamily });
-        }}
+      <Section
+        label={t("textTypography")}
+        defaultOpen
+        testId="section-text-typography"
       >
-        {catalog && !font && <option value={clip.font_family}>{t("unknownFont")}</option>}
-        {categories.map((category) => {
-          return (
-            <optgroup
-              key={category}
-              label={t(CATEGORY_LABELS[category])}
-            >
-              {fonts
-                .filter((f) => {
-                  return f.category === category;
-                })
-                .map((f) => {
-                  return (
-                    <option
-                      key={f.id}
-                      value={f.id}
-                    >
-                      {f.displayName}
-                    </option>
-                  );
-                })}
-            </optgroup>
-          );
-        })}
-      </SelectField>
-      <SelectField
-        label={t("fontStyle")}
-        value={clip.font_style}
-        disabled={!font?.supportsBold}
-        onChange={(style) => {
-          return commit({ fontStyle: style as TextFontStyle });
-        }}
-      >
-        <option value="Regular">{t("fontRegular")}</option>
-        <option value="Bold">{t("fontBold")}</option>
-      </SelectField>
-      {font?.isVariable && (
+        <SelectField
+          label={t("font")}
+          value={clip.font_family}
+          disabled={!catalog}
+          onChange={(fontFamily) => {
+            return commit({ fontFamily });
+          }}
+        >
+          {catalog && !font && <option value={clip.font_family}>{t("unknownFont")}</option>}
+          {categories.map((category) => {
+            return (
+              <optgroup
+                key={category}
+                label={t(CATEGORY_LABELS[category])}
+              >
+                {fonts
+                  .filter((f) => {
+                    return f.category === category;
+                  })
+                  .map((f) => {
+                    return (
+                      <option
+                        key={f.id}
+                        value={f.id}
+                      >
+                        {f.displayName}
+                      </option>
+                    );
+                  })}
+              </optgroup>
+            );
+          })}
+        </SelectField>
+        <SelectField
+          label={t("fontStyle")}
+          value={clip.font_style}
+          disabled={!font?.supportsBold}
+          onChange={(style) => {
+            return commit({ fontStyle: style as TextFontStyle });
+          }}
+        >
+          <option value="Regular">{t("fontRegular")}</option>
+          <option value="Bold">{t("fontBold")}</option>
+        </SelectField>
+        {font?.isVariable && (
+          <Slider
+            label={t("fontWeight")}
+            value={clip.font_weight ?? 400}
+            min={100}
+            max={900}
+            step={10}
+            format={(v) => {
+              return v.toFixed(0);
+            }}
+            onCommit={(fontWeight) => {
+              return commit({ fontWeight });
+            }}
+          />
+        )}
+        <SelectField
+          label={t("direction")}
+          value={clip.direction}
+          onChange={(direction) => {
+            return commit({ direction: direction as TextDirection });
+          }}
+        >
+          {(Object.keys(DIRECTION_LABELS) as TextDirection[]).map((direction) => {
+            return (
+              <option
+                key={direction}
+                value={direction}
+              >
+                {t(DIRECTION_LABELS[direction])}
+              </option>
+            );
+          })}
+        </SelectField>
         <Slider
-          label={t("fontWeight")}
-          value={clip.font_weight ?? 400}
-          min={100}
-          max={900}
-          step={10}
+          label={t("fontSize")}
+          value={clip.font_size}
+          min={10}
+          max={120}
+          step={1}
           format={(v) => {
-            return v.toFixed(0);
+            return `${v.toFixed(0)} pt`;
           }}
-          onCommit={(fontWeight) => {
-            return commit({ fontWeight });
-          }}
-        />
-      )}
-      <SelectField
-        label={t("direction")}
-        value={clip.direction}
-        onChange={(direction) => {
-          return commit({ direction: direction as TextDirection });
-        }}
-      >
-        {(Object.keys(DIRECTION_LABELS) as TextDirection[]).map((direction) => {
-          return (
-            <option
-              key={direction}
-              value={direction}
-            >
-              {t(DIRECTION_LABELS[direction])}
-            </option>
-          );
-        })}
-      </SelectField>
-      <Slider
-        label={t("fontSize")}
-        value={clip.font_size}
-        min={10}
-        max={120}
-        step={1}
-        format={(v) => {
-          return `${v.toFixed(0)} pt`;
-        }}
-        onCommit={(fontSize) => {
-          return commit({ fontSize });
-        }}
-      />
-      <ColorField
-        label={t("textColor")}
-        rgb={clip.color_rgba}
-        onCommit={([r, g, b]) => {
-          return commit({ colorRgba: [r, g, b, clip.color_rgba[3]] });
-        }}
-      />
-      <SelectField
-        label={t("alignment")}
-        value={clip.text_align}
-        onChange={(align) => {
-          return commit({ textAlign: align as TextAlign });
-        }}
-      >
-        {(Object.keys(ALIGN_LABELS) as TextAlign[]).map((align) => {
-          return (
-            <option
-              key={align}
-              value={align}
-            >
-              {t(ALIGN_LABELS[align])}
-            </option>
-          );
-        })}
-      </SelectField>
-
-      <label className="check">
-        <input
-          type="checkbox"
-          checked={backgroundEnabled}
-          onChange={(e) => {
-            return commit({
-              backgroundRgba: [
-                clip.background_rgba[0],
-                clip.background_rgba[1],
-                clip.background_rgba[2],
-                e.target.checked ? 192 : 0,
-              ],
-            });
+          onCommit={(fontSize) => {
+            return commit({ fontSize });
           }}
         />
-        {t("backgroundEnabled")}
-      </label>
-      {backgroundEnabled && (
-        <>
-          <ColorField
-            label={t("backgroundColor")}
-            rgb={clip.background_rgba}
-            onCommit={([r, g, b]) => {
-              return commit({ backgroundRgba: [r, g, b, clip.background_rgba[3]] });
-            }}
-          />
-          <Slider
-            label={t("backgroundPadding")}
-            value={clip.background_padding}
-            min={0}
-            max={64}
-            step={1}
-            format={(v) => {
-              return `${v.toFixed(0)} px`;
-            }}
-            onCommit={(backgroundPadding) => {
-              return commit({ backgroundPadding });
-            }}
-          />
-          <Slider
-            label={t("backgroundRadius")}
-            value={clip.background_corner_radius}
-            min={0}
-            max={64}
-            step={1}
-            format={(v) => {
-              return `${v.toFixed(0)} px`;
-            }}
-            onCommit={(backgroundCornerRadius) => {
-              return commit({ backgroundCornerRadius });
-            }}
-          />
-        </>
-      )}
-
-      <Slider
-        label={t("positionX")}
-        value={clip.pos_x}
-        min={0}
-        max={1}
-        step={0.01}
-        format={(v) => {
-          return `${(v * 100).toFixed(0)}%`;
-        }}
-        onCommit={(posX) => {
-          return commit({ posX });
-        }}
-      />
-      <Slider
-        label={t("positionY")}
-        value={clip.pos_y}
-        min={0}
-        max={1}
-        step={0.01}
-        format={(v) => {
-          return `${(v * 100).toFixed(0)}%`;
-        }}
-        onCommit={(posY) => {
-          return commit({ posY });
-        }}
-      />
+        <ColorField
+          label={t("textColor")}
+          rgb={clip.color_rgba}
+          onCommit={([r, g, b]) => {
+            return commit({ colorRgba: [r, g, b, clip.color_rgba[3]] });
+          }}
+        />
+        <SelectField
+          label={t("alignment")}
+          value={clip.text_align}
+          onChange={(align) => {
+            return commit({ textAlign: align as TextAlign });
+          }}
+        >
+          {(Object.keys(ALIGN_LABELS) as TextAlign[]).map((align) => {
+            return (
+              <option
+                key={align}
+                value={align}
+              >
+                {t(ALIGN_LABELS[align])}
+              </option>
+            );
+          })}
+        </SelectField>
+      </Section>
 
       <Section
-        label={t("posXKeyframes")}
-        defaultOpen={clip.pos_x_keyframes.length > 0}
+        label={t("textBackground")}
+        defaultOpen={backgroundEnabled}
+        testId="section-text-background"
+      >
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={backgroundEnabled}
+            onChange={(e) => {
+              return commit({
+                backgroundRgba: [
+                  clip.background_rgba[0],
+                  clip.background_rgba[1],
+                  clip.background_rgba[2],
+                  e.target.checked ? 192 : 0,
+                ],
+              });
+            }}
+          />
+          {t("backgroundEnabled")}
+        </label>
+        {backgroundEnabled && (
+          <>
+            <ColorField
+              label={t("backgroundColor")}
+              rgb={clip.background_rgba}
+              onCommit={([r, g, b]) => {
+                return commit({ backgroundRgba: [r, g, b, clip.background_rgba[3]] });
+              }}
+            />
+            <Slider
+              label={t("backgroundPadding")}
+              value={clip.background_padding}
+              min={0}
+              max={64}
+              step={1}
+              format={(v) => {
+                return `${v.toFixed(0)} px`;
+              }}
+              onCommit={(backgroundPadding) => {
+                return commit({ backgroundPadding });
+              }}
+            />
+            <Slider
+              label={t("backgroundRadius")}
+              value={clip.background_corner_radius}
+              min={0}
+              max={64}
+              step={1}
+              format={(v) => {
+                return `${v.toFixed(0)} px`;
+              }}
+              onCommit={(backgroundCornerRadius) => {
+                return commit({ backgroundCornerRadius });
+              }}
+            />
+          </>
+        )}
+      </Section>
+
+      <Section
+        label={t("textPosition")}
+        defaultOpen
+        testId="section-text-position"
+      >
+        <Slider
+          label={t("positionX")}
+          value={clip.pos_x}
+          min={0}
+          max={1}
+          step={0.01}
+          format={(v) => {
+            return `${(v * 100).toFixed(0)}%`;
+          }}
+          onCommit={(posX) => {
+            return commit({ posX });
+          }}
+        />
+        <Slider
+          label={t("positionY")}
+          value={clip.pos_y}
+          min={0}
+          max={1}
+          step={0.01}
+          format={(v) => {
+            return `${(v * 100).toFixed(0)}%`;
+          }}
+          onCommit={(posY) => {
+            return commit({ posY });
+          }}
+        />
+      </Section>
+
+      <Section
+        label={t("keyframes")}
+        defaultOpen={
+          clip.pos_x_keyframes.length > 0 ||
+          clip.pos_y_keyframes.length > 0 ||
+          clip.scale_keyframes.length > 0 ||
+          clip.rotation_keyframes.length > 0 ||
+          clip.opacity_keyframes.length > 0
+        }
+        testId="section-text-keyframes"
       >
         <F32KeyframeList
           label={t("posXKeyframes")}
@@ -288,11 +313,6 @@ export function TextInspector({ clip }: { clip: TextClip }) {
             return commit({ posXKeyframes });
           }}
         />
-      </Section>
-      <Section
-        label={t("posYKeyframes")}
-        defaultOpen={clip.pos_y_keyframes.length > 0}
-      >
         <F32KeyframeList
           label={t("posYKeyframes")}
           keyframes={clip.pos_y_keyframes}
@@ -304,11 +324,6 @@ export function TextInspector({ clip }: { clip: TextClip }) {
             return commit({ posYKeyframes });
           }}
         />
-      </Section>
-      <Section
-        label={t("scaleKeyframes")}
-        defaultOpen={clip.scale_keyframes.length > 0}
-      >
         <F32KeyframeList
           label={t("scaleKeyframes")}
           keyframes={clip.scale_keyframes}
@@ -320,11 +335,6 @@ export function TextInspector({ clip }: { clip: TextClip }) {
             return commit({ scaleKeyframes });
           }}
         />
-      </Section>
-      <Section
-        label={t("rotationKeyframes")}
-        defaultOpen={clip.rotation_keyframes.length > 0}
-      >
         <F32KeyframeList
           label={t("rotationKeyframes")}
           keyframes={clip.rotation_keyframes}
@@ -336,11 +346,6 @@ export function TextInspector({ clip }: { clip: TextClip }) {
             return commit({ rotationKeyframes });
           }}
         />
-      </Section>
-      <Section
-        label={t("opacityKeyframes")}
-        defaultOpen={clip.opacity_keyframes.length > 0}
-      >
         <F32KeyframeList
           label={t("opacityKeyframes")}
           keyframes={clip.opacity_keyframes}
@@ -355,7 +360,11 @@ export function TextInspector({ clip }: { clip: TextClip }) {
       </Section>
 
       {clip.words.length > 0 && (
-        <>
+        <Section
+          label={t("textHighlight")}
+          defaultOpen={clip.highlight_enabled}
+          testId="section-text-highlight"
+        >
           <label className="check">
             <input
               type="checkbox"
@@ -375,33 +384,39 @@ export function TextInspector({ clip }: { clip: TextClip }) {
               });
             }}
           />
-        </>
+        </Section>
       )}
 
-      <div className="field">
-        <label>{t("overlayStart")}</label>
-        <input
-          type="number"
-          min={0}
-          step={0.1}
-          defaultValue={clip.start_secs}
-          onBlur={(e) => {
-            return commit({ startSecs: Number(e.target.value) });
-          }}
-        />
-      </div>
-      <div className="field">
-        <label>{t("overlayDuration")}</label>
-        <input
-          type="number"
-          min={0.1}
-          step={0.1}
-          defaultValue={clip.duration_secs}
-          onBlur={(e) => {
-            return commit({ durationSecs: Number(e.target.value) });
-          }}
-        />
-      </div>
+      <Section
+        label={t("textTiming")}
+        defaultOpen
+        testId="section-text-timing"
+      >
+        <div className="field">
+          <label>{t("overlayStart")}</label>
+          <input
+            type="number"
+            min={0}
+            step={0.1}
+            defaultValue={clip.start_secs}
+            onBlur={(e) => {
+              return commit({ startSecs: Number(e.target.value) });
+            }}
+          />
+        </div>
+        <div className="field">
+          <label>{t("overlayDuration")}</label>
+          <input
+            type="number"
+            min={0.1}
+            step={0.1}
+            defaultValue={clip.duration_secs}
+            onBlur={(e) => {
+              return commit({ durationSecs: Number(e.target.value) });
+            }}
+          />
+        </div>
+      </Section>
     </>
   );
 }
