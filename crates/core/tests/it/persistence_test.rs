@@ -18,7 +18,7 @@ use std::path::PathBuf;
 
 use avcore::persistence::{
     from_ocproj_bytes, from_ocqueue_bytes, load_project_from_file, save_project_to_file,
-    to_ocproj_bytes, to_ocqueue_bytes, PersistError,
+    to_ocproj_bytes, to_ocqueue_bytes, write_atomic, PersistError,
 };
 use avcore::timeline::{
     AudioRole, BlendMode, ClipInstance, ColorFilter, MaskShape, TextClip, TextFontFamily,
@@ -696,4 +696,98 @@ fn load_project_from_file_errors_on_a_missing_file() {
         load_project_from_file(&path),
         Err(PersistError::Io(_))
     ));
+}
+
+fn scratch_dir(name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("oca_atomic_{name}_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+#[test]
+fn write_atomic_replaces_the_file_and_leaves_no_temporary_behind() {
+    let dir = scratch_dir("replace");
+    let path = dir.join("a.ocproj");
+    fs::write(&path, b"old").unwrap();
+
+    write_atomic(&path, b"new contents").unwrap();
+
+    assert_eq!(fs::read(&path).unwrap(), b"new contents");
+    let leftovers: Vec<_> = fs::read_dir(&dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    assert_eq!(leftovers.len(), 1, "only the target remains: {leftovers:?}");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn write_atomic_creates_a_new_file() {
+    let dir = scratch_dir("create");
+    let path = dir.join("fresh.ocproj");
+    write_atomic(&path, b"hello").unwrap();
+    assert_eq!(fs::read(&path).unwrap(), b"hello");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_failed_write_keeps_the_previous_file_and_cleans_up() {
+    let dir = scratch_dir("fail");
+    // The target is a directory, so the final rename cannot replace it.
+    let target = dir.join("blocked");
+    fs::create_dir_all(target.join("inside")).unwrap();
+
+    assert!(write_atomic(&target, b"data").is_err());
+
+    assert!(target.is_dir(), "the target was not touched");
+    let names: Vec<_> = fs::read_dir(&dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    assert_eq!(names.len(), 1, "the temporary file is removed: {names:?}");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn write_atomic_rejects_a_path_without_a_file_name() {
+    assert!(write_atomic(std::path::Path::new(""), b"x").is_err());
+}
+
+#[test]
+fn saving_over_an_existing_project_keeps_it_loadable() {
+    let original = fixture_project();
+    let dir = scratch_dir("project");
+    let path = dir.join("p.ocproj");
+    save_project_to_file(&original, &path).unwrap();
+    save_project_to_file(&original, &path).unwrap();
+    assert_eq!(load_project_from_file(&path).unwrap(), original);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn concurrent_writers_of_one_file_never_fail_or_corrupt_it() {
+    let dir = scratch_dir("concurrent");
+    let path = dir.join("shared.bin");
+    let handles: Vec<_> = (0..8u8)
+        .map(|n| {
+            let path = path.clone();
+            std::thread::spawn(move || {
+                for _ in 0..20 {
+                    write_atomic(&path, &[n; 4096]).unwrap();
+                }
+            })
+        })
+        .collect();
+    for handle in handles {
+        handle.join().unwrap();
+    }
+    let data = fs::read(&path).unwrap();
+    assert_eq!(data.len(), 4096);
+    assert!(
+        data.iter().all(|byte| *byte == data[0]),
+        "a mix of two writers"
+    );
+    assert_eq!(fs::read_dir(&dir).unwrap().count(), 1);
+    let _ = fs::remove_dir_all(&dir);
 }
