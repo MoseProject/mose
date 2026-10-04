@@ -12,10 +12,20 @@
 use std::path::{Path, PathBuf};
 
 use avcore::{MediaKind, PreviewQuality};
-use tauri::{AppHandle, Manager, Runtime};
+use serde::Serialize;
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use super::with_session;
 use crate::state::{publish, AppState, Session};
+
+/// Emitted when a file could not be read as media, so the import does not fail in silence.
+pub const IMPORT_FAILED_EVENT: &str = "import-failed";
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportFailedPayload {
+    pub file_name: String,
+}
 
 const AUDIO_EXTENSIONS: &[&str] = &["wav", "mp3", "m4a", "aac", "flac", "ogg", "opus"];
 
@@ -91,6 +101,11 @@ fn import_one<R: Runtime>(app: &AppHandle<R>, path: &Path, epoch: u64, proxy_dir
         Ok(probed) => probed,
         Err(error) => {
             tracing::warn!(path = %path.display(), %error, "failed to probe media");
+            let file_name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let _ = app.emit(IMPORT_FAILED_EVENT, ImportFailedPayload { file_name });
             return;
         }
     };

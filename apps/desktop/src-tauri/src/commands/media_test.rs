@@ -164,6 +164,34 @@ fn a_file_that_cannot_be_probed_adds_nothing() {
 }
 
 #[test]
+fn a_file_that_cannot_be_probed_is_reported_by_name() {
+    use tauri::Listener;
+
+    let h = saved_harness();
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let sink = std::sync::Arc::clone(&seen);
+    h.app.listen(IMPORT_FAILED_EVENT, move |event| {
+        sink.lock().unwrap().push(event.payload().to_string());
+    });
+    let (epoch, proxy_dir) = {
+        let s = h.session();
+        (
+            s.project_epoch,
+            avcore::proxy::cache_dir_for_project(&s.project),
+        )
+    };
+    import_one(
+        &h.handle(),
+        &path_in(&h.dir, "broken.mp4"),
+        epoch,
+        &proxy_dir,
+    );
+    let payloads = seen.lock().unwrap();
+    assert_eq!(payloads.len(), 1);
+    assert!(payloads[0].contains("broken.mp4"), "got {}", payloads[0]);
+}
+
+#[test]
 fn an_import_for_a_replaced_project_is_dropped() {
     let h = saved_harness();
     let proxy_dir = avcore::proxy::cache_dir_for_project(&h.session().project);
