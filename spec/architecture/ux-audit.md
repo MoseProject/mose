@@ -300,9 +300,18 @@ mais usado em NLEs para acessar exatamente essas ações.
 | UX-19 | P3 | Agrupar Rolar/Deslizar origem/Deslizar num submenu do trilho | S |
 | UX-20 | P3 | `:focus-visible`, `prefers-reduced-motion`, fonte mínima de 11px | S |
 
-**Status (2026-10-04):** UX-01, UX-02 e UX-03 estão implementados: `ExportDialog`
-(Ctrl+E ou botão Exportar), `Dialog` único em todos os modais, e os atalhos globais respeitam
-diálogos abertos, campos editáveis e botões focados.
+**Status (2026-10-04):** UX-01 a UX-20 estão implementados, mais a funcionalidade nova de
+atalhos editáveis (`keymap.ts`, `ShortcutsDialog`, persistência em `keybindings` nas
+preferências, conflito/reservados/duplicados, máximo de 4 por comando, restaurar padrão por
+comando e global). Limites conhecidos:
+
+- Zoom do monitor 50/100 sem pan (centralizado, recortado; alças ocultas com zoom).
+- J/K/L aproximados: K pausa, L toca, J volta 1 s, Shift ±10 s.
+- Marcas I/O servem só ao apagar intervalo com ripple.
+- Medidor mostra pico (dBFS) com retenção, sem alvos de LUFS.
+- Posição da transformação exibida em % do canvas.
+- Fila de exportação sem ETA/abrir pasta; inspetor de texto não reagrupado.
+- Sem diamante de keyframe por seção; menu de contexto sem remover mídia (falta API).
 
 Esforço: S até meio dia, M de 1 a 3 dias, L mais de 3 dias.
 
@@ -311,4 +320,4 @@ Esforço: S até meio dia, M de 1 a 3 dias, L mais de 3 dias.
 - Fila de exportação fora do caminho; ícones coesos; paleta escura legível.
 - Biblioteca com busca, abas e grade/lista; zoom e frames/ondas na timeline reais.
 - Menus da barra superior reaproveitam comandos existentes, sem duplicar lógica.
-- Cobertura de testes alta no frontend (342 testes), o que permite refatorar com segurança.
+- Cobertura de testes alta no frontend (572 testes), o que permite refatorar com segurança.
