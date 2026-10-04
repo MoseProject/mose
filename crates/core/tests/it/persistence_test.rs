@@ -791,3 +791,51 @@ fn concurrent_writers_of_one_file_never_fail_or_corrupt_it() {
     assert_eq!(fs::read_dir(&dir).unwrap().count(), 1);
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_project_round_trips_through_the_project_layout() {
+    let original = fixture_project();
+    let bytes = avcore::persistence::to_project_bytes(&original).unwrap();
+    assert_eq!(&bytes[..4], b"OCPJ");
+    let restored = avcore::persistence::from_project_bytes(&bytes).unwrap();
+    assert_eq!(restored, original);
+}
+
+#[test]
+fn the_project_layout_refuses_other_versions_and_damaged_input() {
+    use avcore::persistence::{from_project_bytes, to_project_bytes};
+    let good = to_project_bytes(&fixture_project()).unwrap();
+
+    assert!(matches!(
+        from_project_bytes(b"not a project"),
+        Err(PersistError::Corrupt(_))
+    ));
+    let mut other_version = good.clone();
+    other_version[4] = 99;
+    assert!(matches!(
+        from_project_bytes(&other_version),
+        Err(PersistError::Corrupt(_))
+    ));
+    // The generic MessagePack framing shares the magic but is not a project file.
+    let generic = to_ocproj_bytes(&fixture_project()).unwrap();
+    assert!(matches!(
+        from_project_bytes(&generic),
+        Err(PersistError::Corrupt(_))
+    ));
+    assert!(matches!(
+        from_project_bytes(&good[..7]),
+        Err(PersistError::Corrupt(_))
+    ));
+    // A size field larger than the cap is rejected before anything is allocated for it.
+    let mut lying = good.clone();
+    lying[5..9].copy_from_slice(&u32::MAX.to_le_bytes());
+    assert!(matches!(
+        from_project_bytes(&lying),
+        Err(PersistError::Corrupt(_))
+    ));
+    // A size that does not match the payload, and a cut-off payload, fail instead of misreading.
+    let mut wrong_size = good.clone();
+    wrong_size[5..9].copy_from_slice(&10u32.to_le_bytes());
+    assert!(from_project_bytes(&wrong_size).is_err());
+    assert!(from_project_bytes(&good[..good.len() / 2]).is_err());
+}

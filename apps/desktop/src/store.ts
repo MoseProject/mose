@@ -4,6 +4,7 @@
 // types and `ui::App`. Preview ticks live in their own store so 60 Hz playhead updates only
 // re-render the components that read them.
 
+import { applyOps } from "./sessionPatch";
 import { useSyncExternalStore } from "react";
 import {
   api,
@@ -18,6 +19,7 @@ import {
   onPrivacyBlur,
   onSceneCut,
   onSession,
+  onSessionPatch,
   onTranscribe,
   onTts,
 } from "./ipc";
@@ -182,6 +184,41 @@ export async function run<T>(call: Promise<T>): Promise<T | undefined> {
   }
 }
 
+/** Makes `view` the current session and drops what it no longer has: a changed sequence resets
+ *  the selection, and selected clips that were deleted are unselected. */
+function adoptSession(view: SessionView) {
+  const previous = sessionStore.get();
+  sessionStore.set(view);
+  const previousId = previous?.project.sequences[previous.project.active_sequence]?.id;
+  const activeId = view.project.sequences[view.project.active_sequence]?.id;
+  if (previousId !== undefined && previousId !== activeId) {
+    patchUi({ selectedClipIds: [] });
+  }
+  // Drop selections that no longer exist (undo, delete, project switch).
+  const selected = uiStore.get().selectedClipIds;
+  if (selected.length === 0) {
+    return;
+  }
+  const ids = new Set(
+    view.project.sequences[view.project.active_sequence].timeline.tracks.flatMap((t) => {
+      return t.clips.map((c) => {
+        return c.id;
+      });
+    }),
+  );
+  if (
+    selected.some((id) => {
+      return !ids.has(id);
+    })
+  ) {
+    patchUi({
+      selectedClipIds: selected.filter((id) => {
+        return ids.has(id);
+      }),
+    });
+  }
+}
+
 let connected = false;
 
 /** Subscribes to backend events once and loads the initial session. */
@@ -190,34 +227,27 @@ export async function connect() {
     return;
   }
   connected = true;
-  await onSession((view) => {
-    const previous = sessionStore.get();
-    sessionStore.set(view);
-    const previousId = previous?.project.sequences[previous.project.active_sequence]?.id;
-    const activeId = view.project.sequences[view.project.active_sequence]?.id;
-    if (previousId !== undefined && previousId !== activeId) {
-      patchUi({ selectedClipIds: [] });
-    }
-    // Drop selections that no longer exist (undo, delete, project switch).
-    const ids = new Set(
-      view.project.sequences[view.project.active_sequence].timeline.tracks.flatMap((t) => {
-        return t.clips.map((c) => {
-          return c.id;
-        });
-      }),
-    );
-    const selected = uiStore.get().selectedClipIds;
-    if (
-      selected.some((id) => {
-        return !ids.has(id);
-      })
-    ) {
-      patchUi({
-        selectedClipIds: selected.filter((id) => {
-          return ids.has(id);
-        }),
+  await onSession(adoptSession);
+  await onSessionPatch((patch) => {
+    const current = sessionStore.get();
+    if (!current || current.rev !== patch.base) {
+      // An update was missed (or none arrived yet): start over from a whole snapshot.
+      void run(api.getSession()).then((view) => {
+        if (view) {
+          adoptSession(view);
+        }
       });
+      return;
     }
+    adoptSession({
+      ...current,
+      rev: patch.rev,
+      project: applyOps(current.project, patch.ops),
+      filePath: patch.filePath,
+      canUndo: patch.canUndo,
+      canRedo: patch.canRedo,
+      dirty: patch.dirty,
+    });
   });
   await onPreview((tick) => {
     return previewStore.set(tick);

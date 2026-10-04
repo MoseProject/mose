@@ -20,6 +20,7 @@ import type {
   PrefsView,
   PrivacyBlurEvent,
   RecentProject,
+  SessionPatch,
   SessionView,
   ShapeClipPatch,
   TextClipPatch,
@@ -39,6 +40,7 @@ import type {
 
 export const events = {
   session: "session-changed",
+  sessionPatch: "session-patch",
   preview: "preview-tick",
   exports: "export-jobs",
   transcribe: "transcribe-event",
@@ -59,6 +61,12 @@ export const events = {
 
 export function onSession(handler: (view: SessionView) => void): Promise<UnlistenFn> {
   return listen<SessionView>(events.session, (e) => {
+    return handler(e.payload);
+  });
+}
+
+export function onSessionPatch(handler: (patch: SessionPatch) => void): Promise<UnlistenFn> {
+  return listen<SessionPatch>(events.sessionPatch, (e) => {
     return handler(e.payload);
   });
 }
@@ -614,6 +622,11 @@ export async function exportActiveSequence(
 /** One video frame of an asset at a source time, for the timeline's clip strips. */
 export const frameAtUrl = (assetId: number, millis: number) => {
   return `${schemeBase}/thumb/${assetId}/${millis}`;
+};
+/** The overview waveform stored with the project, same layout as `waveformUrl`; instant, since
+ *  nothing is decoded. */
+export const coarseWaveformUrl = (assetId: number) => {
+  return `${schemeBase}/wave/${assetId}/coarse`;
 };
 /** The asset's detailed waveform: little-endian f32 (min, max) pairs across its duration. */
 export const waveformUrl = (assetId: number) => {

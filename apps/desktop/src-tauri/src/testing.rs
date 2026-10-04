@@ -14,7 +14,7 @@ use crate::export::ExportQueue;
 use crate::prefs::PrefsDocument;
 use crate::preview_engine::{Command, PreviewEngine};
 use crate::services::Services;
-use crate::state::{AppState, Session, SESSION_CHANGED};
+use crate::state::{AppState, Session, SESSION_CHANGED, SESSION_PATCH};
 
 /// How long a test waits for a background worker before giving up.
 const WAIT: std::time::Duration = std::time::Duration::from_secs(120);
@@ -256,10 +256,12 @@ impl Harness {
     /// changed the session, none for a rejected or no-op edit.
     pub fn count_session_events(&self) -> Arc<AtomicUsize> {
         let seen = Arc::new(AtomicUsize::new(0));
-        let counter = Arc::clone(&seen);
-        self.app.listen(SESSION_CHANGED, move |_| {
-            counter.fetch_add(1, Ordering::SeqCst);
-        });
+        for event in [SESSION_CHANGED, SESSION_PATCH] {
+            let counter = Arc::clone(&seen);
+            self.app.listen(event, move |_| {
+                counter.fetch_add(1, Ordering::SeqCst);
+            });
+        }
         seen
     }
 

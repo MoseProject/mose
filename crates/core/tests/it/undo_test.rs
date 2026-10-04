@@ -99,3 +99,64 @@ fn clear_drops_both_stacks() {
     assert!(!stack.can_undo());
     assert!(!stack.can_redo());
 }
+
+fn sequence_with_clips(name: &str, clips: usize) -> Sequence {
+    use avcore::timeline::{AudioRole, ClipInstance, Track, TrackKind};
+    let mut sequence = sequence_named(name);
+    sequence.timeline.tracks.push(Track {
+        id: 1,
+        name: "V1".into(),
+        kind: TrackKind::Video,
+        clips: (0..clips)
+            .map(|i| ClipInstance::new(i as u64, 1, i as f64, 0.0, 1.0))
+            .collect(),
+        text_clips: Vec::new(),
+        shape_clips: Vec::new(),
+        visible: true,
+        audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
+        locked: false,
+        color_label: None,
+    });
+    sequence
+}
+
+#[test]
+fn a_huge_timeline_keeps_fewer_undo_steps_but_always_the_newest() {
+    let mut stack = UndoStack::new();
+    for step in 0..100 {
+        stack.push(sequence_with_clips(&format!("step {step}"), 30_000));
+    }
+    // 120k clips of budget over 30k-clip snapshots: only the last few survive.
+    let mut kept = 0;
+    let mut current = sequence_named("now");
+    let mut newest = None;
+    while let Some(previous) = stack.undo(current.clone()) {
+        newest.get_or_insert_with(|| previous.name.clone());
+        current = previous;
+        kept += 1;
+    }
+    assert!((1..=4).contains(&kept), "kept {kept}");
+    assert_eq!(newest.as_deref(), Some("step 99"));
+
+    // One snapshot bigger than the whole budget is still kept.
+    let mut single = UndoStack::new();
+    single.push(sequence_with_clips("giant", 500_000));
+    assert!(single.can_undo());
+}
+
+#[test]
+fn small_timelines_keep_every_step_up_to_the_capacity() {
+    let mut stack = UndoStack::new();
+    for step in 0..150 {
+        stack.push(sequence_with_clips(&format!("step {step}"), 50));
+    }
+    let mut kept = 0;
+    let mut current = sequence_named("now");
+    while let Some(previous) = stack.undo(current.clone()) {
+        current = previous;
+        kept += 1;
+    }
+    assert_eq!(kept, 100);
+}

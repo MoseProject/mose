@@ -166,7 +166,7 @@ fn a_malicious_proxy_entry_path_cannot_escape_the_proxy_cache_dir() {
     let dir = scratch_dir("zip_slip");
     let sender_project_path = dir.join("project.ocproj");
     let project = project_at(&sender_project_path, vec![]);
-    let project_bytes = avcore::persistence::to_ocproj_bytes(&project).unwrap();
+    let project_bytes = avcore::persistence::to_project_bytes(&project).unwrap();
 
     // A sentinel file well outside where any legitimate proxy cache dir could ever land --
     // if the traversal succeeded, the malicious entry would overwrite it.

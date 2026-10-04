@@ -33,6 +33,7 @@ mod prefs;
 mod preview_engine;
 mod protocol;
 mod services;
+mod session_sync;
 mod state;
 mod telemetry;
 #[cfg(test)]

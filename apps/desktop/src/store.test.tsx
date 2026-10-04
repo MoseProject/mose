@@ -136,6 +136,7 @@ describe("connect", () => {
       return {
         api,
         onSession: subscribe("session"),
+        onSessionPatch: subscribe("sessionPatch"),
         onPreview: subscribe("preview"),
         onExports: subscribe("exports"),
         onImportFailed: subscribe("importFailed"),
@@ -215,6 +216,45 @@ describe("connect", () => {
     store.patchUi({ selectedClipIds: [1] });
     handlers.get("session")!(session(2, [1, 5]) as never);
     expect(store.uiStore.get().selectedClipIds).toEqual([1]);
+  });
+
+  it("applies a patch on top of the revision it was made for", async () => {
+    const { store, api } = await load();
+    handlers.get("session")!({ ...session(1, [1, 2]), rev: 4 } as never);
+    handlers.get("sessionPatch")!({
+      base: 4,
+      rev: 5,
+      filePath: "a.ocproj",
+      canUndo: true,
+      canRedo: false,
+      dirty: true,
+      ops: [{ p: ["name"], v: "Renamed" }],
+    } as never);
+    const view = store.sessionStore.get()!;
+    expect(view.project.name).toBe("Renamed");
+    expect(view.rev).toBe(5);
+    expect(view.dirty).toBe(true);
+    expect(view.filePath).toBe("a.ocproj");
+    expect(api.getSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks for a whole snapshot when a patch does not follow the revision it has", async () => {
+    const { store, api } = await load();
+    handlers.get("session")!({ ...session(1, [1]), rev: 4 } as never);
+    api.getSession.mockResolvedValueOnce({ ...session(1, [1, 2, 3]), rev: 9 });
+    handlers.get("sessionPatch")!({
+      base: 7,
+      rev: 8,
+      filePath: null,
+      canUndo: false,
+      canRedo: false,
+      dirty: false,
+      ops: [{ p: ["name"], v: "Lost" }],
+    } as never);
+    await vi.waitFor(() => {
+      expect(store.sessionStore.get()!.rev).toBe(9);
+    });
+    expect(store.sessionStore.get()!.project.name).not.toBe("Lost");
   });
 
   it("reports analysis events that found nothing or failed", async () => {

@@ -137,9 +137,9 @@ pub use multicam_sync::{
     DEFAULT_MAX_SYNC_OFFSET_SECS,
 };
 pub use persistence::{
-    from_ocproj_bytes, from_ocqueue_bytes, from_octr_bytes, load_project_from_file,
-    save_project_to_file, to_ocproj_bytes, to_ocqueue_bytes, to_octr_bytes, write_atomic,
-    PersistError,
+    from_ocproj_bytes, from_ocqueue_bytes, from_octr_bytes, from_project_bytes,
+    load_project_from_file, save_project_to_file, to_ocproj_bytes, to_ocqueue_bytes, to_octr_bytes,
+    to_project_bytes, write_atomic, PersistError,
 };
 pub use probe::{probe_media, ProbeError, ProbedMedia};
 pub use project::{PanelLayout, Project, Recency, Sequence, SequenceExportSettings};

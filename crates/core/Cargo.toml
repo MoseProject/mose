@@ -103,6 +103,8 @@ zip = { version = "8", default-features = false }
 # credentials). Already in the workspace's Cargo.lock as a transitive dependency — no new
 # versions/resolution needed just for this.
 regex = "1.13"
+postcard = { version = "1.1.3", features = ["use-std"] }
+lz4_flex = { version = "0.14.0", default-features = false, features = ["std", "safe-encode", "safe-decode"] }
 
 [build-dependencies]
 # Not called directly by build.rs — listing it here forces Cargo to build espeak-rs-sys's own

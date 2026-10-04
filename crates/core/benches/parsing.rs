@@ -25,7 +25,9 @@ use std::path::PathBuf;
 use criterion::{criterion_group, criterion_main, Criterion};
 
 use avcore::loudness::parse_loudnorm_stderr;
-use avcore::persistence::{from_ocproj_bytes, to_ocproj_bytes};
+use avcore::persistence::{
+    from_ocproj_bytes, from_project_bytes, to_ocproj_bytes, to_project_bytes,
+};
 use avcore::timeline::{
     AudioRole, BlendMode, ClipInstance, ColorFilter, MaskShape, Timeline, Track, TrackKind,
     TransitionType,
@@ -210,10 +212,30 @@ fn bench_project_ocproj_round_trip(c: &mut Criterion) {
         let project = large_project(50, clip_count);
         let bytes = to_ocproj_bytes(&project).unwrap();
 
+        let project_bytes = to_project_bytes(&project).unwrap();
+        group.bench_function(
+            format!("to_project_bytes/{clip_count}_clips_per_track"),
+            |b| b.iter(|| to_project_bytes(black_box(&project)).unwrap()),
+        );
+        group.bench_function(
+            format!("from_project_bytes/{clip_count}_clips_per_track"),
+            |b| b.iter(|| from_project_bytes(black_box(&project_bytes)).unwrap()),
+        );
         group.bench_function(
             format!("to_ocproj_bytes/{clip_count}_clips_per_track"),
             |b| b.iter(|| to_ocproj_bytes(black_box(&project)).unwrap()),
         );
+        group.bench_function(format!("msgpack_only/{clip_count}_clips_per_track"), |b| {
+            b.iter(|| {
+                let mut out = Vec::new();
+                serde::Serialize::serialize(
+                    black_box(&project),
+                    &mut rmp_serde::Serializer::new(&mut out).with_struct_map(),
+                )
+                .unwrap();
+                out
+            })
+        });
         group.bench_function(
             format!("from_ocproj_bytes/{clip_count}_clips_per_track"),
             |b| b.iter(|| from_ocproj_bytes::<Project>(black_box(&bytes)).unwrap()),
@@ -236,10 +258,35 @@ fn bench_timeline_duration(c: &mut Criterion) {
     group.finish();
 }
 
+/// What every edit pays in the desktop shell: the undo snapshot (`Sequence` clone), the copy
+/// handed to the preview thread (`Project` clone) and the JSON the webview receives on
+/// `session-changed`. Scales with project size, so a drag that publishes per pointer move is
+/// bounded by these numbers.
+fn bench_per_edit_cost(c: &mut Criterion) {
+    let mut group = c.benchmark_group("per_edit");
+
+    for clip_count in [10usize, 200, 1000] {
+        let project = large_project(50, clip_count);
+        group.bench_function(format!("project_clone/{clip_count}_clips_per_track"), |b| {
+            b.iter(|| black_box(&project).clone())
+        });
+        group.bench_function(
+            format!("sequence_clone/{clip_count}_clips_per_track"),
+            |b| b.iter(|| black_box(&project).active_sequence().clone()),
+        );
+        group.bench_function(format!("session_json/{clip_count}_clips_per_track"), |b| {
+            b.iter(|| serde_json::to_vec(black_box(&project)).unwrap())
+        });
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_parse_loudnorm_stderr,
     bench_project_ocproj_round_trip,
     bench_timeline_duration,
+    bench_per_edit_cost,
 );
 criterion_main!(benches);

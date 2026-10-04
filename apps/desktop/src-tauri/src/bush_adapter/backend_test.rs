@@ -310,3 +310,55 @@ fn the_engine_config_follows_the_decode_and_renderer_choices() {
         RendererChoice::GpuWithCpuFallback
     ));
 }
+
+fn project_with_clip() -> avcore::Project {
+    let mut project = crate::state::blank_project("A".into(), "S".into());
+    project
+        .media_library
+        .push(asset(1, MediaKind::Video, Some((1920, 1080)), Some(30.0)));
+    project.timeline_mut().tracks.push(Track {
+        id: 1,
+        name: "V1".into(),
+        kind: avcore::timeline::TrackKind::Video,
+        clips: vec![ClipInstance::new(1, 1, 0.0, 0.0, 5.0)],
+        text_clips: Vec::new(),
+        shape_clips: Vec::new(),
+        visible: true,
+        audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
+        locked: false,
+        color_label: None,
+    });
+    project
+}
+
+#[test]
+fn edits_the_preview_does_not_show_leave_the_scene_alone() {
+    let before = project_with_clip();
+    let mut after = before.clone();
+    after.name = "Renamed".into();
+    after.summary = "notes".into();
+    after.timeline_mut().playhead_secs = 3.0;
+    after.active_sequence_mut().export_settings.target_lufs = -23.0;
+    after.recent_asset_ids = vec![1];
+    assert!(same_preview_content(&before, &after));
+}
+
+#[test]
+fn edits_the_preview_shows_rebuild_the_scene() {
+    let before = project_with_clip();
+    let mut moved = before.clone();
+    moved.timeline_mut().tracks[0].clips[0].start_secs = 1.0;
+    assert!(!same_preview_content(&before, &moved));
+    let mut muted = before.clone();
+    muted.timeline_mut().tracks[0].visible = false;
+    assert!(!same_preview_content(&before, &muted));
+    let mut media = before.clone();
+    media.media_library[0].proxy_path = Some(PathBuf::from("proxy.mp4"));
+    assert!(!same_preview_content(&before, &media));
+    let mut sequences = before.clone();
+    let copy = sequences.sequences[0].clone();
+    sequences.sequences.push(copy);
+    assert!(!same_preview_content(&before, &sequences));
+}
