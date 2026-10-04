@@ -14,6 +14,9 @@ vi.mock("../ipc", () => {
     "dynamicAutoReframeClip",
     "generateMatteForClip",
     "applyPrivacyBlurToClip",
+    "mergeClipsIntoComposite",
+    "createCompoundClip",
+    "deleteClips",
   ];
   return {
     api: Object.fromEntries(
@@ -113,7 +116,7 @@ const lastPatch = () => {
   return vi.mocked(api.updateClip).mock.calls.at(-1)![1];
 };
 const sectionOf = (label: string) => {
-  return screen.getByText(label, { selector: "summary" }).closest("details")!;
+  return screen.getByText(label, { selector: "summary > span" }).closest("details")!;
 };
 
 function slide(label: string, value: number) {
@@ -135,10 +138,6 @@ describe("inspector selection", () => {
     render(<Inspector session={sessionFor()} />);
     expect(screen.getByText(t("noClipSelected"))).toBeTruthy();
     cleanup();
-
-    patchUi({ selectedClipIds: [7, 20] });
-    render(<Inspector session={sessionFor()} />);
-    expect(screen.getByText(t("noClipSelected"))).toBeTruthy();
   });
 
   it("shows the source asset of a selected media clip", () => {
@@ -468,5 +467,130 @@ describe("inspector tabs", () => {
     patchUi({ selectedClipIds: [20] });
     render(<Inspector session={sessionFor()} />);
     expect(screen.getAllByRole("tab")).toHaveLength(1);
+  });
+});
+
+describe("transform section", () => {
+  it("shows position, scale and rotation as plain numbers", () => {
+    render(
+      <Inspector
+        session={sessionFor({
+          position_keyframes: [{ time_fraction: 0, value: { x: 0.25, y: 0.5 } }],
+          layer_scale_x: 0.5,
+          rotation_keyframes: [{ time_fraction: 0, value: 30 }],
+        })}
+      />,
+    );
+    expect((screen.getByLabelText(t("positionX")) as HTMLInputElement).value).toBe("25");
+    expect((screen.getByLabelText(t("positionY")) as HTMLInputElement).value).toBe("50");
+    expect((screen.getByLabelText(t("scale")) as HTMLInputElement).value).toBe("50");
+    expect((screen.getByLabelText(t("rotation")) as HTMLInputElement).value).toBe("30");
+  });
+
+  it("commits an edited position on blur as one keyframe, in canvas fractions", () => {
+    render(<Inspector session={sessionFor()} />);
+    const x = screen.getByLabelText(t("positionX"));
+    fireEvent.change(x, { target: { value: "40" } });
+    expect(api.updateClip).not.toHaveBeenCalled();
+    fireEvent.blur(x);
+    expect(lastPatch()).toEqual({
+      positionKeyframes: [{ time_fraction: 0, value: { x: 0.4, y: 0 } }],
+    });
+  });
+
+  it("scales both axes together and never below 1 percent", () => {
+    render(<Inspector session={sessionFor()} />);
+    const scale = screen.getByLabelText(t("scale"));
+    fireEvent.change(scale, { target: { value: "150" } });
+    fireEvent.keyDown(scale, { key: "Enter" });
+    fireEvent.blur(scale);
+    expect(lastPatch()).toEqual({ layerScaleX: 1.5, layerScaleY: 1.5 });
+    fireEvent.change(scale, { target: { value: "-20" } });
+    fireEvent.blur(scale);
+    expect(lastPatch()).toEqual({ layerScaleX: 0.01, layerScaleY: 0.01 });
+  });
+
+  it("commits a rotation and ignores an empty or unchanged field", () => {
+    render(<Inspector session={sessionFor()} />);
+    const rotation = screen.getByLabelText(t("rotation")) as HTMLInputElement;
+    fireEvent.change(rotation, { target: { value: "45" } });
+    fireEvent.blur(rotation);
+    expect(lastPatch()).toEqual({ rotationKeyframes: [{ time_fraction: 0, value: 45 }] });
+    vi.mocked(api.updateClip).mockClear();
+    fireEvent.change(rotation, { target: { value: "" } });
+    fireEvent.blur(rotation);
+    expect(api.updateClip).not.toHaveBeenCalled();
+    expect(rotation.value).toBe("0");
+  });
+
+  it("disables an animated value and points at the keyframes", () => {
+    render(
+      <Inspector
+        session={sessionFor({
+          position_keyframes: [
+            { time_fraction: 0, value: { x: 0, y: 0 } },
+            { time_fraction: 1, value: { x: 1, y: 1 } },
+          ],
+        })}
+      />,
+    );
+    expect((screen.getByLabelText(t("positionX")) as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByText(t("transformAnimated"))).toBeTruthy();
+  });
+
+  it("resets position, scale and rotation from the section header", () => {
+    render(<Inspector session={sessionFor({ layer_scale_x: 2 })} />);
+    fireEvent.click(screen.getByLabelText(t("resetSection") + ": " + t("transform")));
+    expect(lastPatch()).toEqual({
+      positionKeyframes: [],
+      layerScaleX: 1,
+      layerScaleY: 1,
+      rotationKeyframes: [],
+    });
+  });
+});
+
+describe("section resets", () => {
+  it.each([
+    ["gain", { gainDb: 0 }],
+    ["speed", { speedFactor: 1 }],
+    ["colorAdjust", { brightness: 0, contrast: 1, saturation: 1 }],
+    ["crop", { cropX: 0, cropY: 0, cropW: 1, cropH: 1 }],
+  ])("restores %s to its defaults without toggling the section", (key, patch) => {
+    render(<Inspector session={sessionFor()} />);
+    const label = t(key as never);
+    const section = sectionOf(label);
+    const wasOpen = section.open;
+    fireEvent.click(screen.getByLabelText(t("resetSection") + ": " + label));
+    expect(lastPatch()).toEqual(patch);
+    expect(section.open).toBe(wasOpen);
+  });
+});
+
+describe("inspector grouping and selection", () => {
+  it("puts voice cleanup under Audio and freeze/flip under Inspector", () => {
+    const { container } = render(<Inspector session={sessionFor()} />);
+    const group = (text: string) => {
+      return screen.getByText(text).closest("[data-group]")!.getAttribute("data-group");
+    };
+    expect(group(t("voiceCleanup"))).toBe("audio");
+    expect(group(t("freeze"))).toBe("inspector");
+    expect(group(t("flip"))).toBe("inspector");
+    expect(container.querySelector('[data-group="effects"]')).toBeTruthy();
+  });
+
+  it("says how many clips are selected and offers the group actions", () => {
+    patchUi({ selectedClipIds: [7, 20] });
+    vi.mocked(api.mergeClipsIntoComposite).mockClear();
+    render(<Inspector session={sessionFor()} />);
+    expect(screen.getByTestId("inspector-multi").textContent).toContain("2 " + t("clipsSelected"));
+    fireEvent.click(screen.getByText(t("mergeComposite")));
+    fireEvent.click(screen.getByText(t("compoundClip")));
+    fireEvent.click(screen.getByText(t("delete")));
+    fireEvent.click(screen.getByText(t("rippleDelete")));
+    expect(api.mergeClipsIntoComposite).toHaveBeenCalledWith([7, 20]);
+    expect(api.createCompoundClip).toHaveBeenCalledWith(7, [7, 20]);
+    expect(api.deleteClips).toHaveBeenCalledWith([7, 20], false);
+    expect(api.deleteClips).toHaveBeenCalledWith([7, 20], true);
   });
 });
