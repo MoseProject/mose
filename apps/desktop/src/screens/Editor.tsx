@@ -10,6 +10,7 @@ import { t } from "../i18n";
 import { api } from "../ipc";
 import { commandForEvent } from "../commands";
 import { isActivatableTarget, shouldIgnoreShortcut } from "../keyboard";
+import { stopRange, stopShuttle } from "../shuttle";
 import { patchUi, run, uiStore } from "../store";
 import type { SessionView } from "../types";
 
@@ -74,6 +75,14 @@ export function Editor({ session }: { session: SessionView }) {
       void unlisten.then((stop) => {
         return stop();
       });
+    };
+  }, []);
+
+  // Timers of a running shuttle or range playback must not outlive the editor.
+  useEffect(() => {
+    return () => {
+      stopShuttle();
+      stopRange();
     };
   }, []);
 

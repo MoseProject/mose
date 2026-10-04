@@ -5,7 +5,7 @@
 
 import { timelineDuration } from "./editing";
 import { api } from "./ipc";
-import { createStore, previewStore, run, sessionStore, uiStore } from "./store";
+import { createStore, patchUi, previewStore, run, sessionStore, uiStore } from "./store";
 
 export const SHUTTLE_LEVELS = [1, 2, 4, 8];
 const TICK_MS = 80;
@@ -57,7 +57,11 @@ function tick() {
   const session = sessionStore.get();
   const end = session ? timelineDuration(session) : 0;
   position = Math.min(end, Math.max(0, position + (direction * level * TICK_MS) / 1000));
-  void run(api.seek(position));
+  // A failing seek would otherwise repeat its error every tick, so it ends the shuttle.
+  api.seek(position).catch((error: unknown) => {
+    patchUi({ error: String(error) });
+    stopShuttle();
+  });
   if ((direction < 0 && position <= 0) || (direction > 0 && position >= end)) {
     stopShuttle();
   }

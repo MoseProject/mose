@@ -1026,7 +1026,7 @@ function NumberField({
 }
 
 /** Position, scale and rotation as plain numbers. Position is the layer's top-left corner in
- *  percent of the canvas, as the on-canvas handle moves it; an animated value (several keyframes)
+ *  pixels of the output canvas, stored as a fraction of it as the on-canvas handle moves it; an animated value (several keyframes)
  *  is edited in the Keyframes section instead. */
 function TransformSection({
   clip,
@@ -1041,7 +1041,8 @@ function TransformSection({
   /** The playhead inside the clip (0..1), null outside it. */
   fraction: number | null;
 }) {
-  const [canvasW, canvasH] = canvas;
+  const canvasW = Math.max(1, canvas[0]);
+  const canvasH = Math.max(1, canvas[1]);
   const position = clip.position_keyframes[0]?.value ?? { x: 0, y: 0 };
   const rotation = clip.rotation_keyframes[0]?.value ?? 0;
   const positionAnimated = clip.position_keyframes.length > 1;
@@ -1081,7 +1082,12 @@ function TransformSection({
     },
   };
   const setPosition = (x: number, y: number) => {
-    void commit({ positionKeyframes: [{ time_fraction: 0, value: { x, y } }] });
+    // The monitor drag keeps a layer within one canvas of the frame; typed values get the same
+    // bound so a stray digit cannot throw the layer out of reach.
+    const bound = (value: number) => {
+      return Math.min(2, Math.max(-1, value));
+    };
+    void commit({ positionKeyframes: [{ time_fraction: 0, value: { x: bound(x), y: bound(y) } }] });
   };
   return (
     <Section
