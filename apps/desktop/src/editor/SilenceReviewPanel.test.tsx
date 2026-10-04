@@ -71,7 +71,7 @@ describe("silence review panel", () => {
     fireEvent.click(screen.getByText(t("silenceReview")));
     await screen.findByRole("heading");
 
-    fireEvent.click(screen.getByText("▶"));
+    fireEvent.click(screen.getByLabelText(t("goToGap")));
     expect(api.seek).toHaveBeenCalledWith(4);
 
     fireEvent.click(screen.getByRole("checkbox"));
