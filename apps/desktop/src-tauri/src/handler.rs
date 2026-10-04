@@ -38,6 +38,8 @@ macro_rules! all_commands {
             $crate::commands::prefs::save_layer_template,
             $crate::commands::prefs::delete_layer_template,
             $crate::commands::prefs::apply_layer_template,
+            $crate::commands::prefs::get_keybindings,
+            $crate::commands::prefs::set_keybindings,
             $crate::commands::media::import_media_dialog,
             $crate::commands::media::import_media,
             $crate::commands::media::toggle_favorite,

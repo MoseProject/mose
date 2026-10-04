@@ -234,6 +234,69 @@ pub fn apply_layer_template<R: Runtime>(
     })
 }
 
+const MAX_BINDING_COMMANDS: usize = 256;
+const MAX_BINDINGS_PER_COMMAND: usize = 4;
+const MAX_BINDING_LEN: usize = 48;
+const MAX_COMMAND_ID_LEN: usize = 48;
+
+/// Keeps only what can be a keybinding table: command ids of letters, digits and underscores,
+/// at most [`MAX_BINDINGS_PER_COMMAND`] distinct non-blank bindings each, no control characters,
+/// and no more than [`MAX_BINDING_COMMANDS`] commands. The webview validates the same rules
+/// before saving; this keeps a hand-edited or corrupted `prefs.oc` from reaching it.
+pub(crate) fn sanitize_keybindings(
+    input: std::collections::BTreeMap<String, Vec<String>>,
+) -> std::collections::BTreeMap<String, Vec<String>> {
+    let mut clean = std::collections::BTreeMap::new();
+    for (id, bindings) in input.into_iter().take(MAX_BINDING_COMMANDS) {
+        let id_ok = !id.is_empty()
+            && id.len() <= MAX_COMMAND_ID_LEN
+            && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+        if !id_ok {
+            continue;
+        }
+        let mut kept: Vec<String> = Vec::new();
+        for binding in bindings {
+            let binding = binding.trim().to_string();
+            if binding.is_empty()
+                || binding.len() > MAX_BINDING_LEN
+                || binding.chars().any(char::is_control)
+                || kept.contains(&binding)
+            {
+                continue;
+            }
+            kept.push(binding);
+            if kept.len() == MAX_BINDINGS_PER_COMMAND {
+                break;
+            }
+        }
+        clean.insert(id, kept);
+    }
+    clean
+}
+
+/// The saved keyboard shortcut overrides (command id to bindings).
+#[tauri::command]
+pub fn get_keybindings(
+    state: State<'_, AppState>,
+) -> std::collections::BTreeMap<String, Vec<String>> {
+    sanitize_keybindings(state.prefs().view.keybindings.clone())
+}
+
+/// Saves the shortcut overrides and returns what was kept after sanitizing. An empty table
+/// restores every default.
+#[tauri::command]
+pub fn set_keybindings<R: Runtime>(
+    app: AppHandle<R>,
+    keybindings: std::collections::BTreeMap<String, Vec<String>>,
+) -> Result<std::collections::BTreeMap<String, Vec<String>>, String> {
+    let clean = sanitize_keybindings(keybindings);
+    let state = app.state::<AppState>();
+    let mut document = state.prefs();
+    document.view.keybindings = clean.clone();
+    document.save()?;
+    Ok(clean)
+}
+
 #[cfg(test)]
 #[path = "prefs_test.rs"]
 mod tests;
