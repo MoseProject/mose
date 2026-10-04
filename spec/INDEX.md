@@ -21,6 +21,10 @@ For anything touching the desktop shell (`apps/desktop`), read
 flow, and the migration's own history (the original `egui`/`eframe` shell, `crates/ui`, is
 deleted — this doc records why parity was reached and when).
 
+For UI/UX work on the desktop editor, read
+**[architecture/ux-audit.md](architecture/ux-audit.md)**: the 2026-10-04 audit of layout, shortcuts,
+dialogs and accessibility, with a prioritized backlog (UX-01..UX-20).
+
 Before broad beta distribution, read
 **[architecture/client-error-reporting.md](architecture/client-error-reporting.md)** for ER-01's
 consent, sanitization, offline delivery, symbolication, and native-crash rollout requirements.
