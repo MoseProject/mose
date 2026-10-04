@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "./i18n";
-import { answerConfirm, confirmStore, toastStore } from "./notifications";
+import { answerConfirm, answerExtra, confirmStore, toastStore } from "./notifications";
 import { exportsStore, sessionStore, uiStore } from "./store";
 import { makeSession } from "./testSupport";
 import type { SessionView } from "./types";
@@ -303,10 +303,11 @@ describe("export queue popover", () => {
 describe("closing the window", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(api.saveProject).mockResolvedValue(true as never);
     confirmStore.set(null);
   });
 
-  it("asks before quitting when changes would be lost, and quits when confirmed", async () => {
+  it("offers save and quit, quit without saving or staying when changes would be lost", async () => {
     render(<App />);
     act(() => {
       closeHandler({ dirty: true, exporting: false });
@@ -314,15 +315,61 @@ describe("closing the window", () => {
     const request = confirmStore.get()!;
     expect(request.title).toBe(t("confirmQuitTitle"));
     expect(request.message).toBe(t("confirmQuitDirty"));
+    expect(request.confirmLabel).toBe(t("confirmQuitSave"));
+    expect(request.extraLabel).toBe(t("confirmQuitAction"));
     expect(api.quitApp).not.toHaveBeenCalled();
+  });
 
+  it("saves first and then quits", async () => {
+    render(<App />);
+    act(() => {
+      closeHandler({ dirty: true, exporting: false });
+    });
     await act(async () => {
       answerConfirm(true);
     });
+    expect(api.saveProject).toHaveBeenCalledWith(false);
     expect(api.quitApp).toHaveBeenCalledTimes(1);
   });
 
-  it("stays open when the question is dismissed", async () => {
+  it("stays open when the save dialog is cancelled", async () => {
+    vi.mocked(api.saveProject).mockResolvedValue(false as never);
+    render(<App />);
+    act(() => {
+      closeHandler({ dirty: true, exporting: false });
+    });
+    await act(async () => {
+      answerConfirm(true);
+    });
+    expect(api.saveProject).toHaveBeenCalled();
+    expect(api.quitApp).not.toHaveBeenCalled();
+  });
+
+  it("stays open when the save fails", async () => {
+    vi.mocked(api.saveProject).mockRejectedValue("disk full");
+    render(<App />);
+    act(() => {
+      closeHandler({ dirty: true, exporting: false });
+    });
+    await act(async () => {
+      answerConfirm(true);
+    });
+    expect(api.quitApp).not.toHaveBeenCalled();
+  });
+
+  it("quits without saving when asked to", async () => {
+    render(<App />);
+    act(() => {
+      closeHandler({ dirty: true, exporting: false });
+    });
+    await act(async () => {
+      answerExtra();
+    });
+    expect(api.saveProject).not.toHaveBeenCalled();
+    expect(api.quitApp).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays open and saves nothing when the question is dismissed", async () => {
     render(<App />);
     act(() => {
       closeHandler({ dirty: true, exporting: true });
@@ -333,7 +380,23 @@ describe("closing the window", () => {
     await act(async () => {
       answerConfirm(false);
     });
+    expect(api.saveProject).not.toHaveBeenCalled();
     expect(api.quitApp).not.toHaveBeenCalled();
+  });
+
+  it("only asks to quit anyway when nothing is unsaved but an export is running", async () => {
+    render(<App />);
+    act(() => {
+      closeHandler({ dirty: false, exporting: true });
+    });
+    const request = confirmStore.get()!;
+    expect(request.extraLabel).toBeUndefined();
+    expect(request.message).toBe(t("confirmQuitExporting"));
+    await act(async () => {
+      answerConfirm(true);
+    });
+    expect(api.saveProject).not.toHaveBeenCalled();
+    expect(api.quitApp).toHaveBeenCalledTimes(1);
   });
 
   it("stops listening when the app goes away", async () => {

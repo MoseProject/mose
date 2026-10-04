@@ -220,3 +220,12 @@ describe("window close", () => {
     expect(invoke).toHaveBeenLastCalledWith("quit_app");
   });
 });
+
+describe("preview recovery", () => {
+  it("hands the restart flag of a playback crash to the handler", async () => {
+    const handler = vi.fn();
+    await ipc.onPreviewRecovery(handler);
+    listeners.get(ipc.events.previewRecovery)!({ payload: { restarted: false } });
+    expect(handler).toHaveBeenCalledWith(false);
+  });
+});

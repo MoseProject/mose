@@ -139,6 +139,7 @@ describe("connect", () => {
         onPreview: subscribe("preview"),
         onExports: subscribe("exports"),
         onImportFailed: subscribe("importFailed"),
+        onPreviewRecovery: subscribe("previewRecovery"),
         onSceneCut: subscribe("sceneCut"),
         onMotionTrack: subscribe("motionTrack"),
         onAutoReframe: subscribe("autoReframe"),
@@ -175,6 +176,14 @@ describe("connect", () => {
     const { store, i18n } = await load();
     handlers.get("importFailed")!("broken.mp4" as never);
     expect(store.uiStore.get().error).toBe(i18n.t("importFailed") + ": broken.mp4");
+  });
+
+  it("tells the user when playback crashed and whether it came back", async () => {
+    const { store, i18n } = await load();
+    handlers.get("previewRecovery")!(true as never);
+    expect(store.uiStore.get().error).toBe(i18n.t("previewRestarted"));
+    handlers.get("previewRecovery")!(false as never);
+    expect(store.uiStore.get().error).toBe(i18n.t("previewGaveUp"));
   });
 
   it("forwards preview ticks and export lists to their stores", async () => {
