@@ -78,7 +78,7 @@ pub fn get_session(state: State<'_, AppState>) -> Result<serde_json::Value, Stri
     // The same lock order as `publish` (session, then sync), so the revision matches the project.
     let session = state.session();
     let rev = crate::state::lock_or_recover(&state.sync).rev;
-    serde_json::to_value(session.view_at(rev)).map_err(|e| e.to_string())
+    Ok(crate::session_sync::snapshot(&session.view_at(rev)))
 }
 
 /// Saves the active project's editor dimensions. Layout changes are not undoable timeline edits,

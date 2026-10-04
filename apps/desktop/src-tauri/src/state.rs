@@ -323,7 +323,10 @@ pub fn publish<R: Runtime>(app: &AppHandle<R>, session: &Session) {
             );
         }
         None => {
-            let _ = app.emit(SESSION_CHANGED, session.view_at(rev));
+            let _ = app.emit(
+                SESSION_CHANGED,
+                crate::session_sync::snapshot(&session.view_at(rev)),
+            );
         }
     }
 }

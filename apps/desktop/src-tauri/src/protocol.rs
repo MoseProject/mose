@@ -11,6 +11,7 @@
 //! - `/frame/<seq>` -- the latest preview frame (`seq` is only a cache buster).
 //! - `/thumb/<asset_id>` -- a media-library poster frame, extracted once and cached.
 //! - `/thumb/<asset_id>/<millis>` -- the frame of an asset at that source time (timeline strips).
+//! - `/wave/<asset_id>/coarse` -- the overview waveform stored with the project, same layout.
 //! - `/wave/<asset_id>` -- the asset's detailed waveform: little-endian `f32` (min, max) pairs,
 //!   `detailed_bucket_count(duration)` of them, computed on first request and cached.
 
@@ -72,11 +73,21 @@ pub(crate) fn handle_with<R: Runtime>(
             let frame = app.state::<AppState>().preview.latest_frame();
             respond(jpeg_or_not_found(frame));
         }
-        (Some("wave"), Some(id)) => {
+        (Some("wave"), Some(rest)) => {
+            let mut ids = rest.splitn(2, '/');
+            let id = ids.next().unwrap_or_default();
             let Some(asset) = id.parse::<u64>().ok().and_then(|id| find_asset(app, id)) else {
                 respond(not_found());
                 return;
             };
+            if ids.next() == Some("coarse") {
+                // The overview stored with the project, already in memory: no decode.
+                respond(bytes_or_not_found(
+                    coarse_wave_bytes(&asset),
+                    "application/octet-stream",
+                ));
+                return;
+            }
             if !asset.has_audio {
                 respond(not_found());
                 return;
@@ -122,6 +133,21 @@ pub(crate) fn handle_with<R: Runtime>(
         }
         _ => respond(not_found()),
     }
+}
+
+/// The coarse waveform stored with `asset` as little-endian `f32` (min, max) pairs; `None` when
+/// it has none yet.
+fn coarse_wave_bytes(asset: &avcore::MediaAsset) -> Bytes {
+    let peaks = asset
+        .waveform_peaks
+        .as_ref()
+        .filter(|peaks| !peaks.is_empty())?;
+    let mut bytes = Vec::with_capacity(peaks.len() * 8);
+    for (min, max) in peaks {
+        bytes.extend_from_slice(&min.to_le_bytes());
+        bytes.extend_from_slice(&max.to_le_bytes());
+    }
+    Some(Arc::new(bytes))
 }
 
 fn find_asset<R: Runtime>(app: &AppHandle<R>, asset_id: u64) -> Option<avcore::MediaAsset> {
@@ -253,6 +279,20 @@ mod tests {
 
     fn fixture() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../crates/core/tests/fixtures/video.mp4")
+    }
+
+    #[test]
+    fn the_coarse_waveform_is_served_as_little_endian_pairs() {
+        let mut asset = crate::session_sync::tests_support_asset();
+        assert!(coarse_wave_bytes(&asset).is_none());
+        asset.waveform_peaks = Some(Vec::new());
+        assert!(coarse_wave_bytes(&asset).is_none());
+        asset.waveform_peaks = Some(vec![(-0.5, 0.25), (-1.0, 1.0)]);
+        let bytes = coarse_wave_bytes(&asset).unwrap();
+        assert_eq!(bytes.len(), 16);
+        assert_eq!(f32::from_le_bytes(bytes[0..4].try_into().unwrap()), -0.5);
+        assert_eq!(f32::from_le_bytes(bytes[4..8].try_into().unwrap()), 0.25);
+        assert_eq!(f32::from_le_bytes(bytes[12..16].try_into().unwrap()), 1.0);
     }
 
     #[test]

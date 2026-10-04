@@ -74,11 +74,16 @@ fn apply(root: &mut Value, ops: &[Op]) {
     }
 }
 
+/// The project as the webview holds it after a snapshot.
+fn project_json(project: &Project) -> Value {
+    snapshot(&json!({ "project": project }))["project"].clone()
+}
+
 fn assert_round_trip(prev: &Project, next: &Project) -> usize {
     let ops = diff(prev, next);
-    let mut json = serde_json::to_value(prev).unwrap();
+    let mut json = project_json(prev);
     apply(&mut json, &ops);
-    assert_eq!(json, serde_json::to_value(next).unwrap());
+    assert_eq!(json, project_json(next));
     ops.len()
 }
 
@@ -162,4 +167,49 @@ fn a_one_clip_edit_in_a_big_project_costs_far_less_than_the_whole_session() {
     let whole = whole.elapsed();
     eprintln!("patch {patch:?} ({bytes} bytes) vs whole {whole:?} ({full} bytes)");
     assert!(bytes * 100 < full);
+}
+
+pub(super) fn audio_asset(id: u64, peaks: Option<Vec<(f32, f32)>>) -> avcore::MediaAsset {
+    let mut asset = avcore::MediaAsset {
+        id,
+        file_name: format!("a{id}.wav"),
+        source_path: format!("a{id}.wav").into(),
+        kind: avcore::MediaKind::Audio,
+        has_audio: true,
+        duration_secs: 4.0,
+        codec: "pcm".into(),
+        source_bitrate_mbps: 1.0,
+        resolution: None,
+        fps: None,
+        sample_rate_khz: Some(48.0),
+        loudness: None,
+        proxy_path: None,
+        waveform_peaks: None,
+        favorited: false,
+    };
+    asset.waveform_peaks = peaks;
+    asset
+}
+
+#[test]
+fn the_coarse_waveform_stays_out_of_what_the_webview_receives() {
+    let mut prev = project();
+    prev.media_library.push(audio_asset(1, None));
+    let mut next = prev.clone();
+    next.media_library[0].waveform_peaks = Some(vec![(-0.5, 0.5); 2000]);
+    next.media_library
+        .push(audio_asset(2, Some(vec![(-1.0, 1.0); 2000])));
+
+    let snapshot = project_json(&next);
+    assert_eq!(snapshot["media_library"][0]["waveform_peaks"], Value::Null);
+    assert_eq!(snapshot["media_library"][0]["has_waveform"], true);
+    assert_eq!(
+        project_json(&prev)["media_library"][0]["has_waveform"],
+        false
+    );
+
+    // The patch that announces new peaks carries the flag, not the numbers.
+    let ops = diff(&prev, &next);
+    assert!(serde_json::to_vec(&ops).unwrap().len() < 2_000);
+    assert_round_trip(&prev, &next);
 }

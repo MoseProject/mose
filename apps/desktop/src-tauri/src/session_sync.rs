@@ -18,7 +18,7 @@
 use std::sync::Arc;
 
 use avcore::timeline::{Timeline, Track};
-use avcore::{Project, Sequence};
+use avcore::{MediaAsset, Project, Sequence};
 use serde::Serialize;
 use serde_json::{json, Value};
 
@@ -59,6 +59,44 @@ pub struct Patch {
     pub ops: Vec<Op>,
 }
 
+/// Moves the coarse waveform out of an asset's JSON: thousands of numbers per asset that the
+/// webview would parse and hold for every snapshot. They are served as bytes at
+/// `oca://wave/<id>/coarse` instead, and `has_waveform` says whether there are any.
+pub fn strip_waveform(asset: &mut Value) {
+    if let Value::Object(fields) = asset {
+        let present =
+            matches!(fields.get("waveform_peaks"), Some(Value::Array(peaks)) if !peaks.is_empty());
+        fields.insert("waveform_peaks".into(), Value::Null);
+        fields.insert("has_waveform".into(), Value::Bool(present));
+    }
+}
+
+/// `asset` as the webview receives it (see [`strip_waveform`]), without serializing the peaks.
+fn asset_json(asset: &MediaAsset) -> Value {
+    let present = asset
+        .waveform_peaks
+        .as_ref()
+        .is_some_and(|peaks| !peaks.is_empty());
+    let mut json = serde_json::to_value(MediaAsset {
+        waveform_peaks: None,
+        ..asset.clone()
+    })
+    .unwrap_or(Value::Null);
+    if let Value::Object(fields) = &mut json {
+        fields.insert("has_waveform".into(), Value::Bool(present));
+    }
+    json
+}
+
+/// The whole session as JSON for the webview.
+pub fn snapshot(view: &impl Serialize) -> Value {
+    let mut json = serde_json::to_value(view).unwrap_or(Value::Null);
+    if let Some(Value::Array(assets)) = json.pointer_mut("/project/media_library") {
+        assets.iter_mut().for_each(strip_waveform);
+    }
+    json
+}
+
 fn set(ops: &mut Vec<Op>, path: &[Value], value: impl Serialize) {
     ops.push(json!({ "p": path, "v": serde_json::to_value(value).unwrap_or(Value::Null) }));
 }
@@ -93,6 +131,7 @@ fn list<T: PartialEq + Serialize>(
     prev: &[T],
     next: &[T],
     each: impl Fn(&mut Vec<Op>, &[Value], &T, &T),
+    encode: impl Fn(&T) -> Value,
 ) {
     for (index, (old, new)) in prev.iter().zip(next).enumerate() {
         if old != new {
@@ -100,7 +139,7 @@ fn list<T: PartialEq + Serialize>(
         }
     }
     for (index, new) in next.iter().enumerate().skip(prev.len()) {
-        set(ops, &child(path, index), new);
+        set(ops, &child(path, index), encode(new));
     }
     if next.len() < prev.len() {
         truncate(ops, path, next.len());
@@ -109,7 +148,14 @@ fn list<T: PartialEq + Serialize>(
 
 /// [`list`] where a changed element is simply replaced.
 fn flat_list<T: PartialEq + Serialize>(ops: &mut Vec<Op>, path: &[Value], prev: &[T], next: &[T]) {
-    list(ops, path, prev, next, |ops, at, _, new| set(ops, at, new));
+    list(
+        ops,
+        path,
+        prev,
+        next,
+        |ops, at, _, new| set(ops, at, new),
+        |new| serde_json::to_value(new).unwrap_or(Value::Null),
+    );
 }
 
 fn diff_track(ops: &mut Vec<Op>, at: &[Value], prev: &Track, next: &Track) {
@@ -153,7 +199,14 @@ fn diff_timeline(ops: &mut Vec<Op>, at: &[Value], prev: &Timeline, next: &Timeli
         markers,
         multicam_groups,
     } = next;
-    list(ops, &child(at, "tracks"), &prev.tracks, tracks, diff_track);
+    list(
+        ops,
+        &child(at, "tracks"),
+        &prev.tracks,
+        tracks,
+        diff_track,
+        |track| serde_json::to_value(track).unwrap_or(Value::Null),
+    );
     field(ops, at, "playhead_secs", &prev.playhead_secs, playhead_secs);
     field(ops, at, "markers", &prev.markers, markers);
     field(
@@ -212,11 +265,13 @@ pub fn diff(prev: &Project, next: &Project) -> Vec<Op> {
         last_edited,
     );
     field(&mut ops, &root, "summary", &prev.summary, summary);
-    flat_list(
+    list(
         &mut ops,
         &child(&root, "media_library"),
         &prev.media_library,
         media_library,
+        |ops, at, _, new| set(ops, at, asset_json(new)),
+        asset_json,
     );
     list(
         &mut ops,
@@ -224,6 +279,7 @@ pub fn diff(prev: &Project, next: &Project) -> Vec<Op> {
         &prev.sequences,
         sequences,
         diff_sequence,
+        |sequence| serde_json::to_value(sequence).unwrap_or(Value::Null),
     );
     field(
         &mut ops,
@@ -248,6 +304,12 @@ pub fn diff(prev: &Project, next: &Project) -> Vec<Op> {
         recent_asset_ids,
     );
     ops
+}
+
+/// An audio asset with no waveform, for tests in other modules.
+#[cfg(test)]
+pub(crate) fn tests_support_asset() -> MediaAsset {
+    tests::audio_asset(1, None)
 }
 
 #[cfg(test)]
