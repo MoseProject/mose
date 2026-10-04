@@ -94,7 +94,8 @@ fn main() {
                 telemetry_enabled,
                 Arc::new(services::SystemServices::new(handle.clone())),
             ));
-            autosave::spawn(handle);
+            autosave::spawn(handle.clone());
+            autosave::spawn_saver(handle);
             Ok(())
         })
         .on_window_event(|window, event| {
