@@ -145,3 +145,34 @@ fn encoding_no_frames_is_an_error() {
     let out = std::env::temp_dir().join("avcore_empty_matte.mp4");
     assert!(encode_matte_video(&[], 16, 16, 30, 1, &out).is_err());
 }
+
+#[test]
+fn the_model_matte_is_resized_back_to_the_frame() {
+    let rgba = vec![200u8; 100 * 60 * 4];
+    let matte = segment_person_with(&rgba, 100, 60, |input, model_w, model_h| {
+        assert_eq!(input.len(), (3 * model_w * model_h) as usize);
+        Ok(vec![0.75; (model_w * model_h) as usize])
+    })
+    .unwrap();
+    assert_eq!(matte.len(), 100 * 60);
+    assert!(matte.iter().all(|&a| (a - 0.75).abs() < 1e-6));
+}
+
+#[test]
+fn a_model_failure_is_passed_through() {
+    let result = segment_person_with(&[0u8; 4 * 4 * 4], 4, 4, |_, _, _| {
+        Err(SegmentError::Onnx("boom".into()))
+    });
+    assert!(matches!(result, Err(SegmentError::Onnx(m)) if m == "boom"));
+}
+
+#[test]
+fn a_missing_model_file_is_an_onnx_error() {
+    let result = segment_person(
+        Path::new("definitely-not-a-model.onnx"),
+        &[0u8; 4 * 4 * 4],
+        4,
+        4,
+    );
+    assert!(matches!(result, Err(SegmentError::Onnx(_))));
+}

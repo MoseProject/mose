@@ -205,3 +205,76 @@ fn errors_are_readable_and_a_missing_model_fails_to_load() {
     let result = detect_faces(std::path::Path::new("missing-model.onnx"), &[0; 16], 2, 2);
     assert!(matches!(result, Err(ReframeError::Onnx(_))));
 }
+
+/// Output tensors shaped like the real model's: `anchors` rows of (background, face) scores and
+/// of (xmin, ymin, xmax, ymax) boxes.
+fn model_outputs(faces: &[(f32, [f32; 4])], anchors: usize) -> Vec<(Vec<i64>, Vec<f32>)> {
+    let mut scores = vec![0.0; anchors * 2];
+    let mut boxes = vec![0.0; anchors * 4];
+    for (i, (score, bbox)) in faces.iter().enumerate() {
+        scores[i * 2 + 1] = *score;
+        boxes[i * 4..i * 4 + 4].copy_from_slice(bbox);
+    }
+    vec![
+        (vec![1, anchors as i64, 4], boxes),
+        (vec![1, anchors as i64, 2], scores),
+    ]
+}
+
+#[test]
+fn faces_are_decoded_from_whatever_order_the_model_lists_its_outputs() {
+    let rgba = vec![128u8; 8 * 8 * 4];
+    let faces = detect_faces_with(&rgba, 8, 8, |input| {
+        assert_eq!(
+            input.len(),
+            3 * (MODEL_INPUT_WIDTH * MODEL_INPUT_HEIGHT) as usize
+        );
+        Ok(model_outputs(
+            &[(0.9, [0.1, 0.2, 0.3, 0.6]), (0.2, [0.5, 0.5, 0.9, 0.9])],
+            4,
+        ))
+    })
+    .unwrap();
+    assert_eq!(faces.len(), 1, "the low-confidence box is dropped");
+    approx(faces[0].x, 0.1);
+    approx(faces[0].w, 0.2);
+}
+
+#[test]
+fn overlapping_detections_are_merged_and_degenerate_boxes_ignored() {
+    let rgba = vec![0u8; 4 * 4 * 4];
+    let faces = detect_faces_with(&rgba, 4, 4, |_| {
+        Ok(model_outputs(
+            &[
+                (0.95, [0.1, 0.1, 0.5, 0.5]),
+                (0.90, [0.12, 0.12, 0.5, 0.5]),
+                (0.80, [0.7, 0.7, 0.7, 0.9]),
+            ],
+            4,
+        ))
+    })
+    .unwrap();
+    assert_eq!(faces.len(), 1);
+}
+
+#[test]
+fn a_model_without_the_expected_outputs_is_an_error() {
+    let rgba = vec![0u8; 4 * 4 * 4];
+    let only_boxes = detect_faces_with(&rgba, 4, 4, |_| Ok(vec![(vec![1, 2, 4], vec![0.0; 8])]));
+    assert!(matches!(only_boxes, Err(ReframeError::Onnx(m)) if m.contains("scores")));
+    let only_scores = detect_faces_with(&rgba, 4, 4, |_| Ok(vec![(vec![1, 2, 2], vec![0.0; 4])]));
+    assert!(matches!(only_scores, Err(ReframeError::Onnx(m)) if m.contains("boxes")));
+    let failing = detect_faces_with(&rgba, 4, 4, |_| Err(ReframeError::Onnx("boom".into())));
+    assert!(matches!(failing, Err(ReframeError::Onnx(m)) if m == "boom"));
+}
+
+#[test]
+fn a_missing_model_file_is_an_onnx_error() {
+    let result = detect_faces(
+        Path::new("definitely-not-a-model.onnx"),
+        &[0u8; 4 * 4 * 4],
+        4,
+        4,
+    );
+    assert!(matches!(result, Err(ReframeError::Onnx(_))));
+}
