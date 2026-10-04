@@ -25,7 +25,9 @@ use std::path::PathBuf;
 use criterion::{criterion_group, criterion_main, Criterion};
 
 use avcore::loudness::parse_loudnorm_stderr;
-use avcore::persistence::{from_ocproj_bytes, to_ocproj_bytes};
+use avcore::persistence::{
+    from_ocproj_bytes, from_project_bytes, to_ocproj_bytes, to_project_bytes,
+};
 use avcore::timeline::{
     AudioRole, BlendMode, ClipInstance, ColorFilter, MaskShape, Timeline, Track, TrackKind,
     TransitionType,
@@ -210,6 +212,15 @@ fn bench_project_ocproj_round_trip(c: &mut Criterion) {
         let project = large_project(50, clip_count);
         let bytes = to_ocproj_bytes(&project).unwrap();
 
+        let project_bytes = to_project_bytes(&project).unwrap();
+        group.bench_function(
+            format!("to_project_bytes/{clip_count}_clips_per_track"),
+            |b| b.iter(|| to_project_bytes(black_box(&project)).unwrap()),
+        );
+        group.bench_function(
+            format!("from_project_bytes/{clip_count}_clips_per_track"),
+            |b| b.iter(|| from_project_bytes(black_box(&project_bytes)).unwrap()),
+        );
         group.bench_function(
             format!("to_ocproj_bytes/{clip_count}_clips_per_track"),
             |b| b.iter(|| to_ocproj_bytes(black_box(&project)).unwrap()),
