@@ -96,7 +96,7 @@ make lint      # cargo clippy --workspace --all-targets
 make check     # cargo check --workspace --all-targets (fast compile-only loop)
 ```
 
-Single test: `cargo test -p core --test probe_test measure_loudness` or
+Single test: `cargo test -p core --test it probe_test::measure_loudness` or
 `cd apps/desktop && npx vitest run`.
 
 **Git hooks**: `npm install` (Node, one-time) sets up a husky pre-commit hook that runs
