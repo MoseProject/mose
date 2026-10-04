@@ -3,6 +3,7 @@ import { Dialog } from "../editor/Dialog";
 import { Icon } from "../editor/Icon";
 import { formatTime, t } from "../i18n";
 import { api } from "../ipc";
+import { uniqueFunnyName } from "../projectNames";
 import { askConfirm } from "../notifications";
 import { patchUi, run, sessionStore, useStore } from "../store";
 import type { RecentProject } from "../types";
@@ -161,7 +162,7 @@ export function Home() {
         </div>
       </header>
 
-      {session && (
+      {session && (session.filePath || session.dirty) && (
         <section
           className="home-current"
           aria-label={t("continueEditing")}
@@ -322,6 +323,9 @@ export function Home() {
 
       {creating && (
         <NewProjectDialog
+          taken={(projects ?? []).map((project) => {
+            return project.name;
+          })}
           onCreate={(name) => {
             void createProject(name);
           }}
@@ -336,13 +340,18 @@ export function Home() {
 
 /** Asks for the project's name; the file location comes next, from the save dialog. */
 function NewProjectDialog({
+  taken,
   onCreate,
   onClose,
 }: {
+  /** Names of the projects that exist, which the suggested name avoids. */
+  taken: string[];
   onCreate: (name: string) => void;
   onClose: () => void;
 }) {
-  const [name, setName] = useState(t("untitledProject"));
+  const [name, setName] = useState(() => {
+    return uniqueFunnyName(taken);
+  });
   const valid = name.trim() !== "";
   const submit = () => {
     if (valid) {
@@ -371,25 +380,38 @@ function NewProjectDialog({
         </>
       }
     >
-      <label className="dialog-field">
-        <span>{t("projectName")}</span>
-        <input
-          type="text"
-          value={name}
-          aria-invalid={!valid}
-          onChange={(e) => {
-            setName(e.target.value);
+      <div className="name-row">
+        <label className="dialog-field">
+          <span>{t("projectName")}</span>
+          <input
+            type="text"
+            value={name}
+            aria-invalid={!valid}
+            onChange={(e) => {
+              setName(e.target.value);
+            }}
+            onFocus={(e) => {
+              e.currentTarget.select();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                submit();
+              }
+            }}
+          />
+        </label>
+        <button
+          type="button"
+          className="icon"
+          title={t("anotherName")}
+          aria-label={t("anotherName")}
+          onClick={() => {
+            setName(uniqueFunnyName(taken));
           }}
-          onFocus={(e) => {
-            e.currentTarget.select();
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              submit();
-            }
-          }}
-        />
-      </label>
+        >
+          <Icon name="reset" />
+        </button>
+      </div>
       {!valid && (
         <p
           className="dialog-error"

@@ -2302,3 +2302,22 @@ canvas:focus-visible {
   padding: 4px 10px 6px;
   border-top: 1px solid var(--border-subtle);
 }
+
+/* ---- save state in the top bar ---- */
+.save-state {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.save-state.saving {
+  color: var(--accent);
+}
+
+/* ---- new project name with its suggest button ---- */
+.name-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+.name-row .dialog-field {
+  flex: 1;
+}

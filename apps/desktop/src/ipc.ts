@@ -51,6 +51,7 @@ export const events = {
   watchFolder: "watch-folder-event",
   importFailed: "import-failed",
   closeRequested: "close-requested",
+  autosaveFailed: "autosave-failed",
   previewRecovery: "preview-recovery",
   youtubeDownload: "youtube-download-event",
   updateCheck: "update-check-event",
@@ -121,6 +122,13 @@ export function onTts(handler: (event: TtsEvent) => void): Promise<UnlistenFn> {
 export function onImportFailed(handler: (fileName: string) => void): Promise<UnlistenFn> {
   return listen<{ fileName: string }>(events.importFailed, (e) => {
     return handler(e.payload.fileName);
+  });
+}
+
+/** Saving the project in the background failed; `message` is the reason. */
+export function onAutosaveFailed(handler: (message: string) => void): Promise<UnlistenFn> {
+  return listen<string>(events.autosaveFailed, (e) => {
+    return handler(e.payload);
   });
 }
 

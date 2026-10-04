@@ -58,12 +58,29 @@ export function TopBar({ session }: { session: SessionView | null }) {
           <span className="project-name">
             {t("projectLabel")}: {session.project.name}
           </span>
-          {session.dirty && (
+          {session.dirty && !session.filePath && (
             <span
               className="dirty"
               title={t("unsaved")}
               aria-label={t("unsaved")}
             />
+          )}
+          {session.dirty && session.filePath && (
+            <span
+              className="save-state saving"
+              role="status"
+            >
+              {t("savingProject")}
+            </span>
+          )}
+          {!session.dirty && session.filePath && (
+            <span
+              className="save-state"
+              role="status"
+              title={session.filePath}
+            >
+              {t("projectSaved")}
+            </span>
           )}
           {sequenceName && (
             <span className="muted">
