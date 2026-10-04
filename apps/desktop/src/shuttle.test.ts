@@ -10,8 +10,9 @@ vi.mock("./ipc", () => {
 });
 
 const { api } = await import("./ipc");
-const { nextShuttle, shuttle, shuttleStore, stopShuttle } = await import("./shuttle");
-const { previewStore, sessionStore } = await import("./store");
+const { nextShuttle, playRange, shuttle, shuttleStore, stopRange, stopShuttle } =
+  await import("./shuttle");
+const { previewStore, sessionStore, uiStore } = await import("./store");
 const { makeSession } = await import("./testSupport");
 
 describe("nextShuttle", () => {
@@ -102,5 +103,57 @@ describe("shuttle", () => {
     vi.advanceTimersByTime(400);
     expect(api.seek).toHaveBeenCalledTimes(1);
     expect(shuttleStore.get().direction).toBe(0);
+  });
+});
+
+describe("playRange", () => {
+  const tickAt = (playheadSecs: number, playing: boolean) => {
+    previewStore.set({ ...previewStore.get(), playheadSecs, playing });
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stopShuttle();
+    stopRange();
+    tickAt(0, false);
+    uiStore.set({ ...uiStore.get(), markIn: 2, markOut: 6 });
+  });
+  afterEach(() => {
+    stopRange();
+  });
+
+  it("does nothing without a valid range", async () => {
+    uiStore.set({ ...uiStore.get(), markIn: 6, markOut: 2 });
+    await playRange();
+    expect(api.seek).not.toHaveBeenCalled();
+    expect(api.setPlaying).not.toHaveBeenCalled();
+  });
+
+  it("seeks to the in mark and plays, then pauses when the out mark is reached", async () => {
+    await playRange();
+    expect(api.seek).toHaveBeenCalledWith(2);
+    expect(api.setPlaying).toHaveBeenCalledWith(true);
+
+    tickAt(2, true);
+    tickAt(4, true);
+    expect(api.setPlaying).toHaveBeenCalledTimes(1);
+    tickAt(6.02, true);
+    expect(api.setPlaying).toHaveBeenLastCalledWith(false);
+  });
+
+  it("ignores ticks from before the playback request took effect", async () => {
+    tickAt(20, false);
+    await playRange();
+    tickAt(20, false);
+    expect(api.setPlaying).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops watching after a pause by hand, so later playback runs past the out mark", async () => {
+    await playRange();
+    tickAt(3, true);
+    tickAt(3, false);
+    tickAt(6.1, true);
+    tickAt(6.2, true);
+    expect(api.setPlaying).toHaveBeenCalledTimes(1);
   });
 });

@@ -15,6 +15,7 @@ vi.mock("./ipc", () => {
     "pasteClip",
     "addMarker",
     "rippleDeleteRange",
+    "liftRange",
     "saveProject",
     "importMediaDialog",
     "copyClipFormatting",
@@ -199,6 +200,31 @@ describe("in and out marks", () => {
     await run("clearMarks");
     expect(uiStore.get().markIn).toBeNull();
     expect(uiStore.get().markOut).toBeNull();
+  });
+
+  it("lifts the range, leaving the gap, only when both marks are set in order", async () => {
+    const lift = commands.findCommand("liftRange")!;
+    expect(lift.enabled?.()).toBe(false);
+    await lift.run();
+    expect(api.liftRange).not.toHaveBeenCalled();
+
+    uiStore.set({ ...uiStore.get(), markIn: 2, markOut: 6 });
+    expect(lift.enabled?.()).toBe(true);
+    await lift.run();
+    expect(api.liftRange).toHaveBeenCalledWith(2, 6);
+    expect(uiStore.get().markIn).toBeNull();
+  });
+
+  it("jumps to the marks once they exist", async () => {
+    const toIn = commands.findCommand("goToMarkIn")!;
+    const toOut = commands.findCommand("goToMarkOut")!;
+    expect(toIn.enabled?.()).toBe(false);
+    expect(toOut.enabled?.()).toBe(false);
+    uiStore.set({ ...uiStore.get(), markIn: 3, markOut: 8 });
+    await toIn.run();
+    await toOut.run();
+    expect(api.seek).toHaveBeenNthCalledWith(1, 3);
+    expect(api.seek).toHaveBeenNthCalledWith(2, 8);
   });
 
   it("deletes the range only when both marks are set in order", async () => {
