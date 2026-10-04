@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use avcore::GpuEncoderPreference;
 use tauri::{AppHandle, Manager, Runtime, State};
@@ -75,7 +75,54 @@ pub fn start_export<R: Runtime>(
         output = avcore::next_available_path(&output);
     }
     let exports = app.state::<AppState>().exports.clone();
+    check_output_is_free(&app, &exports, &output)?;
     Ok(exports.enqueue(app.clone(), title, output, prepared))
+}
+
+/// Whether two paths name the same file: by identity when both exist, otherwise by their text
+/// (ignoring case on Windows, whose file system does).
+fn same_file(a: &Path, b: &Path) -> bool {
+    if let (Ok(a), Ok(b)) = (a.canonicalize(), b.canonicalize()) {
+        return a == b;
+    }
+    if cfg!(windows) {
+        a.to_string_lossy().to_lowercase() == b.to_string_lossy().to_lowercase()
+    } else {
+        a == b
+    }
+}
+
+/// Refuses an output that would destroy something in use: a media file of the project (the
+/// encoder would overwrite what it is reading) or the output of a job still queued or running.
+fn check_output_is_free<R: Runtime>(
+    app: &AppHandle<R>,
+    exports: &crate::export::ExportQueue,
+    output: &Path,
+) -> Result<(), String> {
+    let is_source = {
+        let state = app.state::<AppState>();
+        let session = state.session();
+        session.project.media_library.iter().any(|asset| {
+            same_file(&asset.source_path, output)
+                || asset
+                    .proxy_path
+                    .as_deref()
+                    .is_some_and(|proxy| same_file(proxy, output))
+        })
+    };
+    if is_source {
+        return Err("outputIsSource".to_string());
+    }
+    let busy = exports.snapshot().iter().any(|job| {
+        !matches!(
+            job.status,
+            avcore::ExportJobStatus::Done | avcore::ExportJobStatus::Failed { .. }
+        ) && same_file(Path::new(&job.output_path), output)
+    });
+    if busy {
+        return Err("outputInQueue".to_string());
+    }
+    Ok(())
 }
 
 #[tauri::command]
