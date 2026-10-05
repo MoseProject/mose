@@ -1,0 +1,18 @@
+# Static analysis for crates/avbridge/csrc (run with `make lint-c`).
+# Bugs and the Clang analyzer only: style is clang-format's job (.clang-format). The FFmpeg API
+# makes easily-swappable-parameters, macro-parentheses, assignment-in-if (its error idiom),
+# multi-level pointer conversions (av_freep and friends) and switches over status ints noise.
+Checks: >
+  -*,
+  bugprone-*,
+  clang-analyzer-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-reserved-identifier,
+  -bugprone-macro-parentheses,
+  -bugprone-narrowing-conversions,
+  -bugprone-switch-missing-default-case,
+  -bugprone-assignment-in-if-condition,
+  -bugprone-multi-level-implicit-pointer-conversion,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
+WarningsAsErrors: ''
+HeaderFilterRegex: 'crates/avbridge/csrc/.*'

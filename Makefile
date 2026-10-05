@@ -51,7 +51,7 @@ ifneq ($(shell sccache --version 2>/dev/null),)
   export RUSTC_WRAPPER ?= sccache
 endif
 
-.PHONY: coverage coverage-web build release test test-core test-bush test-xtask test-e2e bench bench-bush fmt fmt-check lint graph docs check clean desktop-install lint-desktop lint-desktop-fix desktop-run desktop-dev desktop-build test-desktop
+.PHONY: coverage coverage-web build release test test-core test-bush test-xtask test-e2e bench bench-bush fmt fmt-check lint lint-c fmt-c graph docs check clean desktop-install lint-desktop lint-desktop-fix desktop-run desktop-dev desktop-build test-desktop
 
 # Debug build of the whole workspace (core, avbridge, ytbridge, desktop, xtask).
 build:
@@ -167,15 +167,24 @@ coverage:
 coverage-web:
 	cd apps/desktop && npm run coverage
 
-fmt:
+fmt: fmt-c
 	cargo fmt --all
+
+# Format the C bridge (`.clang-format`); the pre-commit hook does the same for staged files.
+fmt-c:
+	clang-format -i crates/avbridge/csrc/*.c crates/avbridge/csrc/*.h
 
 # Check formatting without rewriting files — use in CI.
 fmt-check:
 	cargo fmt --all -- --check
+	clang-format --dry-run -Werror crates/avbridge/csrc/*.c crates/avbridge/csrc/*.h
 
-lint:
+lint: lint-c
 	cargo clippy --workspace --all-targets
+
+# Static analysis of the C bridge (`.clang-tidy`); needs FFMPEG_DIR for the headers.
+lint-c:
+	for f in crates/avbridge/csrc/*.c; do clang-tidy $$f -- -I"$$FFMPEG_DIR/include" -Icrates/avbridge/csrc || exit 1; done
 
 # Regenerate docs/CODE_GRAPH.md (module dependency graph + public API index). Run after
 # adding/removing modules or public items.
