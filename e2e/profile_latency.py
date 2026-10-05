@@ -34,6 +34,9 @@ const cb = arguments[arguments.length - 1]; const [positions] = arguments;
 """
 
 
+EDIT_JS = SEEK_JS.replace("'preview_seek', { positionSecs: p }", "'update_clip', { clipId: clipId, patch: { brightness: p } }").replace("const [positions] = arguments;", "const [positions, clipId] = arguments;")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--exe", default=str(DEFAULT_EXE))
@@ -52,6 +55,18 @@ def main():
                 f"p90 {times[int(len(times) * 0.9)]:.0f} ms, max {times[-1]:.0f} ms",
                 flush=True,
             )
+            from helpers import _active_timeline, get_session
+
+            clip = next(t for t in _active_timeline(get_session(app.driver))["tracks"] if t["kind"] == "Video")["clips"][0]
+            brightness = [((i % 8) - 4) / 10 for i in range(args.seeks)]
+            edits = [t for t in app.driver.execute_async_script(EDIT_JS, brightness, clip["id"]) if t is not None]
+            edits.sort()
+            if edits:
+                print(
+                    f"{label} edit to picture: {len(edits)}/{args.seeks} answered, median {statistics.median(edits):.0f} ms, "
+                    f"p90 {edits[int(len(edits) * 0.9)]:.0f} ms, max {edits[-1]:.0f} ms",
+                    flush=True,
+                )
             invoke(app.driver, "undo")
 
 
