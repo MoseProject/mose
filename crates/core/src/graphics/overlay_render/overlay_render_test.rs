@@ -203,7 +203,9 @@ fn rounded_background_has_transparent_corners_and_opaque_edges() {
 }
 
 fn contains_pixel(buf: &[u8], rgba: [u8; 4]) -> bool {
-    buf.as_chunks::<4>().0.iter()
+    buf.as_chunks::<4>()
+        .0
+        .iter()
         .any(|p| p[0] == rgba[0] && p[1] == rgba[1] && p[2] == rgba[2] && p[3] == rgba[3])
 }
 

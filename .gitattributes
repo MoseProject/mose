@@ -2,3 +2,6 @@
 
 LICENSE.txt eol=crlf
 **/*.json linguist-language=jsonc
+
+# License texts are hashed byte for byte (packaging/licenses/spdx-manifest.json): never convert their line endings.
+packaging/licenses/** -text
