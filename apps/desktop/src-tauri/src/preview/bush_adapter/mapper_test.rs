@@ -366,6 +366,20 @@ fn a_fade_transition_becomes_the_placement_fade() {
 }
 
 #[test]
+fn fade_handles_set_the_placement_fade_and_win_over_a_shorter_fade_transition() {
+    let mut faded = clip(0.0, 0.0, 6.0);
+    faded.transition_in = TransitionType::Fade;
+    faded.transition_duration_secs = 0.5;
+    faded.fade_in_secs = 1.0;
+    faded.fade_out_secs = 2.0;
+    let (_, contributor) = one_clip(faded);
+    assert_eq!(contributor.placement.fade.in_secs, 1.0);
+    assert_eq!(contributor.placement.fade.out_secs, 2.0);
+    assert!((contributor.placement_at(0.5).opacity - 0.5).abs() < 1e-6);
+    assert!((contributor.placement_at(5.0).opacity - 0.5).abs() < 1e-6);
+}
+
+#[test]
 fn a_slide_transition_is_skipped_when_position_keyframes_own_the_axis() {
     let mut slid = clip(0.0, 0.0, 6.0);
     slid.transition_in = TransitionType::Slide;

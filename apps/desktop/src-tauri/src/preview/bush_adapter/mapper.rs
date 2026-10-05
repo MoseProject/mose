@@ -500,6 +500,7 @@ fn map_clip(
         &mut animation,
         approximations,
     );
+    apply_fade_handles(clip, duration, &mut placement);
     placement.animation = animation;
     Some(MappedClip { range, placement })
 }
@@ -566,6 +567,14 @@ fn zoom_into_crop(
     animation.crop_y = KeyframeTrack::new(ys).ok();
     animation.crop_width = KeyframeTrack::new(widths).ok();
     animation.crop_height = KeyframeTrack::new(heights).ok();
+}
+
+/// The clip's fade-in / fade-out handles. They share the placement fade with the Fade
+/// transition, so the longer fade-in wins and the fade-out is added.
+fn apply_fade_handles(clip: &ClipInstance, duration: f64, placement: &mut Placement) {
+    let clamp = |secs: f32| f64::from(secs).clamp(0.0, duration);
+    placement.fade.in_secs = placement.fade.in_secs.max(clamp(clip.fade_in_secs));
+    placement.fade.out_secs = clamp(clip.fade_out_secs);
 }
 
 /// Incoming transition: fade becomes the placement fade, slide and zoom become short animations

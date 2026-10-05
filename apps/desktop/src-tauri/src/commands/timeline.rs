@@ -52,6 +52,8 @@ pub struct ClipPatch {
     pub mask_corner_radius: Option<f32>,
     pub transition_in: Option<TransitionType>,
     pub transition_duration_secs: Option<f32>,
+    pub fade_in_secs: Option<f32>,
+    pub fade_out_secs: Option<f32>,
     pub blend_mode: Option<BlendMode>,
     pub position_keyframes: Option<Vec<Keyframe<Position>>>,
     pub layer_scale_x: Option<f32>,
@@ -76,6 +78,8 @@ const CROP_MIN_SIZE: f32 = 0.05;
 const MASK_CORNER_RADIUS_RANGE: std::ops::RangeInclusive<f32> = 0.0..=1.0;
 /// Mirrors `crates/ui/src/app/mod.rs`'s `TRANSITION_DURATION_RANGE`.
 const TRANSITION_DURATION_RANGE: std::ops::RangeInclusive<f32> = 0.1..=3.0;
+/// Longest fade-in or fade-out handle, in seconds.
+const MAX_FADE_SECS: f32 = 10.0;
 
 #[tauri::command]
 pub fn add_asset_to_timeline<R: Runtime>(
@@ -810,6 +814,12 @@ fn apply_patch(clip: &mut ClipInstance, patch: &ClipPatch) -> bool {
             *TRANSITION_DURATION_RANGE.start(),
             *TRANSITION_DURATION_RANGE.end(),
         );
+    }
+    if let Some(fade_in_secs) = patch.fade_in_secs {
+        clip.fade_in_secs = fade_in_secs.clamp(0.0, MAX_FADE_SECS);
+    }
+    if let Some(fade_out_secs) = patch.fade_out_secs {
+        clip.fade_out_secs = fade_out_secs.clamp(0.0, MAX_FADE_SECS);
     }
     if let Some(blend_mode) = patch.blend_mode {
         clip.blend_mode = blend_mode;
