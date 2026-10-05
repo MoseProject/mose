@@ -715,6 +715,7 @@ EncodeStatus avbridge_encode_timeline_export_multi(
                 goto seg_cleanup;
             }
             vdec_ctx0->pkt_timebase = in_ctx0->streams[vidx0]->time_base;
+            bridge_enable_decoder_threads(vdec_ctx0);
             if (avcodec_open2(vdec_ctx0, vd, NULL) < 0) {
                 status = ENCODE_ERR_DECODER;
                 goto seg_cleanup;
@@ -821,12 +822,22 @@ EncodeStatus avbridge_encode_timeline_export_multi(
 
         { /* Per-segment decode loop */
             int vdone = 0, adone = 0;
+            int video_flushed = 0;
             while ((!vdone || !adone) && status == ENCODE_OK) {
                 if (cancel && *cancel) {
                     status = ENCODE_CANCELLED;
                     break;
                 }
-                if (av_read_frame(in_ctx0, pkt) < 0) break;
+                if (av_read_frame(in_ctx0, pkt) < 0) {
+                    if (video_flushed || vdone) break;
+                    /* End of input: an empty packet flushes the threaded decoder and the
+                       receive loop below delivers the frames it was still holding. */
+                    video_flushed = 1;
+                    av_packet_unref(pkt);
+                    pkt->data = NULL;
+                    pkt->size = 0;
+                    pkt->stream_index = vidx0;
+                }
 
                 if (pkt->stream_index == vidx0 && !vdone) {
                     int ret = avcodec_send_packet(vdec_ctx0, pkt);

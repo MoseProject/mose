@@ -453,3 +453,84 @@ fn videotoolbox_encodes_a_real_timeline_on_macos() {
 
     let _ = std::fs::remove_file(&out);
 }
+
+/// Number of video frames in `path`, by decoding it.
+fn frame_count(path: &std::path::Path) -> usize {
+    let (mut session, _) = avbridge::DecodeSession::open(path).unwrap();
+    let cancel = AtomicBool::new(false);
+    let mut frames = 0;
+    while let avbridge::Advance::Frame(_) = session.advance(&cancel).unwrap() {
+        frames += 1;
+    }
+    frames
+}
+
+/// The export decodes with frame threading, which holds back a few frames until the decoder is
+/// flushed. Segments that run to the end of their file must still come out whole: no frames lost
+/// at the tail of each one.
+#[test]
+fn segments_that_run_to_the_end_of_their_file_keep_their_last_frames() {
+    let out = std::env::temp_dir().join("avbridge_test_timeline_tails.mp4");
+    let cancel = AtomicBool::new(false);
+    let source = fixture("video.mp4");
+    let per_segment = frame_count(&source);
+
+    // Past the end of the file: each segment is cut by its input ending, not by the out point.
+    let segments: Vec<ClipSegment> = (0..4).map(|_| clip(0.0, 100.0, 0.0, "")).collect();
+    let outcome = encode_timeline_export(
+        &segments,
+        CANVAS,
+        &out,
+        -14.0,
+        GpuEncoderPreference::Cpu,
+        &cancel,
+        |_secs| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, EncodeOutcome::Completed);
+
+    let exported = frame_count(&out);
+    // Frame rate conversion may add or drop a frame at a join; a lost decoder backlog costs
+    // several frames per segment.
+    assert!(
+        exported + 4 >= 4 * per_segment,
+        "exported {exported} frames of {} expected",
+        4 * per_segment
+    );
+
+    let _ = std::fs::remove_file(&out);
+}
+
+#[test]
+fn multi_track_segments_that_run_to_the_end_of_their_file_keep_their_last_frames() {
+    let out = std::env::temp_dir().join("avbridge_test_timeline_multi_tails.mp4");
+    let cancel = AtomicBool::new(false);
+    let source = fixture("video.mp4");
+    let per_segment = frame_count(&source);
+
+    // A background of four whole-file segments plus a short overlay on a second track.
+    let background: Vec<ClipSegment> = (0..4).map(|_| clip(0.0, 100.0, 0.0, "")).collect();
+    let overlay = vec![clip(0.0, 0.2, 0.0, "")];
+    let outcome = encode_timeline_export_multi(
+        &[background, overlay],
+        CANVAS,
+        &out,
+        -14.0,
+        GpuEncoderPreference::Cpu,
+        &cancel,
+        |_secs| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, EncodeOutcome::Completed);
+
+    let exported = frame_count(&out);
+    // The multi-track compositor already drops frames where whole-file segments join (92 of 120
+    // with a single-threaded decoder too); a lost decoder backlog on top of that gives about 32.
+    assert!(
+        exported >= 80,
+        "exported {exported} frames of {}",
+        4 * per_segment
+    );
+
+    let _ = std::fs::remove_file(&out);
+}

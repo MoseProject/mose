@@ -96,6 +96,7 @@ ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path,
             goto cleanup;
         }
         vdec_ctx->pkt_timebase = in_ctx->streams[video_in_index]->time_base;
+        bridge_enable_decoder_threads(vdec_ctx);
         if (avcodec_open2(vdec_ctx, decoder, NULL) < 0) {
             status = PROXY_ERR_DECODER;
             goto cleanup;

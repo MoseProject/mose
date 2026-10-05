@@ -182,6 +182,11 @@ EncodeStatus avbridge_encode_timeline_export(const ClipSegment *segments, int se
                 goto segment_cleanup;
             }
             vdec_ctx->pkt_timebase = in_ctx->streams[video_in_index]->time_base;
+            /* A frozen segment reads a single anchor frame and never drains, so it keeps the
+               one-frame-in, one-frame-out decoder; every other segment drains below. */
+            if (!seg->frozen) {
+                bridge_enable_decoder_threads(vdec_ctx);
+            }
             if (avcodec_open2(vdec_ctx, vdecoder, NULL) < 0) {
                 status = ENCODE_ERR_DECODER;
                 goto segment_cleanup;
@@ -603,6 +608,35 @@ EncodeStatus avbridge_encode_timeline_export(const ClipSegment *segments, int se
                 }
 
                 if (status != ENCODE_OK) break;
+            }
+
+            /* The decoder runs frame-threaded, so frames of this segment can still be inside it
+               when the input ends: drain them, applying the same in/out range as above. */
+            if (status == ENCODE_OK && !seg->frozen && !video_done && vdec_ctx) {
+                avcodec_send_packet(vdec_ctx, NULL);
+                while (avcodec_receive_frame(vdec_ctx, dec_frame) >= 0) {
+                    double frame_secs = dec_frame->pts * av_q2d(vdec_ctx->pkt_timebase);
+                    if (frame_secs < seg->source_in_secs) {
+                        av_frame_unref(dec_frame);
+                        continue;
+                    }
+                    if (frame_secs >= seg->source_out_secs) {
+                        av_frame_unref(dec_frame);
+                        break;
+                    }
+                    if (filter_encode_write_video_frame(out_ctx, &vchain, venc_ctx,
+                                                        video_out_stream, dec_frame, filt_frame,
+                                                        &next_video_pts, enc_pkt) < 0) {
+                        status = ENCODE_ERR_PIPELINE;
+                        av_frame_unref(dec_frame);
+                        break;
+                    }
+                    av_frame_unref(dec_frame);
+                    if (progress_cb) {
+                        progress_cb(progress_user_data,
+                                    elapsed_before_segment + (frame_secs - seg->source_in_secs));
+                    }
+                }
             }
         }
 
