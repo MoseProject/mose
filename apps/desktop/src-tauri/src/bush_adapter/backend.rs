@@ -257,11 +257,7 @@ pub(crate) fn run_with_audio<R: Runtime>(
             let in_flight = dirty
                 || outstanding_since.is_some()
                 || encoding_since.is_some_and(|since| since.elapsed() < OUTSTANDING_TIMEOUT);
-            let wait = if in_flight {
-                POLL_INTERVAL
-            } else {
-                IDLE_WAIT
-            };
+            let wait = if in_flight { POLL_INTERVAL } else { IDLE_WAIT };
             match rx.recv_timeout(wait) {
                 Ok(command) => commands.push(command),
                 Err(RecvTimeoutError::Timeout) => {}
