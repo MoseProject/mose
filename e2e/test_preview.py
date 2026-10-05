@@ -42,8 +42,9 @@ fetch('http://oca.localhost/frame/' + Date.now())
 
 # Width in percent of each meter bar (PreviewPanel.tsx square-roots the linear peak).
 METER_WIDTHS = """
-return Array.from(document.querySelectorAll('.meter > div'))
-  .map(bar => parseFloat(bar.style.width) || 0);
+// Each bar is covered from the top by the part of its height above the peak.
+return Array.from(document.querySelectorAll('.meter-bar > .meter-cover'))
+  .map(cover => 100 - (parseFloat(cover.style.height) || 100));
 """
 
 
