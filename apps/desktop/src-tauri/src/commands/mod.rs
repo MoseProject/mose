@@ -286,6 +286,13 @@ pub fn preview_seek(state: State<'_, AppState>, position_secs: f64) {
     state.preview.seek(position_secs);
 }
 
+/// Tells the preview how many pixels its longest side really covers on screen, so it does not
+/// composite, encode and ship more than the monitor shows.
+#[tauri::command]
+pub fn preview_set_max_dim(state: State<'_, AppState>, dim: u32) {
+    state.preview.set_max_dim(dim);
+}
+
 #[tauri::command]
 pub fn preview_step(state: State<'_, AppState>, delta_frames: i64) {
     state.preview.step(delta_frames);

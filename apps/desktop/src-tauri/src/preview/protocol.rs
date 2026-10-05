@@ -23,6 +23,7 @@ use std::time::{Duration, Instant};
 use tauri::http::{header, Response, StatusCode};
 use tauri::{AppHandle, Manager, Runtime};
 
+use crate::frames::{POSTER_MAX_DIM, THUMBNAIL_MAX_DIM};
 use crate::state::{lock_or_recover, AppState};
 use crate::tile_workers::TileWorkers;
 
@@ -188,7 +189,7 @@ impl ThumbnailCache {
         }
         let extracted = self
             .workers
-            .extract(source, millis as f64 / 1000.0)
+            .extract(source, millis as f64 / 1000.0, THUMBNAIL_MAX_DIM)
             .map(Arc::new);
         {
             let mut tiles = lock_or_recover(&self.tiles);
@@ -238,7 +239,7 @@ impl ThumbnailCache {
         }
         let extracted = self
             .workers
-            .extract(source, THUMBNAIL_AT_SECS)
+            .extract(source, THUMBNAIL_AT_SECS, POSTER_MAX_DIM)
             .map(Arc::new);
         lock_or_recover(&self.entries)
             .insert(source.to_path_buf(), (extracted.clone(), Instant::now()));
@@ -430,10 +431,12 @@ mod tests {
             std::env::temp_dir().join(format!("oca_desktop_thumb_{}.bin", std::process::id()));
         std::fs::write(&path, b"not a video").unwrap();
         let workers = TileWorkers::new(1);
-        assert!(workers.extract(&path, THUMBNAIL_AT_SECS).is_none());
+        assert!(workers
+            .extract(&path, THUMBNAIL_AT_SECS, POSTER_MAX_DIM)
+            .is_none());
         let _ = std::fs::remove_file(&path);
         assert!(workers
-            .extract(Path::new("missing.mp4"), THUMBNAIL_AT_SECS)
+            .extract(Path::new("missing.mp4"), THUMBNAIL_AT_SECS, POSTER_MAX_DIM)
             .is_none());
     }
 }

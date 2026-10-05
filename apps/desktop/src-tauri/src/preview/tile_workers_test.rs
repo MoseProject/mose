@@ -1,4 +1,5 @@
 use super::*;
+use crate::frames::THUMBNAIL_MAX_DIM;
 use std::time::Instant;
 
 fn fixture() -> PathBuf {
@@ -8,7 +9,9 @@ fn fixture() -> PathBuf {
 #[test]
 fn a_frame_comes_back_as_a_jpeg() {
     let workers = TileWorkers::default();
-    let jpeg = workers.extract(&fixture(), 0.5).expect("a frame");
+    let jpeg = workers
+        .extract(&fixture(), 0.5, THUMBNAIL_MAX_DIM)
+        .expect("a frame");
     assert_eq!(&jpeg[..2], &[0xFF, 0xD8]);
 }
 
@@ -16,9 +19,11 @@ fn a_frame_comes_back_as_a_jpeg() {
 fn a_missing_file_is_a_miss_and_the_worker_keeps_serving() {
     let workers = TileWorkers::new(1);
     assert!(workers
-        .extract(Path::new("definitely-missing.mp4"), 0.0)
+        .extract(Path::new("definitely-missing.mp4"), 0.0, THUMBNAIL_MAX_DIM)
         .is_none());
-    assert!(workers.extract(&fixture(), 0.5).is_some());
+    assert!(workers
+        .extract(&fixture(), 0.5, THUMBNAIL_MAX_DIM)
+        .is_some());
 }
 
 #[test]
@@ -27,7 +32,9 @@ fn a_burst_larger_than_the_pool_is_answered_in_full() {
     let handles: Vec<_> = (0..12)
         .map(|index| {
             let workers = Arc::clone(&workers);
-            std::thread::spawn(move || workers.extract(&fixture(), f64::from(index) * 0.1))
+            std::thread::spawn(move || {
+                workers.extract(&fixture(), f64::from(index) * 0.1, THUMBNAIL_MAX_DIM)
+            })
         })
         .collect();
     for handle in handles {
@@ -38,9 +45,9 @@ fn a_burst_larger_than_the_pool_is_answered_in_full() {
 #[test]
 fn repeated_requests_on_one_file_reuse_its_decoder() {
     let workers = TileWorkers::new(1);
-    let first = workers.extract(&fixture(), 0.2).unwrap();
+    let first = workers.extract(&fixture(), 0.2, THUMBNAIL_MAX_DIM).unwrap();
     // Backwards in time too: the kept decoder seeks, it is not stuck past the target.
-    let second = workers.extract(&fixture(), 0.1).unwrap();
+    let second = workers.extract(&fixture(), 0.1, THUMBNAIL_MAX_DIM).unwrap();
     assert_eq!(&first[..2], &second[..2]);
 }
 

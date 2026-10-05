@@ -14,6 +14,7 @@ use avcore::timeline::{AudioRole, ClipInstance, Track};
 use bush::{EngineConfig, SceneSnapshot, SceneVersions};
 
 use super::*;
+use crate::frames::PREVIEW_MAX_DIM;
 
 /// `OCA_BUSH_*` are process-wide: the tests that set them take turns.
 fn env_lock() -> std::sync::MutexGuard<'static, ()> {
@@ -64,9 +65,20 @@ fn timeline_with(kind: TrackKind, visible: bool, clip_asset: u64) -> Timeline {
 }
 
 #[test]
+fn a_smaller_preview_size_shrinks_the_canvas_with_the_aspect_kept() {
+    let media = [asset(1, MediaKind::Video, Some((1920, 1080)), Some(30.0))];
+    let (width, height) = preview_canvas(&timeline_with(TrackKind::Video, true, 1), &media, 640);
+    assert_eq!((width, height), (640, 360));
+}
+
+#[test]
 fn the_preview_canvas_follows_the_first_video_clip_scaled_to_the_preview_size() {
     let media = [asset(1, MediaKind::Video, Some((3840, 2160)), Some(30.0))];
-    let (width, height) = preview_canvas(&timeline_with(TrackKind::Video, true, 1), &media);
+    let (width, height) = preview_canvas(
+        &timeline_with(TrackKind::Video, true, 1),
+        &media,
+        PREVIEW_MAX_DIM,
+    );
     assert_eq!(width, PREVIEW_MAX_DIM);
     assert_eq!(height, 720);
     assert!(width % 2 == 0 && height % 2 == 0, "video sizes stay even");
@@ -74,7 +86,11 @@ fn the_preview_canvas_follows_the_first_video_clip_scaled_to_the_preview_size() 
     // A source smaller than the preview is never enlarged.
     let small = [asset(1, MediaKind::Video, Some((640, 360)), None)];
     assert_eq!(
-        preview_canvas(&timeline_with(TrackKind::Video, true, 1), &small),
+        preview_canvas(
+            &timeline_with(TrackKind::Video, true, 1),
+            &small,
+            PREVIEW_MAX_DIM
+        ),
         (640, 360)
     );
 }
@@ -89,32 +105,59 @@ fn without_a_usable_video_clip_the_preview_uses_the_default_canvas() {
         markers: Vec::new(),
         multicam_groups: Vec::new(),
     };
-    assert_eq!(preview_canvas(&empty, &video), DEFAULT_CANVAS);
     assert_eq!(
-        preview_canvas(&timeline_with(TrackKind::Video, false, 1), &video),
+        preview_canvas(&empty, &video, PREVIEW_MAX_DIM),
         DEFAULT_CANVAS
     );
     assert_eq!(
-        preview_canvas(&timeline_with(TrackKind::Audio, true, 1), &video),
+        preview_canvas(
+            &timeline_with(TrackKind::Video, false, 1),
+            &video,
+            PREVIEW_MAX_DIM
+        ),
+        DEFAULT_CANVAS
+    );
+    assert_eq!(
+        preview_canvas(
+            &timeline_with(TrackKind::Audio, true, 1),
+            &video,
+            PREVIEW_MAX_DIM
+        ),
         DEFAULT_CANVAS
     );
     let audio_asset = [asset(1, MediaKind::Audio, Some((1920, 1080)), None)];
     assert_eq!(
-        preview_canvas(&timeline_with(TrackKind::Video, true, 1), &audio_asset),
+        preview_canvas(
+            &timeline_with(TrackKind::Video, true, 1),
+            &audio_asset,
+            PREVIEW_MAX_DIM
+        ),
         DEFAULT_CANVAS
     );
     let unknown_size = [asset(1, MediaKind::Video, None, None)];
     assert_eq!(
-        preview_canvas(&timeline_with(TrackKind::Video, true, 1), &unknown_size),
+        preview_canvas(
+            &timeline_with(TrackKind::Video, true, 1),
+            &unknown_size,
+            PREVIEW_MAX_DIM
+        ),
         DEFAULT_CANVAS
     );
     let zero = [asset(1, MediaKind::Video, Some((0, 1080)), None)];
     assert_eq!(
-        preview_canvas(&timeline_with(TrackKind::Video, true, 1), &zero),
+        preview_canvas(
+            &timeline_with(TrackKind::Video, true, 1),
+            &zero,
+            PREVIEW_MAX_DIM
+        ),
         DEFAULT_CANVAS
     );
     assert_eq!(
-        preview_canvas(&timeline_with(TrackKind::Video, true, 99), &video),
+        preview_canvas(
+            &timeline_with(TrackKind::Video, true, 99),
+            &video,
+            PREVIEW_MAX_DIM
+        ),
         DEFAULT_CANVAS,
         "a clip pointing at a missing asset"
     );

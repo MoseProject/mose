@@ -21,7 +21,7 @@ use std::time::Duration;
 
 use avcore::FrameSampler;
 
-use crate::frames::{encode_jpeg, THUMBNAIL_MAX_DIM};
+use crate::frames::encode_jpeg;
 use crate::state::lock_or_recover;
 
 /// Decoders running at once. More than this only adds contention: each decoder already uses a
@@ -37,6 +37,7 @@ const SAMPLE_DEADLINE: Duration = Duration::from_millis(800);
 struct Job {
     source: PathBuf,
     at_secs: f64,
+    max_dim: u32,
     reply: Sender<Option<Vec<u8>>>,
 }
 
@@ -72,12 +73,14 @@ impl TileWorkers {
         Self { shared }
     }
 
-    /// The JPEG of `source` at `at_secs`, once a worker is free to decode it.
-    pub fn extract(&self, source: &Path, at_secs: f64) -> Option<Vec<u8>> {
+    /// The JPEG of `source` at `at_secs`, at most `max_dim` on its longest side, once a worker
+    /// is free to decode it.
+    pub fn extract(&self, source: &Path, at_secs: f64, max_dim: u32) -> Option<Vec<u8>> {
         let (reply, answer) = channel();
         lock_or_recover(&self.shared.queue).jobs.push_back(Job {
             source: source.to_path_buf(),
             at_secs,
+            max_dim,
             reply,
         });
         self.shared.wake.notify_one();
@@ -136,7 +139,7 @@ fn serve(open: &mut Option<(PathBuf, FrameSampler)>, job: &Job) -> Option<Vec<u8
         // A decoder that failed or ran late may be stuck mid-GOP; start over next time.
         *open = None;
     }
-    encode_jpeg(&frame?, THUMBNAIL_MAX_DIM)
+    encode_jpeg(&frame?, job.max_dim)
 }
 
 #[cfg(test)]
