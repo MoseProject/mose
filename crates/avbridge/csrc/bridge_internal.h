@@ -128,6 +128,20 @@ int filter_encode_write_frame(AVFormatContext *out_ctx, AudioFilterChain *chain,
                                AVCodecContext *enc_ctx, AVStream *out_stream,
                                AVFrame *frame, AVFrame *filt_frame, AVPacket *enc_pkt);
 
+/* Runs the audio graph and encoder of an export on their own thread (audio_worker.c). While one
+   exists, out_ctx->opaque holds the mutex encode_write_packet takes around muxer writes. */
+typedef struct AudioWorker AudioWorker;
+AudioWorker *audio_worker_start(AVFormatContext *out_ctx, AudioFilterChain *chain,
+                                AVCodecContext *encoder, AVStream *stream);
+/* Queues a reference to `frame`; blocks while the queue is full. Negative once the worker failed. */
+int audio_worker_push_frame(AudioWorker *worker, const AVFrame *frame);
+/* Queues a filter command, applied in order with the frames pushed around it. */
+int audio_worker_command(AudioWorker *worker, const char *target, const char *command,
+                         const char *argument);
+/* Stops and frees `*worker` (set to NULL). With `flush`, the graph and encoder are drained first;
+   without, whatever is still queued is dropped. Returns negative if the worker had failed. */
+int audio_worker_finish(AudioWorker **worker, int flush);
+
 typedef struct {
     AVFilterContext *buffersrc_ctx;
     AVFilterContext *buffersink_ctx;
