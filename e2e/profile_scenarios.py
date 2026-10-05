@@ -2,7 +2,7 @@
 # `profile_resources.py` (which gives the general before/after table). Not pytest tests.
 #
 #   python e2e/profile_scenarios.py soak --minutes 10
-#   python e2e/profile_scenarios.py export
+#   python e2e/profile_scenarios.py export [--tracks N]
 #   python e2e/profile_scenarios.py longmedia
 #   python e2e/profile_scenarios.py renderers
 #   python e2e/profile_scenarios.py render
@@ -86,7 +86,7 @@ class App:
 
     def lay_out(self, assets_in_order):
         invoke(self.driver, "add_track", {"kind": "Video"})
-        track = next(t for t in _active_timeline(get_session(self.driver))["tracks"] if t["kind"] == "Video")
+        track = [t for t in _active_timeline(get_session(self.driver))["tracks"] if t["kind"] == "Video"][-1]
         for asset in assets_in_order:
             invoke(self.driver, "add_asset_to_timeline", {"assetId": asset["id"], "trackId": track["id"]})
         return track
@@ -164,7 +164,14 @@ def soak(args):
 def export(args):
     with App(args.exe) as app:
         assets = app.import_clips(["clip1080.mp4"])
-        app.lay_out([assets[0]])
+        for _ in range(args.tracks):
+            app.lay_out([assets[0]])
+        if args.effects:
+            patch = json.loads(os.environ["OCA_FX_PATCH"]) if os.environ.get("OCA_FX_PATCH") else {"brightness": 0.1, "contrast": 1.1, "saturation": 1.2, "flippedH": True, "cropW": 0.9,
+                     "voiceCleanupEnabled": True}
+            for track in _active_timeline(get_session(app.driver))["tracks"]:
+                for clip in track.get("clips", []):
+                    invoke(app.driver, "update_clip", {"clipId": clip["id"], "patch": patch})
         out = REPO_ROOT / "target" / "perf" / f"export_out_{int(time.time())}.mp4"
         out.unlink(missing_ok=True)
         before = len(app.sampler.samples)
@@ -376,6 +383,8 @@ def main():
     parser.add_argument("--minutes", type=float, default=10)
     parser.add_argument("--parts", default="play,edit,undo,seek")
     parser.add_argument("--tag", default="")
+    parser.add_argument("--effects", action="store_true", help="export: colour, flip, crop and voice cleanup on every clip")
+    parser.add_argument("--tracks", type=int, default=1, help="export: video tracks stacked, each with the same clip")
     args = parser.parse_args()
     report = {"soak": soak, "export": export, "longmedia": longmedia, "renderers": renderers, "render": render}[
         args.scenario

@@ -113,7 +113,8 @@ typedef struct {
     AVCodecContext *vdec_ctx;
     int video_in_index;
     int seg_open;     /* index of the segment this decoder was opened for, or -1 */
-    int done;         /* av_read_frame hit EOF / source_out_secs reached */
+    int done;         /* decoder drained / source_out_secs reached */
+    int draining;     /* input hit EOF and the decoder was flushed; only receive remains */
     AVFrame *pending; /* last decoded frame still within range, or NULL */
 } OverlayDecoder;
 
@@ -141,6 +142,7 @@ static void free_overlay_decoder(OverlayDecoder *d) {
     d->video_in_index = -1;
     d->seg_open = -1;
     d->done = 0;
+    d->draining = 0;
 }
 
 /* Open the overlay decoder for `seg`, seeking to `src_seek`. Returns 0 on success. */
@@ -175,6 +177,7 @@ static int open_overlay_decoder(const ClipSegment *seg, double src_seek, Overlay
         return -5;
     }
     d->vdec_ctx->pkt_timebase = d->in_ctx->streams[d->video_in_index]->time_base;
+    bridge_enable_decoder_threads(d->vdec_ctx);
     if (avcodec_open2(d->vdec_ctx, vd, NULL) < 0) {
         avcodec_free_context(&d->vdec_ctx);
         avformat_close_input(&d->in_ctx);
@@ -186,6 +189,7 @@ static int open_overlay_decoder(const ClipSegment *seg, double src_seek, Overlay
     }
     d->seg_open = seg_idx;
     d->done = 0;
+    d->draining = 0;
     return 0;
 }
 
@@ -196,21 +200,24 @@ static int advance_overlay_decoder(OverlayDecoder *d, const ClipSegment *seg, do
                                    AVPacket *tmp_pkt, AVFrame *tmp_frame) {
     if (d->done) return (d->pending != NULL);
     while (1) {
-        if (av_read_frame(d->in_ctx, tmp_pkt) < 0) {
-            d->done = 1;
-            break;
+        if (!d->draining) {
+            if (av_read_frame(d->in_ctx, tmp_pkt) < 0) {
+                /* Frame threading holds frames back: flush so the clip's last frames arrive. */
+                d->draining = 1;
+                avcodec_send_packet(d->vdec_ctx, NULL);
+            } else if (tmp_pkt->stream_index != d->video_in_index) {
+                av_packet_unref(tmp_pkt);
+                continue;
+            } else {
+                int sent = avcodec_send_packet(d->vdec_ctx, tmp_pkt);
+                av_packet_unref(tmp_pkt);
+                if (sent < 0) {
+                    d->done = 1;
+                    break;
+                }
+            }
         }
-        if (tmp_pkt->stream_index != d->video_in_index) {
-            av_packet_unref(tmp_pkt);
-            continue;
-        }
-        int ret = avcodec_send_packet(d->vdec_ctx, tmp_pkt);
-        av_packet_unref(tmp_pkt);
-        if (ret < 0) {
-            d->done = 1;
-            break;
-        }
-        ret = avcodec_receive_frame(d->vdec_ctx, tmp_frame);
+        int ret = avcodec_receive_frame(d->vdec_ctx, tmp_frame);
         if (ret == AVERROR(EAGAIN)) continue;
         if (ret < 0) {
             d->done = 1;
