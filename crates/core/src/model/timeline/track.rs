@@ -266,6 +266,9 @@ impl Track {
             // casing it.
             transition_in: clip.transition_in,
             transition_duration_secs: clip.transition_duration_secs,
+            // The fade-in belongs to the first half, the fade-out to the second.
+            fade_in_secs: 0.0,
+            fade_out_secs: clip.fade_out_secs,
             position_keyframes: position_second,
             scale_keyframes: scale_second,
             rotation_keyframes: rotation_second,
@@ -311,6 +314,7 @@ impl Track {
             privacy_blur_seed_center_y_frac: 0.0,
         };
         clip.source_out_secs = split_source_secs;
+        clip.fade_out_secs = 0.0;
         // First half's own ramp rides from the original start speed to the split boundary's
         // speed — mirrors the second half's own comment above.
         if let Some(speed_at_split) = speed_at_split {

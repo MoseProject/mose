@@ -111,6 +111,8 @@ fn preview_segment(
         voice_cleanup_compressor_threshold_db: params.compressor_threshold_db,
         voice_cleanup_compressor_ratio: params.compressor_ratio,
         voice_cleanup_ceiling_linear: params.ceiling_linear,
+        fade_in_secs: 0.0,
+        fade_out_secs: 0.0,
     }
 }
 

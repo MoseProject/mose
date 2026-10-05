@@ -31,6 +31,8 @@ fn segment() -> avbridge::ClipSegment {
         blend_mode: String::new(),
         anchor_x: 0.5,
         anchor_y: 0.5,
+        fade_in_secs: 0.0,
+        fade_out_secs: 0.0,
     }
 }
 
@@ -77,6 +79,8 @@ fn audio_segment() -> avbridge::AudioSegment {
         voice_cleanup_compressor_threshold_db: -18.0,
         voice_cleanup_compressor_ratio: 3.0,
         voice_cleanup_ceiling_linear: 0.95,
+        fade_in_secs: 0.0,
+        fade_out_secs: 0.0,
     }
 }
 

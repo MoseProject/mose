@@ -58,6 +58,8 @@ fn clip(id: u64, start_secs: f64, source_in_secs: f64, source_out_secs: f64) -> 
         pixelize_intensity: 0.0,
         transition_in: TransitionType::None,
         transition_duration_secs: 0.5,
+        fade_in_secs: 0.0,
+        fade_out_secs: 0.0,
         position_keyframes: vec![],
         scale_keyframes: vec![],
         rotation_keyframes: vec![],

@@ -68,6 +68,8 @@ fn test_clip(
         pixelize_intensity: 0.0,
         transition_in: TransitionType::None,
         transition_duration_secs: 0.5,
+        fade_in_secs: 0.0,
+        fade_out_secs: 0.0,
         position_keyframes: vec![],
         scale_keyframes: vec![],
         rotation_keyframes: vec![],
