@@ -1,7 +1,8 @@
 import { t } from "../i18n";
 import { frameAt, frameStepSecs, peakRange, peaksFor } from "./timelineMedia";
-import { TRACK_HEIGHT } from "../timelineGeometry";
+import { dissolveSpanSecs, TRACK_HEIGHT } from "../timelineGeometry";
 import {
+  clipDuration,
   type ClipInstance,
   type MediaAsset,
   type ShapeClip,
@@ -99,6 +100,26 @@ export function drawClip(
 
   if (asset && asset.has_audio) {
     drawWaveform(ctx, asset, clip, track.kind === "Audio", left, width, top, height, viewWidth);
+  }
+  // A cross-dissolve: the clip overlaps the one before it here, fading in over it.
+  const dissolveWidth = (dissolveSpanSecs(track, clip) / clipDuration(clip)) * width;
+  if (dissolveWidth > 1) {
+    const fade = ctx.createLinearGradient(left, 0, left + dissolveWidth, 0);
+    fade.addColorStop(0, "rgba(255,255,255,0.75)");
+    fade.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = fade;
+    ctx.beginPath();
+    ctx.moveTo(left, top);
+    ctx.lineTo(left + dissolveWidth, top);
+    ctx.lineTo(left, top + height);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(left + dissolveWidth, top);
+    ctx.lineTo(left, top + height);
+    ctx.stroke();
   }
   ctx.fillStyle = "rgba(0,0,0,0.38)";
   ctx.fillRect(left, top, width, 16);

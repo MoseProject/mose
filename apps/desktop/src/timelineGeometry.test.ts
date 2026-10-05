@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   RULER_HEIGHT,
   TRACK_HEIGHT,
+  dissolveSpanSecs,
   findSpan,
   fitPxPerSec,
   hitTest,
@@ -297,5 +298,27 @@ describe("long timelines", () => {
     }
     expect(px).toBe(0.01);
     expect(36000 * px).toBeLessThan(500);
+  });
+});
+
+describe("dissolveSpanSecs", () => {
+  const trackWith = (clips: ClipInstance[]): Track => {
+    return track(1, clips);
+  };
+
+  it("is the real overlap with the clip before, cut to the transition duration", () => {
+    const second = { ...clip(2, 9, 10), transition_in: "Dissolve" as const };
+    second.transition_duration_secs = 1.5;
+    const track = trackWith([clip(1, 0, 10), second]);
+    expect(dissolveSpanSecs(track, second)).toBe(1);
+    second.transition_duration_secs = 0.5;
+    expect(dissolveSpanSecs(track, second)).toBe(0.5);
+  });
+
+  it("is zero without an overlap or for other transitions", () => {
+    const apart = { ...clip(2, 10, 10), transition_in: "Dissolve" as const };
+    expect(dissolveSpanSecs(trackWith([clip(1, 0, 10), apart]), apart)).toBe(0);
+    const fade = { ...clip(2, 9, 10), transition_in: "Fade" as const };
+    expect(dissolveSpanSecs(trackWith([clip(1, 0, 10), fade]), fade)).toBe(0);
   });
 });
