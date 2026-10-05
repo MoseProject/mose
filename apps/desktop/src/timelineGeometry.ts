@@ -2,7 +2,7 @@
 // React and canvas so it is unit-testable, mirroring how the egui timeline keeps its geometry
 // in plain functions (`timeline_panel/draw.rs` takes `(rect, data, px_per_sec)`).
 
-import { clipDuration, type Marker, type Track } from "./types";
+import { clipDuration, type ClipInstance, type Marker, type Track } from "./types";
 
 export const RULER_HEIGHT = 24;
 export const TRACK_HEIGHT = 56;
@@ -74,6 +74,24 @@ export function trackSpans(track: Track): TimelineSpan[] {
     });
   }
   return spans;
+}
+
+/**
+ * Seconds `clip` starts inside the clips before it on `track` while it is a cross-dissolve (its
+ * transition is "Dissolve", cut to the transition duration); 0 for any other clip. The timeline
+ * marks that span at the clip's left edge.
+ */
+export function dissolveSpanSecs(track: Track, clip: ClipInstance): number {
+  if (clip.transition_in !== "Dissolve") {
+    return 0;
+  }
+  let overlap = 0;
+  for (const other of track.clips) {
+    if (other.id !== clip.id && other.start_secs < clip.start_secs) {
+      overlap = Math.max(overlap, other.start_secs + clipDuration(other) - clip.start_secs);
+    }
+  }
+  return overlap > 0.001 ? Math.min(overlap, clip.transition_duration_secs) : 0;
 }
 
 /** The span with `clipId` and the index of its track, across every track. */
