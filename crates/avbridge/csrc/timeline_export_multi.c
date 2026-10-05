@@ -28,38 +28,6 @@
 #include <libavutil/mem.h>
 #include <libavutil/pixdesc.h>
 
-/* Audio's atempo filter takes one fixed parameter, not a `t`-keyed expression, so a smooth
-   per-sample speed ramp isn't achievable on the audio side in this FFmpeg build — the ramp's
-   *average* speed stands in instead (see ClipSegment::smooth_speed_ramp_end_factor's own doc
-   comment in bridge.h for why this is a deliberate, documented approximation, not a bug). Same
-   helper as timeline_export.c's own (kept as an independent static copy per this codebase's
-   existing convention of not sharing per-segment filter-string helpers across these two
-   translation units). */
-static float smooth_speed_ramp_average_speed(const ClipSegment *seg) {
-    if (seg->smooth_speed_ramp_end_factor > 0.0f) {
-        return (seg->speed_factor + seg->smooth_speed_ramp_end_factor) / 2.0f;
-    }
-    return seg->speed_factor;
-}
-
-/* Builds this segment's `setpts=...,` video filter fragment — see timeline_export.c's own copy
-   of this function for the full derivation notes; kept as an independent static copy here for
-   the same reason smooth_speed_ramp_average_speed above is. */
-static void build_setpts_str(const ClipSegment *seg, double source_duration_secs, char *out,
-                              size_t out_size) {
-    out[0] = '\0';
-    double v0 = (double)seg->speed_factor;
-    double v1 = (double)seg->smooth_speed_ramp_end_factor;
-    if (seg->smooth_speed_ramp_end_factor > 0.0f && fabs(v1 - v0) > 1e-4 && v0 > 0.0 &&
-        source_duration_secs > 1e-9) {
-        double k = source_duration_secs / (v1 - v0);
-        double b = (v1 - v0) / source_duration_secs;
-        snprintf(out, out_size, "setpts=(%.10f/TB)*log((%.10f+(%.10f)*T)/%.10f),", k, v0, b, v0);
-    } else if (fabsf(seg->speed_factor - 1.0f) > 1e-4f && seg->speed_factor > 0.0f) {
-        snprintf(out, out_size, "setpts=PTS/%.6f,", (double)seg->speed_factor);
-    }
-}
-
 /* Timeline-elapsed time after `source_elapsed_secs` of `seg`'s own source time have played —
    the C-side twin of core::keyframe::smooth_speed_ramp_duration_secs, needed anywhere this file
    converts a decoded frame's source-relative position into a timeline position for `seg` (e.g.
@@ -775,60 +743,9 @@ EncodeStatus avbridge_encode_timeline_export_multi(
             canonical_sr = adec_ctx0->sample_rate;
             canonical_fmt = adec_ctx0->sample_fmt;
             av_channel_layout_copy(&canonical_ch, &adec_ctx0->ch_layout);
-            const AVCodec *ae = avcodec_find_encoder(AV_CODEC_ID_AAC);
-            if (!ae) {
-                status = ENCODE_ERR_ENCODER;
-                goto seg_cleanup;
-            }
-            char afd[256];
-            snprintf(afd, sizeof(afd),
-                     "atempo@tempo=1.0,volume@vol=0dB,afftdn,loudnorm=I=%.1f:TP=-1.0:LRA=11,"
-                     "alimiter=limit=0.95:attack=5:release=50",
-                     (double)target_lufs);
-            if (init_audio_filter_chain(adec_ctx0, ae, afd, &achain) < 0) {
-                status = ENCODE_ERR_FILTER_GRAPH;
-                goto seg_cleanup;
-            }
-            aenc_ctx = avcodec_alloc_context3(ae);
-            if (!aenc_ctx) {
-                status = ENCODE_ERR_ENCODER;
-                goto seg_cleanup;
-            }
-            aenc_ctx->sample_rate = av_buffersink_get_sample_rate(achain.buffersink_ctx);
-            av_buffersink_get_ch_layout(achain.buffersink_ctx, &aenc_ctx->ch_layout);
-            aenc_ctx->sample_fmt =
-                (enum AVSampleFormat)av_buffersink_get_format(achain.buffersink_ctx);
-            aenc_ctx->bit_rate = 192000;
-            aenc_ctx->time_base = av_buffersink_get_time_base(achain.buffersink_ctx);
-            if (out_ctx->oformat->flags & AVFMT_GLOBALHEADER)
-                aenc_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-            if (avcodec_open2(aenc_ctx, ae, NULL) < 0) {
-                status = ENCODE_ERR_ENCODER;
-                goto seg_cleanup;
-            }
-            if (aenc_ctx->frame_size > 0)
-                av_buffersink_set_frame_size(achain.buffersink_ctx, (unsigned)aenc_ctx->frame_size);
-            aout_stream = avformat_new_stream(out_ctx, NULL);
-            if (!aout_stream ||
-                avcodec_parameters_from_context(aout_stream->codecpar, aenc_ctx) < 0) {
-                status = ENCODE_ERR_NEW_STREAM;
-                goto seg_cleanup;
-            }
-            aout_stream->time_base = aenc_ctx->time_base;
-            if (!(out_ctx->oformat->flags & AVFMT_NOFILE)) {
-                if (avio_open(&out_ctx->pb, out_path, AVIO_FLAG_WRITE) < 0) {
-                    status = ENCODE_ERR_OPEN_OUTPUT;
-                    goto seg_cleanup;
-                }
-            }
-            if (avformat_write_header(out_ctx, NULL) < 0) {
-                status = ENCODE_ERR_WRITE_HEADER;
-                goto seg_cleanup;
-            }
-            /* From here on the audio graph and encoder belong to the worker's thread. */
-            audio_worker = audio_worker_start(out_ctx, &achain, aenc_ctx, aout_stream);
-            if (!audio_worker) {
-                status = ENCODE_ERR_PIPELINE;
+            status = timeline_open_audio_output(out_ctx, adec_ctx0, target_lufs, out_path, &achain,
+                                                &aenc_ctx, &aout_stream, &audio_worker);
+            if (status != ENCODE_OK) {
                 goto seg_cleanup;
             }
         } else if (adec_ctx0->sample_rate != canonical_sr ||
@@ -838,17 +755,7 @@ EncodeStatus avbridge_encode_timeline_export_multi(
             goto seg_cleanup;
         }
 
-        { /* Update gain + tempo for this segment's audio */
-            char gs[32], ts[32];
-            snprintf(gs, sizeof(gs), "%.4fdB", (double)seg0->gain_db);
-            audio_worker_command(audio_worker, "vol", "volume", gs);
-            float sp = smooth_speed_ramp_average_speed(seg0);
-            sp = sp > 0.0f ? sp : 1.0f;
-            if (sp < 0.5f) sp = 0.5f;
-            if (sp > 100.0f) sp = 100.0f;
-            snprintf(ts, sizeof(ts), "%.6f", (double)sp);
-            audio_worker_command(audio_worker, "tempo", "tempo", ts);
-        }
+        timeline_queue_segment_audio_commands(audio_worker, seg0);
 
         if (seg0->source_in_secs > 0.0) {
             av_seek_frame(in_ctx0, -1, (int64_t)(seg0->source_in_secs * AV_TIME_BASE),

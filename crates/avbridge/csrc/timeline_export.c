@@ -25,40 +25,6 @@
 #include <libavutil/channel_layout.h>
 #include <libavutil/pixdesc.h>
 
-/* Audio's atempo filter takes one fixed parameter, not a `t`-keyed expression, so a smooth
-   per-sample speed ramp isn't achievable on the audio side in this FFmpeg build — the ramp's
-   *average* speed stands in instead (see ClipSegment::smooth_speed_ramp_end_factor's own doc
-   comment in bridge.h for why this is a deliberate, documented approximation, not a bug). */
-static float smooth_speed_ramp_average_speed(const ClipSegment *seg) {
-    if (seg->smooth_speed_ramp_end_factor > 0.0f) {
-        return (seg->speed_factor + seg->smooth_speed_ramp_end_factor) / 2.0f;
-    }
-    return seg->speed_factor;
-}
-
-/* Builds this segment's `setpts=...,` video filter fragment (trailing comma included, ready to
-   prepend to the rest of the per-segment chain), or an empty string when speed is neutral
-   (1.0, no ramp). Plain `setpts=PTS/<speed>` for a constant speed_factor, unchanged from before
-   this field existed. When smooth_speed_ramp_end_factor is set, video speed varies linearly in
-   source time from speed_factor to it, so output PTS is the *integral* of 1/speed(t) instead of
-   a constant divisor — works out to a natural-log term (see bridge.h's own derivation notes).
-   Expressed directly in PTS units via the filter's own runtime `TB`/`T` variables, so it's valid
-   regardless of the actual stream timebase rather than needing it baked in at build time. */
-static void build_setpts_str(const ClipSegment *seg, double source_duration_secs, char *out,
-                              size_t out_size) {
-    out[0] = '\0';
-    double v0 = (double)seg->speed_factor;
-    double v1 = (double)seg->smooth_speed_ramp_end_factor;
-    if (seg->smooth_speed_ramp_end_factor > 0.0f && fabs(v1 - v0) > 1e-4 && v0 > 0.0 &&
-        source_duration_secs > 1e-9) {
-        double k = source_duration_secs / (v1 - v0);
-        double b = (v1 - v0) / source_duration_secs;
-        snprintf(out, out_size, "setpts=(%.10f/TB)*log((%.10f+(%.10f)*T)/%.10f),", k, v0, b, v0);
-    } else if (fabsf(seg->speed_factor - 1.0f) > 1e-4f && seg->speed_factor > 0.0f) {
-        snprintf(out, out_size, "setpts=PTS/%.6f,", (double)seg->speed_factor);
-    }
-}
-
 EncodeStatus avbridge_encode_timeline_export(const ClipSegment *segments, int segment_count,
                                              int canvas_width, int canvas_height,
                                              int canvas_fps_num, int canvas_fps_den,
@@ -224,70 +190,9 @@ EncodeStatus avbridge_encode_timeline_export(const ClipSegment *segments, int se
             canonical_sample_fmt = adec_ctx->sample_fmt;
             av_channel_layout_copy(&canonical_ch_layout, &adec_ctx->ch_layout);
 
-            const AVCodec *aencoder = avcodec_find_encoder(AV_CODEC_ID_AAC);
-            if (!aencoder) {
-                status = ENCODE_ERR_ENCODER;
-                goto segment_cleanup;
-            }
-
-            char afilter_descr[256];
-            /* "vol" is a filter-instance name we target later via
-               avfilter_graph_send_command() to change each segment's gain without rebuilding
-               this graph — the value here is just segment 0's own gain, applied the same way
-               right after setup below. */
-            snprintf(afilter_descr, sizeof(afilter_descr),
-                     "atempo@tempo=1.0,volume@vol=0dB,afftdn,loudnorm=I=%.1f:TP=-1.0:LRA=11,"
-                     "alimiter=limit=0.95:attack=5:release=50",
-                     (double)target_lufs);
-            if (init_audio_filter_chain(adec_ctx, aencoder, afilter_descr, &achain) < 0) {
-                status = ENCODE_ERR_FILTER_GRAPH;
-                goto segment_cleanup;
-            }
-
-            aenc_ctx = avcodec_alloc_context3(aencoder);
-            if (!aenc_ctx) {
-                status = ENCODE_ERR_ENCODER;
-                goto segment_cleanup;
-            }
-            aenc_ctx->sample_rate = av_buffersink_get_sample_rate(achain.buffersink_ctx);
-            av_buffersink_get_ch_layout(achain.buffersink_ctx, &aenc_ctx->ch_layout);
-            aenc_ctx->sample_fmt =
-                (enum AVSampleFormat)av_buffersink_get_format(achain.buffersink_ctx);
-            aenc_ctx->bit_rate = 192000;
-            aenc_ctx->time_base = av_buffersink_get_time_base(achain.buffersink_ctx);
-            if (out_ctx->oformat->flags & AVFMT_GLOBALHEADER) {
-                aenc_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-            }
-            if (avcodec_open2(aenc_ctx, aencoder, NULL) < 0) {
-                status = ENCODE_ERR_ENCODER;
-                goto segment_cleanup;
-            }
-            if (aenc_ctx->frame_size > 0) {
-                av_buffersink_set_frame_size(achain.buffersink_ctx, (unsigned)aenc_ctx->frame_size);
-            }
-
-            audio_out_stream = avformat_new_stream(out_ctx, NULL);
-            if (!audio_out_stream ||
-                avcodec_parameters_from_context(audio_out_stream->codecpar, aenc_ctx) < 0) {
-                status = ENCODE_ERR_NEW_STREAM;
-                goto segment_cleanup;
-            }
-            audio_out_stream->time_base = aenc_ctx->time_base;
-
-            if (!(out_ctx->oformat->flags & AVFMT_NOFILE)) {
-                if (avio_open(&out_ctx->pb, out_path, AVIO_FLAG_WRITE) < 0) {
-                    status = ENCODE_ERR_OPEN_OUTPUT;
-                    goto segment_cleanup;
-                }
-            }
-            if (avformat_write_header(out_ctx, NULL) < 0) {
-                status = ENCODE_ERR_WRITE_HEADER;
-                goto segment_cleanup;
-            }
-            /* From here on the audio graph and encoder belong to the worker's thread. */
-            audio_worker = audio_worker_start(out_ctx, &achain, aenc_ctx, audio_out_stream);
-            if (!audio_worker) {
-                status = ENCODE_ERR_PIPELINE;
+            status = timeline_open_audio_output(out_ctx, adec_ctx, target_lufs, out_path, &achain,
+                                                &aenc_ctx, &audio_out_stream, &audio_worker);
+            if (status != ENCODE_OK) {
                 goto segment_cleanup;
             }
         } else if (adec_ctx->sample_rate != canonical_sample_rate ||
@@ -297,19 +202,7 @@ EncodeStatus avbridge_encode_timeline_export(const ClipSegment *segments, int se
             goto segment_cleanup;
         }
 
-        {
-            char gain_str[32];
-            snprintf(gain_str, sizeof(gain_str), "%.4fdB", (double)seg->gain_db);
-            audio_worker_command(audio_worker, "vol", "volume", gain_str);
-
-            float spd = smooth_speed_ramp_average_speed(seg);
-            spd = spd > 0.0f ? spd : 1.0f;
-            if (spd < 0.5f) spd = 0.5f;
-            if (spd > 100.0f) spd = 100.0f;
-            char tempo_str[32];
-            snprintf(tempo_str, sizeof(tempo_str), "%.6f", (double)spd);
-            audio_worker_command(audio_worker, "tempo", "tempo", tempo_str);
-        }
+        timeline_queue_segment_audio_commands(audio_worker, seg);
 
         /* Per-segment video filter chain: canvas-conform (scale/pad/fps, so every segment
            lands on the same output dimensions/frame rate) + this clip's own effect filters +

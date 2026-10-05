@@ -102,6 +102,12 @@ AVCodecContext *open_video_encoder(GpuEncoderPreference preference, int canvas_w
                                         int64_t canvas_bit_rate_bps, int global_header,
                                         int *out_used_gpu, enum AVPixelFormat *out_pix_fmt);
 
+/* Speed handling shared by the single- and multi-track timeline exports. All defined in
+   timeline_common.c. */
+float smooth_speed_ramp_average_speed(const ClipSegment *seg);
+void build_setpts_str(const ClipSegment *seg, double source_duration_secs, char *out,
+                      size_t out_size);
+
 /* Opens the encoder for a pass that re-encodes an already exported file (text, shape and privacy
    blur overlays): hardware when one opens with yuv420p input, else the CPU encoder. Their filter
    graphs end in yuv420p, so an encoder that wants another format is not used. NULL on failure. */
@@ -147,6 +153,22 @@ int audio_worker_command(AudioWorker *worker, const char *target, const char *co
 /* Stops and frees `*worker` (set to NULL). With `flush`, the graph and encoder are drained first;
    without, whatever is still queued is dropped. Returns negative if the worker had failed. */
 int audio_worker_finish(AudioWorker **worker, int flush);
+
+/* Speed handling and audio output shared by the single- and multi-track timeline exports. All
+   defined in timeline_common.c. */
+float smooth_speed_ramp_average_speed(const ClipSegment *seg);
+void build_setpts_str(const ClipSegment *seg, double source_duration_secs, char *out,
+                      size_t out_size);
+/* Builds the export's audio graph and AAC encoder from `adec_ctx`, adds the audio stream, opens
+   the output file, writes the container header (the video stream must already exist) and starts
+   the audio worker. `*aenc_ctx`, `*audio_stream` and `*worker` are set as far as setup got, so
+   the caller's cleanup can free what exists after a failure. */
+EncodeStatus timeline_open_audio_output(AVFormatContext *out_ctx, AVCodecContext *adec_ctx,
+                                        float target_lufs, const char *out_path,
+                                        AudioFilterChain *achain, AVCodecContext **aenc_ctx,
+                                        AVStream **audio_stream, AudioWorker **worker);
+/* Queues the gain and tempo changes `seg` needs, ahead of its audio frames. */
+void timeline_queue_segment_audio_commands(AudioWorker *worker, const ClipSegment *seg);
 
 /* Result of a re-encode pass; the values equal TextOverlayStatus and PrivacyBlurStatus, which
    the callers convert it to. */
