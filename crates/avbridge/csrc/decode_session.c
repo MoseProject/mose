@@ -10,9 +10,9 @@
 #include <libavformat/avformat.h>
 #include <libavutil/hwcontext.h>
 #include <libavutil/imgutils.h>
+#include <libavutil/mem.h>
 #include <libavutil/opt.h>
 #include <libavutil/pixdesc.h>
-#include <libavutil/mem.h>
 #include <libswscale/swscale.h>
 
 enum { MAX_RGBA_FRAME_BYTES = 256 * 1024 * 1024 };
@@ -60,11 +60,15 @@ static void close_session(AvbridgeDecodeSession *session) {
 #ifdef _WIN32
 #include <windows.h>
 static volatile LONG device_lock;
-#define LOCK_DEVICES() while (InterlockedExchange(&device_lock, 1)) Sleep(0)
+#define LOCK_DEVICES()                                                                             \
+    while (InterlockedExchange(&device_lock, 1))                                                   \
+    Sleep(0)
 #define UNLOCK_DEVICES() InterlockedExchange(&device_lock, 0)
 #else
 static volatile int device_lock;
-#define LOCK_DEVICES() while (__sync_lock_test_and_set(&device_lock, 1)) {}
+#define LOCK_DEVICES()                                                                             \
+    while (__sync_lock_test_and_set(&device_lock, 1)) {                                            \
+    }
 #define UNLOCK_DEVICES() __sync_lock_release(&device_lock)
 #endif
 
@@ -77,7 +81,8 @@ static AVBufferRef *acquire_device(enum AVHWDeviceType type) {
     LOCK_DEVICES();
     if (!cached_devices[type]) {
         AVBufferRef *created = NULL;
-        if (av_hwdevice_ctx_create(&created, type, NULL, NULL, 0) >= 0) cached_devices[type] = created;
+        if (av_hwdevice_ctx_create(&created, type, NULL, NULL, 0) >= 0)
+            cached_devices[type] = created;
     }
     AVBufferRef *reference = cached_devices[type] ? av_buffer_ref(cached_devices[type]) : NULL;
     UNLOCK_DEVICES();
@@ -86,7 +91,8 @@ static AVBufferRef *acquire_device(enum AVHWDeviceType type) {
 
 void avbridge_hw_device_cache_clear(void) {
     LOCK_DEVICES();
-    for (int type = 0; type < MAX_CACHED_DEVICE_TYPES; type++) av_buffer_unref(&cached_devices[type]);
+    for (int type = 0; type < MAX_CACHED_DEVICE_TYPES; type++)
+        av_buffer_unref(&cached_devices[type]);
     UNLOCK_DEVICES();
 }
 
@@ -151,8 +157,7 @@ static int try_hardware(AvbridgeDecodeSession *session, const AVCodec *codec) {
 }
 
 DecodeStatus avbridge_decode_open_ex(const char *path, int hardware,
-                                     AvbridgeDecodeSession **out_session,
-                                     DecodeInfo *out_info) {
+                                     AvbridgeDecodeSession **out_session, DecodeInfo *out_info) {
     if (!path || !out_session || !out_info) return DECODE_ERR_OPEN_INPUT;
     *out_session = NULL;
 
@@ -166,8 +171,8 @@ DecodeStatus avbridge_decode_open_ex(const char *path, int hardware,
         close_session(session);
         return DECODE_ERR_STREAM_INFO;
     }
-    session->stream_index = av_find_best_stream(session->format, AVMEDIA_TYPE_VIDEO, -1, -1,
-                                                NULL, 0);
+    session->stream_index =
+        av_find_best_stream(session->format, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0);
     if (session->stream_index < 0) {
         close_session(session);
         return DECODE_ERR_NO_VIDEO_STREAM;
@@ -245,8 +250,8 @@ DecodeStatus avbridge_decode_open(const char *path, AvbridgeDecodeSession **out_
 DecodeStatus avbridge_decode_seek(AvbridgeDecodeSession *session, double timestamp_secs) {
     if (!session || !isfinite(timestamp_secs) || timestamp_secs < 0.0) return DECODE_ERR_SEEK;
     AVStream *stream = session->format->streams[session->stream_index];
-    int64_t target = av_rescale_q((int64_t)(timestamp_secs * AV_TIME_BASE), AV_TIME_BASE_Q,
-                                  stream->time_base);
+    int64_t target =
+        av_rescale_q((int64_t)(timestamp_secs * AV_TIME_BASE), AV_TIME_BASE_Q, stream->time_base);
     if (av_seek_frame(session->format, session->stream_index, target, AVSEEK_FLAG_BACKWARD) < 0)
         return DECODE_ERR_SEEK;
     avcodec_flush_buffers(session->decoder);
@@ -273,7 +278,8 @@ static DecodeStatus copy_rgba(AvbridgeDecodeSession *session, AVFrame *frame,
     if (!pixels) return DECODE_ERR_FRAME_SIZE;
     uint8_t *dst_data[4] = {0};
     int dst_linesize[4] = {0};
-    if (av_image_fill_arrays(dst_data, dst_linesize, pixels, AV_PIX_FMT_RGBA, width, height, 1) < 0) {
+    if (av_image_fill_arrays(dst_data, dst_linesize, pixels, AV_PIX_FMT_RGBA, width, height, 1) <
+        0) {
         av_free(pixels);
         return DECODE_ERR_FRAME_SIZE;
     }
@@ -415,4 +421,6 @@ void avbridge_decode_free_frame(DecodedRgbaFrame *frame) {
     memset(frame, 0, sizeof(*frame));
 }
 
-void avbridge_decode_close(AvbridgeDecodeSession *session) { close_session(session); }
+void avbridge_decode_close(AvbridgeDecodeSession *session) {
+    close_session(session);
+}

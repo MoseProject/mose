@@ -31,7 +31,7 @@
    filter_desc grow without limit -- e.g. a pathologically large user-drawn polygon. Generous
    enough for any realistic shape (hundreds of vertices, each ray-casting term is roughly
    150-250 bytes, repeated per color channel) without being a true "unbounded" allocation. */
-#define SHAPE_OVERLAY_SEG_MAX (256 * 1024)
+#define SHAPE_OVERLAY_SEG_MAX ((size_t)256 * 1024)
 
 /* Opens `in_path`, chains each segment's pre-built geq filter node, and writes the result to
    `out_path` — structurally identical to avbridge_apply_text_overlays (see that function's
@@ -91,9 +91,9 @@ TextOverlayStatus avbridge_apply_shape_overlays(const char *in_path, const char 
         filter_str[pos] = '\0';
     }
 
-    status = (TextOverlayStatus)avbridge_reencode_with_filter(in_path, out_path, filter_str, canvas_width,
-                                                       canvas_height, canvas_fps_num, canvas_fps_den,
-                                                       0);
+    status = (TextOverlayStatus)avbridge_reencode_with_filter(in_path, out_path, filter_str,
+                                                              canvas_width, canvas_height,
+                                                              canvas_fps_num, canvas_fps_den, 0);
 
 cleanup:
     av_free(filter_str);

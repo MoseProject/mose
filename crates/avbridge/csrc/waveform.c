@@ -44,17 +44,16 @@ static int init_waveform_filter_chain(AVCodecContext *dec_ctx, AudioFilterChain 
     }
 
     av_channel_layout_describe(&dec_ctx->ch_layout, chlayout_str, sizeof(chlayout_str));
-    snprintf(args, sizeof(args),
-             "time_base=1/%d:sample_rate=%d:sample_fmt=%s:channel_layout=%s",
+    snprintf(args, sizeof(args), "time_base=1/%d:sample_rate=%d:sample_fmt=%s:channel_layout=%s",
              dec_ctx->sample_rate, dec_ctx->sample_rate,
              av_get_sample_fmt_name(dec_ctx->sample_fmt), chlayout_str);
 
     ret = avfilter_graph_create_filter(&chain->buffersrc_ctx, buffersrc, "in", args, NULL,
-                                        chain->graph);
+                                       chain->graph);
     if (ret < 0) goto end;
 
     ret = avfilter_graph_create_filter(&chain->buffersink_ctx, buffersink, "out", NULL, NULL,
-                                        chain->graph);
+                                       chain->graph);
     if (ret < 0) goto end;
 
     outputs->name = av_strdup("in");
@@ -68,7 +67,7 @@ static int init_waveform_filter_chain(AVCodecContext *dec_ctx, AudioFilterChain 
     inputs->next = NULL;
 
     ret = avfilter_graph_parse_ptr(chain->graph, "aformat=sample_fmts=flt:channel_layouts=mono",
-                                    &inputs, &outputs, NULL);
+                                   &inputs, &outputs, NULL);
     if (ret < 0) goto end;
 
     ret = avfilter_graph_config(chain->graph, NULL);
@@ -110,7 +109,7 @@ static void accumulate_waveform_frame(WaveformAccumulator *acc, const AVFrame *f
 /* Pushes one decoded frame through the mono-downmix graph and accumulates every filtered
    sample into `acc`'s min/max buckets. Pass frame=NULL to flush. */
 static int drain_waveform_frame(AudioFilterChain *chain, AVFrame *frame, AVFrame *filt_frame,
-                                 WaveformAccumulator *acc) {
+                                WaveformAccumulator *acc) {
     int ret = av_buffersrc_add_frame(chain->buffersrc_ctx, frame);
     if (ret < 0) return ret;
 
@@ -126,8 +125,8 @@ static int drain_waveform_frame(AudioFilterChain *chain, AVFrame *frame, AVFrame
     }
 }
 
-WaveformStatus avbridge_generate_waveform(const char *in_path, int bucket_count,
-                                                  float *out_min, float *out_max) {
+WaveformStatus avbridge_generate_waveform(const char *in_path, int bucket_count, float *out_min,
+                                          float *out_max) {
     AVFormatContext *in_ctx = NULL;
     AVCodecContext *dec_ctx = NULL;
     AudioFilterChain chain = {0};
@@ -150,8 +149,10 @@ WaveformStatus avbridge_generate_waveform(const char *in_path, int bucket_count,
     }
 
     switch (open_input(in_path, &in_ctx)) {
-        case -1: return WAVEFORM_ERR_OPEN_INPUT;
-        case -2: return WAVEFORM_ERR_STREAM_INFO;
+    case -1:
+        return WAVEFORM_ERR_OPEN_INPUT;
+    case -2:
+        return WAVEFORM_ERR_STREAM_INFO;
     }
 
     for (unsigned int i = 0; i < in_ctx->nb_streams; i++) {

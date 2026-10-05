@@ -106,6 +106,10 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
+      - name: Check C formatting
+        shell: pwsh
+        run: clang-format --dry-run -Werror (Get-ChildItem crates/avbridge/csrc -Include *.c,*.h -Recurse).FullName
+
       - name: Clippy
         run: cargo clippy --workspace --all-targets
 

@@ -35,7 +35,7 @@ void free_audio_filter_chain(AudioFilterChain *chain) {
    this, avcodec_open2() on the encoder can reject whatever raw format the filter chain
    happens to produce. */
 int init_audio_filter_chain(AVCodecContext *dec_ctx, const AVCodec *encoder,
-                             const char *filter_descr, AudioFilterChain *chain) {
+                            const char *filter_descr, AudioFilterChain *chain) {
     char args[512];
     char chlayout_str[64];
     const AVFilter *buffersrc = avfilter_get_by_name("abuffer");
@@ -53,13 +53,12 @@ int init_audio_filter_chain(AVCodecContext *dec_ctx, const AVCodec *encoder,
     }
 
     av_channel_layout_describe(&dec_ctx->ch_layout, chlayout_str, sizeof(chlayout_str));
-    snprintf(args, sizeof(args),
-             "time_base=1/%d:sample_rate=%d:sample_fmt=%s:channel_layout=%s",
+    snprintf(args, sizeof(args), "time_base=1/%d:sample_rate=%d:sample_fmt=%s:channel_layout=%s",
              dec_ctx->sample_rate, dec_ctx->sample_rate,
              av_get_sample_fmt_name(dec_ctx->sample_fmt), chlayout_str);
 
     ret = avfilter_graph_create_filter(&chain->buffersrc_ctx, buffersrc, "in", args, NULL,
-                                        chain->graph);
+                                       chain->graph);
     if (ret < 0) goto end;
 
     /* abuffersink, built in two steps (alloc, then init) instead of the one-shot
@@ -81,11 +80,11 @@ int init_audio_filter_chain(AVCodecContext *dec_ctx, const AVCodec *encoder,
         const enum AVSampleFormat *sample_fmts = NULL;
         int num_sample_fmts = 0;
         if (avcodec_get_supported_config(NULL, encoder, AV_CODEC_CONFIG_SAMPLE_FORMAT, 0,
-                                          (const void **)&sample_fmts, &num_sample_fmts) == 0 &&
+                                         (const void **)&sample_fmts, &num_sample_fmts) == 0 &&
             sample_fmts && num_sample_fmts > 0) {
-            ret = av_opt_set_array(chain->buffersink_ctx, "sample_formats",
-                                    AV_OPT_SEARCH_CHILDREN, 0, (unsigned)num_sample_fmts,
-                                    AV_OPT_TYPE_SAMPLE_FMT, sample_fmts);
+            ret =
+                av_opt_set_array(chain->buffersink_ctx, "sample_formats", AV_OPT_SEARCH_CHILDREN, 0,
+                                 (unsigned)num_sample_fmts, AV_OPT_TYPE_SAMPLE_FMT, sample_fmts);
             if (ret < 0) goto end;
         }
     }
@@ -94,7 +93,7 @@ int init_audio_filter_chain(AVCodecContext *dec_ctx, const AVCodec *encoder,
         const int *sample_rates = NULL;
         int num_sample_rates = 0;
         if (avcodec_get_supported_config(NULL, encoder, AV_CODEC_CONFIG_SAMPLE_RATE, 0,
-                                          (const void **)&sample_rates, &num_sample_rates) == 0 &&
+                                         (const void **)&sample_rates, &num_sample_rates) == 0 &&
             sample_rates && num_sample_rates > 0) {
             /* Prefer the source's own rate when the encoder already accepts it — negotiation
                otherwise doesn't necessarily pick the closest/cheapest match from the allowed
@@ -108,13 +107,12 @@ int init_audio_filter_chain(AVCodecContext *dec_ctx, const AVCodec *encoder,
                 }
             }
             if (source_rate_ok) {
-                ret = av_opt_set_array(chain->buffersink_ctx, "samplerates",
-                                        AV_OPT_SEARCH_CHILDREN, 0, 1, AV_OPT_TYPE_INT,
-                                        &dec_ctx->sample_rate);
+                ret = av_opt_set_array(chain->buffersink_ctx, "samplerates", AV_OPT_SEARCH_CHILDREN,
+                                       0, 1, AV_OPT_TYPE_INT, &dec_ctx->sample_rate);
             } else {
-                ret = av_opt_set_array(chain->buffersink_ctx, "samplerates",
-                                        AV_OPT_SEARCH_CHILDREN, 0, (unsigned)num_sample_rates,
-                                        AV_OPT_TYPE_INT, sample_rates);
+                ret =
+                    av_opt_set_array(chain->buffersink_ctx, "samplerates", AV_OPT_SEARCH_CHILDREN,
+                                     0, (unsigned)num_sample_rates, AV_OPT_TYPE_INT, sample_rates);
             }
             if (ret < 0) goto end;
         }
@@ -149,8 +147,8 @@ end:
 
 /* Drains every packet the encoder has ready and writes it. Pass frame=NULL once, at the end,
    to flush. */
-int encode_write_packet(AVFormatContext *out_ctx, AVCodecContext *enc_ctx,
-                         AVStream *out_stream, AVFrame *frame, AVPacket *enc_pkt) {
+int encode_write_packet(AVFormatContext *out_ctx, AVCodecContext *enc_ctx, AVStream *out_stream,
+                        AVFrame *frame, AVPacket *enc_pkt) {
     AVFrame *hw_frame = NULL;
     AVFrame *frame_to_send = frame;
 
@@ -206,8 +204,8 @@ int encode_write_packet(AVFormatContext *out_ctx, AVCodecContext *enc_ctx,
    produces in response (a loudnorm/alimiter chain doesn't emit 1:1 with its input). Pass
    frame=NULL once, at the end, to flush the filter graph itself. */
 int filter_encode_write_frame(AVFormatContext *out_ctx, AudioFilterChain *chain,
-                               AVCodecContext *enc_ctx, AVStream *out_stream,
-                               AVFrame *frame, AVFrame *filt_frame, AVPacket *enc_pkt) {
+                              AVCodecContext *enc_ctx, AVStream *out_stream, AVFrame *frame,
+                              AVFrame *filt_frame, AVPacket *enc_pkt) {
     int ret = av_buffersrc_add_frame(chain->buffersrc_ctx, frame);
     if (ret < 0) return ret;
 
@@ -236,7 +234,7 @@ void free_video_filter_chain(VideoFilterChain *chain) {
    the caller), which pins the sink's output format directly instead of constraining the sink
    via options. */
 int init_video_filter_chain(AVCodecContext *dec_ctx, const char *filter_descr,
-                             VideoFilterChain *chain) {
+                            VideoFilterChain *chain) {
     char args[512];
     const AVFilter *buffersrc = avfilter_get_by_name("buffer");
     const AVFilter *buffersink = avfilter_get_by_name("buffersink");
@@ -257,17 +255,16 @@ int init_video_filter_chain(AVCodecContext *dec_ctx, const char *filter_descr,
         goto end;
     }
 
-    snprintf(args, sizeof(args),
-             "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d", dec_ctx->width,
-             dec_ctx->height, dec_ctx->pix_fmt, dec_ctx->pkt_timebase.num,
+    snprintf(args, sizeof(args), "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d",
+             dec_ctx->width, dec_ctx->height, dec_ctx->pix_fmt, dec_ctx->pkt_timebase.num,
              dec_ctx->pkt_timebase.den, sar.num, sar.den);
 
     ret = avfilter_graph_create_filter(&chain->buffersrc_ctx, buffersrc, "in", args, NULL,
-                                        chain->graph);
+                                       chain->graph);
     if (ret < 0) goto end;
 
     ret = avfilter_graph_create_filter(&chain->buffersink_ctx, buffersink, "out", NULL, NULL,
-                                        chain->graph);
+                                       chain->graph);
     if (ret < 0) goto end;
 
     outputs->name = av_strdup("in");
@@ -302,9 +299,8 @@ end:
    segment boundaries so concatenated segments produce continuous timestamps. Pass frame=NULL
    once, at the end, to flush the filter graph itself. */
 int filter_encode_write_video_frame(AVFormatContext *out_ctx, VideoFilterChain *chain,
-                                     AVCodecContext *enc_ctx, AVStream *out_stream,
-                                     AVFrame *frame, AVFrame *filt_frame,
-                                     int64_t *next_pts, AVPacket *enc_pkt) {
+                                    AVCodecContext *enc_ctx, AVStream *out_stream, AVFrame *frame,
+                                    AVFrame *filt_frame, int64_t *next_pts, AVPacket *enc_pkt) {
     int ret = av_buffersrc_add_frame(chain->buffersrc_ctx, frame);
     if (ret < 0) return ret;
 

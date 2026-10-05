@@ -361,7 +361,6 @@ static int init_overlay_graph(AVCodecContext *vdec0, const char *f0, OverlayTrac
         }
         av_bprintf(&description, "[%s]%s[layer%d];", input_label, layer_filter, i + 1);
 
-        const char *layer_label = "layer";
         char composited_label[32];
         snprintf(composited_label, sizeof(composited_label), "layer%d", i + 1);
         if (track->matte_active) {
@@ -383,8 +382,7 @@ static int init_overlay_graph(AVCodecContext *vdec0, const char *f0, OverlayTrac
             av_bprintf(&description,
                        "[%s]%s,format=gray[matte%d];[layer%d][matte%d]alphamerge[layera%d];",
                        matte_input_label, matte_filter, i + 1, i + 1, i + 1, i + 1);
-            layer_label = "layera";
-            snprintf(composited_label, sizeof(composited_label), "%s%d", layer_label, i + 1);
+            snprintf(composited_label, sizeof(composited_label), "layera%d", i + 1);
         }
 
         /* A blend mode replaces overlay entirely for this layer, per ClipSegment::blend_mode's

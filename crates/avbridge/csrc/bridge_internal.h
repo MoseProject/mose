@@ -40,7 +40,8 @@ static inline void bridge_enable_decoder_threads(AVCodecContext *ctx) {
 /* Mastering every export's audio goes through: denoise, loudness to the target, true-peak limit. */
 #define MASTERING_LOUDNORM_ARGS_FORMAT "I=%.1f:TP=-1.0:LRA=11"
 #define MASTERING_LIMITER_ARGS "limit=0.95:attack=5:release=50"
-#define MASTERING_FILTER_FORMAT     "afftdn,loudnorm=" MASTERING_LOUDNORM_ARGS_FORMAT ",alimiter=" MASTERING_LIMITER_ARGS
+#define MASTERING_FILTER_FORMAT                                                                    \
+    "afftdn,loudnorm=" MASTERING_LOUDNORM_ARGS_FORMAT ",alimiter=" MASTERING_LIMITER_ARGS
 
 /* Sample rate and AAC bitrate of an exported mix, and the bitrate of a proxy's audio. */
 #define EXPORT_AUDIO_SAMPLE_RATE 48000
@@ -75,18 +76,17 @@ typedef enum {
 
 /* Opens a video H.264 encoder AVCodecContext sized for canvas_width/canvas_height/canvas_fps
    at canvas_bit_rate_bps, honoring `preference`. Tries the requested hardware encoder(s) first
-   (AUTO tries all four cross-platform candidates and VideoToolbox on macOS). Each software-frame candidate's requested pixel
-   format comes from
-   gpu_encoder.c's pix_fmt_for_encoder_name(): AV_PIX_FMT_YUV420P for every encoder except
-   h264_qsv, which gets AV_PIX_FMT_NV12. The filter chains conform each segment to the selected
-   format. This split exists because h264_qsv was empirically observed on
-   this dev machine's FFmpeg build to reject yuv420p outright ("Specified pixel format yuv420p
-   is not supported by the h264_qsv encoder", listing only nv12/qsv as supported) even without
-   real Quick Sync hardware present — a mismatch indistinguishable, before this fix, from "no
-   GPU/driver available", so it always fell through to the CPU fallback. avcodec_open2() still
-   fails at runtime for the ordinary "no compatible GPU/driver" case too — that's still treated
-   identically here as "unavailable, fall back to CPU", it just no longer also catches Quick
-   Sync's format mismatch.
+   (AUTO tries all four cross-platform candidates and VideoToolbox on macOS). Each software-frame
+   candidate's requested pixel format comes from gpu_encoder.c's pix_fmt_for_encoder_name():
+   AV_PIX_FMT_YUV420P for every encoder except h264_qsv, which gets AV_PIX_FMT_NV12. The filter
+   chains conform each segment to the selected format. This split exists because h264_qsv was
+   empirically observed on this dev machine's FFmpeg build to reject yuv420p outright ("Specified
+   pixel format yuv420p is not supported by the h264_qsv encoder", listing only nv12/qsv as
+   supported) even without real Quick Sync hardware present — a mismatch indistinguishable, before
+   this fix, from "no GPU/driver available", so it always fell through to the CPU fallback.
+   avcodec_open2() still fails at runtime for the ordinary "no compatible GPU/driver" case too —
+   that's still treated identically here as "unavailable, fall back to CPU", it just no longer also
+   catches Quick Sync's format mismatch.
 
    NVENC/AMF didn't reach the pix_fmt check at all on this machine (no NVIDIA GPU; AMD's
    amfrt64.dll isn't present), so whether they accept yuv420p directly on real hardware remains
@@ -117,9 +117,9 @@ typedef enum {
    libx264 is available). Caller owns the returned AVCodecContext (not yet
    attached to any AVStream). Defined in gpu_encoder.c. */
 AVCodecContext *open_video_encoder(GpuEncoderPreference preference, int canvas_width,
-                                        int canvas_height, AVRational canvas_fps,
-                                        int64_t canvas_bit_rate_bps, int global_header,
-                                        int *out_used_gpu, enum AVPixelFormat *out_pix_fmt);
+                                   int canvas_height, AVRational canvas_fps,
+                                   int64_t canvas_bit_rate_bps, int global_header,
+                                   int *out_used_gpu, enum AVPixelFormat *out_pix_fmt);
 
 /* Speed handling shared by the single- and multi-track timeline exports. All defined in
    timeline_common.c. */
@@ -152,19 +152,20 @@ typedef struct {
 /* All defined in filters.c. */
 void free_audio_filter_chain(AudioFilterChain *chain);
 int init_audio_filter_chain(AVCodecContext *dec_ctx, const AVCodec *encoder,
-                             const char *filter_descr, AudioFilterChain *chain);
-int encode_write_packet(AVFormatContext *out_ctx, AVCodecContext *enc_ctx,
-                         AVStream *out_stream, AVFrame *frame, AVPacket *enc_pkt);
+                            const char *filter_descr, AudioFilterChain *chain);
+int encode_write_packet(AVFormatContext *out_ctx, AVCodecContext *enc_ctx, AVStream *out_stream,
+                        AVFrame *frame, AVPacket *enc_pkt);
 int filter_encode_write_frame(AVFormatContext *out_ctx, AudioFilterChain *chain,
-                               AVCodecContext *enc_ctx, AVStream *out_stream,
-                               AVFrame *frame, AVFrame *filt_frame, AVPacket *enc_pkt);
+                              AVCodecContext *enc_ctx, AVStream *out_stream, AVFrame *frame,
+                              AVFrame *filt_frame, AVPacket *enc_pkt);
 
 /* Runs the audio graph and encoder of an export on their own thread (audio_worker.c). While one
    exists, out_ctx->opaque holds the mutex encode_write_packet takes around muxer writes. */
 typedef struct AudioWorker AudioWorker;
 AudioWorker *audio_worker_start(AVFormatContext *out_ctx, AudioFilterChain *chain,
                                 AVCodecContext *encoder, AVStream *stream);
-/* Queues a reference to `frame`; blocks while the queue is full. Negative once the worker failed. */
+/* Queues a reference to `frame`; blocks while the queue is full. Negative once the worker failed.
+ */
 int audio_worker_push_frame(AudioWorker *worker, const AVFrame *frame);
 /* Queues a filter command, applied in order with the frames pushed around it. */
 int audio_worker_command(AudioWorker *worker, const char *target, const char *command,
@@ -178,9 +179,8 @@ int audio_worker_finish(AudioWorker **worker, int flush);
 float smooth_speed_ramp_average_speed(const ClipSegment *seg);
 void build_setpts_str(const ClipSegment *seg, double source_duration_secs, char *out,
                       size_t out_size);
-int build_segment_vfilter(const ClipSegment *seg, int canvas_width, int canvas_height,
-                          int fps_num, int fps_den, const char *pix_fmt_name, char *buf,
-                          size_t cap);
+int build_segment_vfilter(const ClipSegment *seg, int canvas_width, int canvas_height, int fps_num,
+                          int fps_den, const char *pix_fmt_name, char *buf, size_t cap);
 /* Builds the export's audio graph and AAC encoder from `adec_ctx`, adds the audio stream, opens
    the output file, writes the container header (the video stream must already exist) and starts
    the audio worker. `*aenc_ctx`, `*audio_stream` and `*worker` are set as far as setup got, so
@@ -209,8 +209,7 @@ typedef enum {
 ReencodeStatus avbridge_reencode_with_filter(const char *in_path, const char *out_path,
                                              const char *filter_desc, int canvas_width,
                                              int canvas_height, int canvas_fps_num,
-                                             int canvas_fps_den,
-                                             int bound_output_to_input_frames);
+                                             int canvas_fps_den, int bound_output_to_input_frames);
 
 typedef struct {
     AVFilterContext *buffersrc_ctx;
@@ -221,10 +220,9 @@ typedef struct {
 /* All defined in filters.c. */
 void free_video_filter_chain(VideoFilterChain *chain);
 int init_video_filter_chain(AVCodecContext *dec_ctx, const char *filter_descr,
-                             VideoFilterChain *chain);
+                            VideoFilterChain *chain);
 int filter_encode_write_video_frame(AVFormatContext *out_ctx, VideoFilterChain *chain,
-                                     AVCodecContext *enc_ctx, AVStream *out_stream,
-                                     AVFrame *frame, AVFrame *filt_frame,
-                                     int64_t *next_pts, AVPacket *enc_pkt);
+                                    AVCodecContext *enc_ctx, AVStream *out_stream, AVFrame *frame,
+                                    AVFrame *filt_frame, int64_t *next_pts, AVPacket *enc_pkt);
 
 #endif

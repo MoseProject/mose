@@ -30,8 +30,7 @@
 ReencodeStatus avbridge_reencode_with_filter(const char *in_path, const char *out_path,
                                              const char *filter_desc, int canvas_width,
                                              int canvas_height, int canvas_fps_num,
-                                             int canvas_fps_den,
-                                             int bound_output_to_input_frames) {
+                                             int canvas_fps_den, int bound_output_to_input_frames) {
     ReencodeStatus status = REENCODE_OK;
     AVFormatContext *in_ctx = NULL;
     AVFormatContext *out_ctx = NULL;
@@ -50,7 +49,7 @@ ReencodeStatus avbridge_reencode_with_filter(const char *in_path, const char *ou
     int64_t frames_fed = 0; /* frames pushed into the filtergraph */
     AVRational canvas_fps = {canvas_fps_num, canvas_fps_den};
 
-        /* Open input */
+    /* Open input */
     if (open_input(in_path, &in_ctx) != 0) {
         status = REENCODE_ERR_OPEN_INPUT;
         goto cleanup;

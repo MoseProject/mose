@@ -39,12 +39,13 @@ static int g_loudness_log_print_prefix = 1;
 static void loudness_log_callback(void *avcl, int level, const char *fmt, va_list vl) {
     /* loudnorm's JSON report prints at AV_LOG_INFO; anything noisier (DEBUG/VERBOSE) is not
        needed and anything we'd want less of would print at WARNING or above regardless. */
-    if (level > AV_LOG_INFO || !g_loudness_log_buf || g_loudness_log_len + 1 >= g_loudness_log_cap) {
+    if (level > AV_LOG_INFO || !g_loudness_log_buf ||
+        g_loudness_log_len + 1 >= g_loudness_log_cap) {
         return;
     }
     char line[1024];
-    int written = av_log_format_line2(avcl, level, fmt, vl, line, sizeof(line),
-                                       &g_loudness_log_print_prefix);
+    int written =
+        av_log_format_line2(avcl, level, fmt, vl, line, sizeof(line), &g_loudness_log_print_prefix);
     if (written <= 0) {
         return;
     }
@@ -76,17 +77,16 @@ static int init_measure_filter_chain(AVCodecContext *dec_ctx, AudioFilterChain *
     }
 
     av_channel_layout_describe(&dec_ctx->ch_layout, chlayout_str, sizeof(chlayout_str));
-    snprintf(args, sizeof(args),
-             "time_base=1/%d:sample_rate=%d:sample_fmt=%s:channel_layout=%s",
+    snprintf(args, sizeof(args), "time_base=1/%d:sample_rate=%d:sample_fmt=%s:channel_layout=%s",
              dec_ctx->sample_rate, dec_ctx->sample_rate,
              av_get_sample_fmt_name(dec_ctx->sample_fmt), chlayout_str);
 
     ret = avfilter_graph_create_filter(&chain->buffersrc_ctx, buffersrc, "in", args, NULL,
-                                        chain->graph);
+                                       chain->graph);
     if (ret < 0) goto end;
 
     ret = avfilter_graph_create_filter(&chain->buffersink_ctx, buffersink, "out", NULL, NULL,
-                                        chain->graph);
+                                       chain->graph);
     if (ret < 0) goto end;
 
     outputs->name = av_strdup("in");
@@ -100,7 +100,7 @@ static int init_measure_filter_chain(AVCodecContext *dec_ctx, AudioFilterChain *
     inputs->next = NULL;
 
     ret = avfilter_graph_parse_ptr(chain->graph, "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json",
-                                    &inputs, &outputs, NULL);
+                                   &inputs, &outputs, NULL);
     if (ret < 0) goto end;
 
     ret = avfilter_graph_config(chain->graph, NULL);
@@ -132,8 +132,7 @@ static int drain_measure_frame(AudioFilterChain *chain, AVFrame *frame, AVFrame 
     }
 }
 
-LoudnessStatus avbridge_measure_loudness(const char *in_path, char *out_json,
-                                                 size_t out_json_len) {
+LoudnessStatus avbridge_measure_loudness(const char *in_path, char *out_json, size_t out_json_len) {
     AVFormatContext *in_ctx = NULL;
     AVCodecContext *dec_ctx = NULL;
     AudioFilterChain chain = {0};
@@ -149,8 +148,10 @@ LoudnessStatus avbridge_measure_loudness(const char *in_path, char *out_json,
     }
 
     switch (open_input(in_path, &in_ctx)) {
-        case -1: return LOUDNESS_ERR_OPEN_INPUT;
-        case -2: return LOUDNESS_ERR_STREAM_INFO;
+    case -1:
+        return LOUDNESS_ERR_OPEN_INPUT;
+    case -2:
+        return LOUDNESS_ERR_STREAM_INFO;
     }
 
     for (unsigned int i = 0; i < in_ctx->nb_streams; i++) {
@@ -172,8 +173,8 @@ LoudnessStatus avbridge_measure_loudness(const char *in_path, char *out_json,
             goto cleanup;
         }
         dec_ctx = avcodec_alloc_context3(decoder);
-        if (!dec_ctx || avcodec_parameters_to_context(
-                            dec_ctx, in_ctx->streams[audio_in_index]->codecpar) < 0) {
+        if (!dec_ctx ||
+            avcodec_parameters_to_context(dec_ctx, in_ctx->streams[audio_in_index]->codecpar) < 0) {
             status = LOUDNESS_ERR_DECODER;
             goto cleanup;
         }

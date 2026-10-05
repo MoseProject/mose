@@ -24,8 +24,8 @@
 /* Scales one decoded frame into `scaled_frame` (already sized/formatted for the encoder,
    allocated once by the caller) and stamps a sequential pts — proxies don't need to preserve
    the source's original timestamps, just monotonically increasing ones for the encoder/muxer. */
-static int scale_video_frame(struct SwsContext *sws_ctx, AVFrame *src_frame,
-                              AVFrame *scaled_frame, int64_t *next_pts) {
+static int scale_video_frame(struct SwsContext *sws_ctx, AVFrame *src_frame, AVFrame *scaled_frame,
+                             int64_t *next_pts) {
     int ret = av_frame_make_writable(scaled_frame);
     if (ret < 0) return ret;
 
@@ -36,8 +36,7 @@ static int scale_video_frame(struct SwsContext *sws_ctx, AVFrame *src_frame,
     return 0;
 }
 
-ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path,
-                                            int target_height) {
+ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path, int target_height) {
     AVFormatContext *in_ctx = NULL;
     AVFormatContext *out_ctx = NULL;
     AVCodecContext *vdec_ctx = NULL;
@@ -59,8 +58,10 @@ ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path,
     int64_t next_video_pts = 0;
 
     switch (open_input(in_path, &in_ctx)) {
-        case -1: return PROXY_ERR_OPEN_INPUT;
-        case -2: return PROXY_ERR_STREAM_INFO;
+    case -1:
+        return PROXY_ERR_OPEN_INPUT;
+    case -2:
+        return PROXY_ERR_STREAM_INFO;
     }
 
     for (unsigned int i = 0; i < in_ctx->nb_streams; i++) {
@@ -294,8 +295,7 @@ ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path,
                     goto cleanup_output_io;
                 }
                 if (scale_video_frame(sws_ctx, dec_frame, scaled_frame, &next_video_pts) < 0 ||
-                    encode_write_packet(out_ctx, venc_ctx, out_stream, scaled_frame, enc_pkt) <
-                        0) {
+                    encode_write_packet(out_ctx, venc_ctx, out_stream, scaled_frame, enc_pkt) < 0) {
                     status = PROXY_ERR_PIPELINE;
                     goto cleanup_output_io;
                 }
@@ -317,7 +317,7 @@ ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path,
                     goto cleanup_output_io;
                 }
                 if (filter_encode_write_frame(out_ctx, &achain, aenc_ctx, out_stream, dec_frame,
-                                               filt_frame, enc_pkt) < 0) {
+                                              filt_frame, enc_pkt) < 0) {
                     status = PROXY_ERR_PIPELINE;
                     goto cleanup_output_io;
                 }
@@ -351,13 +351,13 @@ ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path,
         avcodec_send_packet(adec_ctx, NULL);
         while (avcodec_receive_frame(adec_ctx, dec_frame) >= 0) {
             if (filter_encode_write_frame(out_ctx, &achain, aenc_ctx, out_stream, dec_frame,
-                                           filt_frame, enc_pkt) < 0) {
+                                          filt_frame, enc_pkt) < 0) {
                 status = PROXY_ERR_PIPELINE;
                 goto cleanup_output_io;
             }
         }
         if (filter_encode_write_frame(out_ctx, &achain, aenc_ctx, out_stream, NULL, filt_frame,
-                                       enc_pkt) < 0 ||
+                                      enc_pkt) < 0 ||
             encode_write_packet(out_ctx, aenc_ctx, out_stream, NULL, enc_pkt) < 0) {
             status = PROXY_ERR_PIPELINE;
             goto cleanup_output_io;

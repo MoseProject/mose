@@ -105,9 +105,9 @@ PrivacyBlurStatus avbridge_apply_privacy_blur(const char *in_path, const char *o
         }
     }
 
-    status = (PrivacyBlurStatus)avbridge_reencode_with_filter(in_path, out_path, filter_str, canvas_width,
-                                                       canvas_height, canvas_fps_num, canvas_fps_den,
-                                                       1);
+    status = (PrivacyBlurStatus)avbridge_reencode_with_filter(in_path, out_path, filter_str,
+                                                              canvas_width, canvas_height,
+                                                              canvas_fps_num, canvas_fps_den, 1);
 
 cleanup:
     av_free(filter_str);
