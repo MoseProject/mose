@@ -96,11 +96,54 @@ Peak RSS of the process tree, MB:
   `OCA_BUSH_DECODE=hardware` are developer switches), so the GPU is idle apart from the webview's
   own compositor. Playback never used it, so there is nothing to optimize on the GPU side
   without first changing that default.
-- Baseline floor: 424 MB at the home screen is mostly WebView2 (several child processes) plus
-  the app's own working set; not investigated further.
+- Baseline floor: the 424 MB at the home screen is a counting artifact. The tree is the app
+  (36 MB unique) plus six WebView2 processes; summing RSS counts their shared pages once per
+  process. Unique memory (USS) of the whole tree is about 121 MB.
+
+## Further scenarios (`e2e/profile_scenarios.py`)
+
+Soak, 10 minutes (58 cycles of play 8 s, 40 edits, 20 undos, 30 seeks): mean RSS 816 MB in the
+first third and 843 MB in the last (+3%), private memory 608 -> 633 MB, webview JS heap warming up
+from 7 to 19 MB and then flat. A slow native drift of a few MB per minute is visible and was not
+explained; 10 minutes cannot tell a leak from caches filling, so a longer soak is the next check.
+
+Webview in a 604-clip session with the clip selected and the Inspector open: 300 edits and 10 s
+of playback both ran at 16.7 ms per frame (p95 16.8, max 17 ms) with no long task at all.
+
+Two hour 540p recording: import 15 s; the detailed waveform takes 10.1 s to decode and is 2.9 MB;
+RSS goes 479 -> 552 MB across it. Filmstrip tiles cost 200-300 ms each (400 tiles in 119 s, 2000
+in 390 s) because every distinct time seeks and decodes from a keyframe; RSS grew only 19 MB over
+2000 tiles (the 1500-entry tile cache holds). Tile latency, not memory, is the limit on long
+recordings.
+
+Compositor and decoder switches (`OCA_BUSH_RENDERER`, `OCA_BUSH_DECODE`), 15 s of playback across a
+1080p60 and a 2160p30 clip. Delivered distinct frames were 707-724 in every combination (about
+47 per second), so the choice does not change what the webview sees:
+
+| | CPU mean / peak | RSS | VRAM | GPU engines |
+|---|---|---|---|---|
+| CPU compose, software decode (default) | 7.4% / 26% | 677 MB | 29 MB | 3D 0.2% |
+| GPU compose, software decode | 5.1% / 8% | 954 MB | 203 MB | 3D 2.6% |
+| CPU compose, hardware decode | 6.5% / 19% | 733 MB | 55 MB | VideoDecode 1.7% |
+| GPU compose, hardware decode | 4.5% / 7% | 891 MB | 210 MB | 3D 2.7%, VideoDecode 1.5% |
+
+The GPU compositor trades about 280 MB of RAM and 175 MB of VRAM for 2-3 points of CPU and a lower
+CPU peak; not worth making the default at this load.
+
+Export, 60 s of 1080p60 (40 Mbps source), hardware encoder, output matched to the source bitrate:
+52-57 s, about 1.1x real time, 280 MB out. The process tree averages 3% CPU (one core of 32) and
+the encoder engine peaks at 18-22%, so the pipeline runs on a single thread and is neither
+CPU-wide nor GPU-bound. The ffmpeg command line with the same filters and encoder does the same
+file in 9.4 s (6.4x real time); decode alone takes 8.4 s there. In the bridge test harness 20 s of
+source takes 13.8 s with the hardware encoder and 21.7 s with the software one. Checked and ruled
+out: decoder threading (setting thread count and frame threading in the export decoder changed
+nothing, 11.3 s against 11.0 s for the same clip at a 320x240 canvas; the FFmpeg 8 decoders already
+default to auto threads), audio filters (loudnorm and afftdn chain: 1.8 s for 60 s), and the
+progress callback. Remaining suspect, not confirmed: decode, filter, encode and mux run one after
+the other in `timeline_export_multi.c`'s loop while the command line overlaps them on separate
+threads. Next step is a timing split per stage in that loop.
 
 ## Not yet measured
 
-Export throughput, thumbnail/waveform cache pressure on a long recording, memory after hours of
-editing (leak check), React render time of the Inspector for large sessions, the GPU renderer and
-hardware decode paths when enabled.
+Memory over hours (the 10 minute soak shows a small unexplained drift), where the export loop
+spends its time per stage, thumbnail latency on long recordings.
