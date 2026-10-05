@@ -35,12 +35,11 @@
    `source_elapsed_secs / speed_factor` a constant-speed segment already used before this field
    existed. */
 static double smooth_speed_ramp_timeline_elapsed(const ClipSegment *seg,
-                                                  double source_elapsed_secs) {
+                                                 double source_elapsed_secs) {
     double v0 = (double)seg->speed_factor;
     double v1 = (double)seg->smooth_speed_ramp_end_factor;
     double d = seg->source_out_secs - seg->source_in_secs;
-    if (seg->smooth_speed_ramp_end_factor > 0.0f && fabs(v1 - v0) > 1e-4 && v0 > 0.0 &&
-        d > 1e-9) {
+    if (seg->smooth_speed_ramp_end_factor > 0.0f && fabs(v1 - v0) > 1e-4 && v0 > 0.0 && d > 1e-9) {
         double t = source_elapsed_secs;
         if (t < 0.0) t = 0.0;
         if (t > d) t = d;
@@ -72,85 +71,10 @@ static double smooth_speed_ramp_timeline_elapsed(const ClipSegment *seg,
    whenever another video/audio track contributes sound.
    ========================================================================= */
 
-/* Build the complete single-track video filter string for `seg` — identical logic to
-   the inline filter-string block inside avbridge_encode_timeline_export, extracted here
-   so the multi-track function can reuse it for single-track fallback intervals.
-   Returns 0 on success, -1 if `seg->video_filter` (which grows with how many keyframe
-   stages are stacked on one clip, unlike this function's own bounded internal
-   sub-expressions) made the composed string too long for `buf` -- callers treat that the
-   same as any other filter-graph construction failure rather than silently building a
-   truncated (and possibly still-parseable-but-wrong) filter chain. */
-static int build_vfilter_descr(const ClipSegment *seg, int cw, int ch, int fps_num, int fps_den,
-                               const char *pix_fmt_name, char *buf, size_t cap) {
-    const char *cf = (seg->video_filter && seg->video_filter[0]) ? seg->video_filter : "";
-    char setpts[192];
-    build_setpts_str(seg, seg->source_out_secs - seg->source_in_secs, setpts, sizeof(setpts));
-
-    /* A Zoom transition expands `inside` three times, alongside six coordinate
-       expressions. Keep this comfortably above their bounded worst-case expansion. */
-    char trans[8192] = "";
-    if (seg->transition_in != 0) {
-        double tf = (double)seg->transition_duration_secs * (double)fps_num / (double)fps_den;
-        if (tf < 1.0) tf = 1.0;
-        switch (seg->transition_in) {
-        case 1:
-            snprintf(trans, sizeof(trans), "fade=t=in:st=0:d=%.4f",
-                     (double)seg->transition_duration_secs);
-            break;
-        /* See the matching cases in timeline_export.c's per-segment transition block for
-           why Slide uses geq instead of drawbox, and why Zoom uses a geq inverse-sample
-           instead of a dynamically resizing scale+pad (the latter reliably corrupted the
-           heap when actually run through a real export). */
-        case 2:
-            snprintf(trans, sizeof(trans),
-                     "geq=lum='p(X,Y)*lt(X,min(W,N*W/%g))'"
-                     ":cb='128+(cb(X,Y)-128)*lt(X,min(W,N*W/%g))'"
-                     ":cr='128+(cr(X,Y)-128)*lt(X,min(W,N*W/%g))'",
-                     tf, tf, tf);
-            break;
-        case 3: {
-            char z[160], sx[224], sy[224], inside[1024];
-            snprintf(z, sizeof(z), "(0.5+0.5*lt(N,%g)*N/%g+0.5*gte(N,%g))", tf, tf, tf);
-            snprintf(sx, sizeof(sx), "((X-W/2)/%s+W/2)", z);
-            snprintf(sy, sizeof(sy), "((Y-H/2)/%s+H/2)", z);
-            snprintf(inside, sizeof(inside), "(1-lt(%s,0))*lt(%s,W)*(1-lt(%s,0))*lt(%s,H)", sx, sx,
-                     sy, sy);
-            snprintf(trans, sizeof(trans),
-                     "geq=lum='p(%s,%s)*%s'"
-                     ":cb='128+(cb(%s,%s)-128)*%s'"
-                     ":cr='128+(cr(%s,%s)-128)*%s'",
-                     sx, sy, inside, sx, sy, inside, sx, sy, inside);
-            break;
-        }
-        default:
-            break;
-        }
-    }
-
-    const char *post = cf;
-    char chain[8192] = "";
-    int chain_written = 0;
-    if (post[0] && trans[0])
-        chain_written = snprintf(chain, sizeof(chain), "%s,%s", post, trans);
-    else if (post[0])
-        chain_written = snprintf(chain, sizeof(chain), "%s", post);
-    else if (trans[0])
-        chain_written = snprintf(chain, sizeof(chain), "%s", trans);
-    if (chain_written < 0 || (size_t)chain_written >= sizeof(chain)) return -1;
-
-    int buf_written = snprintf(
-        buf, cap,
-        "%sscale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2,"
-        "fps=%d/%d%s%s,format=%s",
-        setpts, cw, ch, cw, ch, fps_num, fps_den, chain[0] ? "," : "", chain, pix_fmt_name);
-    if (buf_written < 0 || (size_t)buf_written >= cap) return -1;
-    return 0;
-}
-
 /* Build the per-track filter string for use INSIDE an overlay graph — same as
-   build_vfilter_descr but omits the trailing format=yuv420p (added after the
+   build_segment_vfilter but omits the trailing format=yuv420p (added after the
    overlay stage) and omits transitions (n counter semantics differ in multi-input
-   graphs). Returns 0 on success, -1 on truncation -- see build_vfilter_descr's doc
+   graphs). Returns 0 on success, -1 on truncation -- see build_segment_vfilter's doc
    comment for why this is checked rather than silently accepted. */
 static int build_overlay_vfilter(const ClipSegment *seg, int cw, int ch, int fps_num, int fps_den,
                                  char *buf, size_t cap) {
@@ -176,11 +100,10 @@ static int build_overlay_vfilter(const ClipSegment *seg, int cw, int ch, int fps
     snprintf(pad_x, sizeof(pad_x), "ow/2-(%g)*iw", seg->anchor_x);
     snprintf(pad_y, sizeof(pad_y), "oh/2-(%g)*ih", seg->anchor_y);
 
-    int buf_written =
-        snprintf(buf, cap,
-                 "%sscale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:%s:%s,"
-                 "fps=%d/%d%s",
-                 setpts, cw, ch, cw, ch, pad_x, pad_y, fps_num, fps_den, post);
+    int buf_written = snprintf(buf, cap,
+                               "%sscale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:%s:%s,"
+                               "fps=%d/%d%s",
+                               setpts, cw, ch, cw, ch, pad_x, pad_y, fps_num, fps_den, post);
     if (buf_written < 0 || (size_t)buf_written >= cap) return -1;
     return 0;
 }
@@ -479,14 +402,12 @@ static int init_overlay_graph(AVCodecContext *vdec0, const char *f0, OverlayTrac
             av_bprintf(&description, "[%s][base%d]blend=all_mode=%s[base%d];", composited_label,
                        layer_number, track->segment->blend_mode, layer_number + 1);
         } else {
-            const char *px =
-                (track->segment->position_x_expr && track->segment->position_x_expr[0])
-                    ? track->segment->position_x_expr
-                    : "0";
-            const char *py =
-                (track->segment->position_y_expr && track->segment->position_y_expr[0])
-                    ? track->segment->position_y_expr
-                    : "0";
+            const char *px = (track->segment->position_x_expr && track->segment->position_x_expr[0])
+                                 ? track->segment->position_x_expr
+                                 : "0";
+            const char *py = (track->segment->position_y_expr && track->segment->position_y_expr[0])
+                                 ? track->segment->position_y_expr
+                                 : "0";
             av_bprintf(&description, "[base%d][%s]overlay=x='%s':y='%s'[base%d];", layer_number,
                        composited_label, px, py, layer_number + 1);
         }
@@ -533,10 +454,10 @@ fail:
    newest frames until the next arrives, so a graph that is freed instead loses them. Returns
    ENCODE_OK or ENCODE_ERR_PIPELINE. */
 static EncodeStatus drain_overlay_graph(AVFilterContext *src0, OverlayTrackState *tracks,
-                                        int track_count, AVFilterContext *sink,
-                                        AVFrame *filt_frame, AVFormatContext *out_ctx,
-                                        AVCodecContext *venc_ctx, AVStream *vout_stream,
-                                        AVPacket *enc_pkt, int64_t *next_vpts) {
+                                        int track_count, AVFilterContext *sink, AVFrame *filt_frame,
+                                        AVFormatContext *out_ctx, AVCodecContext *venc_ctx,
+                                        AVStream *vout_stream, AVPacket *enc_pkt,
+                                        int64_t *next_vpts) {
     if (av_buffersrc_add_frame_flags(src0, NULL, 0) < 0) {
         return ENCODE_ERR_PIPELINE;
     }
@@ -809,7 +730,7 @@ EncodeStatus avbridge_encode_timeline_export_multi(
                         }
 
                         double ftl = tl_start + smooth_speed_ramp_timeline_elapsed(
-                                                     seg0, fsrc - seg0->source_in_secs);
+                                                    seg0, fsrc - seg0->source_in_secs);
 
                         int want_overlay = 0;
                         int overlay_set_changed = (cur_mode != 2);
@@ -850,10 +771,9 @@ EncodeStatus avbridge_encode_timeline_export_multi(
                                 ov_src0 = ov_sink = NULL;
                                 reset_overlay_graph_sources(overlay_tracks, overlay_track_count);
                             }
-                            if (vchain.graph &&
-                                filter_encode_write_video_frame(out_ctx, &vchain, venc_ctx,
-                                                                vout_stream, NULL, filt_frame,
-                                                                &next_vpts, enc_pkt) < 0) {
+                            if (vchain.graph && filter_encode_write_video_frame(
+                                                    out_ctx, &vchain, venc_ctx, vout_stream, NULL,
+                                                    filt_frame, &next_vpts, enc_pkt) < 0) {
                                 status = ENCODE_ERR_PIPELINE;
                                 av_frame_unref(dec_frame);
                                 break;
@@ -954,9 +874,9 @@ EncodeStatus avbridge_encode_timeline_export_multi(
                                 close_overlay_track(&overlay_tracks[i]);
 
                             char vfd[16384];
-                            if (build_vfilter_descr(seg0, canvas_width, canvas_height,
-                                                    canvas_fps_num, canvas_fps_den,
-                                                    venc_pix_fmt_name, vfd, sizeof(vfd)) < 0) {
+                            if (build_segment_vfilter(seg0, canvas_width, canvas_height,
+                                                      canvas_fps_num, canvas_fps_den,
+                                                      venc_pix_fmt_name, vfd, sizeof(vfd)) < 0) {
                                 status = ENCODE_ERR_FILTER_GRAPH;
                                 av_frame_unref(dec_frame);
                                 break;
@@ -990,8 +910,8 @@ EncodeStatus avbridge_encode_timeline_export_multi(
                                 }
                             }
 
-                            /* The layers advance in lockstep with this frame, so every input is stamped
-                               with the same moment, each in its own source's time base. */
+                            /* The layers advance in lockstep with this frame, so every input is
+                               stamped with the same moment, each in its own source's time base. */
                             dec_frame->pts -= ov_base_pts;
                             int64_t layer_moment = dec_frame->pts;
                             if (av_buffersrc_add_frame_flags(ov_src0, dec_frame,
@@ -1039,7 +959,7 @@ EncodeStatus avbridge_encode_timeline_export_multi(
                             if (progress_cb)
                                 progress_cb(progress_user_data,
                                             elapsed + smooth_speed_ramp_timeline_elapsed(
-                                                        seg0, fsrc - seg0->source_in_secs));
+                                                          seg0, fsrc - seg0->source_in_secs));
                         } else { /* single-track vchain */
                             if (filter_encode_write_video_frame(out_ctx, &vchain, venc_ctx,
                                                                 vout_stream, dec_frame, filt_frame,
@@ -1049,7 +969,7 @@ EncodeStatus avbridge_encode_timeline_export_multi(
                             if (progress_cb)
                                 progress_cb(progress_user_data,
                                             elapsed + smooth_speed_ramp_timeline_elapsed(
-                                                        seg0, fsrc - seg0->source_in_secs));
+                                                          seg0, fsrc - seg0->source_in_secs));
                         }
                         av_frame_unref(dec_frame);
                         if (status != ENCODE_OK) break;
@@ -1106,8 +1026,8 @@ EncodeStatus avbridge_encode_timeline_export_multi(
             status = ENCODE_ERR_PIPELINE;
         }
 
-        elapsed += smooth_speed_ramp_timeline_elapsed(
-            seg0, seg0->source_out_secs - seg0->source_in_secs);
+        elapsed +=
+            smooth_speed_ramp_timeline_elapsed(seg0, seg0->source_out_secs - seg0->source_in_secs);
 
     seg_cleanup:
         if (ov_graph) {
