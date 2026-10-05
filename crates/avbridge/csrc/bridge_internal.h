@@ -148,6 +148,26 @@ int audio_worker_command(AudioWorker *worker, const char *target, const char *co
    without, whatever is still queued is dropped. Returns negative if the worker had failed. */
 int audio_worker_finish(AudioWorker **worker, int flush);
 
+/* Result of a re-encode pass; the values equal TextOverlayStatus and PrivacyBlurStatus, which
+   the callers convert it to. */
+typedef enum {
+    REENCODE_OK = 0,
+    REENCODE_ERR_OPEN_INPUT = 1,
+    REENCODE_ERR_ALLOC_OUTPUT = 2,
+    REENCODE_ERR_FILTER_GRAPH = 3,
+    REENCODE_ERR_PIPELINE = 4,
+} ReencodeStatus;
+
+/* Decodes `in_path`, runs `filter_desc` (a graph from [in] to [out]) over its video, encodes the
+   result to `out_path` and copies the audio unchanged. With `bound_output_to_input_frames` the
+   output stops at one frame per input frame, for graphs with a source that never ends. Defined
+   in reencode.c. */
+ReencodeStatus avbridge_reencode_with_filter(const char *in_path, const char *out_path,
+                                             const char *filter_desc, int canvas_width,
+                                             int canvas_height, int canvas_fps_num,
+                                             int canvas_fps_den,
+                                             int bound_output_to_input_frames);
+
 typedef struct {
     AVFilterContext *buffersrc_ctx;
     AVFilterContext *buffersink_ctx;
