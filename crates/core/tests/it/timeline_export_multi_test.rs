@@ -248,6 +248,77 @@ fn resolve_timeline_segments_multi_preserves_all_layer_order() {
 }
 
 #[test]
+fn a_dissolve_splits_the_clip_into_an_overlay_head_and_a_base_tail() {
+    let asset = video_asset(1);
+    let asset_for_audio = asset.clone();
+    let first = clip(1, 1, 0.0, 0.0, 0.5);
+    let mut second = clip(2, 1, 0.4, 0.0, 0.5);
+    second.transition_in = TransitionType::Dissolve;
+    second.transition_duration_secs = 0.3;
+    let sequence = sequence_with(vec![track(10, "V1", vec![first, second])]);
+
+    let (track_segments, _canvas) =
+        resolve_timeline_segments_multi(&sequence, &[asset.clone()]).unwrap();
+    assert_eq!(track_segments.len(), 2, "the overlap gets an overlay layer");
+    // Base lane: the first clip, then the part of the second after the first ended.
+    assert_eq!(track_segments[0].len(), 2);
+    let tail = &track_segments[0][1];
+    assert!((tail.source_in_secs - 0.1).abs() < 1e-6);
+    assert!((tail.source_out_secs - 0.5).abs() < 1e-6);
+    assert!((tail.timeline_start_secs - 0.5).abs() < 1e-6);
+    // Overlay lane: the 0.1 s head, fading in over the overlap (shorter than the 0.3 s asked).
+    assert_eq!(track_segments[1].len(), 1);
+    let head = &track_segments[1][0];
+    assert!((head.source_out_secs - 0.1).abs() < 1e-6);
+    assert!((head.fade_in_secs - 0.1).abs() < 1e-4);
+    assert_eq!(head.transition_in, 0);
+    assert_eq!(track_segments[0][0].fade_in_secs, 0.0);
+
+    // Audio is mixed from the whole clips; the first fades out under the second.
+    let audio_segments = resolve_audio_segments(&sequence, &[asset.clone()]).unwrap();
+    if let Some(first_audio) = audio_segments.first() {
+        assert!((first_audio.fade_out_secs - 0.1).abs() < 1e-4);
+    }
+
+    // The full export, audio crossfade included, completes.
+    let whole = std::env::temp_dir().join("avcore_test_dissolve_audio_export.mp4");
+    let outcome = avcore::render::render_timeline_export(
+        &sequence,
+        std::slice::from_ref(&asset_for_audio),
+        &whole,
+        -14.0,
+        GpuEncoderPreference::Cpu,
+        &AtomicBool::new(false),
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, RenderOutcome::Completed);
+    assert!(probe_media(&whole).unwrap().has_audio);
+    let _ = std::fs::remove_file(&whole);
+
+    // And the export has the length of the union of both clips, 0.9 s.
+    let output = std::env::temp_dir().join("avcore_test_dissolve_export.mp4");
+    let (layers, canvas) = resolve_timeline_segments_multi(&sequence, &[asset]).unwrap();
+    let outcome = render_export_job_multi(
+        &layers,
+        canvas,
+        &output,
+        -14.0,
+        GpuEncoderPreference::Cpu,
+        &[],
+        &[],
+        &[],
+        &AtomicBool::new(false),
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, RenderOutcome::Completed);
+    let duration = probe_media(&output).unwrap().duration_secs;
+    assert!((duration - 0.9).abs() < 0.12, "duration {duration}");
+    let _ = std::fs::remove_file(&output);
+}
+
+#[test]
 fn resolve_timeline_segments_multi_skips_hidden_tracks() {
     let asset = video_asset(1);
     let background = track(1, "V1", vec![clip(1, 1, 0.0, 0.0, 0.5)]);

@@ -206,6 +206,9 @@ pub enum TransitionType {
     HardCut,
     Slide,
     Zoom,
+    /// A cross-dissolve with the clip before this one: the clip overlaps the previous one by
+    /// the transition duration and fades in over it (see `Track::overlap_lanes`).
+    Dissolve,
 }
 
 impl TransitionType {
@@ -217,6 +220,9 @@ impl TransitionType {
             Self::None | Self::HardCut => 0,
             Self::Fade => 1,
             Self::Slide => 2,
+            // A dissolve is a fade in over the clip below, resolved into a fade handle by
+            // `render::segments`, not an entry effect of its own.
+            Self::Dissolve => 0,
             Self::Zoom => 3,
         }
     }

@@ -131,6 +131,7 @@ pub enum InterchangeTransitionKind {
     HardCut,
     Slide,
     Zoom,
+    Dissolve,
 }
 
 impl InterchangeTransitionKind {
@@ -141,6 +142,7 @@ impl InterchangeTransitionKind {
             TransitionType::HardCut => Some(Self::HardCut),
             TransitionType::Slide => Some(Self::Slide),
             TransitionType::Zoom => Some(Self::Zoom),
+            TransitionType::Dissolve => Some(Self::Dissolve),
         }
     }
 
@@ -150,6 +152,7 @@ impl InterchangeTransitionKind {
             Self::HardCut => TransitionType::HardCut,
             Self::Slide => TransitionType::Slide,
             Self::Zoom => TransitionType::Zoom,
+            Self::Dissolve => TransitionType::Dissolve,
         }
     }
 }

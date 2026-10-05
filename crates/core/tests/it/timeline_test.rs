@@ -431,6 +431,73 @@ fn track_with(clips: Vec<ClipInstance>) -> Track {
 }
 
 #[test]
+fn clips_that_follow_each_other_share_lane_zero_and_an_overlap_opens_lane_one() {
+    let track = track_with(vec![
+        clip(1, 0.0, 0.0, 4.0),
+        clip(2, 4.0, 0.0, 4.0),
+        clip(3, 3.5, 0.0, 2.0),
+    ]);
+    let lanes = track.overlap_lanes();
+    assert_eq!(lanes[&1], 0);
+    assert_eq!(lanes[&3], 1, "clip 3 starts inside clip 1");
+    assert_eq!(lanes[&2], 0, "clip 2 starts when clip 1 ends");
+    let plain = track_with(vec![clip(1, 0.0, 0.0, 4.0), clip(2, 4.0, 0.0, 4.0)]);
+    assert!(plain.overlap_lanes().values().all(|&lane| lane == 0));
+}
+
+#[test]
+fn a_dissolve_overlaps_the_previous_clip_and_pulls_the_following_clips_earlier() {
+    let mut track = track_with(vec![
+        clip(1, 0.0, 0.0, 4.0),
+        clip(2, 4.0, 0.0, 4.0),
+        clip(3, 8.0, 0.0, 4.0),
+    ]);
+    assert!(track.apply_dissolve_overlap(2, 1.0));
+    let start =
+        |track: &Track, id: u64| track.clips.iter().find(|c| c.id == id).unwrap().start_secs;
+    assert_eq!(start(&track, 1), 0.0);
+    assert_eq!(start(&track, 2), 3.0);
+    assert_eq!(start(&track, 3), 7.0);
+    assert_eq!(track.overlap_with_earlier_secs(2), 1.0);
+    assert_eq!(track.overlap_lanes()[&2], 1);
+}
+
+#[test]
+fn a_dissolve_is_limited_to_half_of_the_shorter_clip_and_needs_a_clip_right_before() {
+    let mut track = track_with(vec![clip(1, 0.0, 0.0, 1.0), clip(2, 1.0, 0.0, 4.0)]);
+    assert!(track.apply_dissolve_overlap(2, 3.0));
+    assert_eq!(track.clips[1].start_secs, 0.5, "half of the 1 s clip");
+
+    let mut gap = track_with(vec![clip(1, 0.0, 0.0, 1.0), clip(2, 3.0, 0.0, 4.0)]);
+    assert!(!gap.apply_dissolve_overlap(2, 0.5), "a gap is not a cut");
+    assert_eq!(gap.clips[1].start_secs, 3.0);
+    let mut first = track_with(vec![clip(1, 0.0, 0.0, 1.0)]);
+    assert!(!first.apply_dissolve_overlap(1, 0.5));
+}
+
+#[test]
+fn dissolve_fades_follow_the_real_overlap() {
+    let mut second = clip(2, 3.0, 0.0, 4.0);
+    second.transition_in = TransitionType::Dissolve;
+    second.transition_duration_secs = 1.5;
+    let track = track_with(vec![clip(1, 0.0, 0.0, 4.0), second]);
+    // Overlap is 1 s, shorter than the 1.5 s transition.
+    assert_eq!(track.dissolve_in_secs(&track.clips[1]), 1.0);
+    assert_eq!(track.dissolve_out_secs(&track.clips[0]), 1.0);
+    assert_eq!(track.dissolve_out_secs(&track.clips[1]), 0.0);
+
+    let mut alone = clip(5, 0.0, 0.0, 2.0);
+    alone.transition_in = TransitionType::Dissolve;
+    alone.transition_duration_secs = 0.5;
+    let lone = track_with(vec![alone]);
+    assert_eq!(
+        lone.dissolve_in_secs(&lone.clips[0]),
+        0.5,
+        "no overlap: a plain fade-in"
+    );
+}
+
+#[test]
 fn track_duration_is_zero_for_an_empty_track() {
     assert_eq!(track_with(Vec::new()).duration_secs(), 0.0);
 }

@@ -227,94 +227,107 @@ pub fn resolve_timeline_segments_multi(
     let mut canvas: Option<Canvas> = None;
 
     for track in &visible_video_tracks {
-        // Track 0 (background) vs 1+ (overlay) — matches avbridge_encode_timeline_export_multi's
-        // own convention and the same distinction position_keyframes/opacity_keyframes already
-        // rely on: `all_track_segments.len()` is this track's index since it fills in order.
-        let is_overlay = !all_track_segments.is_empty();
-        let mut clips: Vec<_> = track.clips.iter().collect();
-        clips.sort_by(|a, b| a.start_secs.total_cmp(&b.start_secs));
-
-        let mut segments = Vec::with_capacity(clips.len());
-        let mut total_duration_secs = 0.0;
-        let mut weighted_bitrate_bps_secs = 0.0;
-        let mut dimensions_fps = None;
-
-        for clip in &clips {
-            let asset = media_library
+        let pieces = track.lane_pieces();
+        let lane_count = pieces
+            .iter()
+            .map(|(_, lane)| *lane)
+            .max()
+            .map_or(1, |lane| lane + 1);
+        for lane in 0..lane_count {
+            // Track 0 (background) vs 1+ (overlay) — matches avbridge_encode_timeline_export_multi's
+            // own convention and the same distinction position_keyframes/opacity_keyframes already
+            // rely on: `all_track_segments.len()` is this lane's index since it fills in order. A
+            // lane above 0 holds the clips that overlap an earlier one (cross-dissolves).
+            let is_overlay = !all_track_segments.is_empty();
+            let mut clips: Vec<_> = pieces
                 .iter()
-                .find(|a| a.id == clip.resolved_asset_id())
-                .ok_or(RenderError::MissingAsset)?;
-            if dimensions_fps.is_none() {
-                let (width, height) = asset.resolution.ok_or(RenderError::NoVideoStream)?;
-                dimensions_fps = Some((width, height, asset.fps.unwrap_or(30.0)));
-            }
-            let duration_secs = clip.duration_secs();
-            total_duration_secs += duration_secs;
-            weighted_bitrate_bps_secs +=
-                asset.source_bitrate_mbps as f64 * 1_000_000.0 * duration_secs;
-            let (_, _, fps) = dimensions_fps.expect("just set above if it was None");
-            let (fps_num, fps_den) = fps_to_rational(fps);
-            let (video_filter, position_x_expr, position_y_expr) =
-                resolve_clip_filters(clip, fps_num, fps_den, duration_secs, is_overlay);
-            // Same overlay-only gate resolve_clip_filters' resize stage above uses (see its
-            // doc comment) — a track-0/background clip's alpha has no compositing stage to
-            // survive into (build_vfilter_descr's immediate format=yuv420p conform discards
-            // it), so the matte is only worth decoding/alphamerging on an overlay track.
-            let mask_video_path = if is_overlay && clip.background_removal_enabled {
-                clip.background_removal_mask_path.clone()
-            } else {
-                String::new()
-            };
-            // Blend mode is only meaningful on an overlay track (track 1+) — a background
-            // track's clip has no layer below it to blend against, same is_overlay gate
-            // resolve_clip_filters' layer-scale resize stage uses above.
-            let blend_mode = if is_overlay && clip.has_blend_mode() {
-                clip.blend_mode.ffmpeg_name().to_string()
-            } else {
-                String::new()
-            };
-            segments.push(avbridge::ClipSegment {
-                source_path: asset.source_path.clone(),
-                source_in_secs: clip.source_in_secs,
-                source_out_secs: clip.source_out_secs,
-                gain_db: clip.gain_db,
-                video_filter,
-                frozen: clip.frozen,
-                speed_factor: clip.speed_factor,
-                smooth_speed_ramp_end_factor: clip.speed_ramp_end_factor.unwrap_or(0.0),
-                position_x_expr,
-                position_y_expr,
-                transition_in: clip.transition_in.to_export_code(),
-                transition_duration_secs: clip.transition_duration_secs,
-                timeline_start_secs: clip.start_secs,
-                mask_video_path,
-                blend_mode,
-                anchor_x: clip.anchor_x,
-                anchor_y: clip.anchor_y,
-                fade_in_secs: clip.fade_in_secs,
-                fade_out_secs: clip.fade_out_secs,
-            });
-        }
+                .filter(|(_, piece_lane)| *piece_lane == lane)
+                .map(|(clip, _)| clip)
+                .collect();
+            clips.sort_by(|a, b| a.start_secs.total_cmp(&b.start_secs));
 
-        if canvas.is_none() {
-            if let Some((width, height, fps)) = dimensions_fps {
+            let mut segments = Vec::with_capacity(clips.len());
+            let mut total_duration_secs = 0.0;
+            let mut weighted_bitrate_bps_secs = 0.0;
+            let mut dimensions_fps = None;
+
+            for clip in &clips {
+                let asset = media_library
+                    .iter()
+                    .find(|a| a.id == clip.resolved_asset_id())
+                    .ok_or(RenderError::MissingAsset)?;
+                if dimensions_fps.is_none() {
+                    let (width, height) = asset.resolution.ok_or(RenderError::NoVideoStream)?;
+                    dimensions_fps = Some((width, height, asset.fps.unwrap_or(30.0)));
+                }
+                let duration_secs = clip.duration_secs();
+                total_duration_secs += duration_secs;
+                weighted_bitrate_bps_secs +=
+                    asset.source_bitrate_mbps as f64 * 1_000_000.0 * duration_secs;
+                let (_, _, fps) = dimensions_fps.expect("just set above if it was None");
                 let (fps_num, fps_den) = fps_to_rational(fps);
-                let bit_rate_bps = if total_duration_secs > 0.0 {
-                    (weighted_bitrate_bps_secs / total_duration_secs) as i64
+                let (video_filter, position_x_expr, position_y_expr) =
+                    resolve_clip_filters(clip, fps_num, fps_den, duration_secs, is_overlay);
+                // Same overlay-only gate resolve_clip_filters' resize stage above uses (see its
+                // doc comment) — a track-0/background clip's alpha has no compositing stage to
+                // survive into (build_vfilter_descr's immediate format=yuv420p conform discards
+                // it), so the matte is only worth decoding/alphamerging on an overlay track.
+                let mask_video_path = if is_overlay && clip.background_removal_enabled {
+                    clip.background_removal_mask_path.clone()
                 } else {
-                    0
+                    String::new()
                 };
-                canvas = Some(Canvas {
-                    width,
-                    height,
-                    fps_num,
-                    fps_den,
-                    bit_rate_bps,
+                // Blend mode is only meaningful on an overlay track (track 1+) — a background
+                // track's clip has no layer below it to blend against, same is_overlay gate
+                // resolve_clip_filters' layer-scale resize stage uses above.
+                let blend_mode = if is_overlay && clip.has_blend_mode() {
+                    clip.blend_mode.ffmpeg_name().to_string()
+                } else {
+                    String::new()
+                };
+                segments.push(avbridge::ClipSegment {
+                    source_path: asset.source_path.clone(),
+                    source_in_secs: clip.source_in_secs,
+                    source_out_secs: clip.source_out_secs,
+                    gain_db: clip.gain_db,
+                    video_filter,
+                    frozen: clip.frozen,
+                    speed_factor: clip.speed_factor,
+                    smooth_speed_ramp_end_factor: clip.speed_ramp_end_factor.unwrap_or(0.0),
+                    position_x_expr,
+                    position_y_expr,
+                    transition_in: clip.transition_in.to_export_code(),
+                    transition_duration_secs: clip.transition_duration_secs,
+                    timeline_start_secs: clip.start_secs,
+                    mask_video_path,
+                    blend_mode,
+                    anchor_x: clip.anchor_x,
+                    anchor_y: clip.anchor_y,
+                    fade_in_secs: clip.fade_in_secs,
+                    fade_out_secs: clip.fade_out_secs,
                 });
             }
-        }
 
-        all_track_segments.push(segments);
+            if canvas.is_none() {
+                if let Some((width, height, fps)) = dimensions_fps {
+                    let (fps_num, fps_den) = fps_to_rational(fps);
+                    let bit_rate_bps = if total_duration_secs > 0.0 {
+                        (weighted_bitrate_bps_secs / total_duration_secs) as i64
+                    } else {
+                        0
+                    };
+                    canvas = Some(Canvas {
+                        width,
+                        height,
+                        fps_num,
+                        fps_den,
+                        bit_rate_bps,
+                    });
+                }
+            }
+
+            all_track_segments.push(segments);
+        }
     }
 
     let canvas = canvas.ok_or(RenderError::EmptyTimeline)?;
@@ -371,8 +384,8 @@ pub(crate) fn audio_segment(
         voice_cleanup_compressor_threshold_db: clip.voice_cleanup_compressor_threshold_db,
         voice_cleanup_compressor_ratio: clip.voice_cleanup_compressor_ratio,
         voice_cleanup_ceiling_linear: clip.voice_cleanup_ceiling_linear,
-        fade_in_secs: clip.fade_in_secs,
-        fade_out_secs: clip.fade_out_secs,
+        fade_in_secs: clip.fade_in_secs.max(track.dissolve_in_secs(clip) as f32),
+        fade_out_secs: clip.fade_out_secs.max(track.dissolve_out_secs(clip) as f32),
     }
 }
 
@@ -422,6 +435,10 @@ pub fn resolve_audio_segments(
         if !sequence.timeline.track_is_audible(track) {
             silenced_clips |= !track.clips.is_empty();
             continue;
+        }
+        // Clips that overlap (a cross-dissolve) need the mixed audio path, which plays both.
+        if track.overlap_lanes().values().any(|&lane| lane > 0) {
+            has_additional_contributor = true;
         }
         for clip in &track.clips {
             let asset = media_library
