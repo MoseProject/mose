@@ -974,6 +974,13 @@ impl ClipInstance {
         }
     }
 
+    /// Where `source_secs` of this clip's source file lands on the timeline: the clip's start plus
+    /// the time since its in point, stretched by the speed factor. Does not check that the
+    /// moment is inside the trimmed range; callers clip to it first.
+    pub fn source_to_timeline_secs(&self, source_secs: f64) -> f64 {
+        self.start_secs + (source_secs - self.source_in_secs) / f64::from(self.speed_factor)
+    }
+
     /// How long this instance plays for, i.e. its trimmed length — not the source asset's
     /// full duration. Uses [`keyframe::smooth_speed_ramp_duration_secs`]'s log-based integral
     /// when [`ClipInstance::speed_ramp_end_factor`] is `Some` (a smooth ramp doesn't compress

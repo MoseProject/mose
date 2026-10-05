@@ -158,8 +158,7 @@ fn apply_detected_scene_cuts(
         .filter(|m| m.kind == MarkerKind::Chapter)
         .count();
     for (i, cut) in cuts.iter().enumerate() {
-        let timeline_secs =
-            clip.start_secs + (cut.at_secs - clip.source_in_secs) / clip.speed_factor as f64;
+        let timeline_secs = clip.source_to_timeline_secs(cut.at_secs);
         let marker_id = timeline.add_marker(timeline_secs, MarkerKind::Chapter);
         if let Some(marker) = timeline.marker_mut(marker_id) {
             marker.label = format!("Chapter {}", existing_chapters + i + 1);

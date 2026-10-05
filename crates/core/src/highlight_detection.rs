@@ -96,9 +96,6 @@ pub fn clip_amplitude_samples(
     }
 
     let bucket_secs = asset_duration_secs / asset_peaks.len() as f64;
-    let to_timeline_secs = |source_secs: f64| {
-        clip.start_secs + (source_secs - clip.source_in_secs) / clip.speed_factor as f64
-    };
 
     asset_peaks
         .iter()
@@ -114,7 +111,7 @@ pub fn clip_amplitude_samples(
             }
             let bucket_center = (bucket_start + bucket_end) / 2.0;
             Some(TimelineAmplitudeSample {
-                at_secs: to_timeline_secs(bucket_center),
+                at_secs: clip.source_to_timeline_secs(bucket_center),
                 amplitude: min.abs().max(max.abs()),
             })
         })

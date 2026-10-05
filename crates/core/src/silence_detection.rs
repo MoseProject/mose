@@ -109,10 +109,6 @@ pub fn clip_silence_gaps(
         return Vec::new();
     }
 
-    let to_timeline_secs = |source_secs: f64| {
-        clip.start_secs + (source_secs - clip.source_in_secs) / clip.speed_factor as f64
-    };
-
     detect_silence_gaps(
         asset_peaks,
         asset_duration_secs,
@@ -127,8 +123,8 @@ pub fn clip_silence_gaps(
             return None;
         }
         Some(SilenceGap {
-            start_secs: to_timeline_secs(clipped_start),
-            end_secs: to_timeline_secs(clipped_end),
+            start_secs: clip.source_to_timeline_secs(clipped_start),
+            end_secs: clip.source_to_timeline_secs(clipped_end),
         })
     })
     .collect()

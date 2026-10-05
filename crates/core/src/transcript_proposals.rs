@@ -300,9 +300,10 @@ pub fn map_source_range_to_timeline(
     if clipped_end <= clipped_start {
         return None;
     }
-    let to_timeline =
-        |s: f64| clip.start_secs + (s - clip.source_in_secs) / clip.speed_factor as f64;
-    Some((to_timeline(clipped_start), to_timeline(clipped_end)))
+    Some((
+        clip.source_to_timeline_secs(clipped_start),
+        clip.source_to_timeline_secs(clipped_end),
+    ))
 }
 
 #[cfg(test)]
