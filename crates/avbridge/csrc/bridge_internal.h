@@ -26,6 +26,14 @@
 
 #include "bridge.h"
 
+typedef int (*AudioFrameConsumer)(AVFrame *frame, void *user_data);
+
+/* Decodes one demuxed audio stream, forwards each frame to `consume`, flushes the decoder,
+   then calls `consume(NULL, user_data)` to flush its downstream filter graph. */
+int decode_audio_stream(AVFormatContext *input, AVCodecContext *decoder, int stream_index,
+                        AVPacket *packet, AVFrame *frame, AudioFrameConsumer consume,
+                        void *user_data);
+
 /* Lets a video decoder use every core: frame threading plus slice threading. A decoder opened by
    hand through avcodec_alloc_context3 runs on one thread unless this is called before
    avcodec_open2(). Frame threading holds back up to one frame per thread, so the caller must

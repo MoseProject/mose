@@ -132,6 +132,16 @@ static int drain_measure_frame(AudioFilterChain *chain, AVFrame *frame, AVFrame 
     }
 }
 
+typedef struct {
+    AudioFilterChain *chain;
+    AVFrame *filtered_frame;
+} MeasureFrameContext;
+
+static int consume_measure_frame(AVFrame *frame, void *user_data) {
+    MeasureFrameContext *context = user_data;
+    return drain_measure_frame(context->chain, frame, context->filtered_frame);
+}
+
 LoudnessStatus avbridge_measure_loudness(const char *in_path, char *out_json, size_t out_json_len) {
     AVFormatContext *in_ctx = NULL;
     AVCodecContext *dec_ctx = NULL;
@@ -207,40 +217,12 @@ LoudnessStatus avbridge_measure_loudness(const char *in_path, char *out_json, si
     av_log_set_callback(loudness_log_callback);
     log_installed = 1;
 
-    while (av_read_frame(in_ctx, pkt) >= 0) {
-        if (pkt->stream_index != audio_in_index) {
-            av_packet_unref(pkt);
-            continue;
-        }
-        int ret = avcodec_send_packet(dec_ctx, pkt);
-        av_packet_unref(pkt);
-        if (ret < 0) {
-            status = LOUDNESS_ERR_PIPELINE;
-            goto cleanup;
-        }
-        while (1) {
-            ret = avcodec_receive_frame(dec_ctx, dec_frame);
-            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-                break;
-            } else if (ret < 0) {
-                status = LOUDNESS_ERR_PIPELINE;
-                goto cleanup;
-            }
-            if (drain_measure_frame(&chain, dec_frame, filt_frame) < 0) {
-                status = LOUDNESS_ERR_PIPELINE;
-                goto cleanup;
-            }
-        }
+    MeasureFrameContext measure_context = {&chain, filt_frame};
+    if (decode_audio_stream(in_ctx, dec_ctx, audio_in_index, pkt, dec_frame,
+                            consume_measure_frame, &measure_context) < 0) {
+        status = LOUDNESS_ERR_PIPELINE;
+        goto cleanup;
     }
-
-    avcodec_send_packet(dec_ctx, NULL);
-    while (avcodec_receive_frame(dec_ctx, dec_frame) >= 0) {
-        if (drain_measure_frame(&chain, dec_frame, filt_frame) < 0) {
-            status = LOUDNESS_ERR_PIPELINE;
-            goto cleanup;
-        }
-    }
-    drain_measure_frame(&chain, NULL, filt_frame);
 
 cleanup:
     /* free_audio_filter_chain() (avfilter_graph_free) MUST run while the log capture is still
