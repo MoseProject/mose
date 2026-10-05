@@ -17,8 +17,8 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use avbridge::{
-    encode_export, encode_timeline_export, encode_timeline_export_multi, probe, Canvas,
-    ClipSegment, EncodeError, EncodeOutcome, GpuEncoderPreference, StreamKind,
+    encode_export, encode_timeline_export, encode_timeline_export_multi, measure_loudness_json,
+    probe, Canvas, ClipSegment, EncodeError, EncodeOutcome, GpuEncoderPreference, StreamKind,
 };
 
 const CANVAS: Canvas = Canvas {
@@ -530,6 +530,44 @@ fn multi_track_segments_that_run_to_the_end_of_their_file_keep_their_last_frames
         exported >= 80,
         "exported {exported} frames of {}",
         4 * per_segment
+    );
+
+    let _ = std::fs::remove_file(&out);
+}
+
+#[test]
+fn audio_is_encoded_beside_the_video_and_follows_each_segments_gain() {
+    // The audio graph and encoder run on their own thread: the export must still end with all of
+    // its audio, mastered to the target, and never deadlock on the queue between the two.
+    let out = std::env::temp_dir().join("avbridge_test_audio_worker.mp4");
+    let cancel = AtomicBool::new(false);
+    let segments = [
+        clip(0.0, 0.5, 0.0, ""),
+        clip(0.0, 0.5, -12.0, ""),
+        clip(0.0, 0.5, 0.0, ""),
+    ];
+    let outcome = encode_timeline_export(
+        &segments,
+        CANVAS,
+        &out,
+        -14.0,
+        GpuEncoderPreference::Cpu,
+        &cancel,
+        |_secs| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, EncodeOutcome::Completed);
+
+    let report = measure_loudness_json(&out).expect("the export has an audio stream");
+    let integrated: f64 = report
+        .split("\"input_i\"")
+        .nth(1)
+        .and_then(|rest| rest.split('"').nth(1))
+        .and_then(|number| number.parse().ok())
+        .unwrap_or_else(|| panic!("no input_i in {report}"));
+    assert!(
+        integrated > -40.0 && integrated < -6.0,
+        "integrated loudness {integrated} LUFS: audio missing or not mastered"
     );
 
     let _ = std::fs::remove_file(&out);
