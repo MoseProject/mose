@@ -139,7 +139,7 @@ pub use subtitles::export_srt;
 pub use telemetry::{record_event, GpuSampler, ResourceSampler, TelemetryError, TelemetryEvent};
 pub use text_to_speech::{
     load_voice_config, phonemes_to_ids, synthesize, synthesize_with_phonemizer, write_wav,
-    EspeakPhonemizer, PhonemizationError, Phonemizer, PiperVoiceConfig, TtsError,
+    PhonemizationError, Phonemizer, PiperVoiceConfig, PortuguesePhonemizer, TtsError,
 };
 pub use timeline::{
     AudioRole, ClipFormatting, ClipInstance, LayerTemplate, Marker, MarkerKind, ShapeClip,
