@@ -88,7 +88,16 @@ fn shape_overlays_are_composited_and_failures_are_reported() {
     apply_shape_overlays(&source, &out, &[], width, height, 30, 1).unwrap();
     assert!(!out.exists());
 
-    apply_shape_overlays(&source, &out, std::slice::from_ref(&identity), width, height, 30, 1).unwrap();
+    apply_shape_overlays(
+        &source,
+        &out,
+        std::slice::from_ref(&identity),
+        width,
+        height,
+        30,
+        1,
+    )
+    .unwrap();
     assert_eq!(probe(&out).unwrap().resolution, Some((width, height)));
     let _ = std::fs::remove_file(&out);
 
@@ -211,6 +220,8 @@ fn clip() -> ClipSegment {
         blend_mode: String::new(),
         anchor_x: 0.5,
         anchor_y: 0.5,
+        fade_in_secs: 0.0,
+        fade_out_secs: 0.0,
     }
 }
 

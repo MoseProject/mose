@@ -131,6 +131,8 @@ const strings = {
   maskRoundedRect: { "pt-BR": "Retângulo arredondado", en: "Rounded rectangle" },
   transition: { "pt-BR": "Transição", en: "Transition" },
   transitionDuration: { "pt-BR": "Duração da transição", en: "Transition duration" },
+  fadeIn: { "pt-BR": "Fade de entrada", en: "Fade in" },
+  fadeOut: { "pt-BR": "Fade de saída", en: "Fade out" },
   transitionNone: { "pt-BR": "Nenhuma", en: "None" },
   transitionFade: { "pt-BR": "Fade", en: "Fade" },
   transitionHardCut: { "pt-BR": "Corte seco", en: "Hard cut" },

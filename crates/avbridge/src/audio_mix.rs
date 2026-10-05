@@ -66,6 +66,12 @@ pub struct AudioSegment {
     pub voice_cleanup_compressor_ratio: f32,
     #[serde(default = "default_voice_cleanup_ceiling_linear")]
     pub voice_cleanup_ceiling_linear: f32,
+    /// Fade in / out over this many output seconds, right after this branch's own `volume`
+    /// stage (`afade`); `0.0` = none.
+    #[serde(default)]
+    pub fade_in_secs: f32,
+    #[serde(default)]
+    pub fade_out_secs: f32,
 }
 
 pub(crate) fn default_voice_cleanup_noise_floor_db() -> f32 {
@@ -160,6 +166,8 @@ pub fn mix_audio_timeline(
             voice_cleanup_compressor_threshold_db: seg.voice_cleanup_compressor_threshold_db,
             voice_cleanup_compressor_ratio: seg.voice_cleanup_compressor_ratio,
             voice_cleanup_ceiling_linear: seg.voice_cleanup_ceiling_linear,
+            fade_in_secs: seg.fade_in_secs,
+            fade_out_secs: seg.fade_out_secs,
         })
         .collect();
 

@@ -179,6 +179,8 @@ int audio_worker_finish(AudioWorker **worker, int flush);
 float smooth_speed_ramp_average_speed(const ClipSegment *seg);
 void build_setpts_str(const ClipSegment *seg, double source_duration_secs, char *out,
                       size_t out_size);
+int build_entry_transition(const ClipSegment *seg, int fps_num, int fps_den, double frame_offset,
+                           int alpha, char *transition_str, size_t cap);
 int build_segment_vfilter(const ClipSegment *seg, int canvas_width, int canvas_height, int fps_num,
                           int fps_den, const char *pix_fmt_name, char *buf, size_t cap);
 /* Builds the export's audio graph and AAC encoder from `adec_ctx`, adds the audio stream, opens
@@ -191,6 +193,13 @@ EncodeStatus timeline_open_audio_output(AVFormatContext *out_ctx, AVCodecContext
                                         AVStream **audio_stream, AudioWorker **worker);
 /* Queues the gain and tempo changes `seg` needs, ahead of its audio frames. */
 void timeline_queue_segment_audio_commands(AudioWorker *worker, const ClipSegment *seg);
+/* The segment's length in output seconds: the trimmed source length divided by the speed (the
+   integral of 1/speed for a ramp), the time base the fades are specified in. */
+double segment_output_secs(const ClipSegment *seg);
+/* Multiplies the samples of a decoded audio frame by the segment's fade-in / fade-out ramp.
+   `frame_start_secs` is the frame's first sample in source time. A no-op when the segment has no
+   fades or the sample format is not one of the plain PCM/float layouts. */
+void timeline_apply_audio_fade(AVFrame *frame, const ClipSegment *seg, double frame_start_secs);
 
 /* Result of a re-encode pass; the values equal TextOverlayStatus and PrivacyBlurStatus, which
    the callers convert it to. */

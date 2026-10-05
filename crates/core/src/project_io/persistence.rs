@@ -61,7 +61,7 @@ const SEMANTIC_INDEX_MAGIC: &[u8; 4] = b"OCSI";
 /// The price is that the encoding is positional: any change to the fields of a type inside
 /// [`Project`] changes the bytes, so such a change must bump this version, and files from other
 /// versions are refused with a clear error rather than misread.
-const PROJECT_FORMAT_VERSION: u8 = 2;
+const PROJECT_FORMAT_VERSION: u8 = 3;
 /// Bumped only if the on-disk layout (header framing, not the `Project` schema itself —
 /// that's handled by `#[serde(default)]`) ever needs to change.
 const FORMAT_VERSION: u8 = 1;

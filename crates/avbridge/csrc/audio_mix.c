@@ -136,8 +136,31 @@ static int build_mix_graph(const AudioSegment *segments, const uint8_t *valid, i
            final afftdn/loudnorm/limiter mastering pass below (which runs on the whole mix, not
            per branch) -- so a Mic branch gets cleaned up before it's mixed with everything else,
            not just at the very end. */
+        /* Fade handles, right after the branch's own volume. Output seconds, which is what the
+           branch's time axis is after the tempo stage. */
+        AVFilterContext *fade_tail = volume;
+        double branch_out_secs = (seg->source_out_secs - seg->source_in_secs) / speed;
+        if (seg->fade_in_secs > 0.0f) {
+            AVFilterContext *fade = NULL;
+            snprintf(name, sizeof(name), "fade_in_%d", branch);
+            snprintf(args, sizeof(args), "t=in:st=0:d=%.4f", (double)seg->fade_in_secs);
+            if ((ret = create_filter(graph, &fade, "afade", name, args)) < 0) goto fail;
+            if ((ret = avfilter_link(fade_tail, 0, fade, 0)) < 0) goto fail;
+            fade_tail = fade;
+        }
+        if (seg->fade_out_secs > 0.0f && branch_out_secs > 0.0) {
+            AVFilterContext *fade = NULL;
+            double fade_out = fmin((double)seg->fade_out_secs, branch_out_secs);
+            snprintf(name, sizeof(name), "fade_out_%d", branch);
+            snprintf(args, sizeof(args), "t=out:st=%.4f:d=%.4f", branch_out_secs - fade_out,
+                     fade_out);
+            if ((ret = create_filter(graph, &fade, "afade", name, args)) < 0) goto fail;
+            if ((ret = avfilter_link(fade_tail, 0, fade, 0)) < 0) goto fail;
+            fade_tail = fade;
+        }
+
         AVFilterContext *vc_highpass = NULL, *vc_denoise = NULL, *vc_compressor = NULL;
-        AVFilterContext *voice_cleanup_tail = volume;
+        AVFilterContext *voice_cleanup_tail = fade_tail;
         if (seg->voice_cleanup_enabled) {
             snprintf(name, sizeof(name), "vc_highpass_%d", branch);
             if ((ret = create_filter(graph, &vc_highpass, "highpass", name, "f=80")) < 0) goto fail;
@@ -159,7 +182,7 @@ static int build_mix_graph(const AudioSegment *segments, const uint8_t *valid, i
             if ((ret = create_filter(graph, &voice_cleanup_tail, "alimiter", name, args)) < 0)
                 goto fail;
 
-            if ((ret = avfilter_link(volume, 0, vc_highpass, 0)) < 0 ||
+            if ((ret = avfilter_link(fade_tail, 0, vc_highpass, 0)) < 0 ||
                 (ret = avfilter_link(vc_highpass, 0, vc_denoise, 0)) < 0 ||
                 (ret = avfilter_link(vc_denoise, 0, vc_compressor, 0)) < 0 ||
                 (ret = avfilter_link(vc_compressor, 0, voice_cleanup_tail, 0)) < 0)

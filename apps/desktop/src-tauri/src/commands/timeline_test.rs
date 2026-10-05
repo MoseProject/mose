@@ -496,6 +496,8 @@ mod commands {
                 mask_corner_radius: Some(9.0),
                 transition_in: Some(TransitionType::Fade),
                 transition_duration_secs: Some(99.0),
+                fade_in_secs: Some(99.0),
+                fade_out_secs: Some(-1.0),
                 blend_mode: Some(avcore::timeline::BlendMode::default()),
                 position_keyframes: Some(position),
                 layer_scale_x: Some(99.0),
@@ -528,6 +530,8 @@ mod commands {
         assert_eq!(c.mask_corner_radius, 1.0);
         assert_eq!(c.transition_in, TransitionType::Fade);
         assert_eq!(c.transition_duration_secs, 3.0);
+        assert_eq!(c.fade_in_secs, 10.0);
+        assert_eq!(c.fade_out_secs, 0.0);
         assert_eq!((c.layer_scale_x, c.layer_scale_y), (8.0, 0.05));
         assert_eq!(c.position_keyframes.len(), 1);
         assert_eq!(c.scale_keyframes.len(), 1);

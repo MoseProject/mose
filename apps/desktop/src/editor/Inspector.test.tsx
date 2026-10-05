@@ -65,6 +65,8 @@ const clip = (overrides: Partial<ClipInstance> = {}): ClipInstance => {
     mask_corner_radius: 0.2,
     transition_in: "None",
     transition_duration_secs: 0.5,
+    fade_in_secs: 0,
+    fade_out_secs: 0,
     blend_mode: "Normal",
     position_keyframes: [],
     scale_keyframes: [],

@@ -43,12 +43,18 @@ const TRANSITION_TYPES: { value: TransitionType; label: () => string }[] = [
 
 type Commit = (patch: ClipPatch) => Promise<unknown>;
 
+function formatSeconds(v: number): string {
+  return `${v.toFixed(1)}s`;
+}
+
 export function TransitionSection({ clip, commit }: { clip: ClipInstance; commit: Commit }) {
   return (
     <>
       <Section
         label={t("transition")}
-        defaultOpen={clip.transition_in !== "None"}
+        defaultOpen={
+          clip.transition_in !== "None" || clip.fade_in_secs > 0 || clip.fade_out_secs > 0
+        }
         group="effects"
       >
         <div className="field">
@@ -86,6 +92,28 @@ export function TransitionSection({ clip, commit }: { clip: ClipInstance; commit
             }}
           />
         )}
+        <Slider
+          label={t("fadeIn")}
+          value={clip.fade_in_secs}
+          min={0}
+          max={3}
+          step={0.1}
+          format={formatSeconds}
+          onCommit={(v) => {
+            return commit({ fadeInSecs: v });
+          }}
+        />
+        <Slider
+          label={t("fadeOut")}
+          value={clip.fade_out_secs}
+          min={0}
+          max={3}
+          step={0.1}
+          format={formatSeconds}
+          onCommit={(v) => {
+            return commit({ fadeOutSecs: v });
+          }}
+        />
       </Section>
 
       <div

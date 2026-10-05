@@ -73,10 +73,19 @@ static double smooth_speed_ramp_timeline_elapsed(const ClipSegment *seg,
 
 /* Build the per-track filter string for use INSIDE an overlay graph — same as
    build_segment_vfilter but omits the trailing format=yuv420p (added after the
-   overlay stage) and omits transitions (n counter semantics differ in multi-input
-   graphs). Returns 0 on success, -1 on truncation -- see build_segment_vfilter's doc
-   comment for why this is checked rather than silently accepted. */
-static int build_overlay_vfilter(const ClipSegment *seg, int cw, int ch, int fps_num, int fps_den,
+   overlay stage). Entry transitions and fade handles are included, shifted by how far into the
+   clip the graph's clock (which starts at 0 when the graph is opened) already is. Returns 0 on
+   success, -1 on truncation -- see build_segment_vfilter's doc comment for why this is checked
+   rather than silently accepted. */
+/* How a segment's chain is built inside the overlay graph. */
+typedef enum {
+    OVERLAY_CHAIN_MATTE, /* a matte video: no entry transition, no fades */
+    OVERLAY_CHAIN_BASE,  /* the base track's clip: opaque, fades go to black */
+    OVERLAY_CHAIN_LAYER  /* a layer above it: fades go to transparent (alpha) */
+} OverlayChainKind;
+
+static int build_overlay_vfilter(const ClipSegment *seg, OverlayChainKind kind,
+                                 double graph_open_secs, int cw, int ch, int fps_num, int fps_den,
                                  char *buf, size_t cap) {
     const char *cf = (seg->video_filter && seg->video_filter[0]) ? seg->video_filter : "";
     char setpts[192];
@@ -86,6 +95,47 @@ static int build_overlay_vfilter(const ClipSegment *seg, int cw, int ch, int fps
     if (cf[0]) {
         int post_written = snprintf(post, sizeof(post), ",%s", cf);
         if (post_written < 0 || (size_t)post_written >= sizeof(post)) return -1;
+    }
+
+    /* Entry transition and fade handles. The overlay graph's clock starts at 0 when the graph is
+       opened (graph_open_secs on the timeline), so a clip that started earlier is already
+       `elapsed` seconds in: its fades begin at -elapsed, and the frame counters of the geq
+       transitions are shifted by the frames already played. The Fade transition is folded into
+       the fade-in handle. */
+    char transition[8192] = "";
+    char fade[320] = "";
+    if (kind != OVERLAY_CHAIN_MATTE) {
+        double speed = seg->speed_factor > 0.0f ? (double)seg->speed_factor : 1.0;
+        double total = (seg->source_out_secs - seg->source_in_secs) / speed;
+        double elapsed = graph_open_secs - seg->timeline_start_secs;
+        ClipSegment without_fade = *seg;
+        double fade_in = (double)seg->fade_in_secs;
+        if (seg->transition_in == 1) {
+            if ((double)seg->transition_duration_secs > fade_in)
+                fade_in = (double)seg->transition_duration_secs;
+            without_fade.transition_in = 0;
+        }
+        /* A blend mode ignores alpha, so those layers fade to black like the base clip. */
+        int use_alpha = kind == OVERLAY_CHAIN_LAYER && !(seg->blend_mode && seg->blend_mode[0]);
+        if (build_entry_transition(&without_fade, fps_num, fps_den,
+                                   elapsed * (double)fps_num / (double)fps_den, use_alpha,
+                                   transition, sizeof(transition)) < 0)
+            return -1;
+        double fade_out = (double)seg->fade_out_secs;
+        if (fade_out > total) fade_out = total;
+        const char *alpha_opt = use_alpha ? ":alpha=1" : "";
+        size_t used = 0;
+        if (use_alpha && (fade_in > 0.0 || fade_out > 0.0)) {
+            used += (size_t)snprintf(fade + used, sizeof(fade) - used, ",format=yuva420p");
+        }
+        if (fade_in > 0.0) {
+            used += (size_t)snprintf(fade + used, sizeof(fade) - used,
+                                     ",fade=t=in:st=%.4f:d=%.4f%s", -elapsed, fade_in, alpha_opt);
+        }
+        if (fade_out > 0.0) {
+            snprintf(fade + used, sizeof(fade) - used, ",fade=t=out:st=%.4f:d=%.4f%s",
+                     total - fade_out - elapsed, fade_out, alpha_opt);
+        }
     }
 
     /* pad's x/y offsets place this segment's own anchor point (a fraction of its decoded
@@ -102,8 +152,9 @@ static int build_overlay_vfilter(const ClipSegment *seg, int cw, int ch, int fps
 
     int buf_written = snprintf(buf, cap,
                                "%sscale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:%s:%s,"
-                               "fps=%d/%d%s",
-                               setpts, cw, ch, cw, ch, pad_x, pad_y, fps_num, fps_den, post);
+                               "fps=%d/%d%s%s%s%s",
+                               setpts, cw, ch, cw, ch, pad_x, pad_y, fps_num, fps_den,
+                               transition[0] ? "," : "", transition, post, fade);
     if (buf_written < 0 || (size_t)buf_written >= cap) return -1;
     return 0;
 }
@@ -310,8 +361,9 @@ static int add_graph_input(AVFilterInOut **inputs, AVFilterContext *source, cons
    for h264_qsv. Caller owns the returned graph + contexts; free with avfilter_graph_free(). */
 static int init_overlay_graph(AVCodecContext *vdec0, const char *f0, OverlayTrackState *tracks,
                               int track_count, int canvas_width, int canvas_height, int fps_num,
-                              int fps_den, const char *pix_fmt_name, AVFilterGraph **out_graph,
-                              AVFilterContext **out_src0, AVFilterContext **out_sink) {
+                              int fps_den, double graph_open_secs, const char *pix_fmt_name,
+                              AVFilterGraph **out_graph, AVFilterContext **out_src0,
+                              AVFilterContext **out_sink) {
     *out_graph = avfilter_graph_alloc();
     *out_src0 = *out_sink = NULL;
     reset_overlay_graph_sources(tracks, track_count);
@@ -361,8 +413,9 @@ static int init_overlay_graph(AVCodecContext *vdec0, const char *f0, OverlayTrac
             ret = ret < 0 ? ret : AVERROR(ENOMEM);
             goto graph_build_fail;
         }
-        if (build_overlay_vfilter(track->segment, canvas_width, canvas_height, fps_num, fps_den,
-                                  layer_filter, sizeof(layer_filter)) < 0) {
+        if (build_overlay_vfilter(track->segment, OVERLAY_CHAIN_LAYER, graph_open_secs,
+                                  canvas_width, canvas_height, fps_num, fps_den, layer_filter,
+                                  sizeof(layer_filter)) < 0) {
             ret = AVERROR(EINVAL);
             goto graph_build_fail;
         }
@@ -381,8 +434,9 @@ static int init_overlay_graph(AVCodecContext *vdec0, const char *f0, OverlayTrac
                 ret = ret < 0 ? ret : AVERROR(ENOMEM);
                 goto graph_build_fail;
             }
-            if (build_overlay_vfilter(&track->matte_segment, canvas_width, canvas_height, fps_num,
-                                      fps_den, matte_filter, sizeof(matte_filter)) < 0) {
+            if (build_overlay_vfilter(&track->matte_segment, OVERLAY_CHAIN_MATTE, graph_open_secs,
+                                      canvas_width, canvas_height, fps_num, fps_den, matte_filter,
+                                      sizeof(matte_filter)) < 0) {
                 ret = AVERROR(EINVAL);
                 goto graph_build_fail;
             }
@@ -827,9 +881,9 @@ EncodeStatus avbridge_encode_timeline_export_multi(
                             if (status != ENCODE_OK) break;
 
                             char f0[8192];
-                            if (build_overlay_vfilter(seg0, canvas_width, canvas_height,
-                                                      canvas_fps_num, canvas_fps_den, f0,
-                                                      sizeof(f0)) < 0) {
+                            if (build_overlay_vfilter(seg0, OVERLAY_CHAIN_BASE, ftl, canvas_width,
+                                                      canvas_height, canvas_fps_num, canvas_fps_den,
+                                                      f0, sizeof(f0)) < 0) {
                                 status = ENCODE_ERR_FILTER_GRAPH;
                                 av_frame_unref(dec_frame);
                                 break;
@@ -837,7 +891,7 @@ EncodeStatus avbridge_encode_timeline_export_multi(
                             if (init_overlay_graph(
                                     vdec_ctx0, f0, overlay_tracks, overlay_track_count,
                                     canvas_width, canvas_height, canvas_fps_num, canvas_fps_den,
-                                    venc_pix_fmt_name, &ov_graph, &ov_src0, &ov_sink) < 0) {
+                                    ftl, venc_pix_fmt_name, &ov_graph, &ov_src0, &ov_sink) < 0) {
                                 int had_matte = 0;
                                 for (int i = 0; i < overlay_track_count; i++) {
                                     OverlayTrackState *track = &overlay_tracks[i];
@@ -849,10 +903,11 @@ EncodeStatus avbridge_encode_timeline_export_multi(
                                 /* Matte alpha is optional. If any matte made the combined graph
                                    invalid, retry all active layers without matte inputs. */
                                 if (!had_matte ||
-                                    init_overlay_graph(
-                                        vdec_ctx0, f0, overlay_tracks, overlay_track_count,
-                                        canvas_width, canvas_height, canvas_fps_num, canvas_fps_den,
-                                        venc_pix_fmt_name, &ov_graph, &ov_src0, &ov_sink) < 0) {
+                                    init_overlay_graph(vdec_ctx0, f0, overlay_tracks,
+                                                       overlay_track_count, canvas_width,
+                                                       canvas_height, canvas_fps_num,
+                                                       canvas_fps_den, ftl, venc_pix_fmt_name,
+                                                       &ov_graph, &ov_src0, &ov_sink) < 0) {
                                     status = ENCODE_ERR_FILTER_GRAPH;
                                     av_frame_unref(dec_frame);
                                     break;
@@ -1003,6 +1058,7 @@ EncodeStatus avbridge_encode_timeline_export_multi(
                             av_frame_unref(dec_frame);
                             continue;
                         }
+                        timeline_apply_audio_fade(dec_frame, seg0, fs);
                         if (audio_worker_push_frame(audio_worker, dec_frame) < 0) {
                             status = ENCODE_ERR_PIPELINE;
                             break;

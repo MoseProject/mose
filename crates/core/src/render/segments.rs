@@ -175,6 +175,8 @@ pub fn resolve_timeline_segments(
             blend_mode: String::new(),
             anchor_x: clip.anchor_x,
             anchor_y: clip.anchor_y,
+            fade_in_secs: clip.fade_in_secs,
+            fade_out_secs: clip.fade_out_secs,
         });
     }
     let (width, height, fps) = dimensions_fps.ok_or(RenderError::EmptyTimeline)?;
@@ -289,6 +291,8 @@ pub fn resolve_timeline_segments_multi(
                 blend_mode,
                 anchor_x: clip.anchor_x,
                 anchor_y: clip.anchor_y,
+                fade_in_secs: clip.fade_in_secs,
+                fade_out_secs: clip.fade_out_secs,
             });
         }
 
@@ -367,6 +371,8 @@ pub(crate) fn audio_segment(
         voice_cleanup_compressor_threshold_db: clip.voice_cleanup_compressor_threshold_db,
         voice_cleanup_compressor_ratio: clip.voice_cleanup_compressor_ratio,
         voice_cleanup_ceiling_linear: clip.voice_cleanup_ceiling_linear,
+        fade_in_secs: clip.fade_in_secs,
+        fade_out_secs: clip.fade_out_secs,
     }
 }
 

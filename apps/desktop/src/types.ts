@@ -115,6 +115,8 @@ export interface ClipInstance {
   mask_corner_radius: number;
   transition_in: TransitionType;
   transition_duration_secs: number;
+  fade_in_secs: number;
+  fade_out_secs: number;
   blend_mode: BlendMode;
   position_keyframes: Keyframe<Position>[];
   layer_scale_x: number;
@@ -507,6 +509,8 @@ export interface ClipPatch {
   maskCornerRadius?: number;
   transitionIn?: TransitionType;
   transitionDurationSecs?: number;
+  fadeInSecs?: number;
+  fadeOutSecs?: number;
   blendMode?: BlendMode;
   positionKeyframes?: Keyframe<Position>[];
   layerScaleX?: number;

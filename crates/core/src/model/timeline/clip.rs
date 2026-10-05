@@ -304,6 +304,17 @@ pub struct ClipInstance {
     /// reasonable default duration.
     #[serde(default = "default_transition_duration")]
     pub transition_duration_secs: f32,
+    /// Fade from black over this many seconds at the start of the clip, and from silence for its
+    /// audio (`0.0` = none). Independent of [`ClipInstance::transition_in`], which is a one-shot
+    /// entry effect: the fades are plain handles, like an NLE's fade-in/out grips, and apply in
+    /// export (`fade`/`afade`) and in the live preview. `#[serde(default)]` so older saved
+    /// projects load without them.
+    #[serde(default)]
+    pub fade_in_secs: f32,
+    /// Fade to black over this many seconds at the end of the clip, and to silence for its audio
+    /// (`0.0` = none). See [`ClipInstance::fade_in_secs`].
+    #[serde(default)]
+    pub fade_out_secs: f32,
     /// General keyframe animation for this block's position (translate offset, normalized as a
     /// fraction of canvas width/height), per `features/request.md`'s Fase 4 "Keyframes" spec.
     /// Empty = no offset. Wired into export (`crate::keyframe::position_overlay_xy_expr`) —
@@ -653,6 +664,8 @@ impl ClipInstance {
             pixelize_intensity: 0.0,
             transition_in: TransitionType::None,
             transition_duration_secs: 0.5,
+            fade_in_secs: 0.0,
+            fade_out_secs: 0.0,
             position_keyframes: vec![],
             scale_keyframes: vec![],
             rotation_keyframes: vec![],
