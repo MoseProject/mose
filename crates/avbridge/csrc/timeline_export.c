@@ -646,6 +646,14 @@ EncodeStatus avbridge_encode_timeline_export(const ClipSegment *segments, int se
             }
         }
 
+        /* The graph's `fps` stage holds its newest frame until it sees the next one, so the
+           segment's last frame only comes out when the graph is told its input has ended. */
+        if (status == ENCODE_OK && vchain.graph &&
+            filter_encode_write_video_frame(out_ctx, &vchain, venc_ctx, video_out_stream, NULL,
+                                            filt_frame, &next_video_pts, enc_pkt) < 0) {
+            status = ENCODE_ERR_PIPELINE;
+        }
+
     segment_cleanup:
         free_video_filter_chain(&vchain);
         avcodec_free_context(&vdec_ctx);
