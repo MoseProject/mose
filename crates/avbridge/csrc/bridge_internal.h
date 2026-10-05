@@ -35,6 +35,25 @@ static inline void bridge_enable_decoder_threads(AVCodecContext *ctx) {
     ctx->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
 }
 
+/* Settings the exports, proxies and passes share. */
+
+/* Mastering every export's audio goes through: denoise, loudness to the target, true-peak limit. */
+#define MASTERING_LOUDNORM_ARGS_FORMAT "I=%.1f:TP=-1.0:LRA=11"
+#define MASTERING_LIMITER_ARGS "limit=0.95:attack=5:release=50"
+#define MASTERING_FILTER_FORMAT     "afftdn,loudnorm=" MASTERING_LOUDNORM_ARGS_FORMAT ",alimiter=" MASTERING_LIMITER_ARGS
+
+/* Sample rate and AAC bitrate of an exported mix, and the bitrate of a proxy's audio. */
+#define EXPORT_AUDIO_SAMPLE_RATE 48000
+#define EXPORT_AUDIO_BITRATE_BPS 192000
+#define PROXY_AUDIO_BITRATE_BPS 128000
+
+/* Threads a software H.264 encoder is given, and the keyframe spacing of every encode. */
+#define SOFTWARE_ENCODER_THREADS 8
+#define KEYFRAME_INTERVAL_SECS 2
+
+/* Video bitrate of a re-encode pass when its input does not say. */
+#define DEFAULT_REENCODE_BITRATE_BPS 4000000LL
+
 typedef enum {
     /* Try platform-available hardware encoders in a fixed order (NVENC, Quick Sync, VAAPI,
        AMF, then VideoToolbox on macOS), falling back to the first available CPU H.264 encoder

@@ -15,9 +15,6 @@
 
 #include "bridge_internal.h"
 
-/* The export's audio encoder. */
-#define EXPORT_AUDIO_BITRATE_BPS 192000
-
 /* The audio graph the whole timeline goes through. `vol` and `tempo` are instance names the
    per-segment commands target without rebuilding the graph; loudnorm has to see the whole
    concatenated stream, so the graph is built once, for the first segment. */

@@ -174,7 +174,7 @@ ReencodeStatus avbridge_reencode_with_filter(const char *in_path, const char *ou
         /* Hardware encoder when one opens (this pass re-encodes the whole file), else CPU. */
         venc_ctx = open_overlay_pass_encoder(
             canvas_width, canvas_height, canvas_fps,
-            vin->codecpar->bit_rate > 0 ? vin->codecpar->bit_rate : 4000000LL,
+            vin->codecpar->bit_rate > 0 ? vin->codecpar->bit_rate : DEFAULT_REENCODE_BITRATE_BPS,
             (out_ctx->oformat->flags & AVFMT_GLOBALHEADER) != 0);
         if (!venc_ctx) {
             status = REENCODE_ERR_PIPELINE;
