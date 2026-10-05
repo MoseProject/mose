@@ -13,8 +13,6 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use std::sync::Mutex;
-
 /// Converts text into one IPA string per sentence for a requested language.
 ///
 /// Implementations are synchronous. Callers should keep phonemization off the UI thread when the
@@ -50,23 +48,3 @@ impl std::fmt::Display for PhonemizationError {
 }
 
 impl std::error::Error for PhonemizationError {}
-
-/// Lightweight, rule-based multilingual phonemizer backed by the bundled eSpeak NG engine.
-#[derive(Debug, Default, Clone, Copy)]
-pub struct EspeakPhonemizer;
-
-// eSpeak keeps the selected voice and phonemization buffers in process-global native state.
-// Serialize the complete voice-selection and conversion operation so concurrent TTS jobs cannot
-// change each other's language or read a buffer while another call replaces it.
-static ESPEAK_LOCK: Mutex<()> = Mutex::new(());
-
-impl Phonemizer for EspeakPhonemizer {
-    fn phonemize(&self, text: &str, language: &str) -> Result<Vec<String>, PhonemizationError> {
-        let _guard = ESPEAK_LOCK.lock().map_err(|_| {
-            PhonemizationError::new("eSpeak NG", "global phonemizer lock is poisoned")
-        })?;
-
-        espeak_rs::text_to_phonemes(text, language, None)
-            .map_err(|error| PhonemizationError::new("eSpeak NG", error.0))
-    }
-}

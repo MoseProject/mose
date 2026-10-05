@@ -225,11 +225,25 @@ fn synthesis_reports_phonemization_and_model_failures() {
 }
 
 #[test]
-fn the_bundled_espeak_backend_phonemizes_or_names_itself_in_the_error() {
-    match EspeakPhonemizer.phonemize("ola", "pt-br") {
-        Ok(sentences) => assert!(!sentences.is_empty()),
-        Err(error) => assert_eq!(error.backend(), "eSpeak NG"),
+fn the_default_phonemizer_speaks_portuguese_and_refuses_other_languages() {
+    let sentences = PortuguesePhonemizer.phonemize("ola", "pt-br").unwrap();
+    assert!(!sentences.is_empty());
+    let error = PortuguesePhonemizer
+        .phonemize("hello", "en-us")
+        .unwrap_err();
+    assert_eq!(error.backend(), "pt-BR rules");
+}
+
+#[test]
+fn a_nasal_vowel_is_looked_up_as_its_base_letter_and_combining_tilde() {
+    // Published Piper voices have the base letter and U+0303 as separate symbols and no
+    // entry for the cluster.
+    let mut config = fixture_config();
+    config.phoneme_id_map.clear();
+    for (symbol, id) in [("_", 0), ("^", 1), ("$", 2), ("ɐ", 7), ("\u{303}", 8)] {
+        config.phoneme_id_map.insert(symbol.to_string(), vec![id]);
     }
+    assert_eq!(phonemes_to_ids("ɐ\u{303}", &config), vec![1, 7, 0, 8, 0, 2]);
 }
 
 #[test]

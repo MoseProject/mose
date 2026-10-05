@@ -15,9 +15,8 @@
 
 //! Text-to-speech — per `request.md`'s Fase 4 "Texto-pra-fala": synthesizes narration from
 //! typed text. Runs a Piper VITS ONNX voice model (`rhasspy/piper-voices` on Hugging Face, MIT)
-//! against phonemes produced by [`EspeakPhonemizer`] (statically-linked espeak-ng, no runtime
-//! DLL — see `build.rs`'s doc comment for how its `espeak-ng-data` directory gets discovered at
-//! runtime).
+//! against phonemes produced by [`PortuguesePhonemizer`] (this crate's own pt-BR rules, writing
+//! the eSpeak-style IPA symbols the voices were trained on; no phonemizer library is linked).
 //!
 //! Pipeline: [`Phonemizer::phonemize`] (text -> one IPA string per sentence) ->
 //! [`phonemes_to_ids`] (IPA string -> phoneme IDs, via the voice's own `phoneme_id_map`) ->
@@ -41,8 +40,10 @@ use std::path::Path;
 use unicode_segmentation::UnicodeSegmentation;
 
 mod phonemizer;
+mod pt_br;
 
-pub use phonemizer::{EspeakPhonemizer, PhonemizationError, Phonemizer};
+pub use phonemizer::{PhonemizationError, Phonemizer};
+pub use pt_br::PortuguesePhonemizer;
 
 const PAD_SYMBOL: &str = "_";
 const BOS_SYMBOL: &str = "^";
@@ -74,8 +75,8 @@ pub struct PiperAudioConfig {
 
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct PiperEspeakConfig {
-    /// espeak-ng voice/language code (e.g. `"pt-br"`) — passed straight to
-    /// [`espeak_rs::text_to_phonemes`].
+    /// The voice's language code (e.g. `"pt-br"`), under the `espeak` key of Piper's own config
+    /// file; passed straight to [`Phonemizer::phonemize`].
     pub voice: String,
 }
 
@@ -140,11 +141,23 @@ pub fn load_voice_config(config_path: &Path) -> Result<PiperVoiceConfig, TtsErro
     serde_json::from_slice(&bytes).map_err(TtsError::Json)
 }
 
-/// Splits an espeak IPA phoneme string into individual symbols by Unicode grapheme cluster
-/// (keeps a base letter and any combining stress/length diacritic together as one symbol,
-/// matching how Piper voices were trained — a plain `char` split would separate them).
-fn split_phoneme_symbols(ipa: &str) -> Vec<String> {
-    ipa.graphemes(true).map(str::to_string).collect()
+/// Splits a phoneme string into the symbols to look up in a voice's `phoneme_id_map`: a Unicode
+/// grapheme cluster when the voice has an entry for it, else its code points one by one. The
+/// published Piper voices list a nasal vowel as two symbols (a base letter and a combining
+/// tilde), so a cluster-only lookup would drop the vowel.
+fn split_phoneme_symbols(ipa: &str, config: &PiperVoiceConfig) -> Vec<String> {
+    let known = |symbol: &str| {
+        config.phoneme_id_map.contains_key(symbol) || config.phoneme_map.contains_key(symbol)
+    };
+    let mut symbols = Vec::new();
+    for cluster in ipa.graphemes(true) {
+        if known(cluster) || cluster.chars().count() == 1 {
+            symbols.push(cluster.to_string());
+        } else {
+            symbols.extend(cluster.chars().map(String::from));
+        }
+    }
+    symbols
 }
 
 /// Converts one sentence's IPA phoneme symbols into a Piper phoneme-ID sequence: BOS, then for
@@ -170,7 +183,7 @@ pub fn phonemes_to_ids(ipa: &str, config: &PiperVoiceConfig) -> Vec<i64> {
         .unwrap_or_default();
 
     let mut ids = bos;
-    for symbol in split_phoneme_symbols(ipa) {
+    for symbol in split_phoneme_symbols(ipa, config) {
         let mapped: Vec<String> = config
             .phoneme_map
             .get(&symbol)
@@ -187,13 +200,13 @@ pub fn phonemes_to_ids(ipa: &str, config: &PiperVoiceConfig) -> Vec<i64> {
     ids
 }
 
-/// Phonemizes `text` with the default [`EspeakPhonemizer`] and runs Piper VITS inference.
+/// Phonemizes `text` with the default [`PortuguesePhonemizer`] and runs Piper VITS inference.
 pub fn synthesize(
     model_path: &Path,
     config: &PiperVoiceConfig,
     text: &str,
 ) -> Result<Vec<f32>, TtsError> {
-    synthesize_with_phonemizer(model_path, config, text, &EspeakPhonemizer)
+    synthesize_with_phonemizer(model_path, config, text, &PortuguesePhonemizer)
 }
 
 /// Phonemizes `text` with an explicit backend and runs Piper VITS inference sentence-by-sentence,

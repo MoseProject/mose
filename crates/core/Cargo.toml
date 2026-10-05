@@ -71,13 +71,9 @@ self_update = { version = "0.44", default-features = false, features = ["ureq", 
 # `download-binaries` fetches a checksum-pinned ONNX Runtime archive at build time; this feature
 # set statically links it, so release bundles need no separate ONNX Runtime DLL/shared object.
 ort = { version = "2.0.0-rc.13", features = ["download-binaries"] }
-# Text-to-speech (`text_to_speech`): espeak-ng phonemization for Piper voice models. Builds
-# espeak-ng from vendored C source via cmake (needs CMake + LIBCLANG_PATH — bindgen — on the
-# build machine, same class of requirement as whisper-rs), statically linked (no runtime DLL).
-# Needs its `espeak-ng-data` directory discoverable at runtime — `build.rs` copies it next to
-# the workspace's build output; see that file's doc comment.
-espeak-rs = "0.2"
-# Splits an espeak IPA phoneme string into individual symbols by Unicode grapheme cluster
+# Text-to-speech (`text_to_speech`): phonemes come from this crate's own pt-BR rules, so no
+# phonemizer library (and none under a copyleft license) is linked.
+# Splits a phoneme string into individual symbols by Unicode grapheme cluster
 # (not `char`), so a base letter plus a combining stress/length diacritic stays one phoneme
 # symbol — required for correct lookup against a Piper voice's `phoneme_id_map`.
 unicode-segmentation = "1"
@@ -105,13 +101,6 @@ zip = { version = "8", default-features = false }
 regex = "1.13"
 postcard = { version = "1.1.3", features = ["use-std"] }
 lz4_flex = { version = "0.14.0", default-features = false, features = ["std", "safe-encode", "safe-decode"] }
-
-[build-dependencies]
-# Not called directly by build.rs — listing it here forces Cargo to build espeak-rs-sys's own
-# build script (which populates its OUT_DIR's espeak-ng-data) before core's build.rs runs,
-# since build script *compilation* order otherwise has no dependency on a crate's normal
-# (non-build) dependencies. Without this, build.rs can run before espeak-rs-sys exists at all.
-espeak-rs-sys = "0.2"
 
 [dev-dependencies]
 criterion = "0.8.2"

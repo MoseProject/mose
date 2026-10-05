@@ -16,7 +16,6 @@ python3 "$SCRIPT_DIR/verify_ffmpeg_runtime.py" "$FFMPEG_DIR/bin/ffmpeg" --platfo
 rm -rf -- "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR/resources/runtime/bin" "$OUTPUT_DIR/resources/runtime/lib"
 cp "$BUILD_DIR/oca-desktop" "$BUILD_DIR/ytbridge" "$BUILD_DIR/deno" "$OUTPUT_DIR/"
-cp -a "$BUILD_DIR/espeak-ng-data" "$OUTPUT_DIR/"
 cp -a "$BUILD_DIR/lib" "$OUTPUT_DIR/"
 cp "$FFMPEG_DIR/bin/ffmpeg" "$OUTPUT_DIR/resources/runtime/bin/"
 cp -a "$FFMPEG_DIR/lib/"*.so* "$OUTPUT_DIR/resources/runtime/lib/"

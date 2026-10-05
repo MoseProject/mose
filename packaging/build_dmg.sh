@@ -34,7 +34,7 @@ cp "$INVENTORY" "$STAGING/DEPENDENCIES.json"
 ln -s /Applications "$STAGING/Applications"
 
 # `hdiutil create -srcfolder` uses copy-helper, which can stall for minutes on the thousands of
-# small eSpeak/Python files in this bundle. Populate a writable image directly, then convert it
+# small Python files in this bundle. Populate a writable image directly, then convert it
 # to the compressed read-only release image.
 CONTENT_KIB="$(du -sk "$STAGING" | awk '{print $1}')"
 IMAGE_MIB=$(((CONTENT_KIB * 12 / 10 + 65536 + 1023) / 1024))

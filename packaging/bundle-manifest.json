@@ -70,12 +70,6 @@
       "bundle": "statically linked transcription engine"
     },
     {
-      "name": "eSpeak NG",
-      "version": "espeak-rs-sys 0.2",
-      "license": "GPL-3.0-or-later",
-      "bundle": "engine statically linked; espeak-ng-data copied beside the executable"
-    },
-    {
       "name": "CPython",
       "version": "3.10.21+20260814",
       "license": "PSF-2.0",
