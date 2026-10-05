@@ -30,7 +30,7 @@ pub const PREVIEW_TICK: &str = "preview-tick";
 pub const PREVIEW_RECOVERY: &str = "preview-recovery";
 
 /// How often the supervisor wakes to check on the playback thread while no command arrives.
-const SUPERVISE_INTERVAL: Duration = Duration::from_millis(100);
+const SUPERVISE_INTERVAL: Duration = Duration::from_millis(500);
 /// A playback thread that crashes this many times within [`RESTART_WINDOW`] is not restarted
 /// again: something about the project makes it crash every time.
 const MAX_RESTARTS: usize = 5;

@@ -48,6 +48,8 @@ const FRAME_CACHE_BYTES: usize = 192 * 1024 * 1024;
 const OUTSTANDING_TIMEOUT: Duration = Duration::from_millis(250);
 /// Poll cadence while playing: short enough to request the next frame right after one lands.
 const PLAYING_POLL_INTERVAL: Duration = Duration::from_millis(1);
+/// How long the loop waits for a command when no render or tick is pending.
+const IDLE_WAIT: Duration = Duration::from_millis(250);
 
 /// Resolves proxies and parses LUTs once per path for the mapper.
 #[derive(Default)]
@@ -226,6 +228,8 @@ pub(crate) fn run_with_audio<R: Runtime>(
     let mut dirty = true;
     let mut last_tick = Instant::now();
     let mut outstanding_since: Option<Instant> = None;
+    // When a rendered frame was handed to the JPEG thread and its picture has not shown up yet.
+    let mut encoding_since: Option<Instant> = None;
     let mut stats = PlaybackStats::new();
     let encoder = spawn_encoder(Arc::clone(&latest));
     let mut encoded_seen = 0u64;
@@ -247,7 +251,18 @@ pub(crate) fn run_with_audio<R: Runtime>(
                 Err(TryRecvError::Disconnected) => break,
             }
         } else {
-            match rx.recv_timeout(POLL_INTERVAL) {
+            // Nothing in flight: a command is the only thing worth waking for, so wait for one
+            // instead of polling 60 times a second (idle wakeups are what keeps a laptop's cores
+            // out of deep sleep).
+            let in_flight = dirty
+                || outstanding_since.is_some()
+                || encoding_since.is_some_and(|since| since.elapsed() < OUTSTANDING_TIMEOUT);
+            let wait = if in_flight {
+                POLL_INTERVAL
+            } else {
+                IDLE_WAIT
+            };
+            match rx.recv_timeout(wait) {
                 Ok(command) => commands.push(command),
                 Err(RecvTimeoutError::Timeout) => {}
                 Err(RecvTimeoutError::Disconnected) => break,
@@ -429,6 +444,7 @@ pub(crate) fn run_with_audio<R: Runtime>(
             }
             if let Some(frame) = newest {
                 outstanding_since = None;
+                encoding_since = Some(Instant::now());
                 let _ = encoder.tx.send(frame);
             }
 
@@ -471,6 +487,7 @@ pub(crate) fn run_with_audio<R: Runtime>(
         let encoded = encoder.shared.encoded_seq.load(Ordering::Acquire);
         if encoded != encoded_seen {
             encoded_seen = encoded;
+            encoding_since = None;
             available = true;
             error = None;
             dirty = true;
