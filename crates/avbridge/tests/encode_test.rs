@@ -759,6 +759,34 @@ fn an_overlay_layers_slide_and_zoom_transitions_reveal_it_over_the_footage() {
 }
 
 #[test]
+fn fades_already_over_when_the_overlay_graph_opens_do_not_break_the_export() {
+    // The overlay graph's clock restarts when a layer enters: by then the base clip's 0.2 s
+    // fade-in is long over and the layer's own fade has not started. `fade` rejects negative
+    // start times, so the graph used to fail to build.
+    let out = std::env::temp_dir().join("avbridge_test_fade_before_overlay.mp4");
+    let cancel = AtomicBool::new(false);
+    let mut background = clip(0.0, 1.0, 0.0, "");
+    background.fade_in_secs = 0.2;
+    background.fade_out_secs = 0.2;
+    let mut layer = clip(0.0, 0.2, 0.0, "");
+    layer.timeline_start_secs = 0.5;
+    layer.fade_in_secs = 0.1;
+    layer.fade_out_secs = 0.1;
+    let outcome = encode_timeline_export_multi(
+        &[vec![background], vec![layer]],
+        CANVAS,
+        &out,
+        -14.0,
+        GpuEncoderPreference::Cpu,
+        &cancel,
+        |_secs| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, EncodeOutcome::Completed);
+    let _ = std::fs::remove_file(&out);
+}
+
+#[test]
 fn multi_track_segments_contribute_exactly_their_duration_in_frames() {
     let out = std::env::temp_dir().join("avbridge_test_timeline_multi_exact.mp4");
     let cancel = AtomicBool::new(false);

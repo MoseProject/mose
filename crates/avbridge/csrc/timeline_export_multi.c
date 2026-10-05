@@ -128,13 +128,28 @@ static int build_overlay_vfilter(const ClipSegment *seg, OverlayChainKind kind,
         if (use_alpha && (fade_in > 0.0 || fade_out > 0.0)) {
             used += (size_t)snprintf(fade + used, sizeof(fade) - used, ",format=yuva420p");
         }
-        if (fade_in > 0.0) {
-            used += (size_t)snprintf(fade + used, sizeof(fade) - used,
-                                     ",fade=t=in:st=%.4f:d=%.4f%s", -elapsed, fade_in, alpha_opt);
+        /* `fade` takes no negative start time. A fade the graph opened in the middle of (or
+           after) continues over what is left of it, restarting its ramp: an approximation of a
+           rare case, in place of a graph that fails to build. */
+        double in_start = -elapsed;
+        double in_length = fade_in;
+        if (in_start < 0.0) {
+            in_length = fade_in + in_start;
+            in_start = 0.0;
         }
-        if (fade_out > 0.0) {
-            snprintf(fade + used, sizeof(fade) - used, ",fade=t=out:st=%.4f:d=%.4f%s",
-                     total - fade_out - elapsed, fade_out, alpha_opt);
+        if (fade_in > 0.0 && in_length > 0.001) {
+            used += (size_t)snprintf(fade + used, sizeof(fade) - used,
+                                     ",fade=t=in:st=%.4f:d=%.4f%s", in_start, in_length, alpha_opt);
+        }
+        double out_start = total - fade_out - elapsed;
+        double out_length = fade_out;
+        if (out_start < 0.0) {
+            out_length = total - elapsed;
+            out_start = 0.0;
+        }
+        if (fade_out > 0.0 && out_length > 0.001) {
+            snprintf(fade + used, sizeof(fade) - used, ",fade=t=out:st=%.4f:d=%.4f%s", out_start,
+                     out_length, alpha_opt);
         }
     }
 
