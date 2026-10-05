@@ -10,24 +10,23 @@ from selenium.webdriver.common.by import By
 from conftest import poll_until
 from helpers import goto_editor, invoke
 
-NAV_TESTID_TO_SCREEN_TESTID = {
-    "nav-prefs": "screen-prefs",
-    "nav-watch": "screen-watch",
-    "nav-home": "screen-home",
-}
+def test_home_opens_preferences_as_a_dialog(oca_driver):
+    # Preferences and the watch folder are dialogs over Home now, opened from its header.
+    oca_driver.find_element(By.CSS_SELECTOR, '[data-testid="home-settings"]').click()
+    found = poll_until(
+        lambda: oca_driver.find_elements(By.CSS_SELECTOR, '[role="dialog"]'),
+        timeout_secs=3.0,
+    )
+    assert found, "no dialog after clicking Preferences on Home"
 
 
-def test_navigating_topbar_destinations_updates_the_screen(oca_driver):
-    for nav_testid, screen_testid in NAV_TESTID_TO_SCREEN_TESTID.items():
-        oca_driver.find_element(By.CSS_SELECTOR, f'[data-testid="{nav_testid}"]').click()
-
-        found = poll_until(
-            lambda testid=screen_testid: oca_driver.find_elements(
-                By.CSS_SELECTOR, f'[data-testid="{testid}"]'
-            ),
-            timeout_secs=3.0,
-        )
-        assert found, f"no [data-testid={screen_testid!r}] after clicking [data-testid={nav_testid!r}]"
+def test_home_opens_the_watch_folder(oca_driver):
+    oca_driver.find_element(By.CSS_SELECTOR, '[data-testid="home-watch"]').click()
+    found = poll_until(
+        lambda: oca_driver.find_elements(By.CSS_SELECTOR, '[data-testid="screen-watch"]'),
+        timeout_secs=3.0,
+    )
+    assert found, "no [data-testid=screen-watch] after clicking Watch folder on Home"
 
 
 def test_new_project_asks_for_a_name_first(oca_driver):

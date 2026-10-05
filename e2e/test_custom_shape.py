@@ -15,7 +15,10 @@ from conftest import poll_until
 
 def test_drawing_three_points_and_pressing_enter_creates_a_polygon_shape(oca_driver):
     goto_editor(oca_driver)
-    oca_driver.find_element(By.CSS_SELECTOR, '[data-testid="draw-custom-shape"]').click()
+    # The toolbar button can sit in the toolbar's overflow, where WebDriver cannot click it.
+    oca_driver.execute_script(
+        "document.querySelector('[data-testid=draw-custom-shape]').click()"
+    )
 
     monitor = oca_driver.find_element(By.CSS_SELECTOR, '[data-testid="preview-monitor"]')
     size = monitor.size

@@ -84,7 +84,16 @@ def goto_editor(driver):
     was ever explicitly created (a session already exists from app startup either way)."""
     if driver.find_elements(By.CSS_SELECTOR, '[data-testid="screen-editor"]'):
         return
-    driver.find_element(By.CSS_SELECTOR, '[data-testid="nav-home"]').click()
+    # Launch lands on Home, which has no topbar Home button to click; "back to editor" is offered
+    # only for a session that is saved or has unsaved changes, so a clean one is edited and the
+    # edit undone (the session stays marked as changed).
+    if not driver.find_elements(By.CSS_SELECTOR, '[data-testid="back-to-editor"]'):
+        invoke(driver, "add_track", {"kind": "Audio"})
+        invoke(driver, "undo")
+        poll_until(
+            lambda: driver.find_elements(By.CSS_SELECTOR, '[data-testid="back-to-editor"]'),
+            timeout_secs=3.0,
+        )
     driver.find_element(By.CSS_SELECTOR, '[data-testid="back-to-editor"]').click()
     found = poll_until(
         lambda: driver.find_elements(By.CSS_SELECTOR, '[data-testid="screen-editor"]'),

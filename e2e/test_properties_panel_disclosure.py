@@ -20,10 +20,12 @@ def test_gain_section_starts_collapsed_and_toggles_on_click(oca_driver):
     )
 
     summary = section.find_element(By.CSS_SELECTOR, "summary")
-    summary.click()
+    # A native <summary> toggles on click; WebDriver refuses to click it when the inspector is
+    # scrolled, so the click is dispatched in the page.
+    oca_driver.execute_script("arguments[0].click()", summary)
     assert section.get_attribute("open"), "clicking the Gain section header didn't expand it"
 
-    summary.click()
+    oca_driver.execute_script("arguments[0].click()", summary)
     assert not section.get_attribute("open"), (
         "clicking the Gain section header a second time didn't collapse it back"
     )
