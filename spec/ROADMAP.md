@@ -2820,8 +2820,8 @@ but they remain behind the higher-impact CF-01-CF-06 workflow items.
 
 ## P7 — Design System Consolidation
 
-`ui` crate presentation-layer only. Full findings: `UI_DESIGN_AUDIT.md` (whole-app audit) and
-`DESIGN_SYSTEM_CONSOLIDATION.md` (architectural review — source-of-truth table, bypass
+`ui` crate presentation-layer only. Full findings: `docs/design/UI_DESIGN_AUDIT.md` (whole-app audit) and
+`docs/design/DESIGN_SYSTEM_CONSOLIDATION.md` (architectural review — source-of-truth table, bypass
 enforcement analysis, component inventory). Verdict: `theme.rs`/`components/*.rs` infrastructure
 is sound, the problem is unenforced bypass at ~half the relevant call sites, not a missing
 system. Implementation order below matches the consolidation review's recommendation
