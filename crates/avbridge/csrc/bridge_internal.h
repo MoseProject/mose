@@ -26,6 +26,15 @@
 
 #include "bridge.h"
 
+/* Lets a video decoder use every core: frame threading plus slice threading. A decoder opened by
+   hand through avcodec_alloc_context3 runs on one thread unless this is called before
+   avcodec_open2(). Frame threading holds back up to one frame per thread, so the caller must
+   flush the decoder (empty packet, then drain) at the end of its input. */
+static inline void bridge_enable_decoder_threads(AVCodecContext *ctx) {
+    ctx->thread_count = 0; /* one per core */
+    ctx->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
+}
+
 typedef enum {
     /* Try platform-available hardware encoders in a fixed order (NVENC, Quick Sync, VAAPI,
        AMF, then VideoToolbox on macOS), falling back to the first available CPU H.264 encoder
