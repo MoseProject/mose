@@ -3,6 +3,7 @@ name = "ytbridge"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
 
 # A standalone binary, deliberately kept out of `core`/`ui`'s dependency graph — see
 # `src/main.rs`'s module doc for why embedding Python directly into the GUI binary (an earlier

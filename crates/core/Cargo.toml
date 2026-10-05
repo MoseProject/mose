@@ -3,6 +3,7 @@ name = "core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
 
 # Rust code imports this crate as `avcore`, not the bare package name `core` — a dependency
 # literally named `core` shadows the sysroot `core` crate (verified: `use core::mem::...`

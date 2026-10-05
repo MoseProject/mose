@@ -3,6 +3,7 @@ name = "desktop"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
 description = "Tauri shell for oca: a React/TypeScript webview frontend over the avcore engine."
 
 [[bin]]
