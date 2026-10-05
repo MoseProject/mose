@@ -142,7 +142,7 @@ the real default device.
       It stays opt-in; a win needs a zero-copy GPU path.
 - [ ] Hardware paths other than D3D11VA (VAAPI, VideoToolbox) are unverified: no such machine.
 
-## Desktop adapter (plan phase 7, `apps/desktop/src-tauri/src/bush_adapter/`)
+## Desktop adapter (plan phase 7, `apps/desktop/src-tauri/src/preview/bush_adapter/`)
 
 Behind the `bush-preview` cargo feature (off by default); at runtime `OCA_PREVIEW_ENGINE=bush`
 selects it and `OCA_BUSH_RENDERER=gpu` lets it composite on the GPU. Design and rollout:

@@ -80,7 +80,7 @@ Read the relevant files:
   and `apps/desktop/src/editor/Timeline.tsx` for the real canvas implementation
 - Workflow changes: `ux/WORKFLOWS.md` (workflow shape only, see the note above on stale paths)
 - UI changes: `design/DESIGN_SYSTEM.md`, `design/PROFESSIONAL_UI.md`
-- Architecture changes: `apps/desktop/src-tauri/src/state.rs` and `commands/mod.rs` (the real
+- Architecture changes: `apps/desktop/src-tauri/src/session/state.rs` and `commands/mod.rs` (the real
   session/command/undo plumbing) — `engineering/ARCHITECTURE.md` is egui-era history only
 - Quality gates before calling a change done: `engineering/QUALITY.md` (still applies at the
   principle level; ignore any egui-specific command/file paths in it)
