@@ -398,6 +398,34 @@ mod commands {
     }
 
     #[test]
+    fn choosing_a_cross_dissolve_overlaps_the_clip_with_the_one_before_it() {
+        let h = setup();
+        let (first, second) = two_clips(&h);
+        let patch = ClipPatch {
+            transition_in: Some(avcore::timeline::TransitionType::Dissolve),
+            transition_duration_secs: Some(1.0),
+            ..Default::default()
+        };
+        update_clip(h.handle(), second, patch).unwrap();
+        let after = timeline(&h);
+        assert_eq!(clip(&after, first).start_secs, 0.0);
+        assert_eq!(
+            clip(&after, second).start_secs,
+            9.0,
+            "10 s clip, 1 s overlap"
+        );
+        assert_eq!(after.tracks[0].overlap_with_earlier_secs(second), 1.0);
+
+        // Choosing it again does not overlap further.
+        let again = ClipPatch {
+            transition_in: Some(avcore::timeline::TransitionType::Dissolve),
+            ..Default::default()
+        };
+        update_clip(h.handle(), second, again).unwrap();
+        assert_eq!(clip(&timeline(&h), second).start_secs, 9.0);
+    }
+
+    #[test]
     fn formatting_is_copied_and_applied_to_another_clip() {
         let h = setup();
         let (first, second) = two_clips(&h);
