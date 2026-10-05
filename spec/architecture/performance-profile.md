@@ -174,6 +174,15 @@ overlay decoders stay single-threaded.
   graphs freed on a mode change or at the end of a segment are drained first.
 Tests assert exact frame counts for both.
 
+**Proxies and overlay passes.** Proxy generation scaled on one thread and encoded with one:
+`threads=0` on the scaler and eight encoder threads take 60 s of 1080p60 from 13.7 s to 8.5 s and
+60 s of 2160p30 from 8.3 s to 5.5 s (the ffmpeg command line with libx264 ultrafast: 8.1 s). The
+text, shape and privacy blur passes re-encode the whole exported file, and ran a single-threaded
+decoder into the CPU encoder: 61.7 s for 60 s of 1080p60, several times the export they follow.
+They now decode with frame threading and open the hardware encoder when its input format matches
+the graphs (CPU otherwise): 11.8 s for the same text pass, all 3600 frames and the audio intact.
+Software encoders everywhere get eight threads (the CPU export fallback was single-threaded).
+
 **Filmstrip tiles.** A screenful of tile requests spawned a thread and opened a decoder each, so 24
 simultaneous requests on a 2 hour file each waited 1.3 s (every decoder starts a thread per core).
 Opening costs 45 ms and the frame 30 ms. `tile_workers.rs` drains requests with four workers that
