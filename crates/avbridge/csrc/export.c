@@ -20,9 +20,9 @@
 #include <libavfilter/buffersink.h>
 #include <libavformat/avformat.h>
 
-EncodeStatus avbridge_encode_export(const char *in_path, const char *out_path,
-                                            float target_lufs, ProgressCallback progress_cb,
-                                            void *progress_user_data, const uint8_t *cancel) {
+EncodeStatus avbridge_encode_export(const char *in_path, const char *out_path, float target_lufs,
+                                    ProgressCallback progress_cb, void *progress_user_data,
+                                    const uint8_t *cancel) {
     AVFormatContext *in_ctx = NULL;
     AVFormatContext *out_ctx = NULL;
     AVCodecContext *dec_ctx = NULL;
@@ -38,8 +38,10 @@ EncodeStatus avbridge_encode_export(const char *in_path, const char *out_path,
     int audio_out_index = -1;
 
     switch (open_input(in_path, &in_ctx)) {
-        case -1: return ENCODE_ERR_OPEN_INPUT;
-        case -2: return ENCODE_ERR_STREAM_INFO;
+    case -1:
+        return ENCODE_ERR_OPEN_INPUT;
+    case -2:
+        return ENCODE_ERR_STREAM_INFO;
     }
 
     for (unsigned int i = 0; i < in_ctx->nb_streams; i++) {
@@ -73,8 +75,8 @@ EncodeStatus avbridge_encode_export(const char *in_path, const char *out_path,
             goto cleanup;
         }
         dec_ctx = avcodec_alloc_context3(decoder);
-        if (!dec_ctx || avcodec_parameters_to_context(
-                            dec_ctx, in_ctx->streams[audio_in_index]->codecpar) < 0) {
+        if (!dec_ctx ||
+            avcodec_parameters_to_context(dec_ctx, in_ctx->streams[audio_in_index]->codecpar) < 0) {
             status = ENCODE_ERR_DECODER;
             goto cleanup;
         }
@@ -93,9 +95,7 @@ EncodeStatus avbridge_encode_export(const char *in_path, const char *out_path,
 
     {
         char filter_descr[256];
-        snprintf(filter_descr, sizeof(filter_descr),
-                 MASTERING_FILTER_FORMAT,
-                 (double)target_lufs);
+        snprintf(filter_descr, sizeof(filter_descr), MASTERING_FILTER_FORMAT, (double)target_lufs);
         if (init_audio_filter_chain(dec_ctx, encoder, filter_descr, &chain) < 0) {
             status = ENCODE_ERR_FILTER_GRAPH;
             goto cleanup;
@@ -218,7 +218,7 @@ EncodeStatus avbridge_encode_export(const char *in_path, const char *out_path,
                     break;
                 }
                 if (filter_encode_write_frame(out_ctx, &chain, enc_ctx, out_stream, dec_frame,
-                                               filt_frame, enc_pkt) < 0) {
+                                              filt_frame, enc_pkt) < 0) {
                     status = ENCODE_ERR_PIPELINE;
                     break;
                 }
@@ -248,14 +248,13 @@ EncodeStatus avbridge_encode_export(const char *in_path, const char *out_path,
         avcodec_send_packet(dec_ctx, NULL);
         while (avcodec_receive_frame(dec_ctx, dec_frame) >= 0) {
             if (filter_encode_write_frame(out_ctx, &chain, enc_ctx, out_stream, dec_frame,
-                                           filt_frame, enc_pkt) < 0) {
+                                          filt_frame, enc_pkt) < 0) {
                 status = ENCODE_ERR_PIPELINE;
                 break;
             }
         }
-        if (status == ENCODE_OK &&
-            filter_encode_write_frame(out_ctx, &chain, enc_ctx, out_stream, NULL, filt_frame,
-                                       enc_pkt) < 0) {
+        if (status == ENCODE_OK && filter_encode_write_frame(out_ctx, &chain, enc_ctx, out_stream,
+                                                             NULL, filt_frame, enc_pkt) < 0) {
             status = ENCODE_ERR_PIPELINE;
         }
         if (status == ENCODE_OK &&

@@ -260,9 +260,9 @@ TextOverlayStatus avbridge_apply_text_overlays(const char *in_path, const char *
         filter_str[pos] = '\0';
     }
 
-    status = (TextOverlayStatus)avbridge_reencode_with_filter(in_path, out_path, filter_str, canvas_width,
-                                                       canvas_height, canvas_fps_num, canvas_fps_den,
-                                                       0);
+    status = (TextOverlayStatus)avbridge_reencode_with_filter(in_path, out_path, filter_str,
+                                                              canvas_width, canvas_height,
+                                                              canvas_fps_num, canvas_fps_den, 0);
 
 cleanup:
     av_free(filter_str);

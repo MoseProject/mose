@@ -50,17 +50,16 @@ static int init_pcm_filter_chain(AVCodecContext *dec_ctx, AudioFilterChain *chai
     }
 
     av_channel_layout_describe(&dec_ctx->ch_layout, chlayout_str, sizeof(chlayout_str));
-    snprintf(args, sizeof(args),
-             "time_base=1/%d:sample_rate=%d:sample_fmt=%s:channel_layout=%s",
+    snprintf(args, sizeof(args), "time_base=1/%d:sample_rate=%d:sample_fmt=%s:channel_layout=%s",
              dec_ctx->sample_rate, dec_ctx->sample_rate,
              av_get_sample_fmt_name(dec_ctx->sample_fmt), chlayout_str);
 
     ret = avfilter_graph_create_filter(&chain->buffersrc_ctx, buffersrc, "in", args, NULL,
-                                        chain->graph);
+                                       chain->graph);
     if (ret < 0) goto end;
 
     ret = avfilter_graph_create_filter(&chain->buffersink_ctx, buffersink, "out", NULL, NULL,
-                                        chain->graph);
+                                       chain->graph);
     if (ret < 0) goto end;
 
     outputs->name = av_strdup("in");
@@ -75,8 +74,8 @@ static int init_pcm_filter_chain(AVCodecContext *dec_ctx, AudioFilterChain *chai
 
     ret = avfilter_graph_parse_ptr(
         chain->graph,
-        "aresample=" AV_STRINGIFY(PCM_TARGET_SAMPLE_RATE)
-        ",aformat=sample_fmts=flt:channel_layouts=mono",
+        "aresample=" AV_STRINGIFY(
+            PCM_TARGET_SAMPLE_RATE) ",aformat=sample_fmts=flt:channel_layouts=mono",
         &inputs, &outputs, NULL);
     if (ret < 0) goto end;
 
@@ -119,7 +118,10 @@ static int pcm_buffer_reserve(PcmBuffer *buf, int64_t additional) {
 }
 
 static int append_pcm_frame(PcmBuffer *buf, const AVFrame *frame) {
-    if (pcm_buffer_reserve(buf, frame->nb_samples) < 0) {
+    if (frame->nb_samples <= 0) {
+        return 0;
+    }
+    if (!frame->data[0] || pcm_buffer_reserve(buf, frame->nb_samples) < 0) {
         return -1;
     }
     memcpy(buf->data + buf->len, frame->data[0], (size_t)frame->nb_samples * sizeof(float));
@@ -130,7 +132,7 @@ static int append_pcm_frame(PcmBuffer *buf, const AVFrame *frame) {
 /* Pushes one decoded frame through the resample/mono-downmix graph and appends every filtered
    sample to `buf`. Pass frame=NULL to flush. */
 static int drain_pcm_frame(AudioFilterChain *chain, AVFrame *frame, AVFrame *filt_frame,
-                            PcmBuffer *buf) {
+                           PcmBuffer *buf) {
     int ret = av_buffersrc_add_frame(chain->buffersrc_ctx, frame);
     if (ret < 0) return ret;
 
@@ -150,7 +152,7 @@ static int drain_pcm_frame(AudioFilterChain *chain, AVFrame *frame, AVFrame *fil
 }
 
 PcmStatus avbridge_extract_pcm_16k_mono(const char *in_path, float **out_samples,
-                                             int64_t *out_sample_count) {
+                                        int64_t *out_sample_count) {
     AVFormatContext *in_ctx = NULL;
     AVCodecContext *dec_ctx = NULL;
     AudioFilterChain chain = {0};
@@ -162,8 +164,10 @@ PcmStatus avbridge_extract_pcm_16k_mono(const char *in_path, float **out_samples
     int audio_in_index = -1;
 
     switch (open_input(in_path, &in_ctx)) {
-        case -1: return PCM_ERR_OPEN_INPUT;
-        case -2: return PCM_ERR_STREAM_INFO;
+    case -1:
+        return PCM_ERR_OPEN_INPUT;
+    case -2:
+        return PCM_ERR_STREAM_INFO;
     }
 
     for (unsigned int i = 0; i < in_ctx->nb_streams; i++) {

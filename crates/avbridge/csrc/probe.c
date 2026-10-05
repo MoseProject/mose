@@ -20,14 +20,18 @@
 
 #include <libavformat/avformat.h>
 
-uint32_t avbridge_version(void) { return avformat_version(); }
+uint32_t avbridge_version(void) {
+    return avformat_version();
+}
 
 ProbeStatus avbridge_probe(const char *path, ProbeInfo *out) {
     AVFormatContext *fmt_ctx = NULL;
 
     switch (open_input(path, &fmt_ctx)) {
-        case -1: return PROBE_ERR_OPEN;
-        case -2: return PROBE_ERR_STREAM_INFO;
+    case -1:
+        return PROBE_ERR_OPEN;
+    case -2:
+        return PROBE_ERR_STREAM_INFO;
     }
 
     AVStream *video = NULL;
@@ -71,8 +75,7 @@ ProbeStatus avbridge_probe(const char *path, ProbeInfo *out) {
     if (video) {
         out->width = stream->codecpar->width;
         out->height = stream->codecpar->height;
-        AVRational fps =
-            stream->avg_frame_rate.num ? stream->avg_frame_rate : stream->r_frame_rate;
+        AVRational fps = stream->avg_frame_rate.num ? stream->avg_frame_rate : stream->r_frame_rate;
         out->fps_num = fps.num;
         out->fps_den = fps.den;
     } else {
@@ -90,8 +93,10 @@ RemuxStatus avbridge_remux_copy(const char *in_path, const char *out_path) {
     RemuxStatus status = REMUX_OK;
 
     switch (open_input(in_path, &in_ctx)) {
-        case -1: return REMUX_ERR_OPEN_INPUT;
-        case -2: return REMUX_ERR_STREAM_INFO;
+    case -1:
+        return REMUX_ERR_OPEN_INPUT;
+    case -2:
+        return REMUX_ERR_STREAM_INFO;
     }
 
     avformat_alloc_output_context2(&out_ctx, NULL, NULL, out_path);

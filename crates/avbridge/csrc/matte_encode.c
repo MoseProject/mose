@@ -28,8 +28,8 @@
    decode/scale side (frames are already decoded and already the right size, supplied whole by
    the caller) and minus any audio handling (a matte video has none). */
 MatteStatus avbridge_encode_matte_video(const uint8_t *luma_frames, int frame_count, int width,
-                                         int height, int fps_num, int fps_den,
-                                         const char *out_path) {
+                                        int height, int fps_num, int fps_den,
+                                        const char *out_path) {
     if (frame_count <= 0 || width <= 0 || height <= 0 || fps_num <= 0 || fps_den <= 0) {
         return MATTE_ERR_EMPTY;
     }

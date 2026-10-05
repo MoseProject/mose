@@ -329,8 +329,7 @@ static int build_mix_graph(const AudioSegment *segments, const uint8_t *valid, i
     if ((ret = create_filter(graph, &noise, "afftdn", "noise", NULL)) < 0) goto fail;
     snprintf(args, sizeof(args), MASTERING_LOUDNORM_ARGS_FORMAT, (double)target_lufs);
     if ((ret = create_filter(graph, &loudnorm, "loudnorm", "loudnorm", args)) < 0) goto fail;
-    if ((ret = create_filter(graph, &limiter, "alimiter", "limiter",
-                             MASTERING_LIMITER_ARGS)) < 0)
+    if ((ret = create_filter(graph, &limiter, "alimiter", "limiter", MASTERING_LIMITER_ARGS)) < 0)
         goto fail;
     snprintf(args, sizeof(args), "end=%.9f", timeline_duration_secs);
     if ((ret = create_filter(graph, &final_trim, "atrim", "timeline_trim", args)) < 0) goto fail;

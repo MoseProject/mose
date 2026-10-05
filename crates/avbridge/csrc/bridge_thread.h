@@ -25,16 +25,30 @@ typedef struct {
     void *arg;
 } BridgeThread;
 
-static inline void bridge_mutex_init(BridgeMutex *m) { InitializeCriticalSection(m); }
-static inline void bridge_mutex_destroy(BridgeMutex *m) { DeleteCriticalSection(m); }
-static inline void bridge_mutex_lock(BridgeMutex *m) { EnterCriticalSection(m); }
-static inline void bridge_mutex_unlock(BridgeMutex *m) { LeaveCriticalSection(m); }
-static inline void bridge_cond_init(BridgeCond *c) { InitializeConditionVariable(c); }
-static inline void bridge_cond_destroy(BridgeCond *c) { (void)c; }
+static inline void bridge_mutex_init(BridgeMutex *m) {
+    InitializeCriticalSection(m);
+}
+static inline void bridge_mutex_destroy(BridgeMutex *m) {
+    DeleteCriticalSection(m);
+}
+static inline void bridge_mutex_lock(BridgeMutex *m) {
+    EnterCriticalSection(m);
+}
+static inline void bridge_mutex_unlock(BridgeMutex *m) {
+    LeaveCriticalSection(m);
+}
+static inline void bridge_cond_init(BridgeCond *c) {
+    InitializeConditionVariable(c);
+}
+static inline void bridge_cond_destroy(BridgeCond *c) {
+    (void)c;
+}
 static inline void bridge_cond_wait(BridgeCond *c, BridgeMutex *m) {
     SleepConditionVariableCS(c, m, INFINITE);
 }
-static inline void bridge_cond_broadcast(BridgeCond *c) { WakeAllConditionVariable(c); }
+static inline void bridge_cond_broadcast(BridgeCond *c) {
+    WakeAllConditionVariable(c);
+}
 
 static DWORD WINAPI bridge_thread_entry(LPVOID param) {
     BridgeThread *thread = (BridgeThread *)param;
@@ -65,14 +79,30 @@ typedef struct {
     void *arg;
 } BridgeThread;
 
-static inline void bridge_mutex_init(BridgeMutex *m) { pthread_mutex_init(m, NULL); }
-static inline void bridge_mutex_destroy(BridgeMutex *m) { pthread_mutex_destroy(m); }
-static inline void bridge_mutex_lock(BridgeMutex *m) { pthread_mutex_lock(m); }
-static inline void bridge_mutex_unlock(BridgeMutex *m) { pthread_mutex_unlock(m); }
-static inline void bridge_cond_init(BridgeCond *c) { pthread_cond_init(c, NULL); }
-static inline void bridge_cond_destroy(BridgeCond *c) { pthread_cond_destroy(c); }
-static inline void bridge_cond_wait(BridgeCond *c, BridgeMutex *m) { pthread_cond_wait(c, m); }
-static inline void bridge_cond_broadcast(BridgeCond *c) { pthread_cond_broadcast(c); }
+static inline void bridge_mutex_init(BridgeMutex *m) {
+    pthread_mutex_init(m, NULL);
+}
+static inline void bridge_mutex_destroy(BridgeMutex *m) {
+    pthread_mutex_destroy(m);
+}
+static inline void bridge_mutex_lock(BridgeMutex *m) {
+    pthread_mutex_lock(m);
+}
+static inline void bridge_mutex_unlock(BridgeMutex *m) {
+    pthread_mutex_unlock(m);
+}
+static inline void bridge_cond_init(BridgeCond *c) {
+    pthread_cond_init(c, NULL);
+}
+static inline void bridge_cond_destroy(BridgeCond *c) {
+    pthread_cond_destroy(c);
+}
+static inline void bridge_cond_wait(BridgeCond *c, BridgeMutex *m) {
+    pthread_cond_wait(c, m);
+}
+static inline void bridge_cond_broadcast(BridgeCond *c) {
+    pthread_cond_broadcast(c);
+}
 
 static void *bridge_thread_entry(void *param) {
     BridgeThread *thread = (BridgeThread *)param;

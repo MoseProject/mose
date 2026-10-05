@@ -71,9 +71,8 @@ static int build_graph(AvbridgeAudioSession *session) {
 
     AVCodecContext *dec = session->decoder;
     av_channel_layout_describe(&dec->ch_layout, layout, sizeof(layout));
-    snprintf(args, sizeof(args),
-             "time_base=1/%d:sample_rate=%d:sample_fmt=%s:channel_layout=%s", dec->sample_rate,
-             dec->sample_rate, av_get_sample_fmt_name(dec->sample_fmt), layout);
+    snprintf(args, sizeof(args), "time_base=1/%d:sample_rate=%d:sample_fmt=%s:channel_layout=%s",
+             dec->sample_rate, dec->sample_rate, av_get_sample_fmt_name(dec->sample_fmt), layout);
     ret = avfilter_graph_create_filter(&session->src, abuffer, "in", args, NULL, session->graph);
     if (ret < 0) goto end;
     ret = avfilter_graph_create_filter(&session->sink, abuffersink, "out", NULL, NULL,
@@ -105,8 +104,7 @@ end:
 }
 
 DecodeStatus avbridge_audio_open(const char *path, int target_sample_rate, int target_channels,
-                                 AvbridgeAudioSession **out_session,
-                                 AudioDecodeInfo *out_info) {
+                                 AvbridgeAudioSession **out_session, AudioDecodeInfo *out_info) {
     if (!path || !out_session || !out_info) return DECODE_ERR_OPEN_INPUT;
     *out_session = NULL;
     if (target_sample_rate < 8000 || target_sample_rate > 192000 || target_channels < 1 ||
@@ -125,8 +123,8 @@ DecodeStatus avbridge_audio_open(const char *path, int target_sample_rate, int t
         close_session(session);
         return DECODE_ERR_STREAM_INFO;
     }
-    session->stream_index = av_find_best_stream(session->format, AVMEDIA_TYPE_AUDIO, -1, -1,
-                                                NULL, 0);
+    session->stream_index =
+        av_find_best_stream(session->format, AVMEDIA_TYPE_AUDIO, -1, -1, NULL, 0);
     if (session->stream_index < 0) {
         close_session(session);
         return DECODE_ERR_NO_AUDIO_STREAM;
@@ -153,8 +151,7 @@ DecodeStatus avbridge_audio_open(const char *path, int target_sample_rate, int t
     session->decoded = av_frame_alloc();
     session->filtered = av_frame_alloc();
     session->packet = av_packet_alloc();
-    if (!session->decoded || !session->filtered || !session->packet ||
-        build_graph(session) < 0) {
+    if (!session->decoded || !session->filtered || !session->packet || build_graph(session) < 0) {
         close_session(session);
         return DECODE_ERR_PIPELINE;
     }
@@ -176,8 +173,8 @@ DecodeStatus avbridge_audio_open(const char *path, int target_sample_rate, int t
 DecodeStatus avbridge_audio_seek(AvbridgeAudioSession *session, double timestamp_secs) {
     if (!session || !isfinite(timestamp_secs) || timestamp_secs < 0.0) return DECODE_ERR_SEEK;
     AVStream *stream = session->format->streams[session->stream_index];
-    int64_t target = av_rescale_q((int64_t)(timestamp_secs * AV_TIME_BASE), AV_TIME_BASE_Q,
-                                  stream->time_base);
+    int64_t target =
+        av_rescale_q((int64_t)(timestamp_secs * AV_TIME_BASE), AV_TIME_BASE_Q, stream->time_base);
     if (av_seek_frame(session->format, session->stream_index, target, AVSEEK_FLAG_BACKWARD) < 0)
         return DECODE_ERR_SEEK;
     avcodec_flush_buffers(session->decoder);
@@ -231,8 +228,7 @@ DecodeStatus avbridge_audio_next_block(AvbridgeAudioSession *session, const uint
             int64_t pts = session->decoded->best_effort_timestamp;
             if (pts != AV_NOPTS_VALUE) {
                 session->decoded->pts = av_rescale_q(
-                    pts, stream->time_base,
-                    (AVRational){1, session->decoder->sample_rate});
+                    pts, stream->time_base, (AVRational){1, session->decoder->sample_rate});
             }
             int add = av_buffersrc_add_frame(session->src, session->decoded);
             av_frame_unref(session->decoded);
@@ -274,4 +270,6 @@ void avbridge_audio_free_block(DecodedAudioBlock *block) {
     memset(block, 0, sizeof(*block));
 }
 
-void avbridge_audio_close(AvbridgeAudioSession *session) { close_session(session); }
+void avbridge_audio_close(AvbridgeAudioSession *session) {
+    close_session(session);
+}
