@@ -179,6 +179,8 @@ int audio_worker_finish(AudioWorker **worker, int flush);
 float smooth_speed_ramp_average_speed(const ClipSegment *seg);
 void build_setpts_str(const ClipSegment *seg, double source_duration_secs, char *out,
                       size_t out_size);
+int build_entry_transition(const ClipSegment *seg, int fps_num, int fps_den, double frame_offset,
+                           int alpha, char *transition_str, size_t cap);
 int build_segment_vfilter(const ClipSegment *seg, int canvas_width, int canvas_height, int fps_num,
                           int fps_den, const char *pix_fmt_name, char *buf, size_t cap);
 /* Builds the export's audio graph and AAC encoder from `adec_ctx`, adds the audio stream, opens

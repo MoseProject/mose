@@ -237,9 +237,10 @@ typedef struct {
     double anchor_y;
     /* Fade from black (video) and from silence (audio) over this many seconds at the start /
        end of the clip, in output seconds; 0 = none. Video: `fade` appended to the segment's
-       chain after any entry transition (single-track path; overlay layers ignore it). Audio:
-       a sample ramp on the decoded frames in the single-track path, `afade` in the mix graph
-       otherwise. */
+       chain after any entry transition (in the overlay graph a layer fades to transparent through
+
+       its alpha plane, the base clip to black). Audio: a sample ramp on the decoded frames in the
+       single-track path, `afade` in the mix graph otherwise. */
     float fade_in_secs;
     float fade_out_secs;
 } ClipSegment;

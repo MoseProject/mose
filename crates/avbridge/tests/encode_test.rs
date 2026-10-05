@@ -644,6 +644,120 @@ fn each_segment_contributes_exactly_its_duration_in_frames() {
     let _ = std::fs::remove_file(&out);
 }
 
+/// Mean of the red channel of the frame at `secs` in `path`.
+fn mean_red_at(path: &std::path::Path, secs: f64) -> f64 {
+    let (mut session, _) = avbridge::DecodeSession::open(path).unwrap();
+    session.seek(secs).unwrap();
+    let cancel = AtomicBool::new(false);
+    let frame = loop {
+        let frame = session
+            .next_rgba(&cancel)
+            .unwrap()
+            .expect("a frame at the time");
+        if frame.timestamp_secs + 1e-3 >= secs {
+            break frame;
+        }
+    };
+    let reds: Vec<f64> = frame
+        .pixels
+        .chunks_exact(4)
+        .map(|px| f64::from(px[0]))
+        .collect();
+    reds.iter().sum::<f64>() / reds.len() as f64
+}
+
+#[test]
+fn an_overlay_layer_fades_in_to_transparent_not_to_black() {
+    // The layer is plain white (with an explicit alpha: a geq in a layer chain defaults it to
+    // transparent), so it is easy to tell apart from the footage. With a 0.5 s fade-in the output
+    // starts as the footage and ends as the layer; a fade to black would darken the frame instead
+    // of leaving the footage visible.
+    let cancel = AtomicBool::new(false);
+    let background = vec![clip(0.0, 1.0, 0.0, "")];
+    let render = |name: &str, fade_in: f32| {
+        let out = std::env::temp_dir().join(name);
+        let mut layer = clip(0.0, 1.0, 0.0, "geq=lum=255:cb=128:cr=128:a=255");
+        layer.fade_in_secs = fade_in;
+        let outcome = encode_timeline_export_multi(
+            &[background.clone(), vec![layer]],
+            CANVAS,
+            &out,
+            -14.0,
+            GpuEncoderPreference::Cpu,
+            &cancel,
+            |_secs| {},
+        )
+        .unwrap();
+        assert_eq!(outcome, EncodeOutcome::Completed);
+        out
+    };
+    let plain = render("avbridge_test_overlay_nofade.mp4", 0.0);
+    let faded = render("avbridge_test_overlay_fade.mp4", 0.5);
+
+    let white_plain = mean_red_at(&plain, 0.8);
+    let early_plain = mean_red_at(&plain, 0.04);
+    let early_faded = mean_red_at(&faded, 0.04);
+    let late_faded = mean_red_at(&faded, 0.8);
+    // Without the fade the layer covers the background from the first frame.
+    assert!(
+        (early_plain - white_plain).abs() < 6.0,
+        "plain overlay {early_plain} vs {white_plain}"
+    );
+    // With it, the first frame is the footage (not black) and the end is the layer.
+    assert!(
+        early_faded > 40.0 && early_faded < white_plain - 40.0,
+        "the fade did not change the frame: {early_faded} vs {late_faded}"
+    );
+    assert!(
+        (late_faded - white_plain).abs() < 6.0,
+        "the faded layer must end fully opaque: {late_faded} vs {white_plain}"
+    );
+
+    let _ = std::fs::remove_file(&plain);
+    let _ = std::fs::remove_file(&faded);
+}
+
+#[test]
+fn an_overlay_layers_slide_and_zoom_transitions_reveal_it_over_the_footage() {
+    // Slide and Zoom make the not yet revealed part of a layer transparent (not black): the first
+    // frame shows the footage, the last the whole layer.
+    let cancel = AtomicBool::new(false);
+    let background = vec![clip(0.0, 1.0, 0.0, "")];
+    let render = |name: &str, transition: u8| {
+        let out = std::env::temp_dir().join(name);
+        // `alpha(X,Y)` keeps the transition's alpha through the white fill.
+        let mut layer = clip(0.0, 1.0, 0.0, "geq=lum=255:cb=128:cr=128:a='alpha(X,Y)'");
+        layer.transition_in = transition;
+        layer.transition_duration_secs = 0.5;
+        let outcome = encode_timeline_export_multi(
+            &[background.clone(), vec![layer]],
+            CANVAS,
+            &out,
+            -14.0,
+            GpuEncoderPreference::Cpu,
+            &cancel,
+            |_secs| {},
+        )
+        .unwrap();
+        assert_eq!(outcome, EncodeOutcome::Completed);
+        out
+    };
+    for (name, transition) in [("slide", 2u8), ("zoom", 3u8)] {
+        let out = render(&format!("avbridge_test_overlay_tr_{name}.mp4"), transition);
+        let early = mean_red_at(&out, 0.04);
+        let late = mean_red_at(&out, 0.8);
+        assert!(
+            late > 240.0,
+            "{name}: the layer must end fully shown ({late})"
+        );
+        assert!(
+            early > 40.0 && early < late - 40.0,
+            "{name}: the first frame must be the footage, not black or white ({early})"
+        );
+        let _ = std::fs::remove_file(&out);
+    }
+}
+
 #[test]
 fn multi_track_segments_contribute_exactly_their_duration_in_frames() {
     let out = std::env::temp_dir().join("avbridge_test_timeline_multi_exact.mp4");
