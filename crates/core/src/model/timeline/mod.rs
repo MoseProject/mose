@@ -14,6 +14,9 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 mod clip;
+mod effects;
+mod filters;
+mod formatting;
 mod marker;
 mod shape_clip;
 mod text_clip;
@@ -23,9 +26,9 @@ use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
-pub use clip::{
-    BlendMode, ClipFormatting, ClipInstance, ColorFilter, LayerTemplate, MaskShape, TransitionType,
-};
+pub use clip::ClipInstance;
+pub use effects::{BlendMode, ColorFilter, MaskShape, TransitionType};
+pub use formatting::{ClipFormatting, LayerTemplate};
 pub use marker::{Marker, MarkerKind};
 pub use shape_clip::{ShapeClip, ShapeKind, ShapePreset};
 pub use text_clip::{
