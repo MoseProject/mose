@@ -476,6 +476,45 @@ fn a_dissolve_is_limited_to_half_of_the_shorter_clip_and_needs_a_clip_right_befo
 }
 
 #[test]
+fn a_dissolving_clips_keyframes_are_rescaled_over_its_head_and_tail() {
+    // Scale animates 1.0 -> 2.0 over the whole 10 s clip, which overlaps the clip before it for
+    // its first 4 s: the head must run 1.0 -> 1.4 and the tail 1.4 -> 2.0, not the full ramp each.
+    let mut second = clip(2, 6.0, 0.0, 10.0);
+    second.transition_in = TransitionType::Dissolve;
+    second.transition_duration_secs = 4.0;
+    second.scale_keyframes = vec![
+        Keyframe {
+            time_fraction: 0.0,
+            value: 1.0,
+        },
+        Keyframe {
+            time_fraction: 1.0,
+            value: 2.0,
+        },
+    ];
+    let track = track_with(vec![clip(1, 0.0, 0.0, 10.0), second]);
+    let pieces = track.lane_pieces();
+    let head = pieces
+        .iter()
+        .find(|(c, lane)| c.id == 2 && *lane == 1)
+        .map(|(c, _)| c)
+        .unwrap();
+    let tail = pieces
+        .iter()
+        .find(|(c, lane)| c.id == 2 && *lane == 0)
+        .map(|(c, _)| c)
+        .unwrap();
+    let ends = |keys: &[Keyframe<f32>]| (keys.first().unwrap().value, keys.last().unwrap().value);
+    let (head_start, head_end) = ends(&head.scale_keyframes);
+    let (tail_start, tail_end) = ends(&tail.scale_keyframes);
+    assert!((head_start - 1.0).abs() < 1e-5 && (head_end - 1.4).abs() < 1e-5);
+    assert!((tail_start - 1.4).abs() < 1e-5 && (tail_end - 2.0).abs() < 1e-5);
+    assert_eq!(head.duration_secs(), 4.0);
+    assert_eq!(tail.duration_secs(), 6.0);
+    assert_eq!(tail.start_secs, 10.0);
+}
+
+#[test]
 fn dissolve_fades_follow_the_real_overlap() {
     let mut second = clip(2, 3.0, 0.0, 4.0);
     second.transition_in = TransitionType::Dissolve;

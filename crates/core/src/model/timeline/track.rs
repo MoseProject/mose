@@ -618,7 +618,7 @@ impl Track {
     /// that overlaps (the head) goes to an overlay lane (1 and up) and carries the clip's
     /// dissolve as a fade-in; the part after (the tail) continues the base lane (0), so the base
     /// lane stays a plain sequence covering the whole timeline. A clip inside an earlier one is
-    /// all head. Source ranges are split at the clip's speed.
+    /// all head. The split is `split_clip_at`'s, so source ranges, speed ramps and keyframes follow it.
     pub fn lane_pieces(&self) -> Vec<(ClipInstance, usize)> {
         let mut order: Vec<&ClipInstance> = self.clips.iter().collect();
         order.sort_by(|a, b| a.start_secs.total_cmp(&b.start_secs).then(a.id.cmp(&b.id)));
@@ -634,14 +634,28 @@ impl Track {
                 continue;
             }
             let head_end = end.min(covered_until);
-            let head_secs = head_end - clip.start_secs;
-            let speed = f64::from(clip.speed_factor.max(0.01));
-            let mut head = clip.clone();
             let has_tail = end > covered_until + OVERLAP_EPSILON_SECS;
-            if has_tail {
-                head.source_out_secs = clip.source_in_secs + head_secs * speed;
-                head.fade_out_secs = 0.0;
-            }
+            // `split_clip_at` does the whole split (source range, speed ramp, keyframes rescaled
+            // over each half), so a keyframed clip animates the same across both pieces.
+            let (mut head, tail) = if has_tail {
+                let mut scratch = Track {
+                    clips: vec![clip.clone()],
+                    text_clips: Vec::new(),
+                    shape_clips: Vec::new(),
+                    ..self.clone()
+                };
+                if scratch.split_clip_at(head_end, u64::MAX) {
+                    let tail = scratch.clips.pop().map(|mut tail| {
+                        tail.id = clip.id;
+                        tail
+                    });
+                    (scratch.clips.remove(0), tail)
+                } else {
+                    (clip.clone(), None)
+                }
+            } else {
+                (clip.clone(), None)
+            };
             head.fade_in_secs = clip.fade_in_secs.max(self.dissolve_in_secs(clip) as f32);
             head.transition_in = TransitionType::None;
             let lane = overlay_ends
@@ -654,10 +668,7 @@ impl Track {
                 overlay_ends[lane] = head_end;
             }
             pieces.push((head, lane + 1));
-            if has_tail {
-                let mut tail = clip.clone();
-                tail.start_secs = head_end;
-                tail.source_in_secs = clip.source_in_secs + head_secs * speed;
+            if let Some(mut tail) = tail {
                 tail.fade_in_secs = 0.0;
                 tail.transition_in = TransitionType::None;
                 pieces.push((tail, 0));
