@@ -9,7 +9,7 @@ import { shapePresetOf } from "../overlays";
 import { run } from "../store";
 import type { ShapeClip, ShapeClipPatch, ShapePreset } from "../types";
 import { F32KeyframeList } from "./KeyframeEditor";
-import { Section, Slider } from "./Inspector";
+import { Section, Slider } from "./inspector/controls";
 import { ColorField, SelectField, useOverlayCatalog } from "./OverlayFields";
 
 const PRESET_LABELS: Record<ShapePreset, TextKey> = {

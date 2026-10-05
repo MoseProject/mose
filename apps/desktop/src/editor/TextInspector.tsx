@@ -14,7 +14,7 @@ import type {
   TextFontStyle,
 } from "../types";
 import { F32KeyframeList } from "./KeyframeEditor";
-import { Section, Slider } from "./Inspector";
+import { Section, Slider } from "./inspector/controls";
 import { ColorField, SelectField, TextField, useOverlayCatalog } from "./OverlayFields";
 
 const CATEGORY_LABELS: Record<FontCategory, TextKey> = {
