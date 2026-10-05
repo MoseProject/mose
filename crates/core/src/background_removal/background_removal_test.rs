@@ -176,3 +176,12 @@ fn a_missing_model_file_is_an_onnx_error() {
     );
     assert!(matches!(result, Err(SegmentError::Onnx(_))));
 }
+
+#[test]
+fn a_model_that_cannot_be_loaded_is_reported_every_time_and_never_cached() {
+    let missing = Path::new("another-missing-model.onnx");
+    for _ in 0..2 {
+        assert!(segment_person(missing, &[0; 16], 2, 2).is_err());
+    }
+    assert_eq!(crate::onnx_models::cached_session_count(), 0);
+}
