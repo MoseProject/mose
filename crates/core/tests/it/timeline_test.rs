@@ -135,12 +135,13 @@ fn video_filter_chain_includes_crop_when_cropped() {
 }
 
 #[test]
-fn video_filter_chain_includes_eq_when_color_adjusted() {
+fn video_filter_chain_adjusts_color_with_a_lut_filter() {
+    // The shipped FFmpeg is an LGPL build: no `eq`, so the adjustment is a `lutyuv`.
     let mut c = clip(1, 0.0, 0.0, 10.0);
     c.brightness = 0.2;
     assert_eq!(
         c.video_filter_chain(),
-        "eq=brightness=0.2:contrast=1:saturation=1"
+        "lutyuv=y='clip((val/maxval-0.5)*1.0000000+0.5+(0.2000000),0,1)*maxval'"
     );
 }
 
@@ -247,15 +248,15 @@ fn video_filter_chain_orders_mask_after_chroma_key_before_blur() {
     let chain = c.video_filter_chain();
     let colorkey_pos = chain.find("colorkey").unwrap();
     let mask_pos = chain.find("geq").unwrap();
-    let blur_pos = chain.find("boxblur").unwrap();
+    let blur_pos = chain.find("avgblur").unwrap();
     assert!(colorkey_pos < mask_pos && mask_pos < blur_pos);
 }
 
 #[test]
-fn video_filter_chain_includes_boxblur_when_blurred() {
+fn video_filter_chain_includes_avgblur_when_blurred() {
     let mut c = clip(1, 0.0, 0.0, 10.0);
     c.blur_intensity = 0.5;
-    assert_eq!(c.video_filter_chain(), "boxblur=5.00");
+    assert_eq!(c.video_filter_chain(), "avgblur=sizeX=5:sizeY=5");
 }
 
 #[test]
@@ -995,12 +996,12 @@ fn split_clip_at_rescales_crop_keyframes_onto_both_halves() {
 }
 
 #[test]
-fn video_filter_chain_uses_the_static_eq_stage_with_no_color_keyframes() {
+fn video_filter_chain_uses_the_static_color_stage_with_no_color_keyframes() {
     let mut c = clip(1, 0.0, 0.0, 10.0);
     c.brightness = 0.3;
     assert_eq!(
         c.video_filter_chain(),
-        "eq=brightness=0.3:contrast=1:saturation=1"
+        "lutyuv=y='clip((val/maxval-0.5)*1.0000000+0.5+(0.3000000),0,1)*maxval'"
     );
 }
 

@@ -375,6 +375,66 @@ fn deflicker_exports_without_error() {
     let _ = std::fs::remove_file(&output);
 }
 
+/// Every colour and blur stage must name a filter the shipped (LGPL) FFmpeg has: `eq` and
+/// `boxblur` are not in it, and an export with either used to fail to build its filter graph.
+#[test]
+fn colour_and_blur_effects_export_with_the_filters_the_build_has() {
+    let asset = video_asset(1);
+    let key = |time_fraction: f32, value: f32| Keyframe {
+        time_fraction,
+        value,
+    };
+    let mut static_colour = clip(1, 1, 0.0, 0.0, 0.2);
+    static_colour.brightness = 0.1;
+    static_colour.contrast = 1.2;
+    static_colour.saturation = 1.3;
+    let mut blurred = clip(2, 1, 0.2, 0.2, 0.4);
+    blurred.blur_intensity = 0.5;
+    blurred.sharpen = 0.5;
+    let mut animated_saturation = clip(3, 1, 0.4, 0.4, 0.6);
+    animated_saturation.saturation_keyframes = vec![key(0.0, 0.5), key(1.0, 1.5)];
+    let mut animated_brightness = clip(4, 1, 0.6, 0.0, 0.2);
+    animated_brightness.brightness_keyframes = vec![key(0.0, -0.2), key(1.0, 0.2)];
+
+    let track = Track {
+        id: 1,
+        name: "V1".to_string(),
+        kind: TrackKind::Video,
+        clips: vec![
+            static_colour,
+            blurred,
+            animated_saturation,
+            animated_brightness,
+        ],
+        text_clips: vec![],
+        shape_clips: vec![],
+        visible: true,
+        audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
+        locked: false,
+        color_label: None,
+    };
+    let sequence = sequence_with(vec![track]);
+
+    let output = std::env::temp_dir().join("avcore_test_timeline_export_colour_blur.mp4");
+    let cancel = AtomicBool::new(false);
+    let outcome = render_timeline_export(
+        &sequence,
+        &[asset],
+        &output,
+        -14.0,
+        avcore::GpuEncoderPreference::Cpu,
+        &cancel,
+        |_| {},
+    )
+    .unwrap();
+
+    assert_eq!(outcome, RenderOutcome::Completed);
+    assert_eq!(probe_media(&output).unwrap().kind, MediaKind::Video);
+    let _ = std::fs::remove_file(&output);
+}
+
 #[test]
 fn word_highlight_text_overlay_exports_without_error() {
     let asset = video_asset(1);
