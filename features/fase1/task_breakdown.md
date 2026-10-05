@@ -70,7 +70,7 @@ execution_order: sequential (dep: impl-002a)
 ### task_id: impl-003
 title: Swap core probe.rs from ffprobe subprocess to avbridge FFI
 specialist_type: impl
-files_to_touch: crates/core/Cargo.toml, crates/core/src/probe.rs
+files_to_touch: crates/core/Cargo.toml, crates/core/src/av/probe.rs
 estimated_diff_lines: 140
 acceptance_criteria:
   - `core` depends on `avbridge`

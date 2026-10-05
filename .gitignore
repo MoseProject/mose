@@ -12,3 +12,10 @@ e2e/__pycache__
 # "Python runtime for ytbridge" plan).
 /vendor/python-runtime/
 /token-optimizer/
+# Generated or local-only, never checked in
+/apps/desktop/coverage/
+.DS_Store
+/aqtinstall.log
+/mockup/
+/.token-optimizer/
+/.claude/plans/

@@ -62,7 +62,7 @@ one already does the job.
 **Concrete candidate found in oca, now extracted:** frame-sampling-via-seek-and-poll against a
 `Preview` pipeline was independently reimplemented in `ui`'s auto-reframe, motion tracking, and
 background-removal matte generation background-thread functions (plus a fourth copy in
-`import.rs`'s thumbnail extraction). `avcore::FrameSampler` (`crates/core/src/frame_sampler.rs`)
+`import.rs`'s thumbnail extraction). `avcore::FrameSampler` (`crates/core/src/av/frame_sampler.rs`)
 is now the one shared primitive — open once, `sample(at_secs, deadline)` seeks and polls
 `current_frame()` until it decodes or the deadline passes (`None` on timeout, the same "skip
 this sample, don't fail the whole run" tolerance every caller already had), plus

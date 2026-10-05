@@ -1,4 +1,6 @@
 use super::*;
+use crate::timeline::{TextFontFamily, TextFontStyle};
+use avbridge::Canvas;
 
 fn canvas() -> Canvas {
     Canvas {

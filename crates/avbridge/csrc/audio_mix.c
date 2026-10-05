@@ -327,10 +327,10 @@ static int build_mix_graph(const AudioSegment *segments, const uint8_t *valid, i
     branch_duck_role = NULL;
 
     if ((ret = create_filter(graph, &noise, "afftdn", "noise", NULL)) < 0) goto fail;
-    snprintf(args, sizeof(args), "I=%.1f:TP=-1.0:LRA=11", (double)target_lufs);
+    snprintf(args, sizeof(args), MASTERING_LOUDNORM_ARGS_FORMAT, (double)target_lufs);
     if ((ret = create_filter(graph, &loudnorm, "loudnorm", "loudnorm", args)) < 0) goto fail;
     if ((ret = create_filter(graph, &limiter, "alimiter", "limiter",
-                             "limit=0.95:attack=5:release=50")) < 0)
+                             MASTERING_LIMITER_ARGS)) < 0)
         goto fail;
     snprintf(args, sizeof(args), "end=%.9f", timeline_duration_secs);
     if ((ret = create_filter(graph, &final_trim, "atrim", "timeline_trim", args)) < 0) goto fail;
@@ -412,11 +412,11 @@ AudioMixStatus avbridge_mix_audio_timeline(const AudioSegment *segments, int seg
         status = AUDIO_MIX_ERR_ENCODER;
         goto cleanup;
     }
-    enc_ctx->sample_rate = 48000;
+    enc_ctx->sample_rate = EXPORT_AUDIO_SAMPLE_RATE;
     enc_ctx->sample_fmt = AV_SAMPLE_FMT_FLTP;
     av_channel_layout_default(&enc_ctx->ch_layout, 2);
-    enc_ctx->bit_rate = 192000;
-    enc_ctx->time_base = (AVRational){1, 48000};
+    enc_ctx->bit_rate = EXPORT_AUDIO_BITRATE_BPS;
+    enc_ctx->time_base = (AVRational){1, EXPORT_AUDIO_SAMPLE_RATE};
     if (out_ctx->oformat->flags & AVFMT_GLOBALHEADER) enc_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
     if (avcodec_open2(enc_ctx, encoder, NULL) < 0) {
         status = AUDIO_MIX_ERR_ENCODER;

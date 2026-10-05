@@ -1,5 +1,0 @@
-E:\github\oca\CLAUDE.md
-E:\github\oca\README.md
-E:\github\oca\docs\CODE_GRAPH.md
-E:\github\oca\docs\plano.md
-E:\github\oca\ui.html

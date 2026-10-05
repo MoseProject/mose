@@ -135,7 +135,7 @@ ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path,
         }
         venc_ctx->time_base = av_inv_q(frame_rate);
         venc_ctx->framerate = frame_rate;
-        venc_ctx->gop_size = (frame_rate.num / frame_rate.den) * 2; /* ~2s keyframe interval */
+        venc_ctx->gop_size = (frame_rate.num / frame_rate.den) * KEYFRAME_INTERVAL_SECS;
         venc_ctx->max_b_frames = 0; /* keeps proxy decoding lightweight across CPU encoders */
         /* Proxy target: small and fast to decode while scrubbing, not archival quality.
            A pixel-count-derived bitrate keeps output predictable across the supported CPU
@@ -148,7 +148,7 @@ ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path,
             venc_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
         }
         /* The encoder is the other large share; libopenh264 and libx264 both use this many. */
-        venc_ctx->thread_count = 8;
+        venc_ctx->thread_count = SOFTWARE_ENCODER_THREADS;
         if (avcodec_open2(venc_ctx, venc, NULL) < 0) {
             status = PROXY_ERR_ENCODER;
             goto cleanup;
@@ -227,7 +227,7 @@ ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path,
         aenc_ctx->sample_rate = av_buffersink_get_sample_rate(achain.buffersink_ctx);
         av_buffersink_get_ch_layout(achain.buffersink_ctx, &aenc_ctx->ch_layout);
         aenc_ctx->sample_fmt = (enum AVSampleFormat)av_buffersink_get_format(achain.buffersink_ctx);
-        aenc_ctx->bit_rate = 128000;
+        aenc_ctx->bit_rate = PROXY_AUDIO_BITRATE_BPS;
         aenc_ctx->time_base = av_buffersink_get_time_base(achain.buffersink_ctx);
         if (out_ctx->oformat->flags & AVFMT_GLOBALHEADER) {
             aenc_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;

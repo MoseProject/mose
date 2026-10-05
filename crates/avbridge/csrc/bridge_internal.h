@@ -35,6 +35,25 @@ static inline void bridge_enable_decoder_threads(AVCodecContext *ctx) {
     ctx->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
 }
 
+/* Settings the exports, proxies and passes share. */
+
+/* Mastering every export's audio goes through: denoise, loudness to the target, true-peak limit. */
+#define MASTERING_LOUDNORM_ARGS_FORMAT "I=%.1f:TP=-1.0:LRA=11"
+#define MASTERING_LIMITER_ARGS "limit=0.95:attack=5:release=50"
+#define MASTERING_FILTER_FORMAT     "afftdn,loudnorm=" MASTERING_LOUDNORM_ARGS_FORMAT ",alimiter=" MASTERING_LIMITER_ARGS
+
+/* Sample rate and AAC bitrate of an exported mix, and the bitrate of a proxy's audio. */
+#define EXPORT_AUDIO_SAMPLE_RATE 48000
+#define EXPORT_AUDIO_BITRATE_BPS 192000
+#define PROXY_AUDIO_BITRATE_BPS 128000
+
+/* Threads a software H.264 encoder is given, and the keyframe spacing of every encode. */
+#define SOFTWARE_ENCODER_THREADS 8
+#define KEYFRAME_INTERVAL_SECS 2
+
+/* Video bitrate of a re-encode pass when its input does not say. */
+#define DEFAULT_REENCODE_BITRATE_BPS 4000000LL
+
 typedef enum {
     /* Try platform-available hardware encoders in a fixed order (NVENC, Quick Sync, VAAPI,
        AMF, then VideoToolbox on macOS), falling back to the first available CPU H.264 encoder
@@ -102,6 +121,12 @@ AVCodecContext *open_video_encoder(GpuEncoderPreference preference, int canvas_w
                                         int64_t canvas_bit_rate_bps, int global_header,
                                         int *out_used_gpu, enum AVPixelFormat *out_pix_fmt);
 
+/* Speed handling shared by the single- and multi-track timeline exports. All defined in
+   timeline_common.c. */
+float smooth_speed_ramp_average_speed(const ClipSegment *seg);
+void build_setpts_str(const ClipSegment *seg, double source_duration_secs, char *out,
+                      size_t out_size);
+
 /* Opens the encoder for a pass that re-encodes an already exported file (text, shape and privacy
    blur overlays): hardware when one opens with yuv420p input, else the CPU encoder. Their filter
    graphs end in yuv420p, so an encoder that wants another format is not used. NULL on failure. */
@@ -147,6 +172,45 @@ int audio_worker_command(AudioWorker *worker, const char *target, const char *co
 /* Stops and frees `*worker` (set to NULL). With `flush`, the graph and encoder are drained first;
    without, whatever is still queued is dropped. Returns negative if the worker had failed. */
 int audio_worker_finish(AudioWorker **worker, int flush);
+
+/* Speed handling and audio output shared by the single- and multi-track timeline exports. All
+   defined in timeline_common.c. */
+float smooth_speed_ramp_average_speed(const ClipSegment *seg);
+void build_setpts_str(const ClipSegment *seg, double source_duration_secs, char *out,
+                      size_t out_size);
+int build_segment_vfilter(const ClipSegment *seg, int canvas_width, int canvas_height,
+                          int fps_num, int fps_den, const char *pix_fmt_name, char *buf,
+                          size_t cap);
+/* Builds the export's audio graph and AAC encoder from `adec_ctx`, adds the audio stream, opens
+   the output file, writes the container header (the video stream must already exist) and starts
+   the audio worker. `*aenc_ctx`, `*audio_stream` and `*worker` are set as far as setup got, so
+   the caller's cleanup can free what exists after a failure. */
+EncodeStatus timeline_open_audio_output(AVFormatContext *out_ctx, AVCodecContext *adec_ctx,
+                                        float target_lufs, const char *out_path,
+                                        AudioFilterChain *achain, AVCodecContext **aenc_ctx,
+                                        AVStream **audio_stream, AudioWorker **worker);
+/* Queues the gain and tempo changes `seg` needs, ahead of its audio frames. */
+void timeline_queue_segment_audio_commands(AudioWorker *worker, const ClipSegment *seg);
+
+/* Result of a re-encode pass; the values equal TextOverlayStatus and PrivacyBlurStatus, which
+   the callers convert it to. */
+typedef enum {
+    REENCODE_OK = 0,
+    REENCODE_ERR_OPEN_INPUT = 1,
+    REENCODE_ERR_ALLOC_OUTPUT = 2,
+    REENCODE_ERR_FILTER_GRAPH = 3,
+    REENCODE_ERR_PIPELINE = 4,
+} ReencodeStatus;
+
+/* Decodes `in_path`, runs `filter_desc` (a graph from [in] to [out]) over its video, encodes the
+   result to `out_path` and copies the audio unchanged. With `bound_output_to_input_frames` the
+   output stops at one frame per input frame, for graphs with a source that never ends. Defined
+   in reencode.c. */
+ReencodeStatus avbridge_reencode_with_filter(const char *in_path, const char *out_path,
+                                             const char *filter_desc, int canvas_width,
+                                             int canvas_height, int canvas_fps_num,
+                                             int canvas_fps_den,
+                                             int bound_output_to_input_frames);
 
 typedef struct {
     AVFilterContext *buffersrc_ctx;

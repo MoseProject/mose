@@ -25,65 +25,40 @@
 //! Nothing in this crate depends on `egui` or any GUI toolkit — `ui` is the only
 //! consumer, and it owns all presentation/formatting concerns (see its `i18n` module).
 
-pub mod app_paths;
-pub mod auto_reframe;
-pub mod background_removal;
-pub mod blend_mode;
-pub mod bundle;
-pub mod collab_bundle;
-pub mod dynamic_reframe;
-pub mod entitlement;
-pub mod error_reporting;
-pub mod export;
-pub mod export_queue;
-pub mod font_catalog;
-pub mod frame_sampler;
-pub mod gameplay_events;
-pub mod highlight_detection;
-pub mod interchange;
-pub mod keyframe;
-pub mod loudness;
-pub mod lut;
-pub mod mask_propagation;
-pub mod media;
-pub mod motion_template;
-pub mod motion_tracking;
-pub mod multicam_sync;
-pub mod nested_sequence;
-mod onnx_models;
-pub mod overlay_render;
-pub mod persistence;
-pub mod privacy_blur;
-pub mod probe;
-pub mod project;
-pub mod proxy;
+pub mod analysis;
+pub mod av;
+pub mod graphics;
+pub mod model;
+pub mod platform;
+pub mod project_io;
 pub mod render;
-pub mod scene_detection;
-pub mod scopes;
-pub mod semantic_index;
-pub mod shape_render;
-pub mod silence_detection;
-pub mod smart_bins;
-pub mod sound_library;
-pub mod subtitles;
-pub mod telemetry;
-pub mod text_layout;
-pub mod text_metrics;
-pub mod text_to_speech;
-pub mod timeline;
-pub mod timeline_window;
-pub mod transcribe;
-pub mod transcript;
-pub mod transcript_proposals;
-pub mod transcript_search;
-pub mod undo;
-pub mod update_check;
-mod update_install;
-pub mod voice_cleanup_preview;
-pub mod watched_folder;
-pub mod waveform;
-mod whisper_model;
-pub mod youtube_download;
+
+// The modules keep their flat paths (`avcore::probe`, `crate::timeline`) through these re-exports.
+pub use analysis::{
+    auto_reframe, background_removal, dynamic_reframe, gameplay_events, highlight_detection,
+    mask_propagation, motion_tracking, privacy_blur, scene_detection, semantic_index,
+    silence_detection, text_to_speech, transcribe, transcript, transcript_proposals,
+    transcript_search,
+};
+use analysis::{onnx_models, whisper_model};
+pub use av::{
+    frame_sampler, loudness, probe, proxy, sound_library, subtitles, voice_cleanup_preview,
+    waveform, youtube_download,
+};
+pub use graphics::{
+    blend_mode, font_catalog, lut, motion_template, overlay_render, scopes, shape_render,
+    text_layout, text_metrics,
+};
+pub use model::{
+    keyframe, media, multicam_sync, nested_sequence, project, smart_bins, timeline,
+    timeline_window, undo,
+};
+use platform::update_install;
+pub use platform::{entitlement, error_reporting, telemetry, update_check};
+pub use project_io::{
+    app_paths, bundle, collab_bundle, export, export_queue, interchange, persistence,
+    watched_folder,
+};
 
 pub use auto_reframe::{
     compute_reframe_crop, detect_faces, main_subject_center, CropRect, FaceBox, ReframeError,

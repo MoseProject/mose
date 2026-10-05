@@ -94,7 +94,7 @@ EncodeStatus avbridge_encode_export(const char *in_path, const char *out_path,
     {
         char filter_descr[256];
         snprintf(filter_descr, sizeof(filter_descr),
-                 "afftdn,loudnorm=I=%.1f:TP=-1.0:LRA=11,alimiter=limit=0.95:attack=5:release=50",
+                 MASTERING_FILTER_FORMAT,
                  (double)target_lufs);
         if (init_audio_filter_chain(dec_ctx, encoder, filter_descr, &chain) < 0) {
             status = ENCODE_ERR_FILTER_GRAPH;
@@ -110,7 +110,7 @@ EncodeStatus avbridge_encode_export(const char *in_path, const char *out_path,
     enc_ctx->sample_rate = av_buffersink_get_sample_rate(chain.buffersink_ctx);
     av_buffersink_get_ch_layout(chain.buffersink_ctx, &enc_ctx->ch_layout);
     enc_ctx->sample_fmt = (enum AVSampleFormat)av_buffersink_get_format(chain.buffersink_ctx);
-    enc_ctx->bit_rate = 192000;
+    enc_ctx->bit_rate = EXPORT_AUDIO_BITRATE_BPS;
     enc_ctx->time_base = av_buffersink_get_time_base(chain.buffersink_ctx);
     if (out_ctx->oformat->flags & AVFMT_GLOBALHEADER) {
         enc_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;

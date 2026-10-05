@@ -73,12 +73,12 @@ static AVCodecContext *try_open_encoder(const char *encoder_name, int canvas_wid
     ctx->pix_fmt = pix_fmt_for_encoder_name(encoder_name);
     ctx->time_base = av_inv_q(canvas_fps);
     ctx->framerate = canvas_fps;
-    ctx->gop_size = (canvas_fps.num / canvas_fps.den) * 2;
+    ctx->gop_size = (canvas_fps.num / canvas_fps.den) * KEYFRAME_INTERVAL_SECS;
     ctx->max_b_frames = 0;
     ctx->bit_rate = canvas_bit_rate_bps;
     /* Software encoders (libopenh264, libx264) run on one thread unless told otherwise; a
        hardware encoder ignores this. */
-    ctx->thread_count = 8;
+    ctx->thread_count = SOFTWARE_ENCODER_THREADS;
     if (global_header) {
         ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
     }
@@ -120,7 +120,7 @@ static AVCodecContext *try_open_vaapi_device(const char *device_path, int canvas
     ctx->pix_fmt = AV_PIX_FMT_VAAPI;
     ctx->time_base = av_inv_q(canvas_fps);
     ctx->framerate = canvas_fps;
-    ctx->gop_size = (canvas_fps.num / canvas_fps.den) * 2;
+    ctx->gop_size = (canvas_fps.num / canvas_fps.den) * KEYFRAME_INTERVAL_SECS;
     ctx->max_b_frames = 0;
     ctx->bit_rate = canvas_bit_rate_bps;
     if (global_header) {

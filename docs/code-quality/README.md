@@ -12,6 +12,7 @@ matches the current task. Do not preload the whole directory.
 | Playback, preview, import, export, decoding, rendering, cache, allocation, I/O, or a reported slowdown | [performance.md](performance.md) | No runtime path or resource use changes |
 | Tests are added, changed, reviewed, or used as acceptance evidence | [testing.md](testing.md) | No behavior or test changes |
 | Untrusted files, paths, downloads, dependencies, FFI, secrets, or user-controlled data | [security.md](security.md) | The change has no trust boundary |
+| Planning a refactor, or asking what is oversized, duplicated or misplaced | [architecture-review-2026-10.md](architecture-review-2026-10.md): findings, what changed, backlog | The task is a bug fix or a feature in an already well-sized module |
 | A patch or pull request is being reviewed | [review-checklist.md](review-checklist.md), then only the relevant guides above | Implementation is still being designed |
 
 When multiple rows match, load their union once. Start with the smallest set and open another

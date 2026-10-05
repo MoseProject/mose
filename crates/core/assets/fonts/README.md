@@ -8,7 +8,7 @@ the architecture doc. The reviewed expansion target, official acquisition source
 Complex shaping, bidi, cluster-safe highlights, and international fallback are specified in
 [`spec/architecture/complex-text-shaping.md`](../../../../spec/architecture/complex-text-shaping.md).
 Do not add a family here without updating that specification and the locked catalog manifest
-(`crates/core/src/font_catalog.rs`) together.
+(`crates/core/src/graphics/font_catalog.rs`) together.
 
 These font files are downloaded from the official
 [Google Fonts repository](https://github.com/google/fonts) and embedded into `avcore` for
@@ -63,7 +63,7 @@ its unmodified `OFL.txt` is stored beside the corresponding font files.
 
 Single-weight families intentionally map both runtime style requests to their one designed
 face. The UI disables the Bold selector for those families. A variable family's single locked
-binary carries every weight/width axis in one file — `crates/core/src/font_catalog.rs`'s
+binary carries every weight/width axis in one file — `crates/core/src/graphics/font_catalog.rs`'s
 `FontFace::weight`/`FontFamilyEntry::default_weight` records only the Regular (400) instance
 selected at load time (FONT-01C's own "official axis-selection UI" is still open; today's
 Editor properties panel only offers the fixed default/bold weight either way).

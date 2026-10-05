@@ -29,7 +29,7 @@ same flag but isn't actually about runtime cost.
 inspection (`clippy::perf` doesn't catch this shape of thing) that `App::pump_preview_frame`
 always calls `avcore::luma_waveform_rgba` and `avcore::vectorscope_rgba` back to back whenever
 `scopes_enabled`, each independently iterating over the *entire* decoded source frame. Added
-`avcore::render_scopes_rgba` (`crates/core/src/scopes.rs`), computing both scopes' per-pixel
+`avcore::render_scopes_rgba` (`crates/core/src/graphics/scopes.rs`), computing both scopes' per-pixel
 accumulation in one shared pass over the source instead of two, and switched the one real call
 site to it. See "Scopes: two passes merged into one" below for the measured result and how
 correctness was confirmed.
@@ -133,7 +133,7 @@ arithmetic and RGBA byte reads between them.
 
 **Correctness confirmed before performance**: `render_scopes_rgba`'s output for both scopes must
 be byte-identical to calling the two original functions separately, on every input shape — not
-just a solid-color test case, which could pass by coincidence. `crates/core/src/scopes/
+just a solid-color test case, which could pass by coincidence. `crates/core/src/graphics/scopes/
 scopes_test.rs` gained `render_scopes_matches_calling_both_standalone_functions` (a non-uniform,
 non-square, non-power-of-two 37x23 test frame, checked against both `luma_waveform_rgba` and
 `vectorscope_rgba` called independently) plus two edge-case tests (empty source; one output side

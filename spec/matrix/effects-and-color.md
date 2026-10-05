@@ -68,7 +68,7 @@ for exact export-vs-preview wiring per effect).
 ## Known gaps
 
 - [x] Color scopes (waveform/vectorscope) for calibrated grading. `avcore::scopes`
-      (`luma_waveform_rgba`/`vectorscope_rgba`, `crates/core/src/scopes.rs`) — pure pixel
+      (`luma_waveform_rgba`/`vectorscope_rgba`, `crates/core/src/graphics/scopes.rs`) — pure pixel
       analysis against the already-decoded preview `VideoFrame`, no new avfilter/GStreamer
       element needed. Toggled via the Editor preview panel's "📊" button
       (`App::scopes_enabled`), computed opt-in inside `App::pump_preview_frame` alongside the

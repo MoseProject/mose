@@ -2,7 +2,7 @@
 
 ## Done
 
-`crates/core/src/undo.rs` — `UndoStack`: two bounded `Vec<Sequence>` stacks (undo/redo),
+`crates/core/src/model/undo.rs` — `UndoStack`: two bounded `Vec<Sequence>` stacks (undo/redo),
 snapshot-based (not command-pattern — see the module's own doc for why `Sequence: Clone` makes
 this the correct reuse-before-build choice per `RULES.md`). `push`/`undo`/`redo`/`can_undo`/
 `can_redo`/`clear`. Unit tested (`crates/core/tests/undo_test.rs`, 7 tests): fresh-stack state,
@@ -13,7 +13,7 @@ touching redo, capacity bounds the stack by dropping the oldest entry, `clear` d
 ## Wired
 
 Items 1-2 and 4-7 below are done. `Project::active_sequence()`/`active_sequence_mut()`
-accessors added (`crates/core/src/project.rs`, next to `timeline()`/`timeline_mut()`).
+accessors added (`crates/core/src/model/project.rs`, next to `timeline()`/`timeline_mut()`).
 `App::undo_stack: avcore::undo::UndoStack` (`crates/ui/src/app/mod.rs`, next to
 `selected_clip_id`). `App::push_undo_snapshot()`/`undo()`/`redo()`/`can_undo()`/`can_redo()`
 added next to `reset_sequence_context`. `Undo`/`Redo` added to `BindableAction`/`KeyBindings`

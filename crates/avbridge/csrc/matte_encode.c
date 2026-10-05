@@ -69,7 +69,7 @@ MatteStatus avbridge_encode_matte_video(const uint8_t *luma_frames, int frame_co
     AVRational frame_rate = (AVRational){fps_num, fps_den};
     venc_ctx->time_base = av_inv_q(frame_rate);
     venc_ctx->framerate = frame_rate;
-    venc_ctx->gop_size = (fps_num / fps_den) * 2;
+    venc_ctx->gop_size = (fps_num / fps_den) * KEYFRAME_INTERVAL_SECS;
     venc_ctx->max_b_frames = 0; /* keeps internal matte decoding lightweight */
     /* Internal-only artifact re-decoded frame-by-frame at export time, not archival quality —
        sized the same way proxy.c's bit_rate is, off the (small, luma-dominated) pixel count. */

@@ -15,30 +15,26 @@
 
 //! `desktop` -- the Tauri shell for oca. The webview (React/TypeScript in `../src`) renders;
 //! this crate owns the editing session, the Bush preview, import and export, all through
-//! `avcore`. Runs alongside the egui shell (`crates/ui`) while screens migrate; see
-//! `spec/architecture/tauri-migration.md`.
+//! `avcore`. See `spec/architecture/tauri-migration.md` for the design history.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod autosave;
-mod bush_adapter;
-mod close_guard;
 mod commands;
 mod dialogs;
 mod error_reporting;
 mod export;
-mod frames;
 mod handler;
 mod prefs;
-mod preview_engine;
-mod protocol;
+mod preview;
 mod services;
-mod session_sync;
-mod state;
+mod session;
 mod telemetry;
 #[cfg(test)]
 mod testing;
-mod tile_workers;
+
+// The modules keep their flat paths (`crate::state`, `crate::preview_engine`) through these.
+use preview::{bush_adapter, frames, preview_engine, protocol, tile_workers};
+use session::{autosave, close_guard, session_sync, state};
 
 use std::sync::Arc;
 

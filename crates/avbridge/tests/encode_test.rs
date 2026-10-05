@@ -649,3 +649,32 @@ fn an_overlay_covering_a_whole_segment_keeps_every_frame() {
 
     let _ = std::fs::remove_file(&out);
 }
+
+#[test]
+fn multi_track_export_honours_a_segments_anchor() {
+    // The single- and multi-track exports build a segment's filter graph with the same function
+    // now; the multi-track one used to centre the clip whatever its anchor was.
+    let out = std::env::temp_dir().join("avbridge_test_multi_anchor.mp4");
+    let cancel = AtomicBool::new(false);
+    let segment = ClipSegment {
+        video_filter: "rotate=angle='0.3':ow=rotw('0.3'):oh=roth('0.3')".to_string(),
+        anchor_x: 0.2,
+        anchor_y: 0.8,
+        ..clip(0.0, 1.0, 0.0, "")
+    };
+    let outcome = encode_timeline_export_multi(
+        &[vec![segment]],
+        CANVAS,
+        &out,
+        -14.0,
+        GpuEncoderPreference::Cpu,
+        &cancel,
+        |_secs| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, EncodeOutcome::Completed);
+    let per_second = (CANVAS.fps_num / CANVAS.fps_den) as usize;
+    assert_eq!(frame_count(&out), per_second);
+
+    let _ = std::fs::remove_file(&out);
+}

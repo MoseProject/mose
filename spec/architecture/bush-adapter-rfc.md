@@ -22,13 +22,13 @@ No project, timeline or `.ocproj` schema changes. `ytbridge` is unaffected.
 
 ## Where the adapter lives
 
-`apps/desktop/src-tauri/src/preview_engine.rs` is the single place that drives preview today: a
+`apps/desktop/src-tauri/src/preview/preview_engine.rs` is the single place that drives preview today: a
 dedicated thread owns an `avcore::preview_worker::PreviewWorker`, `resolve_layers` turns the
 session timeline into a `Layers` value (background, overlays, audio, text, shapes), and
 `live_updates_between` decides reopen versus live update. The adapter is a second backend behind
 the same `PreviewEngine` handle (`Command` channel, `latest_frame()`, playhead atomics), so
 `state.rs`, the commands and the whole webview stay unchanged. Bush must not be imported by
-`core`: the mapper lives in `apps/desktop/src-tauri/src/bush_adapter/` and is the only code that
+`core`: the mapper lives in `apps/desktop/src-tauri/src/preview/bush_adapter/` and is the only code that
 knows both `avcore` types and Bush DTOs, exactly as the engine plan requires.
 
 ```text

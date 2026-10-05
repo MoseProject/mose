@@ -129,16 +129,25 @@ Dependency direction: `avbridge` → `bush` → `core` → `desktop` (`apps/desk
 `avbridge`; `core` uses its decoder for frame sampling and `desktop` runs its playback loop —
 see [`spec/matrix/bush.md`](spec/matrix/bush.md); `make test-bush`.
 
-- **`avbridge`** — thin C bridge (`csrc/bridge.c`) over libavformat/libavcodec/libavfilter/
-  libavutil, called via FFI. Exposes probing, timeline export rendering, loudness
-  measurement, proxy generation, and waveform extraction.
+- **`avbridge`** — thin C bridge (`csrc/`, one file per capability: `probe.c`, `timeline_export.c`,
+  `timeline_export_multi.c`, `proxy.c`, `reencode.c` for the text/shape/privacy-blur passes, ...)
+  over libavformat/libavcodec/libavfilter/libavutil, called via FFI. The Rust side
+  (`src/`) mirrors it: `ffi.rs` holds the raw structs and extern declarations, one module per
+  capability (`probe`, `decode`, `export`, `timeline_export`, `audio_mix`, `loudness`, `proxy`,
+  `overlay`, ...) wraps them, and `lib.rs` only lists and re-exports. Shared settings
+  (mastering chain, bitrates, encoder threads) are constants in `csrc/bridge_internal.h`.
 - **`core`** — package name `core`, `[lib] name = "avcore"` (Rust code imports it as `avcore`,
-  never `core`, since that would shadow libcore). Project/timeline/media data model plus
-  wrappers (`probe`, `render`, `loudness`, `proxy`, `waveform`), a frame sampler over Bush's
-  decoder (`frame_sampler`), and `.ocproj` save/load (`persistence`) — gzip-compressed
-  MessagePack (struct-map mode, so `#[serde(default)]` still lets an older-saved project load
-  after a new field is added). Locale-neutral — stores enums, never pre-formatted strings. No
-  mock/sample data anywhere.
+  never `core`, since that would shadow libcore). Modules are grouped by concern and keep flat
+  public paths through re-exports in `lib.rs` (`avcore::probe` lives in `av/probe.rs`):
+  `model/` (project, timeline, keyframe, undo, ...), `av/` (probe, proxy, loudness, waveform,
+  frame_sampler, ...), `analysis/` (detection, tracking, transcription, model inference),
+  `graphics/` (fonts, text layout, blend modes, overlay rasterizers), `project_io/`
+  (persistence, bundles, interchange, export queue), `platform/` (telemetry, error reporting,
+  updates) and `render/` (resolving a sequence into export segments and running the export).
+  `.ocproj` save/load (`project_io/persistence.rs`) is LZ4-compressed postcard for the `Project`
+  itself (positional: bump `PROJECT_FORMAT_VERSION` when its fields change) and gzip MessagePack
+  for the smaller framed files (prefs, queue, transcripts). Locale-neutral — stores enums,
+  never pre-formatted strings. No mock/sample data anywhere.
 - **`apps/desktop`** — the app itself: a Tauri 2 shell, React/TypeScript webview (`src/`, Vite)
   over a Rust crate `desktop` (`src-tauri/`, bin `oca-desktop`) that owns the session, the Bush
   preview (`bush_adapter/`: timeline-to-scene mapper and playback loop), import and export via
