@@ -145,7 +145,7 @@ Read [architecture/performance-and-caching.md](architecture/performance-and-cach
    `App::resolved_active_sequence_export_preview`'s value-equality cache. See
    `matrix/performance.md` for what is/isn't covered.
 5. `[x]` Extract a shared `FrameSampler` primitive — `avcore::FrameSampler`
-   (`crates/core/src/frame_sampler.rs`) now backs auto-reframe, motion tracking,
+   (`crates/core/src/av/frame_sampler.rs`) now backs auto-reframe, motion tracking,
    background-removal matte generation, and (found during the same pass) thumbnail extraction,
    which had the identical shape. Session-reuse for `background_removal::segment_person`'s ONNX
    session is a related but separate gap, left open — see `architecture/performance-and-
@@ -182,7 +182,7 @@ Read [matrix/effects-and-color.md](matrix/effects-and-color.md),
    what shipped.
 8. `[x]` Export presets per platform (YouTube Shorts / Instagram Reels / TikTok — resolution +
    aspect + LUFS target bundled under one name). `avcore::PlatformExportPreset`
-   (`crates/core/src/export.rs`) + `App::apply_platform_export_preset` + a one-click button row
+   (`crates/core/src/project_io/export.rs`) + `App::apply_platform_export_preset` + a one-click button row
    on the Fila screen, above the existing aspect-ratio/LUFS pickers (which stay live afterward
    for fine-tuning — a preset isn't a lock). All three presets currently resolve to the same
    numbers (1080x1920, -14 LUFS, matching this codebase's own existing "YouTube" LUFS profile)
@@ -1572,7 +1572,7 @@ an item earlier:
   anything different from an explicit value matching the old Bold weight; and an off-axis override
   a static family has no matching face for (`Some(550)` on Lato) degrades gracefully via `fontdb`'s
   own nearest-weight matching rather than panicking or producing an empty shape. Mirrored as 3 new
-  inline tests in the real `crates/core/src/text_layout/text_layout_test.rs`, plus the existing
+  inline tests in the real `crates/core/src/graphics/text_layout/text_layout_test.rs`, plus the existing
   `shape_cache_misses_when_any_input_differs` test extended with a 5th differing-input case for
   the new field. `cargo check --workspace --all-targets` and `cargo clippy -p core --lib --no-deps`/
   `-p ui --tests --no-deps` (via the documented temporary `filters.c` shim, discarded before
@@ -1620,7 +1620,7 @@ an item earlier:
   as a passing, informative assertion rather than deleted once its original premise turned out
   false), and the determinism check (`Lato`'s fallback-resolved Arabic glyph and a direct
   `NotoSansArabic` pick resolve to the exact same font id). Mirrored as 8 new tests in the real
-  `crates/core/src/text_layout/text_layout_test.rs` (the control test itself stays scratch-crate-
+  `crates/core/src/graphics/text_layout/text_layout_test.rs` (the control test itself stays scratch-crate-
   only, since it deliberately reconstructs the *old*, no-longer-present construction path rather
   than testing this module's own current code). `cargo check --workspace --all-targets`, `cargo
   clippy -p core --lib --no-deps` (via the documented temporary `filters.c`/`text_overlay.c` shim,
@@ -1932,7 +1932,7 @@ an item earlier:
   identical shim applied to `text_overlay.c`'s own unrelated `av_opt_set_array` call site purely
   so the rest of the crate's object files satisfy the linker, since that call is never actually
   reached under the shim — both discarded before commit). `cargo check --workspace --all-targets`
-  passed clean via the shim; `crates/core/src/voice_cleanup_preview.rs` (depends only on
+  passed clean via the shim; `crates/core/src/av/voice_cleanup_preview.rs` (depends only on
   `avbridge` + `crate::loudness`/`crate::media`, none of core's heavy ONNX/whisper/GStreamer
   dependencies) was copied into a throwaway scratch crate that depends on the *real* `avbridge`
   crate directly (a path dependency, not a copy) and `cargo test`ed there for real: 4/4 passing,
@@ -2015,7 +2015,7 @@ an item earlier:
   gap; a cut at the very first sample (no preceding gap) correctly ignored; a cut matching no real
   sample time ignored; multiple cuts handled without duplicate times; and the result staying
   strictly ascending under a stress case with a cut at every gap. Mirrored as the same 8 tests in
-  the real `crates/core/src/dynamic_reframe/dynamic_reframe_test.rs`. `cargo check --workspace
+  the real `crates/core/src/analysis/dynamic_reframe/dynamic_reframe_test.rs`. `cargo check --workspace
   --all-targets` and `cargo clippy -p core --lib --no-deps` / `-p ui --tests --no-deps` (via the
   documented temporary `filters.c`/`text_overlay.c` shim, discarded before commit) and `cargo fmt
   --all -- --check` all stayed clean.
@@ -2314,7 +2314,7 @@ an item earlier:
   (not a plain file), a trailing separator with no final segment, and bare `.`/`..` segments — plus
   `resolve_asset_id`'s own fallback ordering (exact match preferred over the media-root fallback,
   the fallback engaged only when the exact match fails, and no match invented when the root has
-  nothing matching). Mirrored as 9 new tests directly in `crates/core/src/interchange/
+  nothing matching). Mirrored as 9 new tests directly in `crates/core/src/project_io/interchange/
   interchange_test.rs` plus 2 more exercising `interchange_to_timeline`'s new parameter end-to-end
   (resolves via the root when the exact match fails; still reports the existing warning when the
   root has no match either) — type-checked cleanly here (this sandbox's own `core` test binary
@@ -2502,7 +2502,7 @@ an item earlier:
   combined fade correctly scaled down to land exactly at the clip's midpoint, and negative inputs
   clamped rather than producing backwards keyframes if this pure function is ever called with
   unvalidated input directly. Mirrored as the same 9 tests in the real
-  `crates/core/src/motion_template/motion_template_test.rs`. `cargo check --workspace
+  `crates/core/src/graphics/motion_template/motion_template_test.rs`. `cargo check --workspace
   --all-targets`, `cargo clippy -p core --lib --no-deps` / `-p ui --tests --no-deps` (via the
   documented temporary `filters.c`/`text_overlay.c` shim, discarded before commit), and `cargo fmt
   --all -- --check` all stayed clean.

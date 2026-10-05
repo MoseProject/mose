@@ -81,7 +81,7 @@ the clearest template to copy for a similar ruler-level feature.
 
 ## Thumbnails and waveforms
 
-- **Waveform**: `crates/core/src/waveform.rs::generate_waveform` produces peaks stored directly
+- **Waveform**: `crates/core/src/av/waveform.rs::generate_waveform` produces peaks stored directly
   on `MediaAsset.waveform_peaks` (persisted) — no separate runtime cache struct; `draw_waveform`
   reads it straight off the asset.
 - **Thumbnails**: generated in `crates/ui/src/app/import.rs` (no dedicated `core` module), cached

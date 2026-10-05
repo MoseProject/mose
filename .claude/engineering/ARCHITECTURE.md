@@ -39,7 +39,7 @@ of core editing rules" — mutation primitives (`Track::ripple_delete_range`,
 
 ## Undo/redo — full-snapshot, not command-pattern
 
-`crates/core/src/undo.rs`: `UndoStack { capacity, undo: Vec<Sequence>, redo: Vec<Sequence> }`.
+`crates/core/src/model/undo.rs`: `UndoStack { capacity, undo: Vec<Sequence>, redo: Vec<Sequence> }`.
 Scoped to **one `Sequence`**, not the whole `Project`; cleared on sequence switch. This is an
 explicit, documented design choice (see the module's own doc comment), not a placeholder to
 "eventually" replace with commands. `App::push_undo_snapshot()` clones the current sequence

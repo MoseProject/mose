@@ -1,7 +1,7 @@
 # Video Editor Domain Model — `avcore` (crate `core`)
 
-Ground truth against `crates/core/src/project.rs`, `crates/core/src/timeline.rs`,
-`crates/core/src/media.rs`. Field lists are abbreviated (types simplified); read the real
+Ground truth against `crates/core/src/model/project.rs`, `crates/core/src/model/timeline.rs`,
+`crates/core/src/model/media.rs`. Field lists are abbreviated (types simplified); read the real
 struct for exact types before relying on this for a signature.
 
 ## CURRENTLY IMPLEMENTED

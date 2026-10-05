@@ -30,8 +30,8 @@ Excluded by file (reason):
 | `apps/desktop/src-tauri/src/main.rs` | Tauri builder and window setup, runs only inside a real app |
 | `crates/bush/src/device_sink.rs` | Needs an audio output device (`device_audio_test` runs it where one exists) |
 | `crates/bush/src/gpu_*.rs` | Needs a GPU adapter; parity covered by `gpu_parity_test` where one exists |
-| `crates/core/src/update_check.rs` network and install calls | Needs GitHub and an elevated installer; the pure parts are tested |
-| `crates/core/src/youtube_download.rs` process launch | Needs yt-dlp and the network; argument building and parsing are tested |
+| `crates/core/src/platform/update_check.rs` network and install calls | Needs GitHub and an elevated installer; the pure parts are tested |
+| `crates/core/src/av/youtube_download.rs` process launch | Needs yt-dlp and the network; argument building and parsing are tested |
 
 The list is reviewed at the end of each phase and only shrinks.
 

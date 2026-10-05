@@ -101,7 +101,7 @@ code and structured fields; only the adapter converts a validated report into a 
 
 These names are proposed and should be reconciled with the source tree when implementation starts:
 
-- `crates/core/src/error_reporting.rs`
+- `crates/core/src/platform/error_reporting.rs`
   - stable `ErrorCode`, `ErrorSeverity`, `RecoveryOutcome`, and report schema;
   - path/content sanitizer and allowlist validator;
   - provider-neutral `ErrorReporter` trait;

@@ -108,12 +108,12 @@ fn bundled_lato_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "lato",
         "lato/Lato-Regular.ttf",
-        include_bytes!("../../assets/fonts/lato/Lato-Regular.ttf"),
+        include_bytes!("../../../assets/fonts/lato/Lato-Regular.ttf"),
     );
     assert_face_matches(
         "lato",
         "lato/Lato-Bold.ttf",
-        include_bytes!("../../assets/fonts/lato/Lato-Bold.ttf"),
+        include_bytes!("../../../assets/fonts/lato/Lato-Bold.ttf"),
     );
 }
 
@@ -122,7 +122,7 @@ fn bundled_bebas_neue_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "bebas-neue",
         "bebas-neue/BebasNeue-Regular.ttf",
-        include_bytes!("../../assets/fonts/bebas-neue/BebasNeue-Regular.ttf"),
+        include_bytes!("../../../assets/fonts/bebas-neue/BebasNeue-Regular.ttf"),
     );
 }
 
@@ -131,12 +131,12 @@ fn bundled_playfair_display_sc_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "playfair-display-sc",
         "playfair-display-sc/PlayfairDisplaySC-Regular.ttf",
-        include_bytes!("../../assets/fonts/playfair-display-sc/PlayfairDisplaySC-Regular.ttf"),
+        include_bytes!("../../../assets/fonts/playfair-display-sc/PlayfairDisplaySC-Regular.ttf"),
     );
     assert_face_matches(
         "playfair-display-sc",
         "playfair-display-sc/PlayfairDisplaySC-Bold.ttf",
-        include_bytes!("../../assets/fonts/playfair-display-sc/PlayfairDisplaySC-Bold.ttf"),
+        include_bytes!("../../../assets/fonts/playfair-display-sc/PlayfairDisplaySC-Bold.ttf"),
     );
 }
 
@@ -145,7 +145,7 @@ fn bundled_patrick_hand_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "patrick-hand",
         "patrick-hand/PatrickHand-Regular.ttf",
-        include_bytes!("../../assets/fonts/patrick-hand/PatrickHand-Regular.ttf"),
+        include_bytes!("../../../assets/fonts/patrick-hand/PatrickHand-Regular.ttf"),
     );
 }
 
@@ -154,12 +154,12 @@ fn bundled_anonymous_pro_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "anonymous-pro",
         "anonymous-pro/AnonymousPro-Regular.ttf",
-        include_bytes!("../../assets/fonts/anonymous-pro/AnonymousPro-Regular.ttf"),
+        include_bytes!("../../../assets/fonts/anonymous-pro/AnonymousPro-Regular.ttf"),
     );
     assert_face_matches(
         "anonymous-pro",
         "anonymous-pro/AnonymousPro-Bold.ttf",
-        include_bytes!("../../assets/fonts/anonymous-pro/AnonymousPro-Bold.ttf"),
+        include_bytes!("../../../assets/fonts/anonymous-pro/AnonymousPro-Bold.ttf"),
     );
 }
 
@@ -168,7 +168,7 @@ fn bundled_archivo_black_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "archivo-black",
         "archivo-black/ArchivoBlack-Regular.ttf",
-        include_bytes!("../../assets/fonts/archivo-black/ArchivoBlack-Regular.ttf"),
+        include_bytes!("../../../assets/fonts/archivo-black/ArchivoBlack-Regular.ttf"),
     );
 }
 
@@ -177,7 +177,7 @@ fn bundled_inter_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "inter",
         "inter/Inter[opsz,wght].ttf",
-        include_bytes!("../../assets/fonts/inter/Inter[opsz,wght].ttf"),
+        include_bytes!("../../../assets/fonts/inter/Inter[opsz,wght].ttf"),
     );
 }
 
@@ -186,7 +186,7 @@ fn bundled_montserrat_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "montserrat",
         "montserrat/Montserrat[wght].ttf",
-        include_bytes!("../../assets/fonts/montserrat/Montserrat[wght].ttf"),
+        include_bytes!("../../../assets/fonts/montserrat/Montserrat[wght].ttf"),
     );
 }
 
@@ -195,7 +195,7 @@ fn bundled_roboto_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "roboto",
         "roboto/Roboto[wdth,wght].ttf",
-        include_bytes!("../../assets/fonts/roboto/Roboto[wdth,wght].ttf"),
+        include_bytes!("../../../assets/fonts/roboto/Roboto[wdth,wght].ttf"),
     );
 }
 
@@ -204,7 +204,7 @@ fn bundled_open_sans_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "open-sans",
         "open-sans/OpenSans[wdth,wght].ttf",
-        include_bytes!("../../assets/fonts/open-sans/OpenSans[wdth,wght].ttf"),
+        include_bytes!("../../../assets/fonts/open-sans/OpenSans[wdth,wght].ttf"),
     );
 }
 
@@ -213,12 +213,12 @@ fn bundled_poppins_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "poppins",
         "poppins/Poppins-Regular.ttf",
-        include_bytes!("../../assets/fonts/poppins/Poppins-Regular.ttf"),
+        include_bytes!("../../../assets/fonts/poppins/Poppins-Regular.ttf"),
     );
     assert_face_matches(
         "poppins",
         "poppins/Poppins-Bold.ttf",
-        include_bytes!("../../assets/fonts/poppins/Poppins-Bold.ttf"),
+        include_bytes!("../../../assets/fonts/poppins/Poppins-Bold.ttf"),
     );
 }
 
@@ -227,7 +227,7 @@ fn bundled_nunito_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "nunito",
         "nunito/Nunito[wght].ttf",
-        include_bytes!("../../assets/fonts/nunito/Nunito[wght].ttf"),
+        include_bytes!("../../../assets/fonts/nunito/Nunito[wght].ttf"),
     );
 }
 
@@ -236,7 +236,7 @@ fn bundled_source_sans_3_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "source-sans-3",
         "source-sans-3/SourceSans3[wght].ttf",
-        include_bytes!("../../assets/fonts/source-sans-3/SourceSans3[wght].ttf"),
+        include_bytes!("../../../assets/fonts/source-sans-3/SourceSans3[wght].ttf"),
     );
 }
 
@@ -245,12 +245,12 @@ fn bundled_barlow_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "barlow",
         "barlow/Barlow-Regular.ttf",
-        include_bytes!("../../assets/fonts/barlow/Barlow-Regular.ttf"),
+        include_bytes!("../../../assets/fonts/barlow/Barlow-Regular.ttf"),
     );
     assert_face_matches(
         "barlow",
         "barlow/Barlow-Bold.ttf",
-        include_bytes!("../../assets/fonts/barlow/Barlow-Bold.ttf"),
+        include_bytes!("../../../assets/fonts/barlow/Barlow-Bold.ttf"),
     );
 }
 
@@ -259,7 +259,7 @@ fn bundled_fredoka_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "fredoka",
         "fredoka/Fredoka[wdth,wght].ttf",
-        include_bytes!("../../assets/fonts/fredoka/Fredoka[wdth,wght].ttf"),
+        include_bytes!("../../../assets/fonts/fredoka/Fredoka[wdth,wght].ttf"),
     );
 }
 
@@ -268,7 +268,7 @@ fn bundled_oswald_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "oswald",
         "oswald/Oswald[wght].ttf",
-        include_bytes!("../../assets/fonts/oswald/Oswald[wght].ttf"),
+        include_bytes!("../../../assets/fonts/oswald/Oswald[wght].ttf"),
     );
 }
 
@@ -277,7 +277,7 @@ fn bundled_anton_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "anton",
         "anton/Anton-Regular.ttf",
-        include_bytes!("../../assets/fonts/anton/Anton-Regular.ttf"),
+        include_bytes!("../../../assets/fonts/anton/Anton-Regular.ttf"),
     );
 }
 
@@ -286,12 +286,12 @@ fn bundled_barlow_condensed_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "barlow-condensed",
         "barlow-condensed/BarlowCondensed-Regular.ttf",
-        include_bytes!("../../assets/fonts/barlow-condensed/BarlowCondensed-Regular.ttf"),
+        include_bytes!("../../../assets/fonts/barlow-condensed/BarlowCondensed-Regular.ttf"),
     );
     assert_face_matches(
         "barlow-condensed",
         "barlow-condensed/BarlowCondensed-Bold.ttf",
-        include_bytes!("../../assets/fonts/barlow-condensed/BarlowCondensed-Bold.ttf"),
+        include_bytes!("../../../assets/fonts/barlow-condensed/BarlowCondensed-Bold.ttf"),
     );
 }
 
@@ -300,7 +300,7 @@ fn bundled_league_spartan_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "league-spartan",
         "league-spartan/LeagueSpartan[wght].ttf",
-        include_bytes!("../../assets/fonts/league-spartan/LeagueSpartan[wght].ttf"),
+        include_bytes!("../../../assets/fonts/league-spartan/LeagueSpartan[wght].ttf"),
     );
 }
 
@@ -309,7 +309,7 @@ fn bundled_teko_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "teko",
         "teko/Teko[wght].ttf",
-        include_bytes!("../../assets/fonts/teko/Teko[wght].ttf"),
+        include_bytes!("../../../assets/fonts/teko/Teko[wght].ttf"),
     );
 }
 
@@ -318,7 +318,7 @@ fn bundled_black_ops_one_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "black-ops-one",
         "black-ops-one/BlackOpsOne-Regular.ttf",
-        include_bytes!("../../assets/fonts/black-ops-one/BlackOpsOne-Regular.ttf"),
+        include_bytes!("../../../assets/fonts/black-ops-one/BlackOpsOne-Regular.ttf"),
     );
 }
 
@@ -327,7 +327,7 @@ fn bundled_russo_one_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "russo-one",
         "russo-one/RussoOne-Regular.ttf",
-        include_bytes!("../../assets/fonts/russo-one/RussoOne-Regular.ttf"),
+        include_bytes!("../../../assets/fonts/russo-one/RussoOne-Regular.ttf"),
     );
 }
 
@@ -336,7 +336,7 @@ fn bundled_bangers_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "bangers",
         "bangers/Bangers-Regular.ttf",
-        include_bytes!("../../assets/fonts/bangers/Bangers-Regular.ttf"),
+        include_bytes!("../../../assets/fonts/bangers/Bangers-Regular.ttf"),
     );
 }
 
@@ -345,7 +345,7 @@ fn bundled_merriweather_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "merriweather",
         "merriweather/Merriweather[opsz,wdth,wght].ttf",
-        include_bytes!("../../assets/fonts/merriweather/Merriweather[opsz,wdth,wght].ttf"),
+        include_bytes!("../../../assets/fonts/merriweather/Merriweather[opsz,wdth,wght].ttf"),
     );
 }
 
@@ -354,7 +354,7 @@ fn bundled_libre_baskerville_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "libre-baskerville",
         "libre-baskerville/LibreBaskerville[wght].ttf",
-        include_bytes!("../../assets/fonts/libre-baskerville/LibreBaskerville[wght].ttf"),
+        include_bytes!("../../../assets/fonts/libre-baskerville/LibreBaskerville[wght].ttf"),
     );
 }
 
@@ -363,7 +363,7 @@ fn bundled_lora_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "lora",
         "lora/Lora[wght].ttf",
-        include_bytes!("../../assets/fonts/lora/Lora[wght].ttf"),
+        include_bytes!("../../../assets/fonts/lora/Lora[wght].ttf"),
     );
 }
 
@@ -372,7 +372,7 @@ fn bundled_cinzel_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "cinzel",
         "cinzel/Cinzel[wght].ttf",
-        include_bytes!("../../assets/fonts/cinzel/Cinzel[wght].ttf"),
+        include_bytes!("../../../assets/fonts/cinzel/Cinzel[wght].ttf"),
     );
 }
 
@@ -381,7 +381,7 @@ fn bundled_bitter_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "bitter",
         "bitter/Bitter[wght].ttf",
-        include_bytes!("../../assets/fonts/bitter/Bitter[wght].ttf"),
+        include_bytes!("../../../assets/fonts/bitter/Bitter[wght].ttf"),
     );
 }
 
@@ -390,7 +390,7 @@ fn bundled_caveat_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "caveat",
         "caveat/Caveat[wght].ttf",
-        include_bytes!("../../assets/fonts/caveat/Caveat[wght].ttf"),
+        include_bytes!("../../../assets/fonts/caveat/Caveat[wght].ttf"),
     );
 }
 
@@ -399,7 +399,7 @@ fn bundled_pacifico_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "pacifico",
         "pacifico/Pacifico-Regular.ttf",
-        include_bytes!("../../assets/fonts/pacifico/Pacifico-Regular.ttf"),
+        include_bytes!("../../../assets/fonts/pacifico/Pacifico-Regular.ttf"),
     );
 }
 
@@ -408,7 +408,7 @@ fn bundled_dancing_script_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "dancing-script",
         "dancing-script/DancingScript[wght].ttf",
-        include_bytes!("../../assets/fonts/dancing-script/DancingScript[wght].ttf"),
+        include_bytes!("../../../assets/fonts/dancing-script/DancingScript[wght].ttf"),
     );
 }
 
@@ -417,12 +417,12 @@ fn bundled_comic_neue_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "comic-neue",
         "comic-neue/ComicNeue-Regular.ttf",
-        include_bytes!("../../assets/fonts/comic-neue/ComicNeue-Regular.ttf"),
+        include_bytes!("../../../assets/fonts/comic-neue/ComicNeue-Regular.ttf"),
     );
     assert_face_matches(
         "comic-neue",
         "comic-neue/ComicNeue-Bold.ttf",
-        include_bytes!("../../assets/fonts/comic-neue/ComicNeue-Bold.ttf"),
+        include_bytes!("../../../assets/fonts/comic-neue/ComicNeue-Bold.ttf"),
     );
 }
 
@@ -431,7 +431,7 @@ fn bundled_gloria_hallelujah_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "gloria-hallelujah",
         "gloria-hallelujah/GloriaHallelujah.ttf",
-        include_bytes!("../../assets/fonts/gloria-hallelujah/GloriaHallelujah.ttf"),
+        include_bytes!("../../../assets/fonts/gloria-hallelujah/GloriaHallelujah.ttf"),
     );
 }
 
@@ -440,7 +440,7 @@ fn bundled_jetbrains_mono_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "jetbrains-mono",
         "jetbrains-mono/JetBrainsMono[wght].ttf",
-        include_bytes!("../../assets/fonts/jetbrains-mono/JetBrainsMono[wght].ttf"),
+        include_bytes!("../../../assets/fonts/jetbrains-mono/JetBrainsMono[wght].ttf"),
     );
 }
 
@@ -449,7 +449,7 @@ fn bundled_roboto_mono_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "roboto-mono",
         "roboto-mono/RobotoMono[wght].ttf",
-        include_bytes!("../../assets/fonts/roboto-mono/RobotoMono[wght].ttf"),
+        include_bytes!("../../../assets/fonts/roboto-mono/RobotoMono[wght].ttf"),
     );
 }
 
@@ -458,12 +458,12 @@ fn bundled_space_mono_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "space-mono",
         "space-mono/SpaceMono-Regular.ttf",
-        include_bytes!("../../assets/fonts/space-mono/SpaceMono-Regular.ttf"),
+        include_bytes!("../../../assets/fonts/space-mono/SpaceMono-Regular.ttf"),
     );
     assert_face_matches(
         "space-mono",
         "space-mono/SpaceMono-Bold.ttf",
-        include_bytes!("../../assets/fonts/space-mono/SpaceMono-Bold.ttf"),
+        include_bytes!("../../../assets/fonts/space-mono/SpaceMono-Bold.ttf"),
     );
 }
 
@@ -472,7 +472,7 @@ fn bundled_noto_sans_arabic_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "noto-sans-arabic",
         "noto-sans-arabic/NotoSansArabic[wdth,wght].ttf",
-        include_bytes!("../../assets/fonts/noto-sans-arabic/NotoSansArabic[wdth,wght].ttf"),
+        include_bytes!("../../../assets/fonts/noto-sans-arabic/NotoSansArabic[wdth,wght].ttf"),
     );
 }
 
@@ -481,7 +481,7 @@ fn bundled_noto_naskh_arabic_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "noto-naskh-arabic",
         "noto-naskh-arabic/NotoNaskhArabic[wght].ttf",
-        include_bytes!("../../assets/fonts/noto-naskh-arabic/NotoNaskhArabic[wght].ttf"),
+        include_bytes!("../../../assets/fonts/noto-naskh-arabic/NotoNaskhArabic[wght].ttf"),
     );
 }
 
@@ -490,7 +490,7 @@ fn bundled_noto_sans_hebrew_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "noto-sans-hebrew",
         "noto-sans-hebrew/NotoSansHebrew[wdth,wght].ttf",
-        include_bytes!("../../assets/fonts/noto-sans-hebrew/NotoSansHebrew[wdth,wght].ttf"),
+        include_bytes!("../../../assets/fonts/noto-sans-hebrew/NotoSansHebrew[wdth,wght].ttf"),
     );
 }
 
@@ -499,7 +499,9 @@ fn bundled_noto_sans_devanagari_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "noto-sans-devanagari",
         "noto-sans-devanagari/NotoSansDevanagari[wdth,wght].ttf",
-        include_bytes!("../../assets/fonts/noto-sans-devanagari/NotoSansDevanagari[wdth,wght].ttf"),
+        include_bytes!(
+            "../../../assets/fonts/noto-sans-devanagari/NotoSansDevanagari[wdth,wght].ttf"
+        ),
     );
 }
 
@@ -508,7 +510,7 @@ fn bundled_noto_sans_bengali_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "noto-sans-bengali",
         "noto-sans-bengali/NotoSansBengali[wdth,wght].ttf",
-        include_bytes!("../../assets/fonts/noto-sans-bengali/NotoSansBengali[wdth,wght].ttf"),
+        include_bytes!("../../../assets/fonts/noto-sans-bengali/NotoSansBengali[wdth,wght].ttf"),
     );
 }
 
@@ -517,7 +519,7 @@ fn bundled_noto_sans_tamil_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "noto-sans-tamil",
         "noto-sans-tamil/NotoSansTamil[wdth,wght].ttf",
-        include_bytes!("../../assets/fonts/noto-sans-tamil/NotoSansTamil[wdth,wght].ttf"),
+        include_bytes!("../../../assets/fonts/noto-sans-tamil/NotoSansTamil[wdth,wght].ttf"),
     );
 }
 
@@ -526,7 +528,7 @@ fn bundled_noto_sans_thai_bytes_match_the_locked_manifest() {
     assert_face_matches(
         "noto-sans-thai",
         "noto-sans-thai/NotoSansThai[wdth,wght].ttf",
-        include_bytes!("../../assets/fonts/noto-sans-thai/NotoSansThai[wdth,wght].ttf"),
+        include_bytes!("../../../assets/fonts/noto-sans-thai/NotoSansThai[wdth,wght].ttf"),
     );
 }
 
