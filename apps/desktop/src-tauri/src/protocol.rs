@@ -23,8 +23,8 @@ use std::time::{Duration, Instant};
 use tauri::http::{header, Response, StatusCode};
 use tauri::{AppHandle, Manager, Runtime};
 
-use crate::frames::{encode_jpeg, THUMBNAIL_MAX_DIM};
 use crate::state::{lock_or_recover, AppState};
+use crate::tile_workers::TileWorkers;
 
 pub const SCHEME: &str = "oca";
 
@@ -52,6 +52,7 @@ pub struct ThumbnailCache {
     entries: Mutex<HashMap<PathBuf, Stamped>>,
     tiles: Mutex<HashMap<(PathBuf, u64), Stamped>>,
     waves: Mutex<HashMap<PathBuf, WaveSlot>>,
+    workers: TileWorkers,
     retry_after: Duration,
 }
 
@@ -166,6 +167,7 @@ impl ThumbnailCache {
             entries: Mutex::default(),
             tiles: Mutex::default(),
             waves: Mutex::default(),
+            workers: TileWorkers::default(),
             retry_after,
         }
     }
@@ -184,7 +186,10 @@ impl ThumbnailCache {
         {
             return cached.0.clone();
         }
-        let extracted = extract_frame_at(source, millis as f64 / 1000.0).map(Arc::new);
+        let extracted = self
+            .workers
+            .extract(source, millis as f64 / 1000.0)
+            .map(Arc::new);
         {
             let mut tiles = lock_or_recover(&self.tiles);
             if tiles.len() >= MAX_TILE_ENTRIES {
@@ -231,24 +236,14 @@ impl ThumbnailCache {
         {
             return cached.0.clone();
         }
-        let extracted = extract_thumbnail(source).map(Arc::new);
+        let extracted = self
+            .workers
+            .extract(source, THUMBNAIL_AT_SECS)
+            .map(Arc::new);
         lock_or_recover(&self.entries)
             .insert(source.to_path_buf(), (extracted.clone(), Instant::now()));
         extracted
     }
-}
-
-fn extract_thumbnail(path: &Path) -> Option<Vec<u8>> {
-    extract_frame_at(path, THUMBNAIL_AT_SECS)
-}
-
-fn extract_frame_at(path: &Path, at_secs: f64) -> Option<Vec<u8>> {
-    if !path.exists() {
-        return None;
-    }
-    let sampler = avcore::FrameSampler::open(path).ok()?;
-    let frame = sampler.sample(at_secs, Duration::from_millis(800))?;
-    encode_jpeg(&frame, THUMBNAIL_MAX_DIM)
 }
 
 fn jpeg_or_not_found(bytes: Option<Arc<Vec<u8>>>) -> Response<Vec<u8>> {
@@ -434,9 +429,12 @@ mod tests {
         let path =
             std::env::temp_dir().join(format!("oca_desktop_thumb_{}.bin", std::process::id()));
         std::fs::write(&path, b"not a video").unwrap();
-        assert!(extract_thumbnail(&path).is_none());
+        let workers = TileWorkers::new(1);
+        assert!(workers.extract(&path, THUMBNAIL_AT_SECS).is_none());
         let _ = std::fs::remove_file(&path);
-        assert!(extract_thumbnail(Path::new("missing.mp4")).is_none());
+        assert!(workers
+            .extract(Path::new("missing.mp4"), THUMBNAIL_AT_SECS)
+            .is_none());
     }
 }
 
