@@ -94,7 +94,9 @@ fn vectorscope_pushes_a_saturated_color_away_from_center() {
     let neutral = vectorscope_rgba(&solid_rgba(2, 2, 128, 128, 128), 2, 2, 9);
     let saturated_red = vectorscope_rgba(&solid_rgba(2, 2, 255, 0, 0), 2, 2, 9);
     let brightest_cell = |img: &[u8]| {
-        img.as_chunks::<4>().0.iter()
+        img.as_chunks::<4>()
+            .0
+            .iter()
             .enumerate()
             .max_by_key(|(_, px)| px[0])
             .map(|(i, _)| i)
