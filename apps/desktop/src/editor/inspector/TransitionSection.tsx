@@ -39,6 +39,12 @@ const TRANSITION_TYPES: { value: TransitionType; label: () => string }[] = [
       return t("transitionZoom");
     },
   },
+  {
+    value: "Dissolve",
+    label: () => {
+      return t("transitionDissolve");
+    },
+  },
 ];
 
 type Commit = (patch: ClipPatch) => Promise<unknown>;

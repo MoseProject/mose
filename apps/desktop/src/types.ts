@@ -16,7 +16,7 @@ export interface Position {
   y: number;
 }
 export type MaskShape = "None" | "Circle" | "RoundedRect";
-export type TransitionType = "None" | "Fade" | "HardCut" | "Slide" | "Zoom";
+export type TransitionType = "None" | "Fade" | "HardCut" | "Slide" | "Zoom" | "Dissolve";
 /** Industry-standard compositing-mode names, shown untranslated regardless of locale -- mirrors
  *  `crates/ui/src/screens/editor/properties_panel/keyframe_editors.rs`'s `blend_mode_label`. */
 export const BLEND_MODES = [
