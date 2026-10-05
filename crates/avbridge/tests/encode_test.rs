@@ -619,6 +619,34 @@ fn clip_fades_ramp_the_audio_in_and_out_and_keep_the_export_valid() {
 }
 
 #[test]
+fn a_cropped_clip_is_conformed_back_to_the_canvas_instead_of_crashing_the_encoder() {
+    // `crop` leaves 90% of the width; the clip's own filters run after the canvas conform, so
+    // without a final conform the encoder received a narrower frame than it was opened for and
+    // FFmpeg aborted the whole process (a persisted export job did that on every app start).
+    let out = std::env::temp_dir().join("avbridge_test_cropped_conform.mp4");
+    let cancel = AtomicBool::new(false);
+    let cropped = clip(0.0, 0.5, 0.0, "crop=iw*0.9:ih*1:iw*0:ih*0,hflip");
+    let outcome = encode_timeline_export(
+        &[cropped],
+        CANVAS,
+        &out,
+        -14.0,
+        GpuEncoderPreference::Cpu,
+        &cancel,
+        |_secs| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, EncodeOutcome::Completed);
+    let info = probe(&out).unwrap();
+    assert_eq!(
+        info.resolution,
+        Some((CANVAS.width, CANVAS.height)),
+        "the output keeps the canvas size"
+    );
+    let _ = std::fs::remove_file(&out);
+}
+
+#[test]
 fn each_segment_contributes_exactly_its_duration_in_frames() {
     // The canvas conform stage (`fps`) keeps its newest frame until the next one arrives: without
     // a flush at the end of each segment, every cut lost one frame, and the video fell a frame
