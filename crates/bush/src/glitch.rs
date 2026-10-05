@@ -4,7 +4,7 @@
 //! the same instant is bit-identical. Glitch splits the colour channels and displaces random
 //! horizontal bands; shake is smooth value noise used to jitter a layer position.
 
-use crate::{PixelFormat, VideoFrame};
+use crate::VideoFrame;
 
 /// Glitch pattern changes at this many steps per second (it looks like digital tearing, not
 /// like motion).
@@ -68,15 +68,9 @@ pub fn glitch(frame: &VideoFrame, intensity: f32, time_secs: f64) -> VideoFrame 
             out_row[x * 4 + 3] = sample(0, 3);
         }
     }
-    VideoFrame::new(
-        PixelFormat::Rgba8,
-        frame.width(),
-        frame.height(),
-        row_bytes,
-        frame.timestamp_secs(),
-        out,
-    )
-    .expect("glitch preserves the validated frame geometry")
+    frame
+        .with_tight_pixels(out)
+        .expect("glitch preserves the validated frame geometry")
 }
 
 /// Smooth pseudo-random offset in `-amplitude..=amplitude` at `time_secs`; `stream` decorrelates

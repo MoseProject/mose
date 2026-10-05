@@ -819,7 +819,7 @@ fn a_zero_budget_and_an_invalid_frame_are_render_errors() {
 
 #[test]
 fn layers_are_clipped_to_the_canvas_edges() {
-    let red = frame(2, 2, vec![255, 0, 0, 255].repeat(4));
+    let red = frame(2, 2, [255, 0, 0, 255].repeat(4));
     let renderer = CpuRenderer::new(4 * 4 * 4).unwrap();
     let at = |x: i32, y: i32| {
         let mut layer = LayerFrame::new(&red);
@@ -840,7 +840,7 @@ fn layers_are_clipped_to_the_canvas_edges() {
 
 #[test]
 fn rotated_layers_are_clipped_and_sampled_inside_their_crop() {
-    let white = frame(4, 4, vec![255, 255, 255, 255].repeat(16));
+    let white = frame(4, 4, [255, 255, 255, 255].repeat(16));
     let renderer = CpuRenderer::new(8 * 8 * 4).unwrap();
     let rotated = |x: i32, y: i32, degrees: f32| {
         let mut layer = LayerFrame::new(&white);

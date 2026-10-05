@@ -6,7 +6,7 @@
 //! premultiplied by alpha so translucent edges do not gain dark halos. Because the effect works
 //! on the frame, not inside the compositor, the CPU and GPU renderers share it unchanged.
 
-use crate::{PixelFormat, VideoFrame};
+use crate::VideoFrame;
 
 /// Largest supported blur sigma, in source pixels.
 pub const MAX_BLUR_SIGMA: f32 = 64.0;
@@ -41,7 +41,7 @@ pub fn gaussian_blur(frame: &VideoFrame, sigma: f32) -> VideoFrame {
     }
     let sigma = sigma.min(MAX_BLUR_SIGMA);
     let (width, height) = (frame.width() as usize, frame.height() as usize);
-    let mut data = tight(frame);
+    let mut data = frame.tight_pixels();
     // Video frames are opaque, where premultiplying is the identity: skip both passes.
     let opaque = data.as_chunks::<4>().0.iter().all(|pixel| pixel[3] == 255);
     if !opaque {
@@ -65,7 +65,7 @@ pub fn sharpen(frame: &VideoFrame, amount: f32, sigma: f32) -> VideoFrame {
     }
     let blurred = gaussian_blur(frame, sigma);
     let (width, height) = (frame.width() as usize, frame.height() as usize);
-    let mut data = tight(frame);
+    let mut data = frame.tight_pixels();
     // `gaussian_blur` hands back tightly packed pixels, so they can be read in place.
     let soft = blurred.pixels();
     let row_bytes = width * 4;
@@ -128,20 +128,6 @@ pub(crate) fn box_radii(sigma: f32) -> [usize; 3] {
     ]
 }
 
-/// Tightly packed RGBA bytes of a frame (drops any row padding).
-fn tight(frame: &VideoFrame) -> Vec<u8> {
-    let row_bytes = frame.width() as usize * 4;
-    if frame.stride_bytes() == row_bytes {
-        return frame.pixels()[..row_bytes * frame.height() as usize].to_vec();
-    }
-    let mut data = Vec::with_capacity(row_bytes * frame.height() as usize);
-    for row in 0..frame.height() as usize {
-        let start = row * frame.stride_bytes();
-        data.extend_from_slice(&frame.pixels()[start..start + row_bytes]);
-    }
-    data
-}
-
 fn premultiply(data: &mut [u8]) {
     for pixel in data.as_chunks_mut::<4>().0 {
         let alpha = u32::from(pixel[3]);
@@ -165,15 +151,9 @@ fn unpremultiply(data: &mut [u8]) {
 }
 
 fn rebuild(frame: &VideoFrame, data: Vec<u8>) -> VideoFrame {
-    VideoFrame::new(
-        PixelFormat::Rgba8,
-        frame.width(),
-        frame.height(),
-        frame.width() as usize * 4,
-        frame.timestamp_secs(),
-        data,
-    )
-    .expect("blur preserves the validated frame geometry")
+    frame
+        .with_tight_pixels(data)
+        .expect("blur preserves the validated frame geometry")
 }
 
 fn worker_count(width: usize, height: usize) -> usize {

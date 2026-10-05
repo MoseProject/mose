@@ -5,7 +5,7 @@
 //! non-zero. A matte frame has its own resolution (the clip's source frames), so it is sampled
 //! nearest-neighbour at the size of the frame it applies to.
 
-use crate::{gaussian_blur, PixelFormat, VideoFrame};
+use crate::{gaussian_blur, VideoFrame};
 
 /// Matte value (0..=255) at pixel `(x, y)` of a `width` x `height` target.
 fn sampler(matte: &VideoFrame, width: usize, height: usize) -> impl Fn(usize, usize) -> u32 + '_ {
@@ -19,33 +19,17 @@ fn sampler(matte: &VideoFrame, width: usize, height: usize) -> impl Fn(usize, us
     }
 }
 
-fn tight(frame: &VideoFrame) -> Vec<u8> {
-    let row_bytes = frame.width() as usize * 4;
-    let mut data = Vec::with_capacity(row_bytes * frame.height() as usize);
-    for row in 0..frame.height() as usize {
-        let start = row * frame.stride_bytes();
-        data.extend_from_slice(&frame.pixels()[start..start + row_bytes]);
-    }
-    data
-}
-
 fn rebuild(frame: &VideoFrame, data: Vec<u8>) -> VideoFrame {
-    VideoFrame::new(
-        PixelFormat::Rgba8,
-        frame.width(),
-        frame.height(),
-        frame.width() as usize * 4,
-        frame.timestamp_secs(),
-        data,
-    )
-    .expect("matte preserves the validated frame geometry")
+    frame
+        .with_tight_pixels(data)
+        .expect("matte preserves the validated frame geometry")
 }
 
 /// The frame with its alpha multiplied by the matte.
 pub(crate) fn apply_alpha_matte(frame: &VideoFrame, matte: &VideoFrame) -> VideoFrame {
     let (width, height) = (frame.width() as usize, frame.height() as usize);
     let value = sampler(matte, width, height);
-    let mut data = tight(frame);
+    let mut data = frame.tight_pixels();
     for (index, pixel) in data.as_chunks_mut::<4>().0.iter_mut().enumerate() {
         let matte_value = value(index % width, index / width);
         pixel[3] = ((u32::from(pixel[3]) * matte_value + 127) / 255) as u8;
@@ -62,8 +46,8 @@ pub(crate) fn blur_through_matte(
     let blurred = gaussian_blur(canvas, sigma);
     let (width, height) = (canvas.width() as usize, canvas.height() as usize);
     let value = sampler(matte, width, height);
-    let mut data = tight(canvas);
-    let soft = tight(&blurred);
+    let mut data = canvas.tight_pixels();
+    let soft = blurred.tight_pixels();
     for (index, (pixel, blurred)) in data
         .as_chunks_mut::<4>()
         .0
@@ -87,6 +71,7 @@ pub(crate) fn blur_through_matte(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::PixelFormat;
 
     fn frame(width: u32, height: u32, pixel: impl Fn(u32, u32) -> [u8; 4]) -> VideoFrame {
         let mut data = Vec::new();
@@ -110,6 +95,27 @@ mod tests {
         [value, value, value, 255]
     }
 
+    fn with_padding(frame: &VideoFrame, padding_bytes: usize) -> VideoFrame {
+        let row_bytes = frame.width() as usize * 4;
+        let stride = row_bytes + padding_bytes;
+        let mut pixels = vec![0xA5; stride * frame.height() as usize];
+        for row in 0..frame.height() as usize {
+            let source_start = row * frame.stride_bytes();
+            let target_start = row * stride;
+            pixels[target_start..target_start + row_bytes]
+                .copy_from_slice(&frame.pixels()[source_start..source_start + row_bytes]);
+        }
+        VideoFrame::new(
+            PixelFormat::Rgba8,
+            frame.width(),
+            frame.height(),
+            stride,
+            frame.timestamp_secs(),
+            pixels,
+        )
+        .unwrap()
+    }
+
     #[test]
     fn the_alpha_matte_scales_alpha_and_is_sampled_at_the_frame_size() {
         // A 2x1 matte (left white, right black) over a 4x2 frame: left half kept, right cut.
@@ -129,6 +135,19 @@ mod tests {
         let out = apply_alpha_matte(&mixed, &half);
         assert_eq!(out.pixels()[3], 128);
         assert_eq!(out.pixels()[7], 0);
+    }
+
+    #[test]
+    fn alpha_matte_ignores_input_row_padding() {
+        let matte = frame(2, 1, |x, _| gray(if x == 0 { 255 } else { 0 }));
+        let layer = frame(4, 2, |x, y| [x as u8, y as u8, 30, 255]);
+        let padded = with_padding(&layer, 12);
+
+        let expected = apply_alpha_matte(&layer, &matte);
+        let actual = apply_alpha_matte(&padded, &matte);
+
+        assert_eq!(actual, expected);
+        assert_eq!(actual.stride_bytes(), actual.width() as usize * 4);
     }
 
     #[test]

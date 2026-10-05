@@ -119,6 +119,42 @@ impl VideoFrame {
     pub fn retained_bytes(&self) -> usize {
         self.pixels.len()
     }
+
+    /// Copies only pixel bytes, excluding any row padding.
+    pub(crate) fn tight_pixels(&self) -> Vec<u8> {
+        let row_bytes = self.width as usize * self.format.bytes_per_pixel();
+        if self.stride_bytes == row_bytes {
+            return self.pixels[..row_bytes * self.height as usize].to_vec();
+        }
+
+        let mut pixels = Vec::with_capacity(row_bytes * self.height as usize);
+        for row in 0..self.height as usize {
+            let start = row * self.stride_bytes;
+            pixels.extend_from_slice(&self.pixels[start..start + row_bytes]);
+        }
+        pixels
+    }
+
+    /// Creates a frame with this frame's format, dimensions, and timestamp but new storage.
+    pub(crate) fn with_pixels(
+        &self,
+        stride_bytes: usize,
+        pixels: Vec<u8>,
+    ) -> Result<Self, VideoFrameError> {
+        Self::new(
+            self.format,
+            self.width,
+            self.height,
+            stride_bytes,
+            self.timestamp_secs,
+            pixels,
+        )
+    }
+
+    /// Creates a tightly packed frame with this frame's metadata.
+    pub(crate) fn with_tight_pixels(&self, pixels: Vec<u8>) -> Result<Self, VideoFrameError> {
+        self.with_pixels(self.width as usize * self.format.bytes_per_pixel(), pixels)
+    }
 }
 
 /// Decoded-frame data rejected before native or GPU work.

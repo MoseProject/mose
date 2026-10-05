@@ -113,7 +113,7 @@ fn a_black_frame_is_left_untouched() {
         2,
         8,
         0.0,
-        vec![0, 0, 0, 255].repeat(4),
+        [0, 0, 0, 255].repeat(4),
     )
     .unwrap();
     let mut deflicker = bush::Deflicker::new(0.5).unwrap();

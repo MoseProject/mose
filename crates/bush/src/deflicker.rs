@@ -4,7 +4,7 @@
 //! it. State is a single `f32` plus the last timestamp, so memory is constant; a seek or jump
 //! resets it rather than blending unrelated frames.
 
-use crate::{PixelFormat, VideoFrame};
+use crate::VideoFrame;
 
 /// Frames further apart than this (or going backwards) restart the average: they are not part
 /// of one continuous shot.
@@ -103,13 +103,7 @@ fn scaled(frame: &VideoFrame, gain: f32) -> VideoFrame {
             }
         }
     }
-    VideoFrame::new(
-        PixelFormat::Rgba8,
-        frame.width(),
-        frame.height(),
-        frame.stride_bytes(),
-        frame.timestamp_secs(),
-        pixels,
-    )
-    .expect("scaling preserves the validated frame geometry")
+    frame
+        .with_pixels(frame.stride_bytes(), pixels)
+        .expect("scaling preserves the validated frame geometry")
 }
