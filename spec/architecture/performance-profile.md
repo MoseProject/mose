@@ -145,8 +145,63 @@ uses the same decoder setting. Overlay (secondary track) decoders and the privac
 their single-threaded decoders; the remaining gap to the command line (6.4x) is encoder
 submission and the loudness and mux passes.
 
+## Corrections and later passes (2026-10-05)
+
+**The GPU poller distorted the export numbers above.** `profile_scenarios.py` polled GPU counters
+through PowerShell on every export poll (and `profile_resources.py` on a second thread), and that
+cost the app it measured: the same 60 s export took 26.8 s with the poller and 12.3 s without
+(`OCA_PROFILE_NO_GPU=1` turns it off). Re-measured without it: 37.2 s before the decoder change,
+12.3 s after, so the decoder change was a 3x gain and not the 2.1x quoted above. The other tables
+in this document sample GPU counters on their own thread and are not affected the same way for
+CPU-bound work, but treat the GPU columns as approximate.
+
+**Export audio on its own thread.** The same 60 s export split as video filter and encode 5.0 s,
+audio (decode, afftdn, loudnorm, alimiter, AAC) 4.4 s, everything else under 0.6 s, all in one
+loop, so the video encoder idled while the audio graph ran. `audio_worker.c` now owns the audio
+graph and encoder behind a bounded frame queue (per-segment gain and tempo commands travel through
+the same queue, so they stay ordered with the frames); both threads write the muxer behind a mutex
+found through `out_ctx->opaque`. Bridge harness 10.2 s -> 7.2 s (the ffmpeg command line on the
+same encoder: 7.5 s); in the app 12.3 s -> 8.8 s, 6.8x real time, applied to the single-track and
+multi-track paths. Multi-track alone (no overlay) takes 9.2 s against 7.2 s for one track; the
+overlay decoders stay single-threaded.
+
+**Frames the export was losing** (found while measuring, both silent):
+- every segment of a single-track export lost its last frame (the `fps` stage holds its newest
+  frame until told its input ended), so the video fell one frame behind the audio per cut;
+- a multi-track export stamped overlay layers with a frame counter in the source's time base, so
+  `fps` saw a second of video in a millisecond: a clip fully covered by an overlay exported with 0
+  video frames, one covered for 0.5 s lost 15 frames. Layers are now stamped with real time, and
+  graphs freed on a mode change or at the end of a segment are drained first.
+Tests assert exact frame counts for both.
+
+**Proxies and overlay passes.** Proxy generation scaled on one thread and encoded with one:
+`threads=0` on the scaler and eight encoder threads take 60 s of 1080p60 from 13.7 s to 8.5 s and
+60 s of 2160p30 from 8.3 s to 5.5 s (the ffmpeg command line with libx264 ultrafast: 8.1 s). The
+text, shape and privacy blur passes re-encode the whole exported file, and ran a single-threaded
+decoder into the CPU encoder: 61.7 s for 60 s of 1080p60, several times the export they follow.
+They now decode with frame threading and open the hardware encoder when its input format matches
+the graphs (CPU otherwise): 11.8 s for the same text pass, all 3600 frames and the audio intact.
+Software encoders everywhere get eight threads (the CPU export fallback was single-threaded).
+
+**Filmstrip tiles.** A screenful of tile requests spawned a thread and opened a decoder each, so 24
+simultaneous requests on a 2 hour file each waited 1.3 s (every decoder starts a thread per core).
+Opening costs 45 ms and the frame 30 ms. `tile_workers.rs` drains requests with four workers that
+keep the decoder of the file they just served and drop it after 300 ms idle. Bench burst: first
+tile at 190 ms (was 1049 ms), all 24 in 0.98 s (was 1.26 s). In the app, 400 scattered tiles of the
+2 hour file: 118 s -> 45 s. A 2000 tile run returned only 717 images in the app (0 failures in an
+isolated run); probably tiles requested while the proxy was still being written, not confirmed.
+
+**Memory drift: not a leak in the app.** A 40 minute soak showed RSS +131 MB (about 3 MB/min),
+not flattening. Isolated: the native app process stayed at 374 -> 378 MB over 20 minutes; the growth
+is in the WebView2 renderer. Through the DevTools protocol (`profile_cdp.py`), 20000 edits make the
+renderer reach 320 MB and a forced collection returns it to 44 MB with the JS heap at 3 MB and the
+DOM node count constant, so that part is garbage waiting for V8 (each edit allocates about 13 KB in
+the renderer, mostly Tauri's event script compilation). The residual retention in the long soak
+(about 5 KB per call) comes from the WebDriver harness: 6000 `execute_async_script` calls that
+invoke a command retain 34 MB after collection, where the same invocations in an in-page loop
+retain nothing.
+
 ## Not yet measured
 
-Memory over hours (the 10 minute soak shows a small unexplained drift), proxy generation time
-before and after the decoder change, thumbnail latency on long recordings, multi-track export
-speed.
+Proxy generation time before and after the decoder change, multi-track export with several
+overlays, startup and project open time on a large project.

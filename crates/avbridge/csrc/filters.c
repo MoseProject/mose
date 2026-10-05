@@ -14,6 +14,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "bridge_internal.h"
+#include "bridge_thread.h"
 
 #include <libavfilter/buffersink.h>
 #include <libavfilter/buffersrc.h>
@@ -192,7 +193,11 @@ int encode_write_packet(AVFormatContext *out_ctx, AVCodecContext *enc_ctx,
         }
         enc_pkt->stream_index = out_stream->index;
         av_packet_rescale_ts(enc_pkt, enc_ctx->time_base, out_stream->time_base);
+        /* Audio and video are encoded on different threads while an AudioWorker runs. */
+        BridgeMutex *mux_lock = (BridgeMutex *)out_ctx->opaque;
+        if (mux_lock) bridge_mutex_lock(mux_lock);
         ret = av_interleaved_write_frame(out_ctx, enc_pkt);
+        if (mux_lock) bridge_mutex_unlock(mux_lock);
         if (ret < 0) return ret;
     }
 }

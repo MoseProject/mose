@@ -147,14 +147,30 @@ ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path,
         if (out_ctx->oformat->flags & AVFMT_GLOBALHEADER) {
             venc_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
         }
+        /* The encoder is the other large share; libopenh264 and libx264 both use this many. */
+        venc_ctx->thread_count = 8;
         if (avcodec_open2(venc_ctx, venc, NULL) < 0) {
             status = PROXY_ERR_ENCODER;
             goto cleanup;
         }
 
-        sws_ctx = sws_getContext(src_w, src_h, vdec_ctx->pix_fmt, dst_w, dst_h,
-                                  AV_PIX_FMT_YUV420P, SWS_BILINEAR, NULL, NULL, NULL);
+        /* Scaling a 4K or 1080p60 frame down is a large share of the work and runs on one
+           thread unless asked: `threads=0` uses one per core. */
+        sws_ctx = sws_alloc_context();
         if (!sws_ctx) {
+            status = PROXY_ERR_SCALER;
+            goto cleanup;
+        }
+        av_opt_set_int(sws_ctx, "srcw", src_w, 0);
+        av_opt_set_int(sws_ctx, "srch", src_h, 0);
+        av_opt_set_int(sws_ctx, "src_format", vdec_ctx->pix_fmt, 0);
+        av_opt_set_int(sws_ctx, "dstw", dst_w, 0);
+        av_opt_set_int(sws_ctx, "dsth", dst_h, 0);
+        av_opt_set_int(sws_ctx, "dst_format", AV_PIX_FMT_YUV420P, 0);
+        av_opt_set_int(sws_ctx, "sws_flags", SWS_BILINEAR, 0);
+        av_opt_set_int(sws_ctx, "threads", 0, 0);
+        if (sws_init_context(sws_ctx, NULL, NULL) < 0) {
+            sws_free_context(&sws_ctx);
             status = PROXY_ERR_SCALER;
             goto cleanup;
         }

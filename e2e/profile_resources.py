@@ -85,7 +85,8 @@ class Sampler(threading.Thread):
         self.running = True
         self.gpu = (None, None)
         self.procs = {}
-        threading.Thread(target=self._gpu_loop, daemon=True).start()
+        if not os.environ.get("OCA_PROFILE_NO_GPU"):
+            threading.Thread(target=self._gpu_loop, daemon=True).start()
 
     def _gpu_loop(self):
         while self.running:

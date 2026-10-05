@@ -54,7 +54,8 @@ class App:
         self.driver.set_script_timeout(900)
         self.pid = next(p.pid for p in psutil.process_iter(["name"]) if p.info["name"] == self.exe.name)
         self.sampler = Sampler(self.pid)
-        self.sampler.start()
+        if not os.environ.get("OCA_PROFILE_NO_SAMPLER"):
+            self.sampler.start()
         return self
 
     def __exit__(self, *exc):
@@ -112,21 +113,28 @@ def soak(args):
         assets = app.import_clips(["clip1080.mp4", "clip4k.mp4"])
         app.lay_out([assets[0], assets[0], assets[1], assets[0]])
         clip = next(t for t in _active_timeline(get_session(app.driver))["tracks"] if t["kind"] == "Video")["clips"][0]
+        parts = set(args.parts.split(","))
         rows = []
         began = time.time()
         end = began + args.minutes * 60
         while time.time() < end:
-            invoke(app.driver, "preview_seek", {"positionSecs": 0})
-            invoke(app.driver, "preview_set_playing", {"playing": True})
-            time.sleep(8)
-            invoke(app.driver, "preview_set_playing", {"playing": False})
-            for i in range(40):
-                invoke(app.driver, "update_clip", {"clipId": clip["id"], "patch": {"brightness": (i % 20) / 100.0}})
-            for _ in range(20):
-                invoke(app.driver, "undo")
-            for i in range(30):
-                invoke(app.driver, "preview_seek", {"positionSecs": (i * 3.1) % 100})
-                time.sleep(0.05)
+            if "play" in parts:
+                invoke(app.driver, "preview_seek", {"positionSecs": 0})
+                invoke(app.driver, "preview_set_playing", {"playing": True})
+                time.sleep(8)
+                invoke(app.driver, "preview_set_playing", {"playing": False})
+            if "edit" in parts:
+                for i in range(40):
+                    invoke(app.driver, "update_clip", {"clipId": clip["id"], "patch": {"brightness": (i % 20) / 100.0}})
+            if "undo" in parts:
+                for _ in range(20):
+                    invoke(app.driver, "undo")
+            if "seek" in parts:
+                for i in range(30):
+                    invoke(app.driver, "preview_seek", {"positionSecs": (i * 3.1) % 100})
+                    time.sleep(0.05)
+            if not parts & {"play", "seek"}:
+                time.sleep(1)
             stats = app.now_stats()
             rows.append(
                 {
@@ -169,7 +177,7 @@ def export(args):
             jobs = invoke(app.driver, "list_exports")
             if jobs:
                 progress.append((round(time.time() - started, 1), str(jobs[-1]["status"])))
-            for engine, value in gpu_engines([p.pid for p in tree(app.pid)]).items():
+            for engine, value in ({} if os.environ.get("OCA_PROFILE_NO_GPU") else gpu_engines([p.pid for p in tree(app.pid)])).items():
                 engines[engine] = max(engines.get(engine, 0.0), value)
             status = jobs[-1]["status"] if jobs else None
             if status == "Done" or (isinstance(status, dict) and "Failed" in status):
@@ -366,12 +374,14 @@ def main():
     parser.add_argument("scenario", choices=["soak", "export", "longmedia", "renderers", "render"])
     parser.add_argument("--exe", default=str(DEFAULT_EXE))
     parser.add_argument("--minutes", type=float, default=10)
+    parser.add_argument("--parts", default="play,edit,undo,seek")
+    parser.add_argument("--tag", default="")
     args = parser.parse_args()
     report = {"soak": soak, "export": export, "longmedia": longmedia, "renderers": renderers, "render": render}[
         args.scenario
     ](args)
     OUT_DIR.mkdir(exist_ok=True)
-    (OUT_DIR / f"scenario_{args.scenario}.json").write_text(json.dumps(report, indent=2, default=str))
+    (OUT_DIR / f"scenario_{args.scenario}{args.tag}.json").write_text(json.dumps(report, indent=2, default=str))
 
 
 if __name__ == "__main__":

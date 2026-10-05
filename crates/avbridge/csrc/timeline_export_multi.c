@@ -239,8 +239,6 @@ typedef struct {
     AVFrame *matte_frame;
     AVFilterContext *video_source;
     AVFilterContext *matte_source;
-    int64_t video_pts;
-    int64_t matte_pts;
 } OverlayTrackState;
 
 static void free_overlay_decoder(OverlayDecoder *d) {
@@ -366,8 +364,6 @@ static void close_overlay_track(OverlayTrackState *track) {
     track->matte_active = 0;
     track->video_source = NULL;
     track->matte_source = NULL;
-    track->video_pts = 0;
-    track->matte_pts = 0;
 }
 
 static void free_overlay_track(OverlayTrackState *track) {
@@ -564,6 +560,38 @@ fail:
     return ret;
 }
 
+/* Tells every input of an overlay graph that its stream has ended and encodes the frames the
+   graph was still holding back: `blend`, `overlay` and `fps` are framesync-backed and keep their
+   newest frames until the next arrives, so a graph that is freed instead loses them. Returns
+   ENCODE_OK or ENCODE_ERR_PIPELINE. */
+static EncodeStatus drain_overlay_graph(AVFilterContext *src0, OverlayTrackState *tracks,
+                                        int track_count, AVFilterContext *sink,
+                                        AVFrame *filt_frame, AVFormatContext *out_ctx,
+                                        AVCodecContext *venc_ctx, AVStream *vout_stream,
+                                        AVPacket *enc_pkt, int64_t *next_vpts) {
+    if (av_buffersrc_add_frame_flags(src0, NULL, 0) < 0) {
+        return ENCODE_ERR_PIPELINE;
+    }
+    for (int i = 0; i < track_count; i++) {
+        OverlayTrackState *track = &tracks[i];
+        if (track->video_source && av_buffersrc_add_frame_flags(track->video_source, NULL, 0) < 0) {
+            return ENCODE_ERR_PIPELINE;
+        }
+        if (track->matte_source && av_buffersrc_add_frame_flags(track->matte_source, NULL, 0) < 0) {
+            return ENCODE_ERR_PIPELINE;
+        }
+    }
+    EncodeStatus status = ENCODE_OK;
+    while (status == ENCODE_OK && av_buffersink_get_frame(sink, filt_frame) == 0) {
+        filt_frame->pts = (*next_vpts)++;
+        if (encode_write_packet(out_ctx, venc_ctx, vout_stream, filt_frame, enc_pkt) < 0) {
+            status = ENCODE_ERR_PIPELINE;
+        }
+        av_frame_unref(filt_frame);
+    }
+    return status;
+}
+
 EncodeStatus avbridge_encode_timeline_export_multi(
     const ClipSegment *const *track_segs, const int *track_n_segs, int n_tracks, int canvas_width,
     int canvas_height, int canvas_fps_num, int canvas_fps_den, int64_t canvas_bit_rate_bps,
@@ -582,6 +610,7 @@ EncodeStatus avbridge_encode_timeline_export_multi(
     AVFormatContext *out_ctx = NULL;
     AVCodecContext *venc_ctx = NULL, *aenc_ctx = NULL;
     AudioFilterChain achain = {0};
+    AudioWorker *audio_worker = NULL;
     AVStream *vout_stream = NULL, *aout_stream = NULL;
     AVPacket *pkt = NULL;
     AVFrame *dec_frame = NULL, *filt_frame = NULL;
@@ -670,7 +699,9 @@ EncodeStatus avbridge_encode_timeline_export_multi(
         int vidx0 = -1, aidx0 = -1;
         /* Filter graph mode: 0 = not built, 1 = single-track vchain, 2 = overlay graph. */
         int cur_mode = 0;
-        int64_t ov_frame0 = 0; /* synthetic buffersrc PTS */
+        /* Pts of the main-source frame that opened the current overlay graph: every frame pushed
+           into the graph is stamped with its time since then, in that source's own time base. */
+        int64_t ov_base_pts = 0;
 
         double tl_start = seg0->timeline_start_secs;
 
@@ -794,6 +825,12 @@ EncodeStatus avbridge_encode_timeline_export_multi(
                 status = ENCODE_ERR_WRITE_HEADER;
                 goto seg_cleanup;
             }
+            /* From here on the audio graph and encoder belong to the worker's thread. */
+            audio_worker = audio_worker_start(out_ctx, &achain, aenc_ctx, aout_stream);
+            if (!audio_worker) {
+                status = ENCODE_ERR_PIPELINE;
+                goto seg_cleanup;
+            }
         } else if (adec_ctx0->sample_rate != canonical_sr ||
                    adec_ctx0->sample_fmt != canonical_fmt ||
                    av_channel_layout_compare(&adec_ctx0->ch_layout, &canonical_ch) != 0) {
@@ -804,13 +841,13 @@ EncodeStatus avbridge_encode_timeline_export_multi(
         { /* Update gain + tempo for this segment's audio */
             char gs[32], ts[32];
             snprintf(gs, sizeof(gs), "%.4fdB", (double)seg0->gain_db);
-            avfilter_graph_send_command(achain.graph, "vol", "volume", gs, NULL, 0, 0);
+            audio_worker_command(audio_worker, "vol", "volume", gs);
             float sp = smooth_speed_ramp_average_speed(seg0);
             sp = sp > 0.0f ? sp : 1.0f;
             if (sp < 0.5f) sp = 0.5f;
             if (sp > 100.0f) sp = 100.0f;
             snprintf(ts, sizeof(ts), "%.6f", (double)sp);
-            avfilter_graph_send_command(achain.graph, "tempo", "tempo", ts, NULL, 0, 0);
+            audio_worker_command(audio_worker, "tempo", "tempo", ts);
         }
 
         if (seg0->source_in_secs > 0.0) {
@@ -894,9 +931,25 @@ EncodeStatus avbridge_encode_timeline_export_multi(
                         /* Rebuild whenever any layer enters, leaves, or changes clip. */
                         if (want_overlay && overlay_set_changed) {
                             if (ov_graph) {
+                                status = drain_overlay_graph(ov_src0, overlay_tracks,
+                                                             overlay_track_count, ov_sink,
+                                                             filt_frame, out_ctx, venc_ctx,
+                                                             vout_stream, enc_pkt, &next_vpts);
+                                if (status != ENCODE_OK) {
+                                    av_frame_unref(dec_frame);
+                                    break;
+                                }
                                 avfilter_graph_free(&ov_graph);
                                 ov_src0 = ov_sink = NULL;
                                 reset_overlay_graph_sources(overlay_tracks, overlay_track_count);
+                            }
+                            if (vchain.graph &&
+                                filter_encode_write_video_frame(out_ctx, &vchain, venc_ctx,
+                                                                vout_stream, NULL, filt_frame,
+                                                                &next_vpts, enc_pkt) < 0) {
+                                status = ENCODE_ERR_PIPELINE;
+                                av_frame_unref(dec_frame);
+                                break;
                             }
                             free_video_filter_chain(&vchain);
 
@@ -973,15 +1026,19 @@ EncodeStatus avbridge_encode_timeline_export_multi(
                                     break;
                                 }
                             }
-                            ov_frame0 = 0;
-                            for (int i = 0; i < overlay_track_count; i++) {
-                                overlay_tracks[i].video_pts = 0;
-                                overlay_tracks[i].matte_pts = 0;
-                            }
+                            ov_base_pts = dec_frame->pts;
                             cur_mode = 2;
                         } else if (!want_overlay && cur_mode != 1) {
                             /* Switch to single-track mode */
                             if (ov_graph) {
+                                status = drain_overlay_graph(ov_src0, overlay_tracks,
+                                                             overlay_track_count, ov_sink,
+                                                             filt_frame, out_ctx, venc_ctx,
+                                                             vout_stream, enc_pkt, &next_vpts);
+                                if (status != ENCODE_OK) {
+                                    av_frame_unref(dec_frame);
+                                    break;
+                                }
                                 avfilter_graph_free(&ov_graph);
                                 ov_src0 = ov_sink = NULL;
                             }
@@ -1026,7 +1083,10 @@ EncodeStatus avbridge_encode_timeline_export_multi(
                                 }
                             }
 
-                            dec_frame->pts = ov_frame0++;
+                            /* The layers advance in lockstep with this frame, so every input is stamped
+                               with the same moment, each in its own source's time base. */
+                            dec_frame->pts -= ov_base_pts;
+                            int64_t layer_moment = dec_frame->pts;
                             if (av_buffersrc_add_frame_flags(ov_src0, dec_frame,
                                                              AV_BUFFERSRC_FLAG_KEEP_REF) < 0) {
                                 status = ENCODE_ERR_PIPELINE;
@@ -1035,7 +1095,9 @@ EncodeStatus avbridge_encode_timeline_export_multi(
                                 OverlayTrackState *track = &overlay_tracks[i];
                                 if (!track->segment) continue;
                                 if (track->video.pending) {
-                                    track->video.pending->pts = track->video_pts++;
+                                    track->video.pending->pts =
+                                        av_rescale_q(layer_moment, vdec_ctx0->pkt_timebase,
+                                                     track->video.vdec_ctx->pkt_timebase);
                                     if (av_buffersrc_add_frame_flags(
                                             track->video_source, track->video.pending,
                                             AV_BUFFERSRC_FLAG_KEEP_REF) < 0) {
@@ -1044,7 +1106,9 @@ EncodeStatus avbridge_encode_timeline_export_multi(
                                     }
                                 }
                                 if (track->matte_active && track->matte.pending) {
-                                    track->matte.pending->pts = track->matte_pts++;
+                                    track->matte.pending->pts =
+                                        av_rescale_q(layer_moment, vdec_ctx0->pkt_timebase,
+                                                     track->matte.vdec_ctx->pkt_timebase);
                                     if (av_buffersrc_add_frame_flags(
                                             track->matte_source, track->matte.pending,
                                             AV_BUFFERSRC_FLAG_KEEP_REF) < 0) {
@@ -1107,8 +1171,7 @@ EncodeStatus avbridge_encode_timeline_export_multi(
                             av_frame_unref(dec_frame);
                             continue;
                         }
-                        if (filter_encode_write_frame(out_ctx, &achain, aenc_ctx, aout_stream,
-                                                      dec_frame, filt_frame, enc_pkt) < 0) {
+                        if (audio_worker_push_frame(audio_worker, dec_frame) < 0) {
                             status = ENCODE_ERR_PIPELINE;
                             break;
                         }
@@ -1125,28 +1188,15 @@ EncodeStatus avbridge_encode_timeline_export_multi(
            EOF. Drain the graph before freeing it so a short blend-only segment cannot leave an
            otherwise valid export with audio but no video stream. */
         if (status == ENCODE_OK && cur_mode == 2 && ov_graph) {
-            if (av_buffersrc_add_frame_flags(ov_src0, NULL, 0) < 0) {
-                status = ENCODE_ERR_PIPELINE;
-            }
-            for (int i = 0; i < overlay_track_count && status == ENCODE_OK; i++) {
-                OverlayTrackState *track = &overlay_tracks[i];
-                if (track->video_source &&
-                    av_buffersrc_add_frame_flags(track->video_source, NULL, 0) < 0) {
-                    status = ENCODE_ERR_PIPELINE;
-                    break;
-                }
-                if (track->matte_source &&
-                    av_buffersrc_add_frame_flags(track->matte_source, NULL, 0) < 0) {
-                    status = ENCODE_ERR_PIPELINE;
-                    break;
-                }
-            }
-            while (status == ENCODE_OK && av_buffersink_get_frame(ov_sink, filt_frame) == 0) {
-                filt_frame->pts = next_vpts++;
-                if (encode_write_packet(out_ctx, venc_ctx, vout_stream, filt_frame, enc_pkt) < 0)
-                    status = ENCODE_ERR_PIPELINE;
-                av_frame_unref(filt_frame);
-            }
+            status = drain_overlay_graph(ov_src0, overlay_tracks, overlay_track_count, ov_sink,
+                                         filt_frame, out_ctx, venc_ctx, vout_stream, enc_pkt,
+                                         &next_vpts);
+        }
+
+        if (status == ENCODE_OK && cur_mode == 1 && vchain.graph &&
+            filter_encode_write_video_frame(out_ctx, &vchain, venc_ctx, vout_stream, NULL,
+                                            filt_frame, &next_vpts, enc_pkt) < 0) {
+            status = ENCODE_ERR_PIPELINE;
         }
 
         elapsed += smooth_speed_ramp_timeline_elapsed(
@@ -1165,10 +1215,7 @@ EncodeStatus avbridge_encode_timeline_export_multi(
     }
 
     /* Flush audio encoder + loudnorm graph. */
-    if (status == ENCODE_OK &&
-        (filter_encode_write_frame(out_ctx, &achain, aenc_ctx, aout_stream, NULL, filt_frame,
-                                   enc_pkt) < 0 ||
-         encode_write_packet(out_ctx, aenc_ctx, aout_stream, NULL, enc_pkt) < 0)) {
+    if (status == ENCODE_OK && audio_worker_finish(&audio_worker, 1) < 0) {
         status = ENCODE_ERR_PIPELINE;
     }
     /* Flush video encoder. */
@@ -1179,6 +1226,7 @@ EncodeStatus avbridge_encode_timeline_export_multi(
     if (status == ENCODE_OK) av_write_trailer(out_ctx);
 
 cleanup:
+    audio_worker_finish(&audio_worker, 0);
     if (overlay_tracks) {
         for (int i = 0; i < overlay_track_count; i++)
             free_overlay_track(&overlay_tracks[i]);

@@ -17,8 +17,8 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use avbridge::{
-    encode_export, encode_timeline_export, encode_timeline_export_multi, probe, Canvas,
-    ClipSegment, EncodeError, EncodeOutcome, GpuEncoderPreference, StreamKind,
+    encode_export, encode_timeline_export, encode_timeline_export_multi, measure_loudness_json,
+    probe, Canvas, ClipSegment, EncodeError, EncodeOutcome, GpuEncoderPreference, StreamKind,
 };
 
 const CANVAS: Canvas = Canvas {
@@ -531,6 +531,121 @@ fn multi_track_segments_that_run_to_the_end_of_their_file_keep_their_last_frames
         "exported {exported} frames of {}",
         4 * per_segment
     );
+
+    let _ = std::fs::remove_file(&out);
+}
+
+#[test]
+fn audio_is_encoded_beside_the_video_and_follows_each_segments_gain() {
+    // The audio graph and encoder run on their own thread: the export must still end with all of
+    // its audio, mastered to the target, and never deadlock on the queue between the two.
+    let out = std::env::temp_dir().join("avbridge_test_audio_worker.mp4");
+    let cancel = AtomicBool::new(false);
+    let segments = [
+        clip(0.0, 0.5, 0.0, ""),
+        clip(0.0, 0.5, -12.0, ""),
+        clip(0.0, 0.5, 0.0, ""),
+    ];
+    let outcome = encode_timeline_export(
+        &segments,
+        CANVAS,
+        &out,
+        -14.0,
+        GpuEncoderPreference::Cpu,
+        &cancel,
+        |_secs| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, EncodeOutcome::Completed);
+
+    let report = measure_loudness_json(&out).expect("the export has an audio stream");
+    let integrated: f64 = report
+        .split("\"input_i\"")
+        .nth(1)
+        .and_then(|rest| rest.split('"').nth(1))
+        .and_then(|number| number.parse().ok())
+        .unwrap_or_else(|| panic!("no input_i in {report}"));
+    assert!(
+        integrated > -40.0 && integrated < -6.0,
+        "integrated loudness {integrated} LUFS: audio missing or not mastered"
+    );
+
+    let _ = std::fs::remove_file(&out);
+}
+
+#[test]
+fn each_segment_contributes_exactly_its_duration_in_frames() {
+    // The canvas conform stage (`fps`) keeps its newest frame until the next one arrives: without
+    // a flush at the end of each segment, every cut lost one frame, and the video fell a frame
+    // further behind the audio at each of them.
+    let out = std::env::temp_dir().join("avbridge_test_timeline_exact.mp4");
+    let cancel = AtomicBool::new(false);
+    let segments: Vec<ClipSegment> = (0..3).map(|_| clip(0.0, 1.0, 0.0, "")).collect();
+    let outcome = encode_timeline_export(
+        &segments,
+        CANVAS,
+        &out,
+        -14.0,
+        GpuEncoderPreference::Cpu,
+        &cancel,
+        |_secs| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, EncodeOutcome::Completed);
+
+    let per_second = (CANVAS.fps_num / CANVAS.fps_den) as usize;
+    assert_eq!(frame_count(&out), 3 * per_second);
+
+    let _ = std::fs::remove_file(&out);
+}
+
+#[test]
+fn multi_track_segments_contribute_exactly_their_duration_in_frames() {
+    let out = std::env::temp_dir().join("avbridge_test_timeline_multi_exact.mp4");
+    let cancel = AtomicBool::new(false);
+    let background: Vec<ClipSegment> = (0..3).map(|_| clip(0.0, 1.0, 0.0, "")).collect();
+    let overlay = vec![clip(0.0, 0.2, 0.0, "")];
+    let outcome = encode_timeline_export_multi(
+        &[background, overlay],
+        CANVAS,
+        &out,
+        -14.0,
+        GpuEncoderPreference::Cpu,
+        &cancel,
+        |_secs| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, EncodeOutcome::Completed);
+
+    let per_second = (CANVAS.fps_num / CANVAS.fps_den) as usize;
+    assert_eq!(frame_count(&out), 3 * per_second);
+
+    let _ = std::fs::remove_file(&out);
+}
+
+#[test]
+fn an_overlay_covering_a_whole_segment_keeps_every_frame() {
+    // The layers of an overlay graph were stamped with a frame counter in the source's time
+    // base (1/15360 s for this file), so `fps` saw a whole second of video inside a millisecond
+    // and dropped nearly all of it: this export had no video frames at all.
+    let out = std::env::temp_dir().join("avbridge_test_timeline_overlay_exact.mp4");
+    let cancel = AtomicBool::new(false);
+    let background = vec![clip(0.0, 1.0, 0.0, "")];
+    let overlay = vec![clip(0.0, 1.0, 0.0, "")];
+    let outcome = encode_timeline_export_multi(
+        &[background, overlay],
+        CANVAS,
+        &out,
+        -14.0,
+        GpuEncoderPreference::Cpu,
+        &cancel,
+        |_secs| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, EncodeOutcome::Completed);
+
+    let per_second = (CANVAS.fps_num / CANVAS.fps_den) as usize;
+    assert_eq!(frame_count(&out), per_second);
 
     let _ = std::fs::remove_file(&out);
 }

@@ -102,6 +102,12 @@ AVCodecContext *open_video_encoder(GpuEncoderPreference preference, int canvas_w
                                         int64_t canvas_bit_rate_bps, int global_header,
                                         int *out_used_gpu, enum AVPixelFormat *out_pix_fmt);
 
+/* Opens the encoder for a pass that re-encodes an already exported file (text, shape and privacy
+   blur overlays): hardware when one opens with yuv420p input, else the CPU encoder. Their filter
+   graphs end in yuv420p, so an encoder that wants another format is not used. NULL on failure. */
+AVCodecContext *open_overlay_pass_encoder(int width, int height, AVRational fps,
+                                          int64_t bit_rate_bps, int global_header);
+
 /* Returns the preferred available software H.264 encoder: libopenh264 when present, otherwise
    libx264. Returns NULL when the FFmpeg build provides neither. Defined in gpu_encoder.c. */
 const AVCodec *find_cpu_h264_encoder(void);
@@ -127,6 +133,20 @@ int encode_write_packet(AVFormatContext *out_ctx, AVCodecContext *enc_ctx,
 int filter_encode_write_frame(AVFormatContext *out_ctx, AudioFilterChain *chain,
                                AVCodecContext *enc_ctx, AVStream *out_stream,
                                AVFrame *frame, AVFrame *filt_frame, AVPacket *enc_pkt);
+
+/* Runs the audio graph and encoder of an export on their own thread (audio_worker.c). While one
+   exists, out_ctx->opaque holds the mutex encode_write_packet takes around muxer writes. */
+typedef struct AudioWorker AudioWorker;
+AudioWorker *audio_worker_start(AVFormatContext *out_ctx, AudioFilterChain *chain,
+                                AVCodecContext *encoder, AVStream *stream);
+/* Queues a reference to `frame`; blocks while the queue is full. Negative once the worker failed. */
+int audio_worker_push_frame(AudioWorker *worker, const AVFrame *frame);
+/* Queues a filter command, applied in order with the frames pushed around it. */
+int audio_worker_command(AudioWorker *worker, const char *target, const char *command,
+                         const char *argument);
+/* Stops and frees `*worker` (set to NULL). With `flush`, the graph and encoder are drained first;
+   without, whatever is still queued is dropped. Returns negative if the worker had failed. */
+int audio_worker_finish(AudioWorker **worker, int flush);
 
 typedef struct {
     AVFilterContext *buffersrc_ctx;

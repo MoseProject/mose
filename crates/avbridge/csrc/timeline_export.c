@@ -74,6 +74,7 @@ EncodeStatus avbridge_encode_timeline_export(const ClipSegment *segments, int se
     AVCodecContext *venc_ctx = NULL;
     AVCodecContext *aenc_ctx = NULL;
     AudioFilterChain achain = {0};
+    AudioWorker *audio_worker = NULL;
     AVStream *video_out_stream = NULL;
     AVStream *audio_out_stream = NULL;
     AVPacket *pkt = NULL;
@@ -283,6 +284,12 @@ EncodeStatus avbridge_encode_timeline_export(const ClipSegment *segments, int se
                 status = ENCODE_ERR_WRITE_HEADER;
                 goto segment_cleanup;
             }
+            /* From here on the audio graph and encoder belong to the worker's thread. */
+            audio_worker = audio_worker_start(out_ctx, &achain, aenc_ctx, audio_out_stream);
+            if (!audio_worker) {
+                status = ENCODE_ERR_PIPELINE;
+                goto segment_cleanup;
+            }
         } else if (adec_ctx->sample_rate != canonical_sample_rate ||
                    adec_ctx->sample_fmt != canonical_sample_fmt ||
                    av_channel_layout_compare(&adec_ctx->ch_layout, &canonical_ch_layout) != 0) {
@@ -293,7 +300,7 @@ EncodeStatus avbridge_encode_timeline_export(const ClipSegment *segments, int se
         {
             char gain_str[32];
             snprintf(gain_str, sizeof(gain_str), "%.4fdB", (double)seg->gain_db);
-            avfilter_graph_send_command(achain.graph, "vol", "volume", gain_str, NULL, 0, 0);
+            audio_worker_command(audio_worker, "vol", "volume", gain_str);
 
             float spd = smooth_speed_ramp_average_speed(seg);
             spd = spd > 0.0f ? spd : 1.0f;
@@ -301,7 +308,7 @@ EncodeStatus avbridge_encode_timeline_export(const ClipSegment *segments, int se
             if (spd > 100.0f) spd = 100.0f;
             char tempo_str[32];
             snprintf(tempo_str, sizeof(tempo_str), "%.6f", (double)spd);
-            avfilter_graph_send_command(achain.graph, "tempo", "tempo", tempo_str, NULL, 0, 0);
+            audio_worker_command(audio_worker, "tempo", "tempo", tempo_str);
         }
 
         /* Per-segment video filter chain: canvas-conform (scale/pad/fps, so every segment
@@ -596,8 +603,7 @@ EncodeStatus avbridge_encode_timeline_export(const ClipSegment *segments, int se
                             av_frame_unref(dec_frame);
                             continue;
                         }
-                        if (filter_encode_write_frame(out_ctx, &achain, aenc_ctx, audio_out_stream,
-                                                      dec_frame, filt_frame, enc_pkt) < 0) {
+                        if (audio_worker_push_frame(audio_worker, dec_frame) < 0) {
                             status = ENCODE_ERR_PIPELINE;
                             break;
                         }
@@ -640,6 +646,14 @@ EncodeStatus avbridge_encode_timeline_export(const ClipSegment *segments, int se
             }
         }
 
+        /* The graph's `fps` stage holds its newest frame until it sees the next one, so the
+           segment's last frame only comes out when the graph is told its input has ended. */
+        if (status == ENCODE_OK && vchain.graph &&
+            filter_encode_write_video_frame(out_ctx, &vchain, venc_ctx, video_out_stream, NULL,
+                                            filt_frame, &next_video_pts, enc_pkt) < 0) {
+            status = ENCODE_ERR_PIPELINE;
+        }
+
     segment_cleanup:
         free_video_filter_chain(&vchain);
         avcodec_free_context(&vdec_ctx);
@@ -649,11 +663,9 @@ EncodeStatus avbridge_encode_timeline_export(const ClipSegment *segments, int se
     }
 
     if (status == ENCODE_OK) {
-        /* Flush: decoder(s) already drained per-segment above; only the shared audio filter
+        /* Flush: decoder(s) already drained per-segment above; only the audio worker's filter
            graph and both encoders may still be holding buffered frames. */
-        if (filter_encode_write_frame(out_ctx, &achain, aenc_ctx, audio_out_stream, NULL,
-                                      filt_frame, enc_pkt) < 0 ||
-            encode_write_packet(out_ctx, aenc_ctx, audio_out_stream, NULL, enc_pkt) < 0) {
+        if (audio_worker_finish(&audio_worker, 1) < 0) {
             status = ENCODE_ERR_PIPELINE;
         }
     }
@@ -667,6 +679,7 @@ EncodeStatus avbridge_encode_timeline_export(const ClipSegment *segments, int se
     }
 
 cleanup:
+    audio_worker_finish(&audio_worker, 0);
     av_packet_free(&pkt);
     av_packet_free(&enc_pkt);
     av_frame_free(&dec_frame);
