@@ -285,25 +285,26 @@ fn sparse_axis_keyframes(
 /// absorb the residual jitter [`smooth_subject_centers`] doesn't fully remove.
 pub const DEFAULT_SPARSIFY_EPSILON: f32 = 0.01;
 
+/// Sparse keyframe trajectories for each axis of a generated crop rectangle.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct CropKeyframeAxes {
+    pub x: Vec<Keyframe<f32>>,
+    pub y: Vec<Keyframe<f32>>,
+    pub width: Vec<Keyframe<f32>>,
+    pub height: Vec<Keyframe<f32>>,
+}
+
 /// Converts a per-sample crop-rect trajectory into the four sparse keyframe lists
 /// [`crate::timeline::ClipInstance::crop_x_keyframes`]/`_y`/`_w`/`_h` expect, each axis
 /// sparsified independently via [`sparse_axis_keyframes`] (a sample where only `x` moved
 /// shouldn't force a redundant keyframe onto `y`/`w`/`h` too).
-pub fn sparse_crop_keyframes(
-    samples: &[(f32, CropRect)],
-    epsilon: f32,
-) -> (
-    Vec<Keyframe<f32>>,
-    Vec<Keyframe<f32>>,
-    Vec<Keyframe<f32>>,
-    Vec<Keyframe<f32>>,
-) {
-    (
-        sparse_axis_keyframes(samples, epsilon, |c| c.x),
-        sparse_axis_keyframes(samples, epsilon, |c| c.y),
-        sparse_axis_keyframes(samples, epsilon, |c| c.w),
-        sparse_axis_keyframes(samples, epsilon, |c| c.h),
-    )
+pub fn sparse_crop_keyframes(samples: &[(f32, CropRect)], epsilon: f32) -> CropKeyframeAxes {
+    CropKeyframeAxes {
+        x: sparse_axis_keyframes(samples, epsilon, |c| c.x),
+        y: sparse_axis_keyframes(samples, epsilon, |c| c.y),
+        width: sparse_axis_keyframes(samples, epsilon, |c| c.w),
+        height: sparse_axis_keyframes(samples, epsilon, |c| c.h),
+    }
 }
 
 #[cfg(test)]

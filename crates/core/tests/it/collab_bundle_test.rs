@@ -15,7 +15,7 @@
 
 use std::fs;
 use std::io::Write as _;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use avcore::collab_bundle::{export_collab_bundle, import_collab_bundle};
 use avcore::proxy::{cache_dir_for_project, proxy_path_for, PreviewQuality};
@@ -53,7 +53,7 @@ fn asset(id: u64, source_path: PathBuf) -> MediaAsset {
     }
 }
 
-fn project_at(project_path: &PathBuf, assets: Vec<MediaAsset>) -> Project {
+fn project_at(project_path: &Path, assets: Vec<MediaAsset>) -> Project {
     Project {
         id: 1,
         name: "Collab bundle fixture".to_string(),
@@ -85,7 +85,7 @@ fn project_at(project_path: &PathBuf, assets: Vec<MediaAsset>) -> Project {
             export_settings: Default::default(),
         }],
         active_sequence: 0,
-        file_path: Some(project_path.clone()),
+        file_path: Some(project_path.to_path_buf()),
         panel_layout: None,
         smart_bins: Vec::new(),
         recent_asset_ids: Vec::new(),

@@ -144,7 +144,7 @@ pub(crate) fn detect_faces_with(
     rgba: &[u8],
     width: u32,
     height: u32,
-    run: impl FnOnce(Vec<f32>) -> Result<Vec<(Vec<i64>, Vec<f32>)>, ReframeError>,
+    run: impl FnOnce(Vec<f32>) -> Result<Vec<super::onnx_models::FaceTensorOutput>, ReframeError>,
 ) -> Result<Vec<FaceBox>, ReframeError> {
     let tensors = run(preprocess(rgba, width, height))?;
     // The model publishes two outputs, "scores" (`1x4420x2`, background/face) and "boxes"
@@ -156,23 +156,23 @@ pub(crate) fn detect_faces_with(
 }
 
 fn select_outputs(
-    tensors: Vec<(Vec<i64>, Vec<f32>)>,
+    tensors: Vec<super::onnx_models::FaceTensorOutput>,
 ) -> Result<(usize, Vec<f32>, Vec<f32>), ReframeError> {
-    let mut scores_flat: Option<(Vec<i64>, Vec<f32>)> = None;
-    let mut boxes_flat: Option<(Vec<i64>, Vec<f32>)> = None;
-    for (dims, data) in tensors {
-        match dims.last() {
-            Some(2) => scores_flat = Some((dims, data)),
-            Some(4) => boxes_flat = Some((dims, data)),
+    let mut scores_flat = None;
+    let mut boxes_flat = None;
+    for tensor in tensors {
+        match tensor.dims.last() {
+            Some(2) => scores_flat = Some(tensor),
+            Some(4) => boxes_flat = Some(tensor),
             _ => {}
         }
     }
-    let (score_dims, scores) = scores_flat
+    let score_dims = scores_flat
         .ok_or_else(|| ReframeError::Onnx("no scores output (last dim 2) found".into()))?;
-    let (_, boxes) = boxes_flat
+    let boxes = boxes_flat
         .ok_or_else(|| ReframeError::Onnx("no boxes output (last dim 4) found".into()))?;
-    let num_anchors = *score_dims.get(1).unwrap_or(&0) as usize;
-    Ok((num_anchors, scores, boxes))
+    let num_anchors = *score_dims.dims.get(1).unwrap_or(&0) as usize;
+    Ok((num_anchors, score_dims.data, boxes.data))
 }
 
 /// Turns the raw model outputs into face boxes: keeps anchors scoring above the threshold,

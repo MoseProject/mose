@@ -115,8 +115,8 @@ fn sparse_crop_keyframes_emits_first_and_last_even_when_perfectly_static() {
         (0.5, crop(0.1, 0.1, 0.5, 0.5)),
         (1.0, crop(0.1, 0.1, 0.5, 0.5)),
     ];
-    let (xs, ys, ws, hs) = sparse_crop_keyframes(&samples, DEFAULT_SPARSIFY_EPSILON);
-    for axis in [&xs, &ys, &ws, &hs] {
+    let axes = sparse_crop_keyframes(&samples, DEFAULT_SPARSIFY_EPSILON);
+    for axis in [&axes.x, &axes.y, &axes.width, &axes.height] {
         assert_eq!(axis.len(), 2);
         assert_eq!(axis[0].time_fraction, 0.0);
         assert_eq!(axis[1].time_fraction, 1.0);
@@ -125,15 +125,17 @@ fn sparse_crop_keyframes_emits_first_and_last_even_when_perfectly_static() {
 
 #[test]
 fn sparse_crop_keyframes_is_empty_for_no_samples() {
-    let (xs, ys, ws, hs) = sparse_crop_keyframes(&[], DEFAULT_SPARSIFY_EPSILON);
-    assert!(xs.is_empty() && ys.is_empty() && ws.is_empty() && hs.is_empty());
+    let axes = sparse_crop_keyframes(&[], DEFAULT_SPARSIFY_EPSILON);
+    assert!(
+        axes.x.is_empty() && axes.y.is_empty() && axes.width.is_empty() && axes.height.is_empty()
+    );
 }
 
 #[test]
 fn sparse_crop_keyframes_handles_a_single_sample_without_panicking() {
     let samples = vec![(0.5, crop(0.2, 0.2, 0.6, 0.6))];
-    let (xs, ys, ws, hs) = sparse_crop_keyframes(&samples, DEFAULT_SPARSIFY_EPSILON);
-    for axis in [&xs, &ys, &ws, &hs] {
+    let axes = sparse_crop_keyframes(&samples, DEFAULT_SPARSIFY_EPSILON);
+    for axis in [&axes.x, &axes.y, &axes.width, &axes.height] {
         assert_eq!(axis.len(), 1);
         assert_eq!(axis[0].time_fraction, 0.5);
     }
@@ -147,7 +149,7 @@ fn sparse_crop_keyframes_emits_a_point_where_a_value_crosses_the_threshold() {
         (0.6, crop(0.5, 0.5, 0.5, 0.5)),    // crosses epsilon -- new point
         (1.0, crop(0.5, 0.5, 0.5, 0.5)),    // matches the last emitted value -- no new point
     ];
-    let (xs, _ys, _ws, _hs) = sparse_crop_keyframes(&samples, 0.01);
+    let xs = sparse_crop_keyframes(&samples, 0.01).x;
     assert_eq!(xs.len(), 3);
     assert_eq!(xs[0].time_fraction, 0.0);
     assert_eq!(xs[0].value, 0.1);
@@ -166,7 +168,9 @@ fn sparse_crop_keyframes_sparsifies_each_axis_independently() {
         (0.5, crop(0.6, 0.3, 0.5, 0.5)),
         (1.0, crop(0.6, 0.3, 0.5, 0.5)),
     ];
-    let (xs, ys, _ws, _hs) = sparse_crop_keyframes(&samples, 0.01);
+    let axes = sparse_crop_keyframes(&samples, 0.01);
+    let xs = axes.x;
+    let ys = axes.y;
     assert_eq!(xs.len(), 3);
     assert_eq!(xs[1].time_fraction, 0.5);
     assert_eq!(xs[2].time_fraction, 1.0);

@@ -129,11 +129,17 @@ mod tests {
     /// moment" a real cross-correlation needs to locate the lag of.
     fn burst_signal(total_len: usize, burst_start: usize, burst_len: usize) -> Vec<f32> {
         let mut signal = vec![0.0f32; total_len];
-        for i in burst_start..(burst_start + burst_len).min(total_len) {
+        let burst_end = (burst_start + burst_len).min(total_len);
+        for (i, sample) in signal
+            .iter_mut()
+            .enumerate()
+            .take(burst_end)
+            .skip(burst_start)
+        {
             // Sign alternates by position *within* the burst, not absolute index -- keyed on
             // absolute index, an odd-length shift would flip the whole waveform's sign and
             // break correlation between an unshifted and shifted copy of the "same" burst.
-            signal[i] = if (i - burst_start).is_multiple_of(2) {
+            *sample = if (i - burst_start).is_multiple_of(2) {
                 1.0
             } else {
                 -1.0

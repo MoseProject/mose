@@ -30,6 +30,13 @@ use crate::auto_reframe::ReframeError;
 use crate::background_removal::SegmentError;
 use crate::text_to_speech::{PiperVoiceConfig, TtsError};
 
+/// One ONNX model output tensor represented as its dimensions and contiguous float data.
+#[derive(Debug, Clone)]
+pub(crate) struct FaceTensorOutput {
+    pub(crate) dims: Vec<i64>,
+    pub(crate) data: Vec<f32>,
+}
+
 /// How long a model stays loaded after its last use.
 const SESSION_IDLE: Duration = Duration::from_secs(20);
 
@@ -163,7 +170,7 @@ pub(crate) fn run_face_model(
     input_data: Vec<f32>,
     input_width: u32,
     input_height: u32,
-) -> Result<Vec<(Vec<i64>, Vec<f32>)>, ReframeError> {
+) -> Result<Vec<FaceTensorOutput>, ReframeError> {
     let session = cached_session(model_path).map_err(ReframeError::Onnx)?;
     let mut session = session.lock().unwrap_or_else(|p| p.into_inner());
     let input = Value::from_array((
@@ -179,7 +186,10 @@ pub(crate) fn run_face_model(
         let (shape, data) = value
             .try_extract_tensor::<f32>()
             .map_err(|e| ReframeError::Onnx(e.to_string()))?;
-        tensors.push((shape.iter().copied().collect::<Vec<i64>>(), data.to_vec()));
+        tensors.push(FaceTensorOutput {
+            dims: shape.iter().copied().collect(),
+            data: data.to_vec(),
+        });
     }
     Ok(tensors)
 }

@@ -157,12 +157,21 @@ fn preprocessing_normalises_and_resamples_to_the_model_grid() {
 
 #[test]
 fn the_two_model_outputs_are_told_apart_by_their_last_dimension() {
-    let scores = (vec![1, 3, 2], vec![0.0; 6]);
-    let boxes = (vec![1, 3, 4], vec![0.0; 12]);
+    let scores = crate::analysis::onnx_models::FaceTensorOutput {
+        dims: vec![1, 3, 2],
+        data: vec![0.0; 6],
+    };
+    let boxes = crate::analysis::onnx_models::FaceTensorOutput {
+        dims: vec![1, 3, 4],
+        data: vec![0.0; 12],
+    };
     let (anchors, s, b) = select_outputs(vec![boxes.clone(), scores.clone()]).unwrap();
     assert_eq!((anchors, s.len(), b.len()), (3, 6, 12));
     // Tensors of any other shape are ignored, and both outputs must be present.
-    let other = (vec![1, 5], vec![0.0; 5]);
+    let other = crate::analysis::onnx_models::FaceTensorOutput {
+        dims: vec![1, 5],
+        data: vec![0.0; 5],
+    };
     assert!(select_outputs(vec![other.clone(), boxes]).is_err());
     assert!(select_outputs(vec![other, scores]).is_err());
     let error = select_outputs(Vec::new()).unwrap_err();
@@ -208,7 +217,10 @@ fn errors_are_readable_and_a_missing_model_fails_to_load() {
 
 /// Output tensors shaped like the real model's: `anchors` rows of (background, face) scores and
 /// of (xmin, ymin, xmax, ymax) boxes.
-fn model_outputs(faces: &[(f32, [f32; 4])], anchors: usize) -> Vec<(Vec<i64>, Vec<f32>)> {
+fn model_outputs(
+    faces: &[(f32, [f32; 4])],
+    anchors: usize,
+) -> Vec<crate::analysis::onnx_models::FaceTensorOutput> {
     let mut scores = vec![0.0; anchors * 2];
     let mut boxes = vec![0.0; anchors * 4];
     for (i, (score, bbox)) in faces.iter().enumerate() {
@@ -216,8 +228,14 @@ fn model_outputs(faces: &[(f32, [f32; 4])], anchors: usize) -> Vec<(Vec<i64>, Ve
         boxes[i * 4..i * 4 + 4].copy_from_slice(bbox);
     }
     vec![
-        (vec![1, anchors as i64, 4], boxes),
-        (vec![1, anchors as i64, 2], scores),
+        crate::analysis::onnx_models::FaceTensorOutput {
+            dims: vec![1, anchors as i64, 4],
+            data: boxes,
+        },
+        crate::analysis::onnx_models::FaceTensorOutput {
+            dims: vec![1, anchors as i64, 2],
+            data: scores,
+        },
     ]
 }
 
@@ -260,9 +278,19 @@ fn overlapping_detections_are_merged_and_degenerate_boxes_ignored() {
 #[test]
 fn a_model_without_the_expected_outputs_is_an_error() {
     let rgba = vec![0u8; 4 * 4 * 4];
-    let only_boxes = detect_faces_with(&rgba, 4, 4, |_| Ok(vec![(vec![1, 2, 4], vec![0.0; 8])]));
+    let only_boxes = detect_faces_with(&rgba, 4, 4, |_| {
+        Ok(vec![crate::analysis::onnx_models::FaceTensorOutput {
+            dims: vec![1, 2, 4],
+            data: vec![0.0; 8],
+        }])
+    });
     assert!(matches!(only_boxes, Err(ReframeError::Onnx(m)) if m.contains("scores")));
-    let only_scores = detect_faces_with(&rgba, 4, 4, |_| Ok(vec![(vec![1, 2, 2], vec![0.0; 4])]));
+    let only_scores = detect_faces_with(&rgba, 4, 4, |_| {
+        Ok(vec![crate::analysis::onnx_models::FaceTensorOutput {
+            dims: vec![1, 2, 2],
+            data: vec![0.0; 4],
+        }])
+    });
     assert!(matches!(only_scores, Err(ReframeError::Onnx(m)) if m.contains("boxes")));
     let failing = detect_faces_with(&rgba, 4, 4, |_| Err(ReframeError::Onnx("boom".into())));
     assert!(matches!(failing, Err(ReframeError::Onnx(m)) if m == "boom"));
