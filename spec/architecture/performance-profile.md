@@ -218,5 +218,5 @@ retain nothing.
 
 ## Not yet measured
 
-Proxy generation time before and after the decoder change, multi-track export with several
-overlays, startup and project open time on a large project.
+Multi-track export with several overlays, project open time on a large project, and Whisper
+transcription speed (no model on the measuring machine).
