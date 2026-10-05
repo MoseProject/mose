@@ -610,6 +610,7 @@ EncodeStatus avbridge_encode_timeline_export_multi(
     AVFormatContext *out_ctx = NULL;
     AVCodecContext *venc_ctx = NULL, *aenc_ctx = NULL;
     AudioFilterChain achain = {0};
+    AudioWorker *audio_worker = NULL;
     AVStream *vout_stream = NULL, *aout_stream = NULL;
     AVPacket *pkt = NULL;
     AVFrame *dec_frame = NULL, *filt_frame = NULL;
@@ -824,6 +825,12 @@ EncodeStatus avbridge_encode_timeline_export_multi(
                 status = ENCODE_ERR_WRITE_HEADER;
                 goto seg_cleanup;
             }
+            /* From here on the audio graph and encoder belong to the worker's thread. */
+            audio_worker = audio_worker_start(out_ctx, &achain, aenc_ctx, aout_stream);
+            if (!audio_worker) {
+                status = ENCODE_ERR_PIPELINE;
+                goto seg_cleanup;
+            }
         } else if (adec_ctx0->sample_rate != canonical_sr ||
                    adec_ctx0->sample_fmt != canonical_fmt ||
                    av_channel_layout_compare(&adec_ctx0->ch_layout, &canonical_ch) != 0) {
@@ -834,13 +841,13 @@ EncodeStatus avbridge_encode_timeline_export_multi(
         { /* Update gain + tempo for this segment's audio */
             char gs[32], ts[32];
             snprintf(gs, sizeof(gs), "%.4fdB", (double)seg0->gain_db);
-            avfilter_graph_send_command(achain.graph, "vol", "volume", gs, NULL, 0, 0);
+            audio_worker_command(audio_worker, "vol", "volume", gs);
             float sp = smooth_speed_ramp_average_speed(seg0);
             sp = sp > 0.0f ? sp : 1.0f;
             if (sp < 0.5f) sp = 0.5f;
             if (sp > 100.0f) sp = 100.0f;
             snprintf(ts, sizeof(ts), "%.6f", (double)sp);
-            avfilter_graph_send_command(achain.graph, "tempo", "tempo", ts, NULL, 0, 0);
+            audio_worker_command(audio_worker, "tempo", "tempo", ts);
         }
 
         if (seg0->source_in_secs > 0.0) {
@@ -1164,8 +1171,7 @@ EncodeStatus avbridge_encode_timeline_export_multi(
                             av_frame_unref(dec_frame);
                             continue;
                         }
-                        if (filter_encode_write_frame(out_ctx, &achain, aenc_ctx, aout_stream,
-                                                      dec_frame, filt_frame, enc_pkt) < 0) {
+                        if (audio_worker_push_frame(audio_worker, dec_frame) < 0) {
                             status = ENCODE_ERR_PIPELINE;
                             break;
                         }
@@ -1209,10 +1215,7 @@ EncodeStatus avbridge_encode_timeline_export_multi(
     }
 
     /* Flush audio encoder + loudnorm graph. */
-    if (status == ENCODE_OK &&
-        (filter_encode_write_frame(out_ctx, &achain, aenc_ctx, aout_stream, NULL, filt_frame,
-                                   enc_pkt) < 0 ||
-         encode_write_packet(out_ctx, aenc_ctx, aout_stream, NULL, enc_pkt) < 0)) {
+    if (status == ENCODE_OK && audio_worker_finish(&audio_worker, 1) < 0) {
         status = ENCODE_ERR_PIPELINE;
     }
     /* Flush video encoder. */
@@ -1223,6 +1226,7 @@ EncodeStatus avbridge_encode_timeline_export_multi(
     if (status == ENCODE_OK) av_write_trailer(out_ctx);
 
 cleanup:
+    audio_worker_finish(&audio_worker, 0);
     if (overlay_tracks) {
         for (int i = 0; i < overlay_track_count; i++)
             free_overlay_track(&overlay_tracks[i]);
