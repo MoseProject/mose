@@ -38,6 +38,7 @@ mod state;
 mod telemetry;
 #[cfg(test)]
 mod testing;
+mod tile_workers;
 
 use std::sync::Arc;
 
