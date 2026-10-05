@@ -131,19 +131,22 @@ The GPU compositor trades about 280 MB of RAM and 175 MB of VRAM for 2-3 points 
 CPU peak; not worth making the default at this load.
 
 Export, 60 s of 1080p60 (40 Mbps source), hardware encoder, output matched to the source bitrate:
-52-57 s, about 1.1x real time, 280 MB out. The process tree averages 3% CPU (one core of 32) and
-the encoder engine peaks at 18-22%, so the pipeline runs on a single thread and is neither
-CPU-wide nor GPU-bound. The ffmpeg command line with the same filters and encoder does the same
-file in 9.4 s (6.4x real time); decode alone takes 8.4 s there. In the bridge test harness 20 s of
-source takes 13.8 s with the hardware encoder and 21.7 s with the software one. Checked and ruled
-out: decoder threading (setting thread count and frame threading in the export decoder changed
-nothing, 11.3 s against 11.0 s for the same clip at a 320x240 canvas; the FFmpeg 8 decoders already
-default to auto threads), audio filters (loudnorm and afftdn chain: 1.8 s for 60 s), and the
-progress callback. Remaining suspect, not confirmed: decode, filter, encode and mux run one after
-the other in `timeline_export_multi.c`'s loop while the command line overlaps them on separate
-threads. Next step is a timing split per stage in that loop.
+52-57 s before, 25.5 s after (1.1x -> 2.4x real time), same 280 MB output. The process tree
+averaged 3% CPU (one core of 32) before: the ffmpeg command line with the same filters and encoder
+does the file in 9.4 s. A stage timing split of the export loop (single track path,
+`timeline_export.c`; bridge test harness, 20 s of source) showed 10.5 of 13.6 s inside the video
+decoder, against 0.5 s for filters and 2.0 s for encoder submission: the export decoders were
+opened by hand without a thread count, so they decoded on one thread (about 115 fps). They now use
+frame plus slice threading (`bridge_enable_decoder_threads`), which took the harness run from
+14.1 s to 4.0 s. Frame threading holds frames back until the decoder is flushed, so each segment
+now drains its decoder at the end of the input (the multi-track path sends an empty packet at EOF);
+without that a segment ending with its file lost 16 frames, and a test covers it. Proxy generation
+uses the same decoder setting. Overlay (secondary track) decoders and the privacy-blur pass keep
+their single-threaded decoders; the remaining gap to the command line (6.4x) is encoder
+submission and the loudness and mux passes.
 
 ## Not yet measured
 
-Memory over hours (the 10 minute soak shows a small unexplained drift), where the export loop
-spends its time per stage, thumbnail latency on long recordings.
+Memory over hours (the 10 minute soak shows a small unexplained drift), proxy generation time
+before and after the decoder change, thumbnail latency on long recordings, multi-track export
+speed.
