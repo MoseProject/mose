@@ -257,16 +257,15 @@ pub fn dynamic_auto_reframe_clip<R: Runtime>(
                 )
             })
             .collect();
-        let (crop_x, crop_y, crop_w, crop_h) =
-            avcore::sparse_crop_keyframes(&crop_samples, avcore::DEFAULT_SPARSIFY_EPSILON);
+        let crop = avcore::sparse_crop_keyframes(&crop_samples, avcore::DEFAULT_SPARSIFY_EPSILON);
         let state = worker_app.state::<AppState>();
         clear_running(&state);
         let _ = with_session(&worker_app, |session| {
             if let Some(clip) = session.project.timeline_mut().clip_mut(clip_id) {
-                clip.crop_x_keyframes = crop_x;
-                clip.crop_y_keyframes = crop_y;
-                clip.crop_w_keyframes = crop_w;
-                clip.crop_h_keyframes = crop_h;
+                clip.crop_x_keyframes = crop.x;
+                clip.crop_y_keyframes = crop.y;
+                clip.crop_w_keyframes = crop.width;
+                clip.crop_h_keyframes = crop.height;
             }
             session.dirty = true;
             Ok(())

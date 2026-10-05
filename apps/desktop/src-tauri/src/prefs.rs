@@ -189,7 +189,7 @@ impl Default for PrefsView {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct PrefsDocument {
     raw: BTreeMap<String, Value>,
     pub view: PrefsView,
@@ -255,15 +255,6 @@ impl PrefsDocument {
             std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
         }
         avcore::write_atomic(path, &bytes).map_err(|error| error.to_string())
-    }
-}
-
-impl Default for PrefsDocument {
-    fn default() -> Self {
-        Self {
-            raw: BTreeMap::new(),
-            view: PrefsView::default(),
-        }
     }
 }
 

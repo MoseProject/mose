@@ -299,7 +299,6 @@ pub fn paste_clip<R: Runtime>(app: AppHandle<R>) -> Result<Vec<u64>, String> {
     else {
         return Ok(Vec::new());
     };
-    drop(state);
     let playhead = app.state::<AppState>().preview.playhead();
     let mut new_ids = Vec::new();
     undoable(&app, |project| {
@@ -345,7 +344,6 @@ pub fn paste_clip_formatting<R: Runtime>(app: AppHandle<R>, clip_id: u64) -> Res
         .lock()
         .unwrap_or_else(|p| p.into_inner())
         .clone();
-    drop(state);
     let Some(formatting) = formatting else {
         return Ok(());
     };

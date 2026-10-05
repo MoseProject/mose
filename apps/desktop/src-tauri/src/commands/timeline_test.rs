@@ -196,7 +196,7 @@ mod commands {
         )
     }
 
-    fn clip<'a>(timeline: &'a Timeline, id: u64) -> &'a avcore::timeline::ClipInstance {
+    fn clip(timeline: &Timeline, id: u64) -> &avcore::timeline::ClipInstance {
         timeline
             .tracks
             .iter()
