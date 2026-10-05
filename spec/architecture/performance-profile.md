@@ -201,6 +201,21 @@ the renderer, mostly Tauri's event script compilation). The residual retention i
 invoke a command retain 34 MB after collection, where the same invocations in an in-page loop
 retain nothing.
 
+**Models, playback timing, idle cost** (2026-10-05, later pass):
+- Face detection and person segmentation built an ONNX session per sampled frame. Sessions are
+  cached per model path and dropped after 20 s idle: MODNet at 1080p 410 -> 270 ms per frame,
+  UltraFace 19 -> 4 ms. Eight and 32 ORT threads take the same time, so the default stays.
+- On Windows `recv_timeout` is as coarse as the system timer (a 1 ms wait takes 15.5 ms, measured;
+  `thread::sleep` takes 1.5 ms). The playback loop therefore ran every 15.5 ms and the 16 ms
+  preview tick went out every second pass: 1080p60 showed 34 pictures a second, now 58 (counted
+  from the monitor image's `src` changes, `e2e/profile_fps.py`). The idle loop now waits for a
+  command instead of polling: thread wakeups of an idle app 77 -> 9 per second
+  (`e2e/profile_idle.py`). Seek to picture about 45 ms, edit to picture 35 ms
+  (`e2e/profile_latency.py`); first paint after launch 640-690 ms, of which our JS is 10 ms.
+- The CPU encoder (libopenh264) takes about 23.5 s per 60 s of 1080p60 whatever thread count it is
+  given; only the hardware encoder is fast.
+- Not measured: Whisper (no model on the machine; its default is 4 threads).
+
 ## Not yet measured
 
 Proxy generation time before and after the decoder change, multi-track export with several
