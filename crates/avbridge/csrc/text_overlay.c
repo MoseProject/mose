@@ -141,6 +141,7 @@ TextOverlayStatus avbridge_apply_text_overlays(const char *in_path, const char *
         }
         avcodec_parameters_to_context(vdec_ctx, vs->codecpar);
         vdec_ctx->time_base = vs->time_base;
+        bridge_enable_decoder_threads(vdec_ctx);
         if (avcodec_open2(vdec_ctx, vdec, NULL) < 0) {
             status = TEXT_OVERLAY_ERR_OPEN_INPUT;
             goto cleanup;
@@ -393,29 +394,13 @@ TextOverlayStatus avbridge_apply_text_overlays(const char *in_path, const char *
             goto cleanup;
         }
 
-        const AVCodec *venc = find_cpu_h264_encoder();
-        if (!venc) {
-            status = TEXT_OVERLAY_ERR_PIPELINE;
-            goto cleanup;
-        }
-        venc_ctx = avcodec_alloc_context3(venc);
-        if (!venc_ctx) {
-            status = TEXT_OVERLAY_ERR_PIPELINE;
-            goto cleanup;
-        }
-
         AVStream *vin = in_ctx->streams[video_in_idx];
-        venc_ctx->width = canvas_width;
-        venc_ctx->height = canvas_height;
-        venc_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
-        venc_ctx->time_base = av_inv_q(canvas_fps);
-        venc_ctx->framerate = canvas_fps;
-        venc_ctx->bit_rate = vin->codecpar->bit_rate > 0 ? vin->codecpar->bit_rate : 4000000LL;
-        venc_ctx->gop_size = canvas_fps_den > 0 ? (canvas_fps_num / canvas_fps_den) * 2 : 60;
-        venc_ctx->max_b_frames = 0;
-        if (out_ctx->oformat->flags & AVFMT_GLOBALHEADER)
-            venc_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-        if (avcodec_open2(venc_ctx, venc, NULL) < 0) {
+        /* Hardware encoder when one opens (this pass re-encodes the whole file), else CPU. */
+        venc_ctx = open_overlay_pass_encoder(
+            canvas_width, canvas_height, canvas_fps,
+            vin->codecpar->bit_rate > 0 ? vin->codecpar->bit_rate : 4000000LL,
+            (out_ctx->oformat->flags & AVFMT_GLOBALHEADER) != 0);
+        if (!venc_ctx) {
             status = TEXT_OVERLAY_ERR_PIPELINE;
             goto cleanup;
         }

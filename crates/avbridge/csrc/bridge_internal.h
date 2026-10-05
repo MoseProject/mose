@@ -102,6 +102,12 @@ AVCodecContext *open_video_encoder(GpuEncoderPreference preference, int canvas_w
                                         int64_t canvas_bit_rate_bps, int global_header,
                                         int *out_used_gpu, enum AVPixelFormat *out_pix_fmt);
 
+/* Opens the encoder for a pass that re-encodes an already exported file (text, shape and privacy
+   blur overlays): hardware when one opens with yuv420p input, else the CPU encoder. Their filter
+   graphs end in yuv420p, so an encoder that wants another format is not used. NULL on failure. */
+AVCodecContext *open_overlay_pass_encoder(int width, int height, AVRational fps,
+                                          int64_t bit_rate_bps, int global_header);
+
 /* Returns the preferred available software H.264 encoder: libopenh264 when present, otherwise
    libx264. Returns NULL when the FFmpeg build provides neither. Defined in gpu_encoder.c. */
 const AVCodec *find_cpu_h264_encoder(void);

@@ -76,6 +76,9 @@ static AVCodecContext *try_open_encoder(const char *encoder_name, int canvas_wid
     ctx->gop_size = (canvas_fps.num / canvas_fps.den) * 2;
     ctx->max_b_frames = 0;
     ctx->bit_rate = canvas_bit_rate_bps;
+    /* Software encoders (libopenh264, libx264) run on one thread unless told otherwise; a
+       hardware encoder ignores this. */
+    ctx->thread_count = 8;
     if (global_header) {
         ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
     }
@@ -278,6 +281,21 @@ AVCodecContext *open_video_encoder(GpuEncoderPreference preference, int canvas_w
     }
     if (out_used_gpu) {
         *out_used_gpu = 0;
+    }
+    return ctx;
+}
+
+AVCodecContext *open_overlay_pass_encoder(int width, int height, AVRational fps,
+                                          int64_t bit_rate_bps, int global_header) {
+    enum AVPixelFormat pix_fmt = AV_PIX_FMT_NONE;
+    AVCodecContext *ctx = open_video_encoder(GPU_ENCODER_AUTO, width, height, fps, bit_rate_bps,
+                                             global_header, NULL, &pix_fmt);
+    if (ctx && pix_fmt != AV_PIX_FMT_YUV420P) {
+        /* Quick Sync and VAAPI want other formats or hardware surfaces than the yuv420p these
+           passes' filter graphs end in. */
+        avcodec_free_context(&ctx);
+        ctx = open_video_encoder(GPU_ENCODER_CPU, width, height, fps, bit_rate_bps, global_header,
+                                 NULL, &pix_fmt);
     }
     return ctx;
 }
