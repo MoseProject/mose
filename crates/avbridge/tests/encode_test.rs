@@ -130,6 +130,8 @@ fn clip(
         blend_mode: String::new(),
         anchor_x: 0.5,
         anchor_y: 0.5,
+        fade_in_secs: 0.0,
+        fade_out_secs: 0.0,
     }
 }
 
@@ -569,6 +571,49 @@ fn audio_is_encoded_beside_the_video_and_follows_each_segments_gain() {
         integrated > -40.0 && integrated < -6.0,
         "integrated loudness {integrated} LUFS: audio missing or not mastered"
     );
+
+    let _ = std::fs::remove_file(&out);
+}
+
+#[test]
+fn clip_fades_ramp_the_audio_in_and_out_and_keep_the_export_valid() {
+    // Video gets `fade` stages and the decoded audio frames get a sample ramp: the clip's first
+    // and last 50 ms must be far quieter than its middle.
+    let out = std::env::temp_dir().join("avbridge_test_clip_fades.mp4");
+    let cancel = AtomicBool::new(false);
+    let mut faded = clip(0.0, 0.6, 0.0, "");
+    faded.fade_in_secs = 0.25;
+    faded.fade_out_secs = 0.25;
+    let outcome = encode_timeline_export(
+        &[faded],
+        CANVAS,
+        &out,
+        -14.0,
+        GpuEncoderPreference::Cpu,
+        &cancel,
+        |_secs| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, EncodeOutcome::Completed);
+
+    let samples = avbridge::extract_pcm_16k_mono(&out).expect("the export has audio");
+    let rms = |from: usize, to: usize| {
+        let window = &samples[from.min(samples.len())..to.min(samples.len())];
+        (window.iter().map(|s| s * s).sum::<f32>() / window.len().max(1) as f32).sqrt()
+    };
+    let window = 16_000 / 20; // 50 ms
+    let start = rms(0, window);
+    let middle = rms(
+        samples.len() / 2 - window / 2,
+        samples.len() / 2 + window / 2,
+    );
+    let end = rms(samples.len() - window, samples.len());
+    assert!(middle > 0.0, "the fixture clip is silent");
+    assert!(
+        start < middle * 0.5,
+        "fade-in: start {start} vs middle {middle}"
+    );
+    assert!(end < middle * 0.5, "fade-out: end {end} vs middle {middle}");
 
     let _ = std::fs::remove_file(&out);
 }

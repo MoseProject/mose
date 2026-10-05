@@ -54,6 +54,8 @@ fn mixes_overlapping_audio_segments_and_muxes_them_without_reencoding_video() {
             voice_cleanup_compressor_threshold_db: -18.0,
             voice_cleanup_compressor_ratio: 3.0,
             voice_cleanup_ceiling_linear: 0.95,
+            fade_in_secs: 0.0,
+            fade_out_secs: 0.0,
         },
         AudioSegment {
             source_path: source,
@@ -69,6 +71,8 @@ fn mixes_overlapping_audio_segments_and_muxes_them_without_reencoding_video() {
             voice_cleanup_compressor_threshold_db: -18.0,
             voice_cleanup_compressor_ratio: 3.0,
             voice_cleanup_ceiling_linear: 0.95,
+            fade_in_secs: 0.0,
+            fade_out_secs: 0.0,
         },
     ];
 
@@ -91,6 +95,52 @@ fn mixes_overlapping_audio_segments_and_muxes_them_without_reencoding_video() {
 
     let _ = std::fs::remove_file(&mixed);
     let _ = std::fs::remove_file(&muxed);
+}
+
+/// The mix graph's `afade` stages: a segment with a fade-in and fade-out starts and ends far
+/// quieter than its middle.
+#[test]
+fn mix_segment_fades_ramp_the_branch_in_and_out() {
+    let mixed = std::env::temp_dir().join("avbridge_audio_mix_fades.m4a");
+    let _ = std::fs::remove_file(&mixed);
+    let segment = AudioSegment {
+        source_path: fixture("audio.m4a"),
+        source_in_secs: 0.0,
+        source_out_secs: 0.8,
+        timeline_start_secs: 0.0,
+        gain_db: 0.0,
+        speed_factor: 1.0,
+        gain_keyframe_expr: String::new(),
+        duck_role: 0,
+        voice_cleanup_enabled: false,
+        voice_cleanup_noise_floor_db: -30.0,
+        voice_cleanup_compressor_threshold_db: -18.0,
+        voice_cleanup_compressor_ratio: 3.0,
+        voice_cleanup_ceiling_linear: 0.95,
+        fade_in_secs: 0.3,
+        fade_out_secs: 0.3,
+    };
+    let outcome =
+        mix_audio_timeline(&[segment], 1.0, &mixed, -14.0, &AtomicBool::new(false)).unwrap();
+    assert_eq!(outcome, AudioMixOutcome::Completed);
+
+    let samples = avbridge::extract_pcm_16k_mono(&mixed).unwrap();
+    let window = 16_000 / 20; // 50 ms
+    let rms = |from: usize, to: usize| {
+        let part = &samples[from.min(samples.len())..to.min(samples.len())];
+        (part.iter().map(|s| s * s).sum::<f32>() / part.len().max(1) as f32).sqrt()
+    };
+    let middle = rms(
+        samples.len() / 2 - window / 2,
+        samples.len() / 2 + window / 2,
+    );
+    assert!(middle > 0.0);
+    assert!(rms(0, window) < middle * 0.5, "fade-in");
+    assert!(
+        rms(samples.len() - window, samples.len()) < middle * 0.5,
+        "fade-out"
+    );
+    let _ = std::fs::remove_file(&mixed);
 }
 
 /// P2 item 6, "Audio ducking": exercises the actual `sidechaincompress`-based filter-graph
@@ -119,6 +169,8 @@ fn mixes_with_sidechain_ducking_when_both_roles_are_present() {
             voice_cleanup_compressor_threshold_db: -18.0,
             voice_cleanup_compressor_ratio: 3.0,
             voice_cleanup_ceiling_linear: 0.95,
+            fade_in_secs: 0.0,
+            fade_out_secs: 0.0,
         },
         AudioSegment {
             source_path: source,
@@ -134,6 +186,8 @@ fn mixes_with_sidechain_ducking_when_both_roles_are_present() {
             voice_cleanup_compressor_threshold_db: -18.0,
             voice_cleanup_compressor_ratio: 3.0,
             voice_cleanup_ceiling_linear: 0.95,
+            fade_in_secs: 0.0,
+            fade_out_secs: 0.0,
         },
     ];
 
@@ -161,6 +215,8 @@ fn voice_cleanup_segment(source: PathBuf, voice_cleanup_enabled: bool) -> AudioS
         voice_cleanup_compressor_threshold_db: -18.0,
         voice_cleanup_compressor_ratio: 3.0,
         voice_cleanup_ceiling_linear: 0.95,
+        fade_in_secs: 0.0,
+        fade_out_secs: 0.0,
     }
 }
 
@@ -285,6 +341,8 @@ fn mixes_with_sidechain_ducking_across_multiple_branches_per_role() {
             voice_cleanup_compressor_threshold_db: -18.0,
             voice_cleanup_compressor_ratio: 3.0,
             voice_cleanup_ceiling_linear: 0.95,
+            fade_in_secs: 0.0,
+            fade_out_secs: 0.0,
         },
         AudioSegment {
             source_path: source.clone(),
@@ -300,6 +358,8 @@ fn mixes_with_sidechain_ducking_across_multiple_branches_per_role() {
             voice_cleanup_compressor_threshold_db: -18.0,
             voice_cleanup_compressor_ratio: 3.0,
             voice_cleanup_ceiling_linear: 0.95,
+            fade_in_secs: 0.0,
+            fade_out_secs: 0.0,
         },
         AudioSegment {
             source_path: source.clone(),
@@ -315,6 +375,8 @@ fn mixes_with_sidechain_ducking_across_multiple_branches_per_role() {
             voice_cleanup_compressor_threshold_db: -18.0,
             voice_cleanup_compressor_ratio: 3.0,
             voice_cleanup_ceiling_linear: 0.95,
+            fade_in_secs: 0.0,
+            fade_out_secs: 0.0,
         },
         AudioSegment {
             source_path: source,
@@ -330,6 +392,8 @@ fn mixes_with_sidechain_ducking_across_multiple_branches_per_role() {
             voice_cleanup_compressor_threshold_db: -18.0,
             voice_cleanup_compressor_ratio: 3.0,
             voice_cleanup_ceiling_linear: 0.95,
+            fade_in_secs: 0.0,
+            fade_out_secs: 0.0,
         },
     ];
 
@@ -363,6 +427,8 @@ fn a_target_branch_without_any_trigger_falls_back_to_a_plain_mix() {
         voice_cleanup_compressor_threshold_db: -18.0,
         voice_cleanup_compressor_ratio: 3.0,
         voice_cleanup_ceiling_linear: 0.95,
+        fade_in_secs: 0.0,
+        fade_out_secs: 0.0,
     }];
 
     let outcome =
@@ -403,6 +469,8 @@ fn mixes_a_segment_with_a_keyframed_gain_expression() {
         voice_cleanup_compressor_threshold_db: -18.0,
         voice_cleanup_compressor_ratio: 3.0,
         voice_cleanup_ceiling_linear: 0.95,
+        fade_in_secs: 0.0,
+        fade_out_secs: 0.0,
     }];
 
     let outcome =

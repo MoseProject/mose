@@ -191,6 +191,13 @@ EncodeStatus timeline_open_audio_output(AVFormatContext *out_ctx, AVCodecContext
                                         AVStream **audio_stream, AudioWorker **worker);
 /* Queues the gain and tempo changes `seg` needs, ahead of its audio frames. */
 void timeline_queue_segment_audio_commands(AudioWorker *worker, const ClipSegment *seg);
+/* The segment's length in output seconds: the trimmed source length divided by the speed (the
+   integral of 1/speed for a ramp), the time base the fades are specified in. */
+double segment_output_secs(const ClipSegment *seg);
+/* Multiplies the samples of a decoded audio frame by the segment's fade-in / fade-out ramp.
+   `frame_start_secs` is the frame's first sample in source time. A no-op when the segment has no
+   fades or the sample format is not one of the plain PCM/float layouts. */
+void timeline_apply_audio_fade(AVFrame *frame, const ClipSegment *seg, double frame_start_secs);
 
 /* Result of a re-encode pass; the values equal TextOverlayStatus and PrivacyBlurStatus, which
    the callers convert it to. */

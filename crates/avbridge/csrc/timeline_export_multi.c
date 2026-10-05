@@ -1003,6 +1003,7 @@ EncodeStatus avbridge_encode_timeline_export_multi(
                             av_frame_unref(dec_frame);
                             continue;
                         }
+                        timeline_apply_audio_fade(dec_frame, seg0, fs);
                         if (audio_worker_push_frame(audio_worker, dec_frame) < 0) {
                             status = ENCODE_ERR_PIPELINE;
                             break;

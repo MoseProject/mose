@@ -47,6 +47,9 @@ pub(crate) struct RawClipSegment {
     /// around — see `ClipSegment::anchor_x`/`anchor_y`'s doc comment in `bridge.h`.
     pub(crate) anchor_x: f64,
     pub(crate) anchor_y: f64,
+    /// See `ClipSegment::fade_in_secs` in `bridge.h`.
+    pub(crate) fade_in_secs: f32,
+    pub(crate) fade_out_secs: f32,
 }
 
 #[repr(C)]
@@ -66,6 +69,8 @@ pub(crate) struct RawAudioSegment {
     pub(crate) voice_cleanup_compressor_threshold_db: f32,
     pub(crate) voice_cleanup_compressor_ratio: f32,
     pub(crate) voice_cleanup_ceiling_linear: f32,
+    pub(crate) fade_in_secs: f32,
+    pub(crate) fade_out_secs: f32,
 }
 
 /// Mirror of `TextSegment` in `bridge.h` — one pre-rasterized text overlay image.

@@ -235,6 +235,13 @@ typedef struct {
        isn't overlay-only. */
     double anchor_x;
     double anchor_y;
+    /* Fade from black (video) and from silence (audio) over this many seconds at the start /
+       end of the clip, in output seconds; 0 = none. Video: `fade` appended to the segment's
+       chain after any entry transition (single-track path; overlay layers ignore it). Audio:
+       a sample ramp on the decoded frames in the single-track path, `afade` in the mix graph
+       otherwise. */
+    float fade_in_secs;
+    float fade_out_secs;
 } ClipSegment;
 
 /* Renders an ordered sequence of trimmed clips (`segments`, `segment_count` of them) as one
@@ -326,6 +333,10 @@ typedef struct {
     float voice_cleanup_compressor_threshold_db;
     float voice_cleanup_compressor_ratio;
     float voice_cleanup_ceiling_linear;
+    /* Fade in / out over this many output seconds, applied right after the branch's own volume
+       stage; 0 = none. */
+    float fade_in_secs;
+    float fade_out_secs;
 } AudioSegment;
 
 typedef enum {

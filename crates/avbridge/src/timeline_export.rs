@@ -124,6 +124,13 @@ pub struct ClipSegment {
     pub anchor_x: f32,
     #[serde(default = "default_anchor")]
     pub anchor_y: f32,
+    /// Fade from black (video) and from silence (audio) over this many seconds at the start of
+    /// the clip; `0.0` = none. Output seconds, after any speed change.
+    #[serde(default)]
+    pub fade_in_secs: f32,
+    /// Fade to black and silence over this many seconds at the end of the clip.
+    #[serde(default)]
+    pub fade_out_secs: f32,
 }
 
 pub(crate) fn default_anchor() -> f32 {
@@ -257,6 +264,8 @@ pub fn encode_timeline_export<F: FnMut(f64)>(
                 blend_mode: blend_mode.as_ptr(),
                 anchor_x: seg.anchor_x as f64,
                 anchor_y: seg.anchor_y as f64,
+                fade_in_secs: seg.fade_in_secs,
+                fade_out_secs: seg.fade_out_secs,
             },
         )
         .collect();
@@ -390,6 +399,8 @@ pub fn encode_timeline_export_multi<F: FnMut(f64)>(
                     blend_mode: blend_mode.as_ptr(),
                     anchor_x: seg.anchor_x as f64,
                     anchor_y: seg.anchor_y as f64,
+                    fade_in_secs: seg.fade_in_secs,
+                    fade_out_secs: seg.fade_out_secs,
                 },
             )
             .collect();

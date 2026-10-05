@@ -33,6 +33,70 @@ float smooth_speed_ramp_average_speed(const ClipSegment *seg) {
     return seg->speed_factor;
 }
 
+double segment_output_secs(const ClipSegment *seg) {
+    double source = seg->source_out_secs - seg->source_in_secs;
+    double v0 = (double)seg->speed_factor;
+    double v1 = (double)seg->smooth_speed_ramp_end_factor;
+    if (source <= 0.0 || v0 <= 0.0) return source > 0.0 ? source : 0.0;
+    if (seg->smooth_speed_ramp_end_factor > 0.0f && fabs(v1 - v0) > 1e-4) {
+        return source / (v1 - v0) * log(v1 / v0);
+    }
+    return source / v0;
+}
+
+/* Gain of a fade at `t_secs` seconds into a clip of `total_secs`, both in output seconds. */
+static double fade_gain(double t_secs, double total_secs, double fade_in, double fade_out) {
+    double gain = 1.0;
+    if (fade_in > 0.0 && t_secs < fade_in) gain *= t_secs < 0.0 ? 0.0 : t_secs / fade_in;
+    double left = total_secs - t_secs;
+    if (fade_out > 0.0 && left < fade_out) gain *= left < 0.0 ? 0.0 : left / fade_out;
+    return gain;
+}
+
+void timeline_apply_audio_fade(AVFrame *frame, const ClipSegment *seg, double frame_start_secs) {
+    if (!frame || frame->sample_rate <= 0 || frame->nb_samples <= 0) return;
+    if (seg->fade_in_secs <= 0.0f && seg->fade_out_secs <= 0.0f) return;
+    double speed = (double)smooth_speed_ramp_average_speed(seg);
+    if (speed <= 0.0) speed = 1.0;
+    double total = segment_output_secs(seg);
+    int channels = frame->ch_layout.nb_channels;
+    enum AVSampleFormat fmt = (enum AVSampleFormat)frame->format;
+    int planar = av_sample_fmt_is_planar(fmt);
+    for (int i = 0; i < frame->nb_samples; i++) {
+        /* Output seconds into the clip: source offset divided by the (average) speed. */
+        double t = (frame_start_secs + (double)i / frame->sample_rate - seg->source_in_secs) / speed;
+        double g = fade_gain(t, total, (double)seg->fade_in_secs, (double)seg->fade_out_secs);
+        if (g >= 1.0) continue;
+        for (int c = 0; c < (planar ? channels : 1); c++) {
+            uint8_t *base = planar ? frame->extended_data[c] : frame->extended_data[0];
+            int stride_channels = planar ? 1 : channels;
+            for (int k = 0; k < stride_channels; k++) {
+                size_t idx = (size_t)i * (size_t)stride_channels + (size_t)k;
+                switch (fmt) {
+                case AV_SAMPLE_FMT_FLT:
+                case AV_SAMPLE_FMT_FLTP:
+                    ((float *)base)[idx] *= (float)g;
+                    break;
+                case AV_SAMPLE_FMT_DBL:
+                case AV_SAMPLE_FMT_DBLP:
+                    ((double *)base)[idx] *= g;
+                    break;
+                case AV_SAMPLE_FMT_S16:
+                case AV_SAMPLE_FMT_S16P:
+                    ((int16_t *)base)[idx] = (int16_t)((double)((int16_t *)base)[idx] * g);
+                    break;
+                case AV_SAMPLE_FMT_S32:
+                case AV_SAMPLE_FMT_S32P:
+                    ((int32_t *)base)[idx] = (int32_t)((double)((int32_t *)base)[idx] * g);
+                    break;
+                default:
+                    return;
+                }
+            }
+        }
+    }
+}
+
 /* Builds this segment's `setpts=...,` video filter fragment (trailing comma included, ready to
    prepend to the rest of the per-segment chain), or an empty string when speed is neutral
    (1.0, no ramp). Plain `setpts=PTS/<speed>` for a constant speed_factor, unchanged from before
@@ -144,6 +208,24 @@ int build_segment_vfilter(const ClipSegment *seg, int canvas_width, int canvas_h
         }
     }
 
+    /* Clip fade handles: from / to black over the first / last fade_*_secs of the output. */
+    char fade_str[160] = "";
+    {
+        double total = segment_output_secs(seg);
+        double fi = (double)seg->fade_in_secs;
+        double fo = (double)seg->fade_out_secs;
+        size_t used = 0;
+        if (fi > 0.0) {
+            used += (size_t)snprintf(fade_str + used, sizeof(fade_str) - used,
+                                     "fade=t=in:st=0:d=%.4f", fi);
+        }
+        if (fo > 0.0 && total > 0.0) {
+            if (fo > total) fo = total;
+            snprintf(fade_str + used, sizeof(fade_str) - used, "%sfade=t=out:st=%.4f:d=%.4f",
+                     used ? "," : "", total - fo, fo);
+        }
+    }
+
     /* Build the post-fps portion: clip_filter (which already has any scale/rotation/
        opacity keyframe stages spliced onto its front — see
        ClipInstance::keyframe_video_filter_chain) and transition, optional, separated by
@@ -153,17 +235,14 @@ int build_segment_vfilter(const ClipSegment *seg, int canvas_width, int canvas_h
        transition_str/z/sx/sy/inside above, this is checked for truncation rather than
        silently accepting a corrupted (or, worse, still-parseable-but-wrong) filter
        chain past this point. */
-    const char *post_fps = clip_filter;
+    const char *stages[3] = {clip_filter, transition_str, fade_str};
     char final_chain[8192] = "";
-    int fc_written;
-    if (post_fps[0] && transition_str[0]) {
-        fc_written = snprintf(final_chain, sizeof(final_chain), "%s,%s", post_fps, transition_str);
-    } else if (post_fps[0]) {
-        fc_written = snprintf(final_chain, sizeof(final_chain), "%s", post_fps);
-    } else if (transition_str[0]) {
-        fc_written = snprintf(final_chain, sizeof(final_chain), "%s", transition_str);
-    } else {
-        fc_written = 0;
+    int fc_written = 0;
+    for (int i = 0; i < 3 && fc_written >= 0 && (size_t)fc_written < sizeof(final_chain); i++) {
+        if (!stages[i][0]) continue;
+        int n = snprintf(final_chain + fc_written, sizeof(final_chain) - (size_t)fc_written,
+                         "%s%s", fc_written ? "," : "", stages[i]);
+        fc_written = n < 0 ? -1 : fc_written + n;
     }
     if (fc_written < 0 || (size_t)fc_written >= sizeof(final_chain)) {
         return -1;
