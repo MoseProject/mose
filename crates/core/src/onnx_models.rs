@@ -18,7 +18,10 @@
 //! from coverage; everything around the model calls (sentence assembly, tensor selection and
 //! decoding, matte resizing) is tested by passing the model run in as a function.
 
-use std::path::Path;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use ort::session::Session;
 use ort::value::Value;
@@ -26,6 +29,82 @@ use ort::value::Value;
 use crate::auto_reframe::ReframeError;
 use crate::background_removal::SegmentError;
 use crate::text_to_speech::{PiperVoiceConfig, TtsError};
+
+/// How long a model stays loaded after its last use.
+const SESSION_IDLE: Duration = Duration::from_secs(20);
+
+struct CachedSession {
+    session: Arc<Mutex<Session>>,
+    last_used: Instant,
+}
+
+#[derive(Default)]
+struct SessionCache {
+    sessions: HashMap<PathBuf, CachedSession>,
+    /// Whether a thread is currently watching for idle entries.
+    reaper_running: bool,
+}
+
+fn session_cache() -> &'static Mutex<SessionCache> {
+    static CACHE: OnceLock<Mutex<SessionCache>> = OnceLock::new();
+    CACHE.get_or_init(Mutex::default)
+}
+
+/// The session for the model at `path`, loaded on first use and kept while it keeps being used.
+/// The per-frame features (face detection, person segmentation) call into a model once per
+/// sampled frame, and loading it again for each one cost 140 ms of a 410 ms MODNet frame and 15
+/// of a 19 ms face detection (all cores already saturate the model: 8 threads and 32 take the
+/// same time).
+/// Entries idle for [`SESSION_IDLE`] are dropped, so an app that finished a run keeps no model in
+/// memory.
+fn cached_session(path: &Path) -> Result<Arc<Mutex<Session>>, String> {
+    let mut cache = session_cache().lock().unwrap_or_else(|p| p.into_inner());
+    if let Some(entry) = cache.sessions.get_mut(path) {
+        entry.last_used = Instant::now();
+        return Ok(Arc::clone(&entry.session));
+    }
+    let session = Session::builder()
+        .map_err(|e| e.to_string())?
+        .commit_from_file(path)
+        .map_err(|e| e.to_string())?;
+    let session = Arc::new(Mutex::new(session));
+    cache.sessions.insert(
+        path.to_path_buf(),
+        CachedSession {
+            session: Arc::clone(&session),
+            last_used: Instant::now(),
+        },
+    );
+    if !cache.reaper_running {
+        cache.reaper_running = true;
+        std::thread::spawn(reap_idle_sessions);
+    }
+    Ok(session)
+}
+
+/// Models currently kept loaded.
+#[cfg(test)]
+pub(crate) fn cached_session_count() -> usize {
+    session_cache()
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .sessions
+        .len()
+}
+
+fn reap_idle_sessions() {
+    loop {
+        std::thread::sleep(SESSION_IDLE / 4);
+        let mut cache = session_cache().lock().unwrap_or_else(|p| p.into_inner());
+        cache
+            .sessions
+            .retain(|_, entry| entry.last_used.elapsed() < SESSION_IDLE);
+        if cache.sessions.is_empty() {
+            cache.reaper_running = false;
+            return;
+        }
+    }
+}
 
 /// Opens the Piper model once and returns a function that speaks one sentence's phoneme ids.
 pub(crate) fn piper_runner(
@@ -85,10 +164,8 @@ pub(crate) fn run_face_model(
     input_width: u32,
     input_height: u32,
 ) -> Result<Vec<(Vec<i64>, Vec<f32>)>, ReframeError> {
-    let mut session = Session::builder()
-        .map_err(|e| ReframeError::Onnx(e.to_string()))?
-        .commit_from_file(model_path)
-        .map_err(|e| ReframeError::Onnx(e.to_string()))?;
+    let session = cached_session(model_path).map_err(ReframeError::Onnx)?;
+    let mut session = session.lock().unwrap_or_else(|p| p.into_inner());
     let input = Value::from_array((
         [1, 3, input_height as usize, input_width as usize],
         input_data,
@@ -115,10 +192,8 @@ pub(crate) fn run_segmentation_model(
     model_width: u32,
     model_height: u32,
 ) -> Result<Vec<f32>, SegmentError> {
-    let mut session = Session::builder()
-        .map_err(|e| SegmentError::Onnx(e.to_string()))?
-        .commit_from_file(model_path)
-        .map_err(|e| SegmentError::Onnx(e.to_string()))?;
+    let session = cached_session(model_path).map_err(SegmentError::Onnx)?;
+    let mut session = session.lock().unwrap_or_else(|p| p.into_inner());
     let input = Value::from_array((
         [1, 3, model_height as usize, model_width as usize],
         input_data,
