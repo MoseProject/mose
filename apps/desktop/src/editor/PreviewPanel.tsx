@@ -7,6 +7,7 @@ import {
 } from "react";
 import { formatTimecode, t } from "../i18n";
 import { api, frameUrl } from "../ipc";
+import { previewMaxDim } from "../previewResolution";
 import { Icon } from "./Icon";
 import { withShortcut } from "../commands";
 import { keymapStore } from "../keymap";
@@ -158,6 +159,17 @@ export function PreviewPanel() {
     setPanState({ zoom: ui.monitorZoom, x, y });
   };
   const base = fitRect({ width: canvasRect.width, height: canvasRect.height }, texAspect);
+  // Composite, encode and ship only as many pixels as the monitor shows (debounced: a window
+  // drag must not rebuild the scene at every size).
+  const wantedDim = previewMaxDim(base.width, base.height, window.devicePixelRatio || 1);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void api.setPreviewMaxDim(wantedDim);
+    }, 250);
+    return () => {
+      return window.clearTimeout(timer);
+    };
+  }, [wantedDim]);
   const hasCanvas = monitorSize.width > 0 && monitorSize.height > 0;
 
   const commitMove = (pos: Position) => {
