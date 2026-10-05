@@ -10,6 +10,7 @@
 
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 #include <libavfilter/buffersink.h>
 
@@ -299,12 +300,21 @@ int build_segment_vfilter(const ClipSegment *seg, int canvas_width, int canvas_h
     char pad_x[96], pad_y[96];
     snprintf(pad_x, sizeof(pad_x), "ow/2-(%g)*iw", seg->anchor_x);
     snprintf(pad_y, sizeof(pad_y), "oh/2-(%g)*ih", seg->anchor_y);
-    int vf_written =
-        snprintf(buf, cap,
-                 "%sscale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:%s:%s,fps=%d/%d%s%s"
-                 ",format=%s",
-                 setpts_str, canvas_width, canvas_height, canvas_width, canvas_height, pad_x, pad_y,
-                 fps_num, fps_den, final_chain[0] ? "," : "", final_chain, pix_fmt_name);
+    /* A stage that changes the frame size (crop, rotate, scale) leaves a frame the encoder was
+       not opened for: conform back to the canvas after the clip's own filters. */
+    char conform[160] = "";
+    if (strstr(final_chain, "crop=") || strstr(final_chain, "rotate=") ||
+        strstr(final_chain, "scale=")) {
+        snprintf(conform, sizeof(conform),
+                 ",scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2",
+                 canvas_width, canvas_height, canvas_width, canvas_height);
+    }
+    int vf_written = snprintf(
+        buf, cap,
+        "%sscale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:%s:%s,fps=%d/%d%s%s%s"
+        ",format=%s",
+        setpts_str, canvas_width, canvas_height, canvas_width, canvas_height, pad_x, pad_y, fps_num,
+        fps_den, final_chain[0] ? "," : "", final_chain, conform, pix_fmt_name);
     if (vf_written < 0 || (size_t)vf_written >= cap) {
         return -1;
     }

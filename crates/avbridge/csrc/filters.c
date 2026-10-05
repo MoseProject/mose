@@ -152,6 +152,14 @@ int encode_write_packet(AVFormatContext *out_ctx, AVCodecContext *enc_ctx, AVStr
     AVFrame *hw_frame = NULL;
     AVFrame *frame_to_send = frame;
 
+    /* A video frame whose size differs from the encoder's (a clip filter that changes the size
+       and was not conformed back) makes the encoders copy past the frame's rows: FFmpeg then
+       aborts the whole process. Refuse it as a pipeline error instead. */
+    if (frame && enc_ctx->codec_type == AVMEDIA_TYPE_VIDEO &&
+        (frame->width != enc_ctx->width || frame->height != enc_ctx->height)) {
+        return AVERROR(EINVAL);
+    }
+
     /* Hardware encoders such as h264_vaapi consume hardware surfaces rather than the NV12
        software frames emitted by the filter graph. Upload only when the encoder exposes a
        hardware-frame pool; audio and all existing software encoders keep the old zero-copy
