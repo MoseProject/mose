@@ -16,6 +16,20 @@ changes made and the backlog that is left. Measured on `main` after the performa
   the C files had a few one- and two-letter locals that the extractions below replaced), so no
   rename pass was made.
 
+## Follow-up quality pass (2026-10-05)
+
+- Extracted the shared FFmpeg audio demux/decode/flush loop into `avbridge/csrc/audio_decode.c`;
+  loudness, waveform, and PCM keep their processing in focused callbacks.
+- Replaced opaque return tuples for dynamic crop keyframes and ONNX face tensors with named types.
+- Addressed workspace Clippy findings; `cargo clippy --workspace --all-targets -- -D warnings` and
+  `cargo fmt --all --check` pass.
+- The 750 `core` library tests pass. Targeted waveform, PCM, loudness, and crop/timeline tests
+  pass. Four `avbridge` timeline-export frame-count assertions remain failing by one frame even
+  when serialized. Three desktop handler tests fail because Tauri reports `Plugin not found`;
+  the other 427 desktop tests pass.
+- Frontend lint and typecheck could not run: `npm ci` was rejected with HTTP 403 by the configured
+  npm registry, so frontend dependencies were unavailable.
+
 ## Findings and what changed
 
 | Finding | Evidence | Change |
@@ -54,10 +68,11 @@ tests, and the e2e suite on a built app); `rustfmt`, `prettier` and `eslint` are
 3. **`PreviewPanel.tsx`** (one 580-line component with refs and pan/zoom state) and the settings
    screens (`Prefs`, `Home`) have the same shape as the components already split; they were left
    because they carry state that needs a hook extraction first.
-4. **Remaining C duplication**: `loudness.c`, `waveform.c` and `pcm_extract.c` share about 28
-   windows of decode-to-float scaffolding with each other and with `filters.c`; `gpu_encoder.c`
-   repeats its setup block between the software and VAAPI paths. Three occurrences qualify
-   under the DRY rule; extract a "decode audio to a callback" helper.
+4. **Remaining C duplication**: the shared audio packet/decode/flush loop from `loudness.c`,
+   `waveform.c` and `pcm_extract.c` was extracted to `audio_decode.c`, with each consumer retaining
+   its own filter and accumulator callback. `gpu_encoder.c` still repeats its setup block between
+   the software and VAAPI paths; review that extraction separately because the backends have
+   different resource lifetimes.
 5. **Rust command modules**: `commands/background_removal.rs` and `commands/privacy_blur.rs`
    share 24 windows (the sampled-frame loop); `commands/timeline.rs` is 860 lines of independent
    commands and could follow the grouping `core` got.
@@ -68,10 +83,10 @@ tests, and the e2e suite on a built app); `rustfmt`, `prettier` and `eslint` are
    duplicated windows) on purpose, so its benchmarks link without `core`. Either delete the
    copies after the benchmarks they back are retired, or note in `perf/PLAN.md` which `core`
    commit each copy tracks.
-8. **Clippy**: 25 warnings remain (`chunks_exact` with a constant size in `bush` tests,
-   `very complex type` twice in `core`, a few `clone` and `drop` notes). The tests-only
-   suggestions were applied; the rest need a human look because the automatic fix for one of
-   them does not compile.
+8. **Clippy**: the workspace gate now passes with `cargo clippy --workspace --all-targets -- -D warnings`.
+   The remaining warnings reported by the previous pass were reviewed and resolved with
+   named crop/tensor result types, borrowed path/slice usage, iterator-based test setup, derived
+   defaults, elided test lifetimes, and removal of redundant `drop(State)` calls.
 9. **Large data files**: `font_catalog.rs` (1,420 lines) is mostly a table; a build-time
    generated table or a data file would shrink it, but only if the font set is expected to grow.
 10. **`graphify-out/`** history still holds the old snapshots (about 100 MB in `.git`); a history
