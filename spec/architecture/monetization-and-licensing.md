@@ -175,6 +175,14 @@ The Oca application and workspace crates are licensed under **GNU GPL-3.0-or-lat
 The root LICENSE, Cargo metadata, and Oca-owned source headers must agree. Dependencies, models,
 fonts, runtimes, and build tools keep their own licenses and notices.
 
+**Update (2026-10):** the eSpeak NG dependency is gone. Piper voices now get their phonemes from
+`crates/core/src/analysis/text_to_speech/pt_br.rs`, a rule-based pt-BR phonemizer written for this
+project, so nothing linked into the app is GPL any more (the Rust dependency tree was checked: every
+crate is permissive, dual-licensed with a permissive option, or file-level MPL-2.0). The GPL-3.0
+choice for Oca's own code is therefore a decision, not a constraint. Still to verify before any
+closed-source release: the licenses of the *training data* behind the MODNet and Piper Faber
+weights, and patent coverage for H.264/AAC distribution.
+
 ### What Pro sells
 
 A Pro subscription may charge for:

@@ -39,7 +39,6 @@ def main() -> None:
             write(path)
             path.chmod(0o755)
 
-        write(bundle / "espeak-ng-data" / "fixture")
         write(bundle / "resources/models/test-model.bin", b"model")
         write(bundle / "resources/licenses/oca.txt")
         write(

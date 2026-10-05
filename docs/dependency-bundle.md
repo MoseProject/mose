@@ -21,7 +21,6 @@ publication when any required runtime component is missing.
 | UltraFace | `resources/models/version-RFB-320_simplified.onnx` | Auto-reframe |
 | MODNet | `resources/models/modnet_photographic.onnx` | Background removal |
 | Piper Faber pt-BR | ONNX model plus JSON sidecar | Text-to-speech |
-| eSpeak NG | Statically linked engine plus `espeak-ng-data/` | Piper phonemization |
 | CPython 3.10.21 | Private runtime beside `ytbridge` | YouTube downloader helper |
 | yt-dlp 2026.07.04 | Verified release package copied into private Python `site-packages` | YouTube downloader helper |
 | yt-dlp EJS 0.8.0 | Verified wheel extracted into private Python `site-packages` | YouTube signature extraction |

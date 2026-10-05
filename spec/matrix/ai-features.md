@@ -17,7 +17,7 @@ sub-sections).
       no ML), converts tracked path into `position_keyframes` delta. Region now user-editable:
       numeric entry (center/width/height/search-radius) *and* drag-on-preview picker. Fully
       unit tested including off-center starting region.
-- [x] **Text-to-speech** — espeak-rs (phonemizer) + Piper VITS ONNX (pt-BR `faber` voice,
+- [x] **Text-to-speech** — own pt-BR phonemizer (`text_to_speech/pt_br.rs`) + Piper VITS ONNX (pt-BR `faber` voice,
       MIT). Confirmed real synthesis, non-silent output.
 - [x] **Whisper subtitles** — Base model bundled, live word-highlight timing shared between
       preview/export layout.

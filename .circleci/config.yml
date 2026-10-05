@@ -67,8 +67,8 @@ commands:
             echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> "$BASH_ENV"
 
       # libclang/cmake are needed by bindgen-based build scripts in core's dependency tree —
-      # espeak-rs-sys (espeak-ng phonemization, core/Cargo.toml) and whisper-rs (transcription)
-      # both link vendored C/C++ sources through bindgen, which needs a real libclang.so to
+      # whisper-rs (transcription)
+      # links vendored C/C++ sources through bindgen, which needs a real libclang.so to
       # parse headers. GitHub's ubuntu-latest runner ships this preinstalled (CLAUDE.md never
       # had to set LIBCLANG_PATH there); cimg/base doesn't, hence installing + pointing at it
       # explicitly here.

@@ -41,19 +41,15 @@ def main() -> None:
         executable = "oca"
         helper = "ytbridge"
         deno = "deno"
-        espeak = resources / "espeak-ng-data"
     else:
         executable_root = root
         resources = root / "resources"
         executable = "oca-desktop.exe" if args.platform == "windows" else "oca-desktop"
         helper = "ytbridge.exe" if args.platform == "windows" else "ytbridge"
         deno = "deno.exe" if args.platform == "windows" else "deno"
-        espeak = root / "espeak-ng-data"
     for relative in (executable, helper, deno):
         if not (executable_root / relative).is_file():
             missing.append(str((executable_root / relative).relative_to(root)))
-    if not espeak.is_dir():
-        missing.append(str(espeak.relative_to(root)))
     for model in manifest["models"]:
         model_path = resources / model["path"]
         if not model_path.is_file():

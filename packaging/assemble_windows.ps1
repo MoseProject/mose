@@ -16,7 +16,6 @@ New-Item -ItemType Directory -Force -Path (Join-Path $Runtime "bin") | Out-Null
 Copy-Item (Join-Path $BuildDir "oca-desktop.exe") $OutputDir
 Copy-Item (Join-Path $BuildDir "ytbridge.exe") $OutputDir
 Copy-Item (Join-Path $BuildDir "deno.exe") $OutputDir
-Copy-Item (Join-Path $BuildDir "espeak-ng-data") $OutputDir -Recurse
 Copy-Item (Join-Path $BuildDir "python310.dll") $OutputDir
 Copy-Item (Join-Path $BuildDir "DLLs") $OutputDir -Recurse
 Copy-Item (Join-Path $BuildDir "Lib") $OutputDir -Recurse

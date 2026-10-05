@@ -31,7 +31,6 @@ mkdir -p "$MACOS" "$RESOURCES" "$RUNTIME/bin" "$RESOURCES/python"
 install -m 0755 "$BUILD_DIR/oca-desktop" "$MACOS/oca"
 install -m 0755 "$BUILD_DIR/ytbridge" "$MACOS/ytbridge"
 install -m 0755 "$PYTHON_RUNTIME/tools/deno" "$MACOS/deno"
-cp -a "$BUILD_DIR/espeak-ng-data" "$RESOURCES/"
 cp -a "$PYTHON_RUNTIME/lib" "$RESOURCES/python/"
 install -m 0755 "$FFMPEG_DIR/bin/ffmpeg" "$RUNTIME/bin/ffmpeg"
 python3 "$SCRIPT_DIR/verify_ffmpeg_runtime.py" "$FFMPEG_DIR/bin/ffmpeg" --platform macos

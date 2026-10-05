@@ -7,7 +7,7 @@ ad-hoc entries.
       + portable ZIP, Linux AppImage + root-owned `.deb`, macOS Apple Silicon + Intel DMGs
       (Developer ID signing/notarization when CI credentials configured).
 - [x] Everything embedded: FFmpeg (LGPL, static), Whisper
-      Base, UltraFace, MODNet, Piper pt-BR, eSpeak data, private CPython/yt-dlp/yt-dlp-ejs/Deno,
+      Base, UltraFace, MODNet, Piper pt-BR, private CPython/yt-dlp/yt-dlp-ejs/Deno,
       Linux AppImage runtime — no runtime model downloader anywhere, `packaging/
       validate_bundle.py` blocks publication if anything required is missing or a hash drifts.
 - [x] Auto-update — `avcore::update_check` hits GitHub Releases API, `self_update` on a worker
