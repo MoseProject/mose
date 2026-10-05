@@ -1,23 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { formatTime, t } from "../i18n";
 import { findCommand, shortcutLabel } from "../commands";
-import {
-  TIMELINE_ACTION_EVENT,
-  addShapeOverlay,
-  addTextOverlay,
-  seekToMarker,
-  type TimelineAction,
-} from "../editing";
+import { TIMELINE_ACTION_EVENT, type TimelineAction } from "../editing";
 import { api } from "../ipc";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
-import { Icon } from "./Icon";
 import { TimelineMinimap } from "./TimelineMinimap";
-import { SequenceTabs } from "./SequenceTabs";
 import { MEDIA_EVENT, syncAssets } from "./timelineMedia";
-import { Menu } from "./Menu";
-import { LayerTemplates } from "./LayerTemplates";
-import { SilenceReviewPanel } from "./SilenceReviewPanel";
-import { TranscriptPanel } from "./TranscriptPanel";
 import {
   assetDragStore,
   MAX_PX_PER_SEC,
@@ -51,6 +39,7 @@ import { activeTimeline, clipDuration, type SessionView, type Track } from "../t
 import { TrackHeader } from "./TrackHeader";
 import { type Drag, snapMove } from "./timelineDrag";
 import { MONO_FONT, drawClip, drawOverlayClip, readPalette, type Palette } from "./timelinePaint";
+import { TimelineToolbar } from "./TimelineToolbar";
 
 /** Seeks sent while scrubbing the ruler are coalesced to preview cadence (egui: 33 ms). */
 const SCRUB_SEEK_INTERVAL_MS = 33;
@@ -839,187 +828,13 @@ export function Timeline({ session }: { session: SessionView }) {
   const selected = ui.selectedClipIds;
   return (
     <section className="panel timeline">
-      <div className="timeline-toolbar">
-        <span
-          className="panel-title"
-          style={{ border: 0, padding: "0 8px 0 0" }}
-        >
-          {t("timeline")}
-        </span>
-        <SequenceTabs session={session} />
-        <button
-          className="icon"
-          disabled={selected.length === 0}
-          onClick={() => {
-            return run(api.deleteClips(selected, false));
-          }}
-        >
-          {t("delete")}
-        </button>
-        <button
-          className="icon"
-          disabled={selected.length === 0}
-          onClick={() => {
-            return run(api.deleteClips(selected, true));
-          }}
-        >
-          {t("rippleDelete")}
-        </button>
-        <Menu label={t("menuClip")}>
-          <button
-            disabled={selected.length < 2}
-            onClick={() => {
-              return run(api.mergeClipsIntoComposite(selected));
-            }}
-          >
-            {t("mergeComposite")}
-          </button>
-          <button
-            data-testid="create-compound-clip"
-            disabled={selected.length === 0}
-            onClick={() => {
-              return (
-                selected[0] !== undefined && run(api.createCompoundClip(selected[0], selected))
-              );
-            }}
-          >
-            {t("compoundClip")}
-          </button>
-          <LayerTemplates session={session} />
-        </Menu>
-        <Menu label={t("menuAnalyze")}>
-          <button
-            disabled={selected.length !== 1}
-            onClick={() => {
-              return selected[0] !== undefined && run(api.detectSceneCutsForClip(selected[0]));
-            }}
-          >
-            {t("detectChapters")}
-          </button>
-          <button
-            onClick={() => {
-              return run(api.detectHighlights());
-            }}
-          >
-            {t("detectHighlightsAction")}
-          </button>
-          <TranscriptPanel session={session} />
-          <SilenceReviewPanel />
-        </Menu>
-        <Menu label={t("menuAdd")}>
-          <button
-            onClick={() => {
-              return run(api.addTrack("Video"));
-            }}
-          >
-            {t("addVideoTrack")}
-          </button>
-          <button
-            onClick={() => {
-              return run(api.addTrack("Audio"));
-            }}
-          >
-            {t("addAudioTrack")}
-          </button>
-          <button
-            onClick={() => {
-              return run(api.addTrack("Text"));
-            }}
-          >
-            {t("addTextTrack")}
-          </button>
-          <button
-            onClick={() => {
-              return run(api.addTrack("Shape"));
-            }}
-          >
-            {t("addShapeTrack")}
-          </button>
-          <button
-            onClick={() => {
-              return void addTextOverlay();
-            }}
-          >
-            {t("addTextClip")}
-          </button>
-          <button
-            onClick={() => {
-              return void addShapeOverlay();
-            }}
-          >
-            {t("addShapeClip")}
-          </button>
-          <button
-            data-testid="draw-custom-shape"
-            onClick={() => {
-              return patchUi({ drawingShapePoints: [] });
-            }}
-          >
-            {t("drawCustomShape")}
-          </button>
-        </Menu>
-        <button
-          className="icon"
-          title={t("addMarker")}
-          aria-label={t("addMarker")}
-          onClick={() => {
-            return run(api.addMarker());
-          }}
-        >
-          <Icon name="flag" />
-        </button>
-        <button
-          className="icon"
-          title={t("previousMarker")}
-          aria-label={t("previousMarker")}
-          onClick={() => {
-            return seekToMarker(markers, -1);
-          }}
-        >
-          <Icon name="chevronLeft" />
-        </button>
-        <button
-          className="icon"
-          title={t("nextMarker")}
-          aria-label={t("nextMarker")}
-          onClick={() => {
-            return seekToMarker(markers, 1);
-          }}
-        >
-          <Icon name="chevronRight" />
-        </button>
-        <span style={{ flex: 1 }} />
-        <div className="zoom-group">
-          <button
-            className="icon"
-            title={t("zoomOut")}
-            aria-label={t("zoomOut")}
-            onClick={() => {
-              return zoomBy(1 / 1.5);
-            }}
-          >
-            <Icon name="minus" />
-          </button>
-          <button
-            className="icon"
-            title={t("zoomFit")}
-            aria-label={t("zoomFit")}
-            onClick={zoomToFit}
-          >
-            <Icon name="fit" />
-          </button>
-          <button
-            className="icon"
-            title={t("zoomIn")}
-            aria-label={t("zoomIn")}
-            onClick={() => {
-              return zoomBy(1.5);
-            }}
-          >
-            <Icon name="plus" />
-          </button>
-        </div>
-      </div>
+      <TimelineToolbar
+        session={session}
+        selected={selected}
+        markers={markers}
+        zoomBy={zoomBy}
+        zoomToFit={zoomToFit}
+      />
       <TimelineMinimap
         tracks={tracks}
         scrollSecs={scrollSecs}
