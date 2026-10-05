@@ -18,7 +18,7 @@
 use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::{self, RecvTimeoutError};
+use std::sync::mpsc::{self, RecvTimeoutError, TryRecvError};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -237,16 +237,21 @@ pub(crate) fn run_with_audio<R: Runtime>(
     loop {
         let mut commands = Vec::new();
         // While playing, a finished render is the thing to react to, so poll tightly; idle, the
-        // usual cadence is plenty.
-        let wait = if playing {
-            PLAYING_POLL_INTERVAL
+        // usual cadence is plenty. A tight `recv_timeout` is no use on Windows, where it is as
+        // coarse as the system timer (a 1 ms wait takes 15.5 ms): that quantised the preview ticks
+        // to 31 ms, so 60 fps playback showed 34 pictures a second. `sleep` is high resolution.
+        if playing {
+            match rx.try_recv() {
+                Ok(command) => commands.push(command),
+                Err(TryRecvError::Empty) => std::thread::sleep(PLAYING_POLL_INTERVAL),
+                Err(TryRecvError::Disconnected) => break,
+            }
         } else {
-            POLL_INTERVAL
-        };
-        match rx.recv_timeout(wait) {
-            Ok(command) => commands.push(command),
-            Err(RecvTimeoutError::Timeout) => {}
-            Err(RecvTimeoutError::Disconnected) => break,
+            match rx.recv_timeout(POLL_INTERVAL) {
+                Ok(command) => commands.push(command),
+                Err(RecvTimeoutError::Timeout) => {}
+                Err(RecvTimeoutError::Disconnected) => break,
+            }
         }
         commands.extend(rx.try_iter());
 
