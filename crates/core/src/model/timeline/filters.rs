@@ -69,6 +69,19 @@ impl ClipInstance {
                 "rotate=angle='{angle_expr}':ow=rotw('{angle_expr}'):oh=roth('{angle_expr}')"
             ));
         }
+        if self.has_color_keyframes() {
+            if let Some(color_stage) = keyframe::color_balance_filter_expr(
+                &self.brightness_keyframes,
+                &self.contrast_keyframes,
+                &self.saturation_keyframes,
+                self.brightness,
+                self.contrast,
+                self.saturation,
+                timeline_duration_secs,
+            ) {
+                stages.push(color_stage);
+            }
+        }
         if let Some(alpha_expr) = keyframe::opacity_alpha_ramp_expr(
             &self.opacity_keyframes,
             fps_num,
@@ -78,19 +91,6 @@ impl ClipInstance {
             stages.push(format!(
                 "format=yuva420p,geq=lum='p(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='alpha(X,Y)*({alpha_expr})'"
             ));
-        }
-        if self.has_color_keyframes() {
-            if let Some(eq) = keyframe::color_balance_filter_expr(
-                &self.brightness_keyframes,
-                &self.contrast_keyframes,
-                &self.saturation_keyframes,
-                self.brightness,
-                self.contrast,
-                self.saturation,
-                timeline_duration_secs,
-            ) {
-                stages.push(eq);
-            }
         }
         if stages.is_empty() {
             None
@@ -144,9 +144,14 @@ impl ClipInstance {
         if !self.has_color_keyframes()
             && (self.brightness != 0.0 || self.contrast != 1.0 || self.saturation != 1.0)
         {
-            stages.push(format!(
-                "eq=brightness={}:contrast={}:saturation={}",
-                self.brightness, self.contrast, self.saturation
+            stages.extend(keyframe::color_balance_filter_expr(
+                &[],
+                &[],
+                &[],
+                self.brightness,
+                self.contrast,
+                self.saturation,
+                0.0,
             ));
         }
         match self.color_filter {
@@ -213,7 +218,12 @@ impl ClipInstance {
             }
         }
         if self.blur_intensity > 0.0 {
-            stages.push(format!("boxblur={:.2}", self.blur_intensity * 10.0));
+            // avgblur is boxblur's equivalent (a box of 2r+1 pixels); boxblur is missing from the
+            // shipped LGPL FFmpeg. Radius truncated to whole pixels, as the preview does.
+            let radius = (self.blur_intensity * 10.0) as i32;
+            if radius > 0 {
+                stages.push(format!("avgblur=sizeX={radius}:sizeY={radius}"));
+            }
         }
         if self.sharpen > 0.0 {
             stages.push(format!("unsharp=5:5:{:.2}:5:5:0.0", self.sharpen * 3.0));

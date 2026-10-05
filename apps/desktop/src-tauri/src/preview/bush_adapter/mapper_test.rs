@@ -511,7 +511,7 @@ fn gain_keyframes_become_a_decibel_track() {
 #[test]
 fn intensity_curves_follow_the_exporter_filter_parameters() {
     let mut styled = clip(0.0, 0.0, 4.0);
-    styled.blur_intensity = 0.5; // boxblur=5 -> variance 5 * 6 / 3
+    styled.blur_intensity = 0.5; // avgblur=5 -> variance 5 * 6 / 3
     styled.sharpen = 1.0; // unsharp amount 3
     styled.pixelize_intensity = 1.0; // 2 + 48 pixel blocks
     styled.vignette_intensity = 1.0;

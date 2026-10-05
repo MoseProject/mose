@@ -43,7 +43,7 @@ use bush::{
 /// Source span a frozen clip advances over its whole window; the decoder keeps serving the same
 /// frame while the (near zero) speed walks through it.
 const FROZEN_SOURCE_SPAN_SECS: f64 = 1e-3;
-/// Export blur is `boxblur=<10 * intensity>` (radius truncated to whole pixels).
+/// Export blur is `avgblur=sizeX=sizeY=<10 * intensity>` (radius truncated to whole pixels).
 const BLUR_RADIUS_AT_FULL: f32 = 10.0;
 /// Export sharpen is `unsharp=5:5:<3 * sharpen>`; the 5x5 box matches `bush::SHARPEN_SIGMA`.
 const SHARPEN_AMOUNT_AT_FULL: f32 = 3.0;

@@ -138,7 +138,7 @@ typedef struct {
     /* Per-clip linear gain in dB, applied (as the `volume` filter's dB form) before the
        shared loudnorm/limiter chain sees this segment's audio. */
     float gain_db;
-    /* Pre-built avfilter chain description (e.g. "eq=brightness=0.1,hflip"), UTF-8,
+    /* Pre-built avfilter chain description (e.g. "lutyuv=y=...,hflip"), UTF-8,
        NUL-terminated. Empty string ("") means no clip-specific video effect — the segment
        still goes through the canvas-conform (scale/pad/fps) stage and gets re-encoded. Any
        scale/rotation/opacity keyframe animation (crate::keyframe module) is already spliced

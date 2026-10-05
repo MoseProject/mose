@@ -386,32 +386,51 @@ fn color_balance_filter_expr_is_none_when_everything_is_neutral() {
 }
 
 #[test]
-fn color_balance_filter_expr_uses_constants_for_unanimated_axes() {
-    let expr = color_balance_filter_expr(&[], &[], &[], 0.3, 1.0, 1.0, 5.0).unwrap();
-    assert!(!expr.contains("eval=frame"));
-    assert!(expr.starts_with("eq=brightness=0.3"));
-    assert!(expr.contains("contrast=1.0000000"));
-    assert!(expr.contains("saturation=1.0000000"));
+fn color_balance_filter_expr_is_one_lut_for_unanimated_axes() {
+    let expr = color_balance_filter_expr(&[], &[], &[], 0.3, 1.0, 1.2, 5.0).unwrap();
+    assert!(expr.starts_with("lutyuv=y='clip((val/maxval-0.5)*1.0000000+0.5+(0.3000000)"));
+    assert!(expr.contains("u='clip((val-(maxval+1)/2)*1.2000000"));
+    assert!(expr.contains(":v='"));
+    assert!(!expr.contains("geq"));
 }
 
 #[test]
-fn color_balance_filter_expr_animates_only_the_keyframed_axis() {
-    let brightness_keyframes = vec![
+fn color_balance_filter_expr_leaves_neutral_planes_out_of_the_lut() {
+    let luma_only = color_balance_filter_expr(&[], &[], &[], 0.3, 1.0, 1.0, 5.0).unwrap();
+    assert!(!luma_only.contains(":u=") && !luma_only.contains(":v="));
+    let chroma_only = color_balance_filter_expr(&[], &[], &[], 0.0, 1.0, 1.5, 5.0).unwrap();
+    assert!(chroma_only.starts_with("lutyuv=u="));
+}
+
+fn ramp(from: f32, to: f32) -> Vec<Keyframe<f32>> {
+    vec![
         Keyframe {
             time_fraction: 0.0,
-            value: -0.5,
+            value: from,
         },
         Keyframe {
             time_fraction: 1.0,
-            value: 0.5,
+            value: to,
         },
-    ];
-    let expr =
-        color_balance_filter_expr(&brightness_keyframes, &[], &[], 0.0, 1.5, 1.0, 5.0).unwrap();
-    assert!(expr.contains("eval=frame"));
+    ]
+}
+
+#[test]
+fn color_balance_filter_expr_animates_saturation_alone_with_hue() {
+    let expr = color_balance_filter_expr(&[], &[], &ramp(0.5, 1.5), 0.0, 1.0, 1.0, 5.0).unwrap();
+    assert!(expr.starts_with("hue=s='"));
+    assert!(expr.ends_with("'"));
     assert!(expr.contains("if(lt(t,"));
+}
+
+#[test]
+fn color_balance_filter_expr_animates_brightness_with_geq() {
+    let expr = color_balance_filter_expr(&ramp(-0.5, 0.5), &[], &[], 0.0, 1.5, 1.0, 5.0).unwrap();
+    // 8-bit planar input, and the frame time under geq's own name for it.
+    assert!(expr.starts_with("format=yuv420p,geq=lum="));
+    assert!(expr.contains("if(lt(T,"));
     // The un-animated contrast axis still uses its own constant.
-    assert!(expr.contains("contrast=1.5000000"));
+    assert!(expr.contains("*(1.5000000)"));
 }
 
 #[test]

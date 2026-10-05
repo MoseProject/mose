@@ -139,9 +139,9 @@ fn keyframed_crop_and_colour_become_filter_stages() {
     clip.crop_x_keyframes = vec![key(0.0, 0.0), key(1.0, 0.25)];
     clip.brightness_keyframes = vec![key(0.0, 0.0), key(1.0, 0.2)];
     let chain = clip.keyframe_video_filter_chain(30, 1, 4.0).unwrap();
-    // A keyframed crop is a per-pixel `geq` window; keyframed colour is an animated `eq`.
+    // A keyframed crop is a per-pixel `geq` window; keyframed brightness is a `geq` too.
     assert!(chain.contains("geq="), "{chain}");
-    assert!(chain.contains("eq=brightness="), "{chain}");
+    assert!(chain.contains("lum='clip((lum(X,Y)"), "{chain}");
 }
 
 #[test]
@@ -154,7 +154,7 @@ fn stylistic_effects_add_their_filter_stages() {
     clip.shake_intensity = 0.5;
     clip.glitch_intensity = 0.5;
     let chain = clip.video_filter_chain();
-    assert!(chain.contains("boxblur=5.00"), "{chain}");
+    assert!(chain.contains("avgblur=sizeX=5:sizeY=5"), "{chain}");
     assert!(chain.contains("unsharp=5:5:1.50"), "{chain}");
     assert!(chain.contains("flags=neighbor"), "{chain}");
     assert!(chain.contains("sin(n*0.31)"), "{chain}");

@@ -480,10 +480,12 @@ pub fn gain_filter_db_expr(
 
 /// One axis of [`color_balance_filter_expr`] — `None` means "nothing animated on this axis,
 /// caller falls back to its own constant field", the same shape `rotation_filter_angle_expr`/
-/// `opacity_alpha_ramp_expr` use for their own single-axis fast path.
-fn eq_axis_expr(
+/// `opacity_alpha_ramp_expr` use for their own single-axis fast path. `time_var` is the filter's
+/// own name for the frame time (`t` for `hue`, `T` for `geq`).
+fn color_axis_expr(
     keyframes: &[Keyframe<f32>],
     default: f32,
+    time_var: &str,
     timeline_duration_secs: f64,
 ) -> Option<String> {
     if keyframes.is_empty() {
@@ -505,20 +507,26 @@ fn eq_axis_expr(
     Some(piecewise_expr(
         &sorted,
         timeline_duration_secs,
-        "t",
+        time_var,
         identity,
     ))
 }
 
-/// Builds the `eq` filter's brightness/contrast/saturation stage, mixing constants with any
-/// per-axis keyframe animation independently — each axis's own keyframes (when non-empty and
-/// not already indistinguishable from neutral) override that axis's constant field, the same
-/// "keyframes win when present" relationship [`gain_filter_db_expr`] has with the constant
-/// `gain_db`. `eval=frame` is only appended when at least one axis is actually animated (a
-/// plain literal-valued `eq` stage doesn't need per-frame re-evaluation). Returns `None` only
-/// when there is nothing to draw at all — no keyframes on any axis and every constant is
-/// already neutral (`0.0`/`1.0`/`1.0`), matching `ClipInstance::video_filter_chain`'s
-/// pre-existing "only emit `eq` when something differs from neutral" guard.
+/// Builds the brightness/contrast/saturation stage, mixing constants with any per-axis keyframe
+/// animation independently — each axis's own keyframes (when non-empty and not already
+/// indistinguishable from neutral) override that axis's constant field, the same "keyframes win
+/// when present" relationship [`gain_filter_db_expr`] has with the constant `gain_db`. Returns
+/// `None` only when there is nothing to draw at all — no keyframes on any axis and every constant
+/// is already neutral (`0.0`/`1.0`/`1.0`).
+///
+/// The shipped FFmpeg is an LGPL build, which has no `eq` filter, so the stage is built from
+/// filters that exist there, using `eq`'s own math (`luma = (luma - 0.5) * contrast + 0.5 +
+/// brightness`, chroma scaled around its midpoint by `saturation`):
+/// - nothing animated: one `lutyuv`, whose table is computed once (fast);
+/// - only saturation animated: `hue=s=<expr>`, evaluated per frame (fast);
+/// - brightness or contrast animated: a `geq` with per-frame expressions, which is correct but
+///   runs at a fraction of real time at 1080p. It is preceded by `format=yuv420p` because `geq`
+///   addresses 8-bit samples and would reset an alpha plane.
 pub fn color_balance_filter_expr(
     brightness_keyframes: &[Keyframe<f32>],
     contrast_keyframes: &[Keyframe<f32>],
@@ -528,22 +536,42 @@ pub fn color_balance_filter_expr(
     saturation: f32,
     timeline_duration_secs: f64,
 ) -> Option<String> {
-    let brightness_expr = eq_axis_expr(brightness_keyframes, 0.0, timeline_duration_secs);
-    let contrast_expr = eq_axis_expr(contrast_keyframes, 1.0, timeline_duration_secs);
-    let saturation_expr = eq_axis_expr(saturation_keyframes, 1.0, timeline_duration_secs);
-    let animated =
-        brightness_expr.is_some() || contrast_expr.is_some() || saturation_expr.is_some();
+    let geq_time = "T";
+    let brightness_expr =
+        color_axis_expr(brightness_keyframes, 0.0, geq_time, timeline_duration_secs);
+    let contrast_expr = color_axis_expr(contrast_keyframes, 1.0, geq_time, timeline_duration_secs);
+    let saturation_expr =
+        color_axis_expr(saturation_keyframes, 1.0, geq_time, timeline_duration_secs);
+    let luma_animated = brightness_expr.is_some() || contrast_expr.is_some();
 
-    if !animated && brightness == 0.0 && contrast == 1.0 && saturation == 1.0 {
-        return None;
+    if !luma_animated && saturation_expr.is_none() {
+        let mut parts = Vec::new();
+        if brightness != 0.0 || contrast != 1.0 {
+            parts.push(format!(
+                "y='clip((val/maxval-0.5)*{contrast:.7}+0.5+({brightness:.7}),0,1)*maxval'"
+            ));
+        }
+        if saturation != 1.0 {
+            for plane in ["u", "v"] {
+                parts.push(format!(
+                    "{plane}='clip((val-(maxval+1)/2)*{saturation:.7}+(maxval+1)/2,minval,maxval)'"
+                ));
+            }
+        }
+        return (!parts.is_empty()).then(|| format!("lutyuv={}", parts.join(":")));
+    }
+
+    if !luma_animated && brightness == 0.0 && contrast == 1.0 {
+        let hue_time_expr =
+            color_axis_expr(saturation_keyframes, 1.0, "t", timeline_duration_secs)?;
+        return Some(format!("hue=s='{hue_time_expr}'"));
     }
 
     let b = brightness_expr.unwrap_or_else(|| format!("{brightness:.7}"));
     let c = contrast_expr.unwrap_or_else(|| format!("{contrast:.7}"));
     let s = saturation_expr.unwrap_or_else(|| format!("{saturation:.7}"));
-    let eval = if animated { ":eval=frame" } else { "" };
     Some(format!(
-        "eq=brightness={b}:contrast={c}:saturation={s}{eval}"
+        "format=yuv420p,geq=lum='clip((lum(X,Y)/255-0.5)*({c})+0.5+({b}),0,1)*255'         :cb='clip((cb(X,Y)-128)*({s})+128,0,255)'         :cr='clip((cr(X,Y)-128)*({s})+128,0,255)'"
     ))
 }
 
