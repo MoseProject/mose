@@ -88,7 +88,7 @@ fn shape_overlays_are_composited_and_failures_are_reported() {
     apply_shape_overlays(&source, &out, &[], width, height, 30, 1).unwrap();
     assert!(!out.exists());
 
-    apply_shape_overlays(&source, &out, &[identity.clone()], width, height, 30, 1).unwrap();
+    apply_shape_overlays(&source, &out, std::slice::from_ref(&identity), width, height, 30, 1).unwrap();
     assert_eq!(probe(&out).unwrap().resolution, Some((width, height)));
     let _ = std::fs::remove_file(&out);
 

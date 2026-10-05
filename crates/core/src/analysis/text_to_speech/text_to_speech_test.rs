@@ -221,7 +221,7 @@ fn synthesis_reports_phonemization_and_model_failures() {
         synthesize_with_phonemizer(model, &config, "Hello", &FixedPhonemizer),
         Err(TtsError::Onnx(_))
     ));
-    assert!(matches!(synthesize(model, &config, "Hello"), Err(_)));
+    assert!(synthesize(model, &config, "Hello").is_err());
 }
 
 #[test]

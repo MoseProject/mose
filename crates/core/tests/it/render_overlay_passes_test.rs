@@ -114,7 +114,7 @@ fn the_single_track_resolver_orders_clips_and_derives_the_canvas() {
     let early = ClipInstance::new(1, 1, 0.0, 0.0, 0.3);
     let sequence = sequence(vec![track(TrackKind::Video, vec![late, early])]);
 
-    let (segments, canvas) = resolve_timeline_segments(&sequence, &[asset.clone()]).unwrap();
+    let (segments, canvas) = resolve_timeline_segments(&sequence, std::slice::from_ref(&asset)).unwrap();
 
     assert_eq!(segments.len(), 2);
     assert_eq!(segments[0].timeline_start_secs, 0.0);
@@ -135,12 +135,12 @@ fn the_single_track_resolver_reports_missing_pieces() {
     // Audio tracks and empty video tracks do not count.
     let audio_only_timeline = sequence(vec![track(TrackKind::Audio, vec![clip()])]);
     assert!(matches!(
-        resolve_timeline_segments(&audio_only_timeline, &[asset.clone()]),
+        resolve_timeline_segments(&audio_only_timeline, std::slice::from_ref(&asset)),
         Err(RenderError::EmptyTimeline)
     ));
     let empty_track = sequence(vec![track(TrackKind::Video, vec![])]);
     assert!(matches!(
-        resolve_timeline_segments(&empty_track, &[asset.clone()]),
+        resolve_timeline_segments(&empty_track, std::slice::from_ref(&asset)),
         Err(RenderError::EmptyTimeline)
     ));
     let video = sequence(vec![track(TrackKind::Video, vec![clip()])]);

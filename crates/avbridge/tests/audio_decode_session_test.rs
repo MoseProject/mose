@@ -45,7 +45,7 @@ fn resamples_and_upmixes_to_the_requested_format() {
     for block in &blocks {
         assert_eq!(block.samples.len(), block.frame_count * 2);
         // Mono -> stereo duplicates the channel.
-        for pair in block.samples.chunks_exact(2) {
+        for pair in block.samples.as_chunks::<2>().0 {
             assert_eq!(pair[0], pair[1]);
         }
     }

@@ -112,14 +112,14 @@ fn sample_text(text: &str) -> TextClip {
 fn empty_text_produces_a_fully_transparent_buffer() {
     let clip = sample_text("");
     let buf = render_text_clip_rgba(&clip, 200, 100, 0.0);
-    assert!(buf.chunks_exact(4).all(|p| p[3] == 0));
+    assert!(buf.as_chunks::<4>().0.iter().all(|p| p[3] == 0));
 }
 
 #[test]
 fn non_empty_text_draws_at_least_one_opaque_pixel() {
     let clip = sample_text("A");
     let buf = render_text_clip_rgba(&clip, 200, 100, 0.0);
-    assert!(buf.chunks_exact(4).any(|p| p[3] > 0));
+    assert!(buf.as_chunks::<4>().0.iter().any(|p| p[3] > 0));
 }
 
 fn leftmost_opaque_column(buf: &[u8], width: u32, height: u32) -> Option<u32> {
@@ -203,7 +203,7 @@ fn rounded_background_has_transparent_corners_and_opaque_edges() {
 }
 
 fn contains_pixel(buf: &[u8], rgba: [u8; 4]) -> bool {
-    buf.chunks_exact(4)
+    buf.as_chunks::<4>().0.iter()
         .any(|p| p[0] == rgba[0] && p[1] == rgba[1] && p[2] == rgba[2] && p[3] == rgba[3])
 }
 
