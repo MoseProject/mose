@@ -17,8 +17,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::keyframe::{self, Position};
 use crate::timeline::clip::ClipInstance;
+use crate::timeline::effects::TransitionType;
 use crate::timeline::shape_clip::ShapeClip;
 use crate::timeline::text_clip::TextClip;
+
+/// Clips starting within this many seconds of an earlier clip's end do not overlap it.
+const OVERLAP_EPSILON_SECS: f64 = 1e-3;
+/// A clip counts as following another when the gap between them is at most this long.
+const DISSOLVE_ADJACENT_SECS: f64 = 0.05;
 
 /// What a [`Track`] carries. Determines how the timeline widget renders its clips
 /// (thumbnails for video, waveforms for audio) and which asset kind can be dropped onto it.
@@ -566,6 +572,170 @@ impl Track {
             return false;
         }
         self.clips[index].start_secs = new_start_secs;
+        true
+    }
+
+    /// The lane of every clip, by id: the clips of a track normally follow one another (lane 0),
+    /// but a clip that starts before an earlier clip has ended (a cross-dissolve overlap) goes to
+    /// the first lane that is free, so each lane is a plain sequence. Export and preview render
+    /// each lane as its own layer above the lane before it.
+    pub fn overlap_lanes(&self) -> std::collections::HashMap<u64, usize> {
+        let mut order: Vec<&ClipInstance> = self.clips.iter().collect();
+        order.sort_by(|a, b| a.start_secs.total_cmp(&b.start_secs).then(a.id.cmp(&b.id)));
+        let mut lane_ends: Vec<f64> = Vec::new();
+        let mut lanes = std::collections::HashMap::with_capacity(order.len());
+        for clip in order {
+            let lane = lane_ends
+                .iter()
+                .position(|&end| end <= clip.start_secs + OVERLAP_EPSILON_SECS)
+                .unwrap_or(lane_ends.len());
+            let end = clip.start_secs + clip.duration_secs();
+            if lane == lane_ends.len() {
+                lane_ends.push(end);
+            } else {
+                lane_ends[lane] = end;
+            }
+            lanes.insert(clip.id, lane);
+        }
+        lanes
+    }
+
+    /// How many seconds `clip_id` starts inside the clips before it (`0.0` when it follows them
+    /// or the id is unknown) -- the span of a cross-dissolve.
+    pub fn overlap_with_earlier_secs(&self, clip_id: u64) -> f64 {
+        let Some(clip) = self.clips.iter().find(|c| c.id == clip_id) else {
+            return 0.0;
+        };
+        self.clips
+            .iter()
+            .filter(|other| other.id != clip_id && other.start_secs < clip.start_secs)
+            .map(|other| other.start_secs + other.duration_secs() - clip.start_secs)
+            .fold(0.0, f64::max)
+    }
+
+    /// The clips of this track cut into the pieces the exporter composites, each with its layer:
+    /// a clip starting before an earlier clip has ended is split where that clip ends. The part
+    /// that overlaps (the head) goes to an overlay lane (1 and up) and carries the clip's
+    /// dissolve as a fade-in; the part after (the tail) continues the base lane (0), so the base
+    /// lane stays a plain sequence covering the whole timeline. A clip inside an earlier one is
+    /// all head. Source ranges are split at the clip's speed.
+    pub fn lane_pieces(&self) -> Vec<(ClipInstance, usize)> {
+        let mut order: Vec<&ClipInstance> = self.clips.iter().collect();
+        order.sort_by(|a, b| a.start_secs.total_cmp(&b.start_secs).then(a.id.cmp(&b.id)));
+        let mut pieces = Vec::with_capacity(order.len());
+        let mut covered_until = f64::NEG_INFINITY;
+        // End of the last head on each overlay lane (index 0 is lane 1).
+        let mut overlay_ends: Vec<f64> = Vec::new();
+        for clip in order {
+            let end = clip.start_secs + clip.duration_secs();
+            if clip.start_secs >= covered_until - OVERLAP_EPSILON_SECS {
+                pieces.push((clip.clone(), 0));
+                covered_until = covered_until.max(end);
+                continue;
+            }
+            let head_end = end.min(covered_until);
+            let head_secs = head_end - clip.start_secs;
+            let speed = f64::from(clip.speed_factor.max(0.01));
+            let mut head = clip.clone();
+            let has_tail = end > covered_until + OVERLAP_EPSILON_SECS;
+            if has_tail {
+                head.source_out_secs = clip.source_in_secs + head_secs * speed;
+                head.fade_out_secs = 0.0;
+            }
+            head.fade_in_secs = clip.fade_in_secs.max(self.dissolve_in_secs(clip) as f32);
+            head.transition_in = TransitionType::None;
+            let lane = overlay_ends
+                .iter()
+                .position(|&lane_end| lane_end <= clip.start_secs + OVERLAP_EPSILON_SECS)
+                .unwrap_or(overlay_ends.len());
+            if lane == overlay_ends.len() {
+                overlay_ends.push(head_end);
+            } else {
+                overlay_ends[lane] = head_end;
+            }
+            pieces.push((head, lane + 1));
+            if has_tail {
+                let mut tail = clip.clone();
+                tail.start_secs = head_end;
+                tail.source_in_secs = clip.source_in_secs + head_secs * speed;
+                tail.fade_in_secs = 0.0;
+                tail.transition_in = TransitionType::None;
+                pieces.push((tail, 0));
+                covered_until = end;
+            }
+        }
+        pieces
+    }
+
+    /// The fade-in a [`TransitionType::Dissolve`] gives `clip`: its transition duration, cut to
+    /// the span it really overlaps the clips before it (the whole duration when it overlaps
+    /// nothing, where it acts as a plain fade-in). `0.0` for any other transition.
+    pub fn dissolve_in_secs(&self, clip: &ClipInstance) -> f64 {
+        if clip.transition_in != TransitionType::Dissolve {
+            return 0.0;
+        }
+        let duration = f64::from(clip.transition_duration_secs).max(0.0);
+        let overlap = self.overlap_with_earlier_secs(clip.id);
+        if overlap > OVERLAP_EPSILON_SECS {
+            duration.min(overlap)
+        } else {
+            duration
+        }
+    }
+
+    /// The fade-out of `clip`'s audio under a later clip's dissolve: how long the next dissolving
+    /// clip overlaps its tail (cut to that clip's transition duration). `0.0` when none does.
+    pub fn dissolve_out_secs(&self, clip: &ClipInstance) -> f64 {
+        let end = clip.start_secs + clip.duration_secs();
+        self.clips
+            .iter()
+            .filter(|other| {
+                other.id != clip.id
+                    && other.transition_in == TransitionType::Dissolve
+                    && other.start_secs >= clip.start_secs
+                    && other.start_secs < end - OVERLAP_EPSILON_SECS
+            })
+            .map(|other| (end - other.start_secs).min(f64::from(other.transition_duration_secs)))
+            .fold(0.0, f64::max)
+    }
+
+    /// Turns the cut before `clip_id` into an overlap of up to `duration_secs` (never more than
+    /// half of either clip): the clip and every clip after it on this track move earlier, so the
+    /// previous clip's tail and this clip's head play together. `false` (nothing changes) when no
+    /// clip ends right where this one starts.
+    pub fn apply_dissolve_overlap(&mut self, clip_id: u64, duration_secs: f64) -> bool {
+        let Some(clip) = self.clips.iter().find(|c| c.id == clip_id) else {
+            return false;
+        };
+        let (start, own_duration) = (clip.start_secs, clip.duration_secs());
+        let adjacent_previous = self
+            .clips
+            .iter()
+            .filter(|other| other.id != clip_id && other.start_secs < start)
+            .map(|other| {
+                (
+                    other.start_secs + other.duration_secs(),
+                    other.duration_secs(),
+                )
+            })
+            .filter(|(end, _)| (end - start).abs() <= DISSOLVE_ADJACENT_SECS)
+            .max_by(|a, b| a.0.total_cmp(&b.0));
+        let Some((_, previous_duration)) = adjacent_previous else {
+            return false;
+        };
+        let shift = duration_secs
+            .min(previous_duration / 2.0)
+            .min(own_duration / 2.0);
+        if !shift.is_finite() || shift <= OVERLAP_EPSILON_SECS {
+            return false;
+        }
+        for later in self
+            .clips
+            .iter_mut()
+            .filter(|c| c.start_secs >= start - OVERLAP_EPSILON_SECS)
+        {
+            later.start_secs -= shift;
+        }
         true
     }
 

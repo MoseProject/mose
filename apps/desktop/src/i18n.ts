@@ -138,6 +138,7 @@ const strings = {
   transitionHardCut: { "pt-BR": "Corte seco", en: "Hard cut" },
   transitionSlide: { "pt-BR": "Deslizar", en: "Slide" },
   transitionZoom: { "pt-BR": "Zoom", en: "Zoom" },
+  transitionDissolve: { "pt-BR": "Dissolução cruzada", en: "Cross dissolve" },
   blendMode: { "pt-BR": "Modo de mesclagem", en: "Blend mode" },
   positionKeyframes: { "pt-BR": "Keyframes de posição", en: "Position keyframes" },
   scaleKeyframes: { "pt-BR": "Keyframes de escala", en: "Scale keyframes" },

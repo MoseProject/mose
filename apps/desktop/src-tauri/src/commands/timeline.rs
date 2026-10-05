@@ -480,9 +480,20 @@ pub fn update_clip<R: Runtime>(
         if track_of(timeline, clip_id).is_none_or(|index| timeline.tracks[index].locked) {
             return false;
         }
-        timeline
+        let changed = timeline
             .clip_mut(clip_id)
-            .is_some_and(|clip| apply_patch(clip, &patch))
+            .is_some_and(|clip| apply_patch(clip, &patch));
+        // Choosing a cross-dissolve turns the cut before the clip into an overlap, so the clips
+        // play together (a no-op once it already overlaps, or when no clip ends right before it).
+        if changed && patch.transition_in == Some(TransitionType::Dissolve) {
+            let duration = timeline
+                .clip_mut(clip_id)
+                .map_or(0.0, |clip| f64::from(clip.transition_duration_secs));
+            if let Some(index) = track_of(timeline, clip_id) {
+                timeline.tracks[index].apply_dissolve_overlap(clip_id, duration);
+            }
+        }
+        changed
     })
 }
 

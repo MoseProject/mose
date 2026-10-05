@@ -240,6 +240,9 @@ struct MappedClip {
 }
 
 /// Builds the scene for the whole timeline. `canvas` is the preview canvas in pixels.
+/// Scene layers reserved per track, so the lanes of one track never reach the next track's layers.
+const LAYERS_PER_TRACK: usize = 1000;
+
 pub fn map_timeline(
     timeline: &Timeline,
     media: &[MediaAsset],
@@ -267,6 +270,7 @@ pub fn map_timeline(
             TrackKind::Audio => false,
             TrackKind::Text | TrackKind::Shape => continue,
         };
+        let lanes = track.overlap_lanes();
         for clip in &track.clips {
             let Some(asset) = media
                 .iter()
@@ -284,7 +288,12 @@ pub fn map_timeline(
             };
             contributors.push(Contributor {
                 id: ContributorId(clip.id),
-                layer: i32::try_from(index).unwrap_or(i32::MAX),
+                // A clip overlapping an earlier one (a cross-dissolve) sits one layer above the
+                // clip it dissolves from; layers of different tracks stay far apart.
+                layer: i32::try_from(
+                    index * LAYERS_PER_TRACK + lanes.get(&clip.id).copied().unwrap_or(0),
+                )
+                .unwrap_or(i32::MAX),
                 visible: on_video_track && asset.kind == MediaKind::Video,
                 audible: asset.has_audio && !clip.frozen && timeline.track_is_audible(track),
                 content: ContributorContent::Media(MediaSource {
@@ -596,7 +605,7 @@ fn apply_transition(
         return;
     }
     match clip.transition_in {
-        TransitionType::Fade => {
+        TransitionType::Fade | TransitionType::Dissolve => {
             placement.fade = Fade {
                 in_secs: length,
                 out_secs: 0.0,
