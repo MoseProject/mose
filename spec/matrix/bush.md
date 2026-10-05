@@ -3,6 +3,7 @@
 Bush is the standalone Rust preview engine described in
 [../architecture/preview-engine-replacement.md](../architecture/preview-engine-replacement.md).
 It is the only preview engine: `apps/desktop` drives it through `bush_adapter/` and `core`'s frame sampler decodes through it. GStreamer was removed (see [../architecture/gstreamer-removal-plan.md](../architecture/gstreamer-removal-plan.md)).
+Current performance findings and the prioritized optimization plan: [../architecture/bush-performance-plan.md](../architecture/bush-performance-plan.md).
 
 Legend: `[x]` done and verified against real media, `[~]` partial, `[ ]` not started.
 Everything below runs in `cargo test -p bush` (and `cargo test -p avbridge` for the native side)
