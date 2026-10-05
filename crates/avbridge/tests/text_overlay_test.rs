@@ -301,3 +301,56 @@ fn applies_a_keyframed_rotation_to_a_text_overlay() {
     let _ = std::fs::remove_file(&out);
     let _ = std::fs::remove_file(&overlay_png);
 }
+
+/// Number of video frames in `path`, by decoding it.
+fn frame_count(path: &Path) -> usize {
+    let (mut session, _) = avbridge::DecodeSession::open(path).unwrap();
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    let mut frames = 0;
+    while let avbridge::Advance::Frame(_) = session.advance(&cancel).unwrap() {
+        frames += 1;
+    }
+    frames
+}
+
+#[test]
+fn an_overlay_pass_re_encodes_every_frame_of_its_input() {
+    // The pass decodes on several threads and encodes with whatever hardware encoder opens:
+    // neither may hold back or drop frames at the end of the file.
+    let out = std::env::temp_dir().join("avbridge_text_overlay_frames_test.mp4");
+    let overlay_png = std::env::temp_dir().join("avbridge_text_overlay_frames_test.png");
+    let _ = std::fs::remove_file(&out);
+    write_test_overlay_png(&overlay_png);
+
+    let source = fixture("video.mp4");
+    let probed = probe(&source).unwrap();
+    let (width, height) = probed.resolution.unwrap();
+    let fps = probed.fps.unwrap();
+    let segments = vec![TextOverlaySegment {
+        start_secs: 0.0,
+        duration_secs: probed.duration_secs.max(0.5),
+        overlay_path: overlay_png.clone(),
+        opacity_keyframe_expr: String::new(),
+        position_keyframe_expr_x: String::new(),
+        position_keyframe_expr_y: String::new(),
+        scale_keyframe_expr_x: String::new(),
+        scale_keyframe_expr_y: String::new(),
+        rotation_keyframe_expr_x: String::new(),
+        rotation_keyframe_expr_y: String::new(),
+    }];
+    apply_text_overlays(
+        &source,
+        &out,
+        &segments,
+        width,
+        height,
+        fps.round() as u32,
+        1,
+    )
+    .unwrap();
+
+    assert_eq!(frame_count(&out), frame_count(&source));
+
+    let _ = std::fs::remove_file(&out);
+    let _ = std::fs::remove_file(&overlay_png);
+}
