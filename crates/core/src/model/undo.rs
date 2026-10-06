@@ -14,41 +14,49 @@
 //! project-level changes (media import, project rename). [`UndoStack::clear`] should be called
 //! on sequence switch: history from one sequence tab isn't meaningful applied to another.
 //!
-//! Deliberately not yet wired to any UI call site — this is the primitive only. Wiring
-//! `UndoStack::push` into every `Timeline`/`Track`/`ClipInstance` mutation call site in
-//! `ui/src/app/timeline_ops.rs`, plus `Ctrl+Z`/`Ctrl+Y` key bindings (same
-//! `BindableAction`/`KeyBindings` pattern `AddOpacityMarker` already established), is the next
-//! step — see `spec/architecture/undo-redo.md`.
 
 use crate::project::Sequence;
 
 const DEFAULT_CAPACITY: usize = 100;
+const DEFAULT_BYTE_BUDGET: usize = 100 * 1024 * 1024;
 
-/// Clips (of any kind) all the undo snapshots together may hold. A snapshot is a full copy of
-/// the sequence, so a long history of a big timeline would otherwise grow without a bound that
-/// means anything (a clip is several hundred bytes: this is on the order of 100 MB). Past it the
-/// oldest steps are dropped, so small projects keep every one of their [`DEFAULT_CAPACITY`] steps
-/// and very large ones keep fewer.
-const CLIP_BUDGET: usize = 120_000;
-
-/// How much memory a snapshot holds, in clips (one extra for the sequence itself).
+/// Count the serialized dynamic payload without allocating a JSON tree or output buffer.
+/// A conservative multiplier also accounts for struct/container overhead. This is an estimate,
+/// not allocator telemetry; one oversized newest step is retained to preserve undo availability.
 fn weight(sequence: &Sequence) -> usize {
-    1 + sequence
-        .timeline
-        .tracks
-        .iter()
-        .map(|track| track.clips.len() + track.text_clips.len() + track.shape_clips.len())
-        .sum::<usize>()
+    struct Counter(usize);
+    impl std::io::Write for Counter {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0 = self.0.saturating_add(bytes.len());
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut counter = Counter(0);
+    if serde_json::to_writer(&mut counter, sequence).is_err() {
+        return usize::MAX;
+    }
+    counter
+        .0
+        .saturating_mul(4)
+        .saturating_add(std::mem::size_of::<Sequence>())
 }
 
-/// Two bounded stacks of `Sequence` snapshots. `push` is called with the sequence's state
-/// *before* a mutation is applied (the caller applies the mutation itself, immediately after);
-/// `undo`/`redo` take the *current* state as their argument (so it can be pushed onto the other
-/// stack) and return the state to restore.
+struct Snapshot {
+    sequence: Sequence,
+    bytes: usize,
+}
+
+/// Two bounded snapshot stacks. Dynamic payloads count towards a shared estimated byte budget.
+/// The newest step alone may exceed the budget, so even an oversized edit remains undoable.
 pub struct UndoStack {
     capacity: usize,
-    undo: Vec<Sequence>,
-    redo: Vec<Sequence>,
+    byte_budget: usize,
+    retained_bytes: u128,
+    undo: std::collections::VecDeque<Snapshot>,
+    redo: std::collections::VecDeque<Snapshot>,
 }
 
 impl UndoStack {
@@ -57,54 +65,80 @@ impl UndoStack {
     }
 
     pub fn with_capacity(capacity: usize) -> Self {
+        Self::with_limits(capacity, DEFAULT_BYTE_BUDGET)
+    }
+
+    /// Selects history depth and a shared estimated byte budget for undo and redo.
+    pub fn with_limits(capacity: usize, byte_budget: usize) -> Self {
         Self {
             capacity: capacity.max(1),
-            undo: Vec::new(),
-            redo: Vec::new(),
+            byte_budget,
+            retained_bytes: 0,
+            undo: Default::default(),
+            redo: Default::default(),
         }
     }
 
-    /// Records `before` as a real undo point. Any pending redo history is discarded — a fresh
-    /// edit after an undo invalidates the branch that redo would have replayed, same as every
-    /// real editor's undo/redo semantics.
+    fn trim(&mut self, newest_is_undo: bool) {
+        while self.undo.len() + self.redo.len() > 1
+            && (self.undo.len() + self.redo.len() > self.capacity
+                || self.retained_bytes > self.byte_budget as u128)
+        {
+            let oldest = if newest_is_undo {
+                self.redo.pop_front().or_else(|| self.undo.pop_front())
+            } else {
+                self.undo.pop_front().or_else(|| self.redo.pop_front())
+            };
+            if let Some(oldest) = oldest {
+                self.retained_bytes = self.retained_bytes.saturating_sub(oldest.bytes as u128);
+            }
+        }
+    }
+
+    fn snapshot(&mut self, sequence: Sequence) -> Snapshot {
+        let bytes = weight(&sequence);
+        self.retained_bytes = self.retained_bytes.saturating_add(bytes as u128);
+        Snapshot { sequence, bytes }
+    }
+
+    /// Records the pre-edit state and discards the previous redo branch.
     pub fn push(&mut self, before: Sequence) {
-        self.undo.push(before);
-        self.redo.clear();
-        let mut held: usize = self.undo.iter().map(weight).sum();
-        // The newest step always stays, however big the sequence is.
-        while self.undo.len() > 1 && (self.undo.len() > self.capacity || held > CLIP_BUDGET) {
-            held -= weight(&self.undo.remove(0));
+        for snapshot in self.redo.drain(..) {
+            self.retained_bytes = self.retained_bytes.saturating_sub(snapshot.bytes as u128);
         }
+        let snapshot = self.snapshot(before);
+        self.undo.push_back(snapshot);
+        self.trim(true);
     }
 
-    /// Pops the most recent undo point, pushes `current` onto the redo stack, and returns the
-    /// state the caller should now restore. `None` when there's nothing to undo.
     pub fn undo(&mut self, current: Sequence) -> Option<Sequence> {
-        let previous = self.undo.pop()?;
-        self.redo.push(current);
-        Some(previous)
+        let previous = self.undo.pop_back()?;
+        self.retained_bytes = self.retained_bytes.saturating_sub(previous.bytes as u128);
+        let snapshot = self.snapshot(current);
+        self.redo.push_back(snapshot);
+        self.trim(false);
+        Some(previous.sequence)
     }
 
-    /// The inverse of [`Self::undo`].
     pub fn redo(&mut self, current: Sequence) -> Option<Sequence> {
-        let next = self.redo.pop()?;
-        self.undo.push(current);
-        Some(next)
+        let next = self.redo.pop_back()?;
+        self.retained_bytes = self.retained_bytes.saturating_sub(next.bytes as u128);
+        let snapshot = self.snapshot(current);
+        self.undo.push_back(snapshot);
+        self.trim(true);
+        Some(next.sequence)
     }
 
     pub fn can_undo(&self) -> bool {
         !self.undo.is_empty()
     }
-
     pub fn can_redo(&self) -> bool {
         !self.redo.is_empty()
     }
-
-    /// Drops all history — call when switching to a different sequence/project. History from
-    /// one sequence applied to another would restore the wrong timeline entirely.
     pub fn clear(&mut self) {
         self.undo.clear();
         self.redo.clear();
+        self.retained_bytes = 0;
     }
 }
 
