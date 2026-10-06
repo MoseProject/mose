@@ -21,6 +21,7 @@ macro_rules! all_commands {
             $crate::commands::set_export_settings,
             $crate::commands::export::pick_export_path,
             $crate::commands::export::start_export,
+            $crate::commands::export::cancel_export_preparation,
             $crate::commands::export::pause_export,
             $crate::commands::export::resume_export,
             $crate::commands::export::cancel_export,

@@ -144,6 +144,57 @@ impl ExportQueue {
         avcore::write_atomic(&self.config_dir.join("export-settings.json"), &b)
             .map_err(|e| e.to_string())
     }
+    pub(crate) fn input_cache_dir(&self) -> PathBuf {
+        self.config_dir.join("export-inputs")
+    }
+
+    pub(crate) fn owns_input_destination(&self, output: &std::path::Path) -> bool {
+        let root = self.input_cache_dir();
+        output.starts_with(&root)
+            || output
+                .parent()
+                .and_then(|p| p.canonicalize().ok())
+                .zip(root.canonicalize().ok())
+                .is_some_and(|(parent, root)| parent.starts_with(root))
+    }
+
+    fn input_directories(&self, id: u64) -> Vec<PathBuf> {
+        let sources: Vec<_> = self
+            .jobs
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .iter()
+            .filter(|j| j.id == id)
+            .flat_map(|j| {
+                j.track_segments
+                    .iter()
+                    .flatten()
+                    .map(|s| s.source_path.clone())
+                    .chain(j.audio_segments.iter().map(|s| s.source_path.clone()))
+            })
+            .collect();
+        let root = self.input_cache_dir();
+        let dirs: std::collections::HashSet<_> = sources
+            .iter()
+            .filter_map(|path| path.parent())
+            .filter(|parent| {
+                parent.parent() == Some(root.as_path())
+                    && parent
+                        .file_name()
+                        .is_some_and(|name| name.to_string_lossy().starts_with("prepared_"))
+            })
+            .collect();
+        dirs.into_iter().map(std::path::Path::to_path_buf).collect()
+    }
+
+    fn release_directories(dirs: &[PathBuf]) {
+        for dir in dirs {
+            if let Err(error) = std::fs::remove_dir_all(dir) {
+                tracing::warn!(%error, "failed to release export inputs");
+            }
+        }
+    }
+
     pub fn enqueue<R: Runtime>(
         self: &Arc<Self>,
         app: AppHandle<R>,
@@ -214,6 +265,7 @@ impl ExportQueue {
         self.pump(app)
     }
     pub fn cancel<R: Runtime>(self: &Arc<Self>, app: AppHandle<R>, id: u64) {
+        let mut released = Vec::new();
         if let Some(c) = self
             .controls
             .lock()
@@ -223,12 +275,15 @@ impl ExportQueue {
         {
             c.cancel()
         } else {
+            released = self.input_directories(id);
             self.jobs
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())
                 .retain(|j| j.id != id)
         }
-        self.persist();
+        if self.persist() {
+            Self::release_directories(&released);
+        }
         self.emit(&app)
     }
     pub fn remove<R: Runtime>(self: &Arc<Self>, app: AppHandle<R>, id: u64) {
@@ -238,11 +293,14 @@ impl ExportQueue {
             .unwrap_or_else(|p| p.into_inner())
             .contains_key(&id)
         {
+            let released = self.input_directories(id);
             self.jobs
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())
                 .retain(|j| j.id != id);
-            self.persist();
+            if self.persist() {
+                Self::release_directories(&released);
+            }
             self.emit(&app)
         }
     }
@@ -273,13 +331,15 @@ impl ExportQueue {
             }
         }
     }
-    fn persist(&self) {
+    fn persist(&self) -> bool {
         let jobs = self.jobs.lock().unwrap_or_else(|p| p.into_inner());
         if let Err(e) =
             avcore::save_export_queue_to_path(&jobs, &avcore::export_queue_path(&self.config_dir))
         {
-            tracing::warn!(%e,"failed to save export queue")
+            tracing::warn!(%e,"failed to save export queue");
+            return false;
         }
+        true
     }
     fn emit<R: Runtime>(&self, app: &AppHandle<R>) {
         let _ = app.emit(EXPORT_JOBS, self.snapshot());
@@ -368,6 +428,7 @@ impl ExportQueue {
         id: u64,
         result: Result<RenderOutcome, avcore::RenderError>,
     ) {
+        let input_dirs = self.input_directories(id);
         let mut jobs = self.jobs.lock().unwrap_or_else(|p| p.into_inner());
         match result {
             Ok(RenderOutcome::Completed) => {
@@ -393,7 +454,9 @@ impl ExportQueue {
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .remove(&id);
-        self.persist();
+        if self.persist() {
+            Self::release_directories(&input_dirs);
+        }
         self.emit(&app);
         self.pump(app)
     }

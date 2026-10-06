@@ -51,23 +51,53 @@ pub async fn start_export<R: Runtime>(
         let state = app.state::<AppState>();
         ExportPreparationPermit::acquire(Arc::clone(&state.export_preparing))?
     };
+    let cancel = Arc::new(AtomicBool::new(false));
+    *crate::state::lock_or_recover(&app.state::<AppState>().export_preparation_cancel) =
+        Some(cancel.clone());
+    let mut cancellation = PreparationCancellation {
+        flag: cancel.clone(),
+        armed: true,
+    };
     let project = {
         let state = app.state::<AppState>();
         let session = state.session();
-        session.project.clone()
+        session.project.render_snapshot()
     };
     let (reply, result) = tokio::sync::oneshot::channel();
     std::thread::Builder::new()
         .name("export-preparation".to_string())
         .spawn(move || {
-            let prepared = prepare_and_enqueue_export(app, project, path, rename);
+            let prepared = prepare_and_enqueue_export(app, project, path, rename, &cancel);
             drop(permit);
             let _ = reply.send(prepared);
         })
         .map_err(|error| format!("failed to start export preparation: {error}"))?;
-    result
-        .await
-        .map_err(|_| "export preparation stopped before completion".to_string())?
+    let result = result.await;
+    let cancelled = cancellation.flag.load(Ordering::Acquire);
+    cancellation.armed = false;
+    if cancelled && !matches!(result, Ok(Ok(_))) {
+        return Err("exportPreparationCancelled".into());
+    }
+    result.map_err(|_| "export preparation stopped before completion".to_string())?
+}
+
+struct PreparationCancellation {
+    flag: Arc<AtomicBool>,
+    armed: bool,
+}
+impl Drop for PreparationCancellation {
+    fn drop(&mut self) {
+        if self.armed {
+            self.flag.store(true, Ordering::Release);
+        }
+    }
+}
+
+#[tauri::command]
+pub fn cancel_export_preparation(state: State<'_, AppState>) {
+    if let Some(cancel) = crate::state::lock_or_recover(&state.export_preparation_cancel).as_ref() {
+        cancel.store(true, Ordering::Release);
+    }
 }
 
 /// Releases admission on success, early errors, a failed spawn, or a worker panic.
@@ -93,6 +123,7 @@ fn prepare_and_enqueue_export<R: Runtime>(
     mut project: avcore::Project,
     path: String,
     rename: bool,
+    cancel: &AtomicBool,
 ) -> Result<u64, String> {
     let mut output = PathBuf::from(path);
     if rename && output.exists() {
@@ -101,24 +132,62 @@ fn prepare_and_enqueue_export<R: Runtime>(
     let exports = app.state::<AppState>().exports.clone();
     check_output_is_free(&app, &exports, &output, &project)?;
     let title = project.active_sequence().name.clone();
-    let nested_assets = {
+    let (nested_assets, artifacts) = {
         let state = app.state::<AppState>();
         let cache_dir = avcore::nested_sequence::cache_dir_for_project(&project);
         let mut cache = crate::state::lock_or_recover(&state.nested_sequence_cache);
-        avcore::nested_sequence::materialize_nested_sequences(
+        let assets = avcore::nested_sequence::materialize_nested_sequences_with_cancel(
             &project,
             project.timeline(),
             &cache_dir,
             &mut cache,
+            cancel,
         )
-        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())?;
+        let artifacts: Vec<_> = assets
+            .keys()
+            .filter_map(|id| cache.get(id).map(|entry| entry.artifact()))
+            .collect();
+        (assets, artifacts)
     };
-    project.media_library.extend(nested_assets.into_values());
+    let owned_inputs = if nested_assets.is_empty() {
+        None
+    } else {
+        let root = exports.input_cache_dir();
+        std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
+        Some(
+            tempfile::Builder::new()
+                .prefix("prepared_")
+                .tempdir_in(root)
+                .map_err(|e| e.to_string())?,
+        )
+    };
+    for mut asset in nested_assets.into_values() {
+        if cancel.load(Ordering::Acquire) {
+            return Err("exportPreparationCancelled".into());
+        }
+        if let Some(inputs) = &owned_inputs {
+            let output = inputs.path().join(format!("{}.mp4", asset.id));
+            if std::fs::hard_link(&asset.source_path, &output).is_err() {
+                std::fs::copy(&asset.source_path, &output).map_err(|e| e.to_string())?;
+            }
+            asset.source_path = output;
+        }
+        project.media_library.push(asset);
+    }
+    drop(artifacts);
     let prepared = prepare_export(&project)?;
     // Project switches during preparation do not change the requested export. Protect both
     // that snapshot's inputs (including materialized children) and the currently open media.
     check_output_is_free(&app, &exports, &output, &project)?;
-    Ok(exports.enqueue(app.clone(), title, output, prepared))
+    if cancel.load(Ordering::Acquire) {
+        return Err("exportPreparationCancelled".into());
+    }
+    let id = exports.enqueue(app.clone(), title, output, prepared);
+    if let Some(inputs) = owned_inputs {
+        let _ = inputs.keep();
+    }
+    Ok(id)
 }
 
 /// Whether two paths name the same file: by identity when both exist, otherwise by their text
@@ -160,7 +229,7 @@ fn check_output_is_free<R: Runtime>(
     let is_source = source_paths(snapshot)
         .chain(current_sources.iter().map(PathBuf::as_path))
         .any(|source| same_file(source, output));
-    if is_source || is_cache_output {
+    if is_source || is_cache_output || exports.owns_input_destination(output) {
         return Err("outputIsSource".to_string());
     }
     let busy = exports.snapshot().iter().any(|job| {
