@@ -9,7 +9,7 @@ use avcore::timeline::MarkerKind;
 use avcore::{FrameSampler, SceneCut};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
-use super::with_session;
+use super::analysis_job::{AnalysisPermit, AnalysisToken};
 use crate::state::AppState;
 
 pub const SCENE_CUT_EVENT: &str = "scene-cut-event";
@@ -27,6 +27,8 @@ pub fn detect_scene_cuts_for_clip<R: Runtime>(
     clip_id: u64,
 ) -> Result<(), String> {
     let state = app.state::<AppState>();
+    let permit = AnalysisPermit::acquire(&app)?;
+    let token = AnalysisToken::capture(&state, Some(clip_id), None);
     {
         let mut running = state
             .scene_cut_detection_clip_id
@@ -37,17 +39,7 @@ pub fn detect_scene_cuts_for_clip<R: Runtime>(
         }
         *running = Some(clip_id);
     }
-    let clip = {
-        let session = state.session();
-        session
-            .project
-            .timeline()
-            .tracks
-            .iter()
-            .flat_map(|t| &t.clips)
-            .find(|c| c.id == clip_id)
-            .cloned()
-    };
+    let clip = token.clip();
     let Some(clip) = clip else {
         *state
             .scene_cut_detection_clip_id
@@ -55,15 +47,7 @@ pub fn detect_scene_cuts_for_clip<R: Runtime>(
             .unwrap_or_else(|p| p.into_inner()) = None;
         return Err("clip not found".to_string());
     };
-    let source_path = {
-        let session = state.session();
-        session
-            .project
-            .media_library
-            .iter()
-            .find(|a| a.id == clip.asset_id)
-            .map(|a| a.source_path.clone())
-    };
+    let source_path = token.source();
     let Some(source_path) = source_path else {
         *state
             .scene_cut_detection_clip_id
@@ -74,6 +58,10 @@ pub fn detect_scene_cuts_for_clip<R: Runtime>(
 
     let worker_app = app.clone();
     std::thread::spawn(move || {
+        let _permit = permit;
+        if !token.is_current(&worker_app) {
+            return;
+        }
         let cuts = detect_scene_cuts_one(&source_path, clip.source_in_secs, clip.source_out_secs);
         {
             let state = worker_app.state::<AppState>();
@@ -82,18 +70,28 @@ pub fn detect_scene_cuts_for_clip<R: Runtime>(
                 .lock()
                 .unwrap_or_else(|p| p.into_inner()) = None;
         }
-        publish_cuts(&worker_app, clip_id, &cuts);
+        if !cuts.is_empty()
+            && token
+                .apply(&worker_app, |project| {
+                    apply_detected_scene_cuts(project.timeline_mut(), clip_id, &cuts)
+                })
+                .is_err()
+        {
+            let _ = worker_app.emit(SCENE_CUT_EVENT, 0usize);
+            return;
+        }
         let _ = worker_app.emit(SCENE_CUT_EVENT, cuts.len());
     });
     Ok(())
 }
 
 /// Adds the detected cuts to the project as chapter markers; nothing is published for none.
+#[cfg(test)]
 fn publish_cuts<R: Runtime>(app: &AppHandle<R>, clip_id: u64, cuts: &[SceneCut]) {
     if cuts.is_empty() {
         return;
     }
-    let _ = with_session(app, |session| {
+    let _ = super::with_session(app, |session| {
         apply_detected_scene_cuts(session.project.timeline_mut(), clip_id, cuts);
         session.dirty = true;
         Ok(())
@@ -119,17 +117,29 @@ fn detect_scene_cuts_one(
     let Ok(sampler) = FrameSampler::open(source_path) else {
         return Vec::new();
     };
-    let samples: Vec<(f64, avcore::GrayFrame)> = sample_times
-        .iter()
-        .filter_map(|&t| {
-            let frame = sampler.sample(t, Duration::from_millis(500))?;
-            Some((
-                t,
-                avcore::rgba_to_gray(&frame.rgba, frame.width, frame.height),
-            ))
-        })
-        .collect();
-    avcore::detect_scene_cuts(&samples, avcore::DEFAULT_SCENE_CUT_THRESHOLD)
+    let mut previous = None;
+    let mut cuts = Vec::new();
+    for t in sample_times {
+        let Some(frame) = sampler.sample_scaled(t, Duration::from_millis(500), 320) else {
+            continue;
+        };
+        let current = (
+            t,
+            avcore::rgba_to_gray(&frame.rgba, frame.width, frame.height),
+        );
+        if let Some(old) = previous.take() {
+            let pair = [old, current];
+            cuts.extend(avcore::detect_scene_cuts(
+                &pair,
+                avcore::DEFAULT_SCENE_CUT_THRESHOLD,
+            ));
+            let [_, current] = pair;
+            previous = Some(current);
+        } else {
+            previous = Some(current);
+        }
+    }
+    cuts
 }
 
 /// Maps each cut's source-relative time onto the timeline and adds a numbered Chapter marker at

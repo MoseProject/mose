@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
-use super::with_session;
+use super::analysis_job::{AnalysisPermit, AnalysisToken};
 use crate::state::AppState;
 
 pub const PRIVACY_BLUR_EVENT: &str = "privacy-blur-event";
@@ -40,6 +40,8 @@ pub fn apply_privacy_blur_to_clip<R: Runtime>(
     height_frac: f32,
 ) -> Result<(), String> {
     let state = app.state::<AppState>();
+    let permit = AnalysisPermit::acquire(&app)?;
+    let token = AnalysisToken::capture(&state, Some(clip_id), None);
     {
         let mut running = state
             .privacy_blur_generating_clip_id
@@ -56,40 +58,38 @@ pub fn apply_privacy_blur_to_clip<R: Runtime>(
             .lock()
             .unwrap_or_else(|p| p.into_inner()) = None;
     };
-    let clip = {
-        let session = state.session();
-        session
-            .project
-            .timeline()
-            .tracks
-            .iter()
-            .flat_map(|t| &t.clips)
-            .find(|c| c.id == clip_id)
-            .cloned()
-    };
+    let clip = token.clip();
     let Some(clip) = clip else {
         clear_running(&state);
         return Err("clip not found".to_string());
     };
-    let (source_path, mask_dir) = {
-        let session = state.session();
-        let source_path = session
-            .project
-            .media_library
-            .iter()
-            .find(|a| a.id == clip.asset_id)
-            .map(|a| a.source_path.clone());
-        let mask_dir = avcore::background_removal::mask_cache_dir_for_project(&session.project);
-        (source_path, mask_dir)
-    };
+    let (source_path, mask_dir) = (token.source(), token.mask_dir.clone());
     let Some(source_path) = source_path else {
         clear_running(&state);
         return Err("asset not found".to_string());
     };
-    let mask_path = mask_dir.join(format!("clip_{clip_id}_privacy_blur_matte.mp4"));
 
     let worker_app = app.clone();
     std::thread::spawn(move || {
+        let _permit = permit;
+        if !token.is_current(&worker_app) {
+            return;
+        }
+        let staged = std::fs::create_dir_all(&mask_dir).and_then(|_| {
+            tempfile::Builder::new()
+                .prefix("analysis_")
+                .suffix(".mp4")
+                .tempfile_in(&mask_dir)
+        });
+        let staged = match staged {
+            Ok(file) => file.into_temp_path(),
+            Err(error) => {
+                let message = error.to_string();
+                emit_privacy_failure(&worker_app, clip_id, message);
+                return;
+            }
+        };
+        let mask_path = staged.to_path_buf();
         let result = apply_privacy_blur_one(
             &source_path,
             clip.source_in_secs,
@@ -107,17 +107,22 @@ pub fn apply_privacy_blur_to_clip<R: Runtime>(
         }
         let event = match result {
             Ok((mask_path, seed_vertices)) => {
-                let _ = with_session(&worker_app, |session| {
-                    if let Some(clip) = session.project.timeline_mut().clip_mut(clip_id) {
+                if let Err(error) = staged.keep() {
+                    return emit_privacy_failure(&worker_app, clip_id, error.to_string());
+                }
+                let applied = token.apply(&worker_app, |project| {
+                    if let Some(clip) = project.timeline_mut().clip_mut(clip_id) {
                         clip.privacy_blur_mask_path = mask_path.display().to_string();
                         clip.privacy_blur_enabled = true;
                         clip.privacy_blur_seed_vertices = seed_vertices;
                         clip.privacy_blur_seed_center_x_frac = center_x;
                         clip.privacy_blur_seed_center_y_frac = center_y;
                     }
-                    session.dirty = true;
-                    Ok(())
                 });
+                if let Err(message) = applied {
+                    let _ = std::fs::remove_file(&mask_path);
+                    return emit_privacy_failure(&worker_app, clip_id, message);
+                }
                 PrivacyBlurResult::Done { clip_id }
             }
             Err(message) => {
@@ -156,12 +161,15 @@ fn apply_privacy_blur_one(
     let sampler = avcore::FrameSampler::open(source_path)
         .map_err(|e| format!("failed to open source for decoding: {e}"))?;
 
-    let frames: Vec<avcore::SampledFrame> = sample_times
+    let frames: Vec<avcore::GrayFrame> = sample_times
         .iter()
-        .filter_map(|&t| sampler.sample(t, Duration::from_millis(1500)))
+        .filter_map(|&t| {
+            let frame = sampler.sample_scaled(t, Duration::from_millis(1500), 320)?;
+            Some(avcore::rgba_to_gray(&frame.rgba, frame.width, frame.height))
+        })
         .collect();
-    matte_from_frames(
-        &frames,
+    matte_from_gray_frames(
+        frames,
         duration,
         center_x,
         center_y,
@@ -174,6 +182,7 @@ fn apply_privacy_blur_one(
 
 /// Propagates the blur region through already decoded frames and encodes the matte video.
 /// Frames whose size differs from the first one's are skipped.
+#[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 fn matte_from_frames(
     frames: &[avcore::SampledFrame],
@@ -190,6 +199,34 @@ fn matte_from_frames(
         .iter()
         .filter(|f| f.width == frame_w && f.height == frame_h)
         .map(|f| avcore::rgba_to_gray(&f.rgba, f.width, f.height))
+        .collect();
+    matte_from_gray_frames(
+        gray_frames,
+        duration,
+        center_x,
+        center_y,
+        width_frac,
+        height_frac,
+        mask_dir,
+        mask_path,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn matte_from_gray_frames(
+    gray_frames: Vec<avcore::GrayFrame>,
+    duration: f64,
+    center_x: f32,
+    center_y: f32,
+    width_frac: f32,
+    height_frac: f32,
+    mask_dir: &Path,
+    mask_path: &Path,
+) -> Result<(PathBuf, Vec<(f32, f32)>), String> {
+    let (frame_w, frame_h) = gray_frames.first().map_or((0, 0), |f| (f.width, f.height));
+    let gray_frames: Vec<_> = gray_frames
+        .into_iter()
+        .filter(|f| f.width == frame_w && f.height == frame_h)
         .collect();
     if gray_frames.len() < 2 {
         return Err("couldn't decode enough frames to propagate a mask".to_string());
@@ -233,3 +270,10 @@ fn matte_from_frames(
 #[cfg(test)]
 #[path = "privacy_blur_test.rs"]
 mod tests;
+
+fn emit_privacy_failure<R: Runtime>(app: &AppHandle<R>, clip_id: u64, message: String) {
+    let _ = app.emit(
+        PRIVACY_BLUR_EVENT,
+        PrivacyBlurResult::Failed { clip_id, message },
+    );
+}

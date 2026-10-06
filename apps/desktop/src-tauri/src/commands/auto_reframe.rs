@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
-use super::with_session;
+use super::analysis_job::{AnalysisPermit, AnalysisToken};
 use crate::services::Services;
 use crate::state::AppState;
 
@@ -38,6 +38,8 @@ pub struct AutoReframeResult {
 #[tauri::command]
 pub fn auto_reframe_clip<R: Runtime>(app: AppHandle<R>, clip_id: u64) -> Result<(), String> {
     let state = app.state::<AppState>();
+    let permit = AnalysisPermit::acquire(&app)?;
+    let token = AnalysisToken::capture(&state, Some(clip_id), None);
     {
         let mut running = state
             .auto_reframing_clip_id
@@ -55,17 +57,7 @@ pub fn auto_reframe_clip<R: Runtime>(app: AppHandle<R>, clip_id: u64) -> Result<
             .unwrap_or_else(|p| p.into_inner()) = None;
     };
 
-    let clip = {
-        let session = state.session();
-        session
-            .project
-            .timeline()
-            .tracks
-            .iter()
-            .flat_map(|t| &t.clips)
-            .find(|c| c.id == clip_id)
-            .cloned()
-    };
+    let clip = token.clip();
     let Some(clip) = clip else {
         clear_running(&state);
         return Err("clip not found".to_string());
@@ -76,38 +68,22 @@ pub fn auto_reframe_clip<R: Runtime>(app: AppHandle<R>, clip_id: u64) -> Result<
         clear_running(&state);
         return Err("no auto-reframe model configured".to_string());
     }
-    let (asset_resolution, source_path) = {
-        let session = state.session();
-        let asset = session
-            .project
-            .media_library
-            .iter()
-            .find(|a| a.id == clip.asset_id)
-            .cloned();
-        (
-            asset.as_ref().and_then(|a| a.resolution),
-            asset.map(|a| a.source_path),
-        )
-    };
+    let (asset_resolution, source_path) = (token.resolution(), token.source());
     let (Some((source_w, source_h)), Some(source_path)) = (asset_resolution, source_path) else {
         clear_running(&state);
         return Err("asset resolution unknown".to_string());
     };
-    let (target_w, target_h) = {
-        let session = state.session();
-        session
-            .project
-            .active_sequence()
-            .export_settings
-            .aspect_ratio
-            .dims_or((source_w, source_h))
-    };
+    let (target_w, target_h) = token.target_dims((source_w, source_h));
     let midpoint_secs = (clip.source_in_secs + clip.source_out_secs) / 2.0;
     let model_path = PathBuf::from(configured_model_path);
 
     let worker_app = app.clone();
     let services = state.services.clone();
     std::thread::spawn(move || {
+        let _permit = permit;
+        if !token.is_current(&worker_app) {
+            return;
+        }
         let subject_center = match seed_point {
             Some(seed) => Some(seed),
             None => extract_frame(&source_path, midpoint_secs).and_then(|(w, h, rgba)| {
@@ -127,16 +103,17 @@ pub fn auto_reframe_clip<R: Runtime>(app: AppHandle<R>, clip_id: u64) -> Result<
             let state = worker_app.state::<AppState>();
             clear_running(&state);
         }
-        let _ = with_session(&worker_app, |session| {
-            if let Some(clip) = session.project.timeline_mut().clip_mut(clip_id) {
+        let applied = token.apply(&worker_app, |project| {
+            if let Some(clip) = project.timeline_mut().clip_mut(clip_id) {
                 clip.crop_x = crop.x;
                 clip.crop_y = crop.y;
                 clip.crop_w = crop.w;
                 clip.crop_h = crop.h;
             }
-            session.dirty = true;
-            Ok(())
         });
+        if applied.is_err() {
+            return;
+        }
         let _ = worker_app.emit(
             AUTO_REFRAME_EVENT,
             AutoReframeResult {
@@ -157,6 +134,8 @@ pub fn dynamic_auto_reframe_clip<R: Runtime>(
     clip_id: u64,
 ) -> Result<(), String> {
     let state = app.state::<AppState>();
+    let permit = AnalysisPermit::acquire(&app)?;
+    let token = AnalysisToken::capture(&state, Some(clip_id), None);
     {
         let mut running = state
             .auto_reframing_clip_id
@@ -173,17 +152,7 @@ pub fn dynamic_auto_reframe_clip<R: Runtime>(
             .lock()
             .unwrap_or_else(|p| p.into_inner()) = None;
     };
-    let clip = {
-        let session = state.session();
-        session
-            .project
-            .timeline()
-            .tracks
-            .iter()
-            .flat_map(|track| &track.clips)
-            .find(|clip| clip.id == clip_id)
-            .cloned()
-    };
+    let clip = token.clip();
     let Some(clip) = clip else {
         clear_running(&state);
         return Err("clip not found".to_string());
@@ -194,37 +163,19 @@ pub fn dynamic_auto_reframe_clip<R: Runtime>(
         clear_running(&state);
         return Err("no auto-reframe model configured".to_string());
     }
-    let (source_w, source_h, source_path) = {
-        let session = state.session();
-        let asset = session
-            .project
-            .media_library
-            .iter()
-            .find(|asset| asset.id == clip.asset_id);
-        match asset.and_then(|asset| {
-            asset
-                .resolution
-                .map(|resolution| (resolution, &asset.source_path))
-        }) {
-            Some(((width, height), path)) => (width, height, path.clone()),
-            None => {
-                clear_running(&state);
-                return Err("asset resolution unknown".to_string());
-            }
-        }
+    let (Some((source_w, source_h)), Some(source_path)) = (token.resolution(), token.source())
+    else {
+        clear_running(&state);
+        return Err("asset resolution unknown".into());
     };
-    let (target_w, target_h) = {
-        let session = state.session();
-        session
-            .project
-            .active_sequence()
-            .export_settings
-            .aspect_ratio
-            .dims_or((source_w, source_h))
-    };
+    let (target_w, target_h) = token.target_dims((source_w, source_h));
     let worker_app = app.clone();
     let services = state.services.clone();
     std::thread::spawn(move || {
+        let _permit = permit;
+        if !token.is_current(&worker_app) {
+            return;
+        }
         let Some(samples) = dynamic_reframe_samples(
             services.as_ref(),
             &source_path,
@@ -260,16 +211,17 @@ pub fn dynamic_auto_reframe_clip<R: Runtime>(
         let crop = avcore::sparse_crop_keyframes(&crop_samples, avcore::DEFAULT_SPARSIFY_EPSILON);
         let state = worker_app.state::<AppState>();
         clear_running(&state);
-        let _ = with_session(&worker_app, |session| {
-            if let Some(clip) = session.project.timeline_mut().clip_mut(clip_id) {
+        let applied = token.apply(&worker_app, |project| {
+            if let Some(clip) = project.timeline_mut().clip_mut(clip_id) {
                 clip.crop_x_keyframes = crop.x;
                 clip.crop_y_keyframes = crop.y;
                 clip.crop_w_keyframes = crop.width;
                 clip.crop_h_keyframes = crop.height;
             }
-            session.dirty = true;
-            Ok(())
         });
+        if applied.is_err() {
+            return;
+        }
         let _ = worker_app.emit(
             AUTO_REFRAME_EVENT,
             AutoReframeResult {
@@ -317,7 +269,7 @@ fn dynamic_reframe_samples(
         .into_iter()
         .map(|time| {
             let center = sampler
-                .sample(time, Duration::from_millis(800))
+                .sample_scaled(time, Duration::from_millis(800), REFRAME_FRAME_MAX_DIM)
                 .and_then(|frame| {
                     let (width, height, rgba) = downscale_frame_rgba(
                         frame.width,
@@ -347,7 +299,8 @@ fn dynamic_reframe_samples(
 
 fn extract_frame(path: &Path, at_secs: f64) -> Option<(u32, u32, Vec<u8>)> {
     let sampler = avcore::FrameSampler::open(path).ok()?;
-    let frame = sampler.sample(at_secs, Duration::from_millis(1500))?;
+    let frame =
+        sampler.sample_scaled(at_secs, Duration::from_millis(1500), REFRAME_FRAME_MAX_DIM)?;
     Some(downscale_frame_rgba(
         frame.width,
         frame.height,

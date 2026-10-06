@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
-use super::with_session;
+use super::analysis_job::{AnalysisPermit, AnalysisToken};
 use crate::services::Services;
 use crate::state::AppState;
 
@@ -30,6 +30,8 @@ pub enum MatteGenerationResult {
 #[tauri::command]
 pub fn generate_matte_for_clip<R: Runtime>(app: AppHandle<R>, clip_id: u64) -> Result<(), String> {
     let state = app.state::<AppState>();
+    let permit = AnalysisPermit::acquire(&app)?;
+    let token = AnalysisToken::capture(&state, Some(clip_id), None);
     {
         let mut running = state
             .matte_generating_clip_id
@@ -51,42 +53,44 @@ pub fn generate_matte_for_clip<R: Runtime>(app: AppHandle<R>, clip_id: u64) -> R
         clear_running(&state);
         return Err("no background-removal model configured".to_string());
     }
-    let clip = {
-        let session = state.session();
-        session
-            .project
-            .timeline()
-            .tracks
-            .iter()
-            .flat_map(|t| &t.clips)
-            .find(|c| c.id == clip_id)
-            .cloned()
-    };
+    let clip = token.clip();
     let Some(clip) = clip else {
         clear_running(&state);
         return Err("clip not found".to_string());
     };
-    let (source_path, mask_dir) = {
-        let session = state.session();
-        let source_path = session
-            .project
-            .media_library
-            .iter()
-            .find(|a| a.id == clip.asset_id)
-            .map(|a| a.source_path.clone());
-        let mask_dir = avcore::background_removal::mask_cache_dir_for_project(&session.project);
-        (source_path, mask_dir)
-    };
+    let (source_path, mask_dir) = (token.source(), token.mask_dir.clone());
     let Some(source_path) = source_path else {
         clear_running(&state);
         return Err("asset not found".to_string());
     };
-    let mask_path = avcore::background_removal::mask_path_for_clip(clip_id, &mask_dir);
+
     let model_path = PathBuf::from(model_path);
 
     let worker_app = app.clone();
     let services = state.services.clone();
     std::thread::spawn(move || {
+        let _permit = permit;
+        if !token.is_current(&worker_app) {
+            return;
+        }
+        let staged = std::fs::create_dir_all(&mask_dir).and_then(|_| {
+            tempfile::Builder::new()
+                .prefix("analysis_")
+                .suffix(".mp4")
+                .tempfile_in(&mask_dir)
+        });
+        let staged = match staged {
+            Ok(file) => file.into_temp_path(),
+            Err(error) => {
+                let message = error.to_string();
+                let _ = worker_app.emit(
+                    MATTE_GENERATION_EVENT,
+                    MatteGenerationResult::Failed { clip_id, message },
+                );
+                return;
+            }
+        };
+        let mask_path = staged.to_path_buf();
         let result = generate_matte_one(
             services.as_ref(),
             &source_path,
@@ -102,14 +106,30 @@ pub fn generate_matte_for_clip<R: Runtime>(app: AppHandle<R>, clip_id: u64) -> R
         }
         let event = match result {
             Ok(mask_path) => {
-                let _ = with_session(&worker_app, |session| {
-                    if let Some(clip) = session.project.timeline_mut().clip_mut(clip_id) {
+                if let Err(error) = staged.keep() {
+                    let _ = worker_app.emit(
+                        MATTE_GENERATION_EVENT,
+                        MatteGenerationResult::Failed {
+                            clip_id,
+                            message: error.to_string(),
+                        },
+                    );
+                    return;
+                }
+                let applied = token.apply(&worker_app, |project| {
+                    if let Some(clip) = project.timeline_mut().clip_mut(clip_id) {
                         clip.background_removal_mask_path = mask_path.display().to_string();
                         clip.background_removal_enabled = true;
                     }
-                    session.dirty = true;
-                    Ok(())
                 });
+                if let Err(message) = applied {
+                    let _ = std::fs::remove_file(&mask_path);
+                    let _ = worker_app.emit(
+                        MATTE_GENERATION_EVENT,
+                        MatteGenerationResult::Failed { clip_id, message },
+                    );
+                    return;
+                }
                 MatteGenerationResult::Done { clip_id }
             }
             Err(message) => {
@@ -145,15 +165,37 @@ fn generate_matte_one(
     let sampler = avcore::FrameSampler::open(source_path)
         .map_err(|e| format!("failed to open source for decoding: {e}"))?;
 
-    let frames: Vec<avcore::SampledFrame> = sample_times
-        .iter()
-        .filter_map(|&t| sampler.sample(t, Duration::from_millis(1500)))
-        .collect();
-    matte_from_frames(services, &frames, duration, model_path, mask_dir, mask_path)
+    let mut dimensions = None;
+    let mut luma_frames = Vec::new();
+    for t in sample_times {
+        let Some(frame) = sampler.sample_scaled(t, Duration::from_millis(1500), 320) else {
+            continue;
+        };
+        let size = (frame.width, frame.height);
+        if dimensions.is_some_and(|d| d != size) {
+            continue;
+        }
+        dimensions = Some(size);
+        let alpha = services
+            .segment_person(model_path, &frame.rgba, frame.width, frame.height)
+            .map_err(|e| format!("segmentation failed: {e}"))?;
+        if alpha.len() != frame.width as usize * frame.height as usize {
+            return Err("invalid segmentation dimensions".into());
+        }
+        luma_frames.push(
+            alpha
+                .iter()
+                .map(|a| (a.clamp(0.0, 1.0) * 255.0).round() as u8)
+                .collect(),
+        );
+    }
+    let (w, h) = dimensions.unwrap_or((0, 0));
+    encode_masks(luma_frames, w, h, duration, mask_dir, mask_path)
 }
 
 /// Segments the people in already decoded frames and encodes the matte video. Frames whose size
 /// differs from the first one's are skipped.
+#[cfg(test)]
 fn matte_from_frames(
     services: &dyn Services,
     frames: &[avcore::SampledFrame],
@@ -178,6 +220,17 @@ fn matte_from_frames(
                 .collect(),
         );
     }
+    encode_masks(luma_frames, frame_w, frame_h, duration, mask_dir, mask_path)
+}
+
+fn encode_masks(
+    luma_frames: Vec<Vec<u8>>,
+    frame_w: u32,
+    frame_h: u32,
+    duration: f64,
+    mask_dir: &Path,
+    mask_path: &Path,
+) -> Result<PathBuf, String> {
     if luma_frames.len() < 2 {
         return Err("couldn't decode enough frames to generate a matte".to_string());
     }

@@ -8,7 +8,7 @@ use std::time::Duration;
 use avcore::{Keyframe, Position};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
-use super::with_session;
+use super::analysis_job::{AnalysisPermit, AnalysisToken};
 use crate::state::AppState;
 
 pub const MOTION_TRACK_EVENT: &str = "motion-track-event";
@@ -36,6 +36,8 @@ pub fn motion_track_clip<R: Runtime>(
     search_radius: f32,
 ) -> Result<(), String> {
     let state = app.state::<AppState>();
+    let permit = AnalysisPermit::acquire(&app)?;
+    let token = AnalysisToken::capture(&state, Some(clip_id), None);
     {
         let mut running = state
             .motion_tracking_clip_id
@@ -46,17 +48,7 @@ pub fn motion_track_clip<R: Runtime>(
         }
         *running = Some(clip_id);
     }
-    let clip = {
-        let session = state.session();
-        session
-            .project
-            .timeline()
-            .tracks
-            .iter()
-            .flat_map(|t| &t.clips)
-            .find(|c| c.id == clip_id)
-            .cloned()
-    };
+    let clip = token.clip();
     let Some(clip) = clip else {
         *state
             .motion_tracking_clip_id
@@ -64,15 +56,7 @@ pub fn motion_track_clip<R: Runtime>(
             .unwrap_or_else(|p| p.into_inner()) = None;
         return Err("clip not found".to_string());
     };
-    let source_path = {
-        let session = state.session();
-        session
-            .project
-            .media_library
-            .iter()
-            .find(|a| a.id == clip.asset_id)
-            .map(|a| a.source_path.clone())
-    };
+    let source_path = token.source();
     let Some(source_path) = source_path else {
         *state
             .motion_tracking_clip_id
@@ -94,6 +78,10 @@ pub fn motion_track_clip<R: Runtime>(
 
     let worker_app = app.clone();
     std::thread::spawn(move || {
+        let _permit = permit;
+        if !token.is_current(&worker_app) {
+            return;
+        }
         let keyframes = motion_track_one(
             &source_path,
             clip.source_in_secs,
@@ -113,13 +101,15 @@ pub fn motion_track_clip<R: Runtime>(
                 .unwrap_or_else(|p| p.into_inner()) = None;
         }
         if !keyframes.is_empty() {
-            let _ = with_session(&worker_app, |session| {
-                if let Some(clip) = session.project.timeline_mut().clip_mut(clip_id) {
+            let applied = token.apply(&worker_app, |project| {
+                if let Some(clip) = project.timeline_mut().clip_mut(clip_id) {
                     clip.position_keyframes = keyframes.clone();
                 }
-                session.dirty = true;
-                Ok(())
             });
+            if applied.is_err() {
+                let _ = worker_app.emit(MOTION_TRACK_EVENT, 0usize);
+                return;
+            }
         }
         let _ = worker_app.emit(MOTION_TRACK_EVENT, keyframes.len());
     });
@@ -155,7 +145,7 @@ fn motion_track_one(
     let decoded: Vec<(f32, avcore::GrayFrame)> = sample_times
         .iter()
         .filter_map(|&t| {
-            let frame = sampler.sample(t, Duration::from_millis(800))?;
+            let frame = sampler.sample_scaled(t, Duration::from_millis(800), 320)?;
             let time_fraction = ((t - source_in_secs) / duration) as f32;
             Some((
                 time_fraction,

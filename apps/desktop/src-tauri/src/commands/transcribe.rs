@@ -13,6 +13,7 @@ use avcore::{ProjectTranscriptHit, TranscribeOutcome, TranscribeSegment, Transcr
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
+use super::analysis_job::{AnalysisPermit, AnalysisToken};
 use super::with_session;
 use crate::services::Services;
 use crate::state::AppState;
@@ -44,6 +45,8 @@ pub struct TranscriptHitView {
 #[tauri::command]
 pub fn transcribe_asset<R: Runtime>(app: AppHandle<R>, asset_id: u64) -> Result<(), String> {
     let state = app.state::<AppState>();
+    let permit = AnalysisPermit::acquire(&app)?;
+    let token = AnalysisToken::capture(&state, None, Some(asset_id));
     {
         let mut transcribing = state
             .transcribing_asset_id
@@ -54,13 +57,7 @@ pub fn transcribe_asset<R: Runtime>(app: AppHandle<R>, asset_id: u64) -> Result<
         }
         *transcribing = Some(asset_id);
     }
-    let source_path = state
-        .session()
-        .project
-        .media_library
-        .iter()
-        .find(|a| a.id == asset_id)
-        .map(|a| a.source_path.clone());
+    let source_path = token.source();
     let Some(source_path) = source_path else {
         *state
             .transcribing_asset_id
@@ -75,15 +72,23 @@ pub fn transcribe_asset<R: Runtime>(app: AppHandle<R>, asset_id: u64) -> Result<
             .unwrap_or_else(|p| p.into_inner()) = None;
         return Err("no Whisper model configured".to_string());
     };
-    let worker_app = app.clone();
-    let services = state.services.clone();
-    std::thread::spawn(move || {
-        run_transcription(worker_app, services, asset_id, source_path, model_path)
-    });
     let _ = app.emit(
         TRANSCRIBE_EVENT,
         TranscribeEventPayload::Started { asset_id },
     );
+    let worker_app = app.clone();
+    let services = state.services.clone();
+    std::thread::spawn(move || {
+        let _permit = permit;
+        run_transcription(
+            worker_app,
+            services,
+            asset_id,
+            source_path,
+            model_path,
+            token,
+        )
+    });
     Ok(())
 }
 
@@ -104,6 +109,7 @@ fn run_transcription<R: Runtime>(
     asset_id: u64,
     source_path: PathBuf,
     model_path: PathBuf,
+    token: AnalysisToken,
 ) {
     let cancel = Arc::new(AtomicBool::new(false));
     let outcome = services.transcribe(&source_path, &model_path, &cancel);
@@ -123,13 +129,42 @@ fn run_transcription<R: Runtime>(
                 );
                 return;
             }
-            save_transcript_document(&app, asset_id, &segments);
-            let _ = with_session(&app, |session| {
-                let playhead_secs = session.project.timeline().playhead_secs;
-                apply_transcription(session.project.timeline_mut(), playhead_secs, segments);
-                session.dirty = true;
-                Ok(())
-            });
+            if !token.is_current(&app) {
+                let _ = app.emit(
+                    TRANSCRIBE_EVENT,
+                    TranscribeEventPayload::Failed {
+                        asset_id,
+                        message: "analysisStale".into(),
+                    },
+                );
+                return;
+            }
+            let document = TranscriptDocument::from_transcribe_segments(asset_id, None, &segments);
+            if let Err(error) = avcore::save_transcript_document(&token.transcript_dir, &document) {
+                let _ = app.emit(
+                    TRANSCRIBE_EVENT,
+                    TranscribeEventPayload::Failed {
+                        asset_id,
+                        message: error.to_string(),
+                    },
+                );
+                return;
+            }
+            if token
+                .apply(&app, |project| {
+                    apply_transcription(project.timeline_mut(), token.playhead, segments)
+                })
+                .is_err()
+            {
+                let _ = app.emit(
+                    TRANSCRIBE_EVENT,
+                    TranscribeEventPayload::Failed {
+                        asset_id,
+                        message: "analysisStale".into(),
+                    },
+                );
+                return;
+            }
             let _ = app.emit(TRANSCRIBE_EVENT, TranscribeEventPayload::Done { asset_id });
         }
         Err(error) => {
@@ -141,22 +176,6 @@ fn run_transcription<R: Runtime>(
                 },
             );
         }
-    }
-}
-
-fn save_transcript_document<R: Runtime>(
-    app: &AppHandle<R>,
-    asset_id: u64,
-    segments: &[TranscribeSegment],
-) {
-    let document = TranscriptDocument::from_transcribe_segments(asset_id, None, segments);
-    let dir = {
-        let state = app.state::<AppState>();
-        let session = state.session();
-        avcore::transcript_cache_dir_for_project(&session.project)
-    };
-    if let Err(error) = avcore::save_transcript_document(&dir, &document) {
-        tracing::warn!(asset_id, %error, "failed to save transcript document");
     }
 }
 

@@ -10,6 +10,7 @@
 //! successful mutations publish the new session through [`crate::state::publish`] rather than
 //! returning it, so every listener (not just the caller) sees the same state.
 
+mod analysis_job;
 pub mod auto_reframe;
 pub mod background_removal;
 pub mod error_reporting;
