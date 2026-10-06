@@ -14,8 +14,12 @@ use avcore::SampledFrame;
 /// Longest side of a preview frame sent to the webview. Matches a typical program monitor on a
 /// 1440p display; the source keeps full resolution for export.
 pub const PREVIEW_MAX_DIM: u32 = 1280;
+/// Smallest longest side the preview is asked to composite at, however small the monitor.
+pub const PREVIEW_MIN_DIM: u32 = 480;
 /// Longest side of a media-library thumbnail.
-pub const THUMBNAIL_MAX_DIM: u32 = 320;
+pub const THUMBNAIL_MAX_DIM: u32 = 192;
+/// The media library's poster frame: shown larger than a timeline strip tile.
+pub const POSTER_MAX_DIM: u32 = 320;
 
 const PREVIEW_JPEG_QUALITY: u8 = 82;
 
@@ -82,15 +86,32 @@ fn downscale_to_rgb(
         }
         return Some((width, height, rgb));
     }
+    // Four taps per output pixel: the first and last source pixel of its box on each axis,
+    // averaged. Much less aliasing than a single nearest sample, at a fraction of a full box
+    // filter's cost.
+    let stride = src_width as usize * 4;
     for y in 0..height {
-        let src_y = (y as u64 * src_height as u64 / height as u64) as u32;
-        let src_row = (src_y as usize * src_width as usize) * 4;
+        let y0 = (y as u64 * src_height as u64 / height as u64) as usize;
+        let y1 = (((y as u64 + 1) * src_height as u64 / height as u64) as usize)
+            .saturating_sub(1)
+            .clamp(y0, src_height as usize - 1);
         let dst_row = (y * width) as usize * 3;
         for x in 0..width {
-            let src_x = (x as u64 * src_width as u64 / width as u64) as usize;
-            let src = src_row + src_x * 4;
+            let x0 = (x as u64 * src_width as u64 / width as u64) as usize;
+            let x1 = (((x as u64 + 1) * src_width as u64 / width as u64) as usize)
+                .saturating_sub(1)
+                .clamp(x0, src_width as usize - 1);
+            let taps = [
+                y0 * stride + x0 * 4,
+                y0 * stride + x1 * 4,
+                y1 * stride + x0 * 4,
+                y1 * stride + x1 * 4,
+            ];
             let dst = dst_row + x as usize * 3;
-            rgb[dst..dst + 3].copy_from_slice(&rgba[src..src + 3]);
+            for channel in 0..3 {
+                let sum: u32 = taps.iter().map(|&at| u32::from(rgba[at + channel])).sum();
+                rgb[dst + channel] = ((sum + 2) / 4) as u8;
+            }
         }
     }
     Some((width, height, rgb))
@@ -114,6 +135,22 @@ mod tests {
         assert!(downscale_to_rgb(4, 0, &[0; 64], 100).is_none());
         assert!(downscale_to_rgb(4, 4, &[0; 10], 100).is_none());
     }
+    #[test]
+    fn downscale_averages_instead_of_picking_one_pixel() {
+        // Columns alternate black and white: a nearest sample would give pure black or white.
+        let mut rgba = Vec::new();
+        for _row in 0..2 {
+            for column in 0..4u32 {
+                let value = if column % 2 == 0 { 0 } else { 255 };
+                rgba.extend_from_slice(&[value, value, value, 255]);
+            }
+        }
+        let (width, height, rgb) = downscale_to_rgb(4, 2, &rgba, 2).unwrap();
+        assert_eq!((width, height), (2, 1));
+        assert_eq!(&rgb[..3], &[128, 128, 128]);
+        assert_eq!(&rgb[3..6], &[128, 128, 128]);
+    }
+
     #[test]
     fn downscale_keeps_aspect_and_caps_longest_side() {
         let frame = solid(1920, 1080);

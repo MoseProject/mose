@@ -63,6 +63,8 @@ pub(crate) enum Command {
     Seek(f64),
     Step(i64),
     Playing(bool),
+    /// The longest side the preview should composite at (the size the monitor really shows).
+    MaxDim(u32),
 }
 
 /// Snapshot of transport state for the webview.
@@ -164,6 +166,10 @@ impl PreviewEngine {
         let _ = self.tx.send(Command::Content { project });
     }
 
+    pub fn set_max_dim(&self, dim: u32) {
+        let _ = self.tx.send(Command::MaxDim(dim));
+    }
+
     pub fn seek(&self, position_secs: f64) {
         let _ = self.tx.send(Command::Seek(position_secs));
     }
@@ -204,6 +210,7 @@ fn supervise<R: Runtime>(
     playhead_bits: Arc<AtomicU64>,
 ) {
     let mut project: Option<Arc<Project>> = None;
+    let mut max_dim: Option<u32> = None;
     let mut crashes: Vec<Instant> = Vec::new();
     let mut first = true;
     loop {
@@ -215,6 +222,9 @@ fn supervise<R: Runtime>(
                 });
                 let secs = f64::from_bits(playhead_bits.load(Ordering::Acquire));
                 let _ = inner_tx.send(Command::Seek(secs));
+            }
+            if let Some(dim) = max_dim {
+                let _ = inner_tx.send(Command::MaxDim(dim));
             }
         }
         first = false;
@@ -232,6 +242,9 @@ fn supervise<R: Runtime>(
                         Ok(command) => {
                             if let Command::Content { project: content } = &command {
                                 project = Some(Arc::clone(content));
+                            }
+                            if let Command::MaxDim(dim) = &command {
+                                max_dim = Some(*dim);
                             }
                             let _ = inner_tx.send(command);
                         }

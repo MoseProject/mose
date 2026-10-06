@@ -408,6 +408,7 @@ fn a_crashed_playback_thread_is_restarted_with_its_scene_and_playhead() {
                 }
                 Command::Step(_) => "step",
                 Command::Playing(_) => "playing",
+                Command::MaxDim(_) => "max_dim",
             };
             RECEIVED.lock().unwrap().push(name);
         }

@@ -568,6 +568,9 @@ export const api = {
   setPlaying: (playing: boolean) => {
     return invoke<void>("preview_set_playing", { playing });
   },
+  setPreviewMaxDim: (dim: number) => {
+    return invoke<void>("preview_set_max_dim", { dim });
+  },
 
   setExportSettings: (targetLufs: number, aspectRatio: ExportAspectRatio) => {
     return invoke<void>("set_export_settings", { targetLufs, aspectRatio });

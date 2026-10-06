@@ -35,7 +35,7 @@ use tauri::{AppHandle, Emitter, Runtime};
 
 use super::audio::{open_default_device, AudioOutput, OpenAudio};
 use super::mapper::{map_timeline, Approximation, OverlayCache, SourceResolver};
-use crate::frames::{encode_jpeg_rgba, PREVIEW_MAX_DIM};
+use crate::frames::{encode_jpeg_rgba, PREVIEW_MAX_DIM, PREVIEW_MIN_DIM};
 use crate::preview_engine::{
     preview_source_path, Command, LatestFrame, PreviewTick, FALLBACK_FPS, POLL_INTERVAL,
     PREVIEW_TICK, TICK_INTERVAL,
@@ -77,7 +77,7 @@ impl SourceResolver for AppResolver {
 
 /// The canvas the preview composites at: the first video clip's resolution, shrunk to the preview
 /// size so Bush never renders pixels the webview would throw away.
-fn preview_canvas(timeline: &Timeline, media: &[MediaAsset]) -> (u32, u32) {
+fn preview_canvas(timeline: &Timeline, media: &[MediaAsset], max_dim: u32) -> (u32, u32) {
     let resolution = timeline
         .tracks
         .iter()
@@ -93,7 +93,7 @@ fn preview_canvas(timeline: &Timeline, media: &[MediaAsset]) -> (u32, u32) {
     let Some((width, height)) = resolution.filter(|(w, h)| *w > 0 && *h > 0) else {
         return DEFAULT_CANVAS;
     };
-    let scale = (PREVIEW_MAX_DIM as f32 / width.max(height) as f32).min(1.0);
+    let scale = (max_dim as f32 / width.max(height) as f32).min(1.0);
     let even = |value: f32| ((value as u32).max(2)) & !1;
     (even(width as f32 * scale), even(height as f32 * scale))
 }
@@ -226,6 +226,8 @@ pub(crate) fn run_with_audio<R: Runtime>(
     let mut error: Option<String> = None;
     let mut frame_seq = 0u64;
     let mut dirty = true;
+    // The longest side to composite at: what the monitor shows, up to PREVIEW_MAX_DIM.
+    let mut max_dim = PREVIEW_MAX_DIM;
     let mut last_tick = Instant::now();
     let mut outstanding_since: Option<Instant> = None;
     // When a rendered frame was handed to the JPEG thread and its picture has not shown up yet.
@@ -296,6 +298,14 @@ pub(crate) fn run_with_audio<R: Runtime>(
                     }
                     rebuild = true;
                 }
+                Command::MaxDim(requested) => {
+                    let requested = requested.clamp(PREVIEW_MIN_DIM, PREVIEW_MAX_DIM);
+                    if requested != max_dim {
+                        max_dim = requested;
+                        // A new canvas size: rebuild the scene at it (once there is one).
+                        rebuild |= shown.is_some();
+                    }
+                }
                 Command::Seek(position) => {
                     if let Some(player) = player.as_mut() {
                         seek(
@@ -348,7 +358,7 @@ pub(crate) fn run_with_audio<R: Runtime>(
         if rebuild {
             revision += 1;
             min_frame_interval = Duration::from_secs_f64(0.9 / first_video_fps(&timeline, &media));
-            let next_canvas = preview_canvas(&timeline, &media);
+            let next_canvas = preview_canvas(&timeline, &media, max_dim);
             let duration = timeline.duration_secs();
             let versions = SceneVersions {
                 source: Version(revision),
