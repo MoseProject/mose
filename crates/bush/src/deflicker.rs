@@ -4,6 +4,7 @@
 //! it. State is a single `f32` plus the last timestamp, so memory is constant; a seek or jump
 //! resets it rather than blending unrelated frames.
 
+use crate::temporal_effect::TemporalEffect;
 use crate::VideoFrame;
 
 /// Frames further apart than this (or going backwards) restart the average: they are not part
@@ -36,14 +37,6 @@ impl Deflicker {
     }
 
     /// Forgets the average (call after any discontinuity you know about).
-    /// Applies a validated smoothing weight and restarts history when it changes.
-    pub(crate) fn set_smoothing(&mut self, smoothing: f32) {
-        if self.smoothing != smoothing {
-            self.smoothing = smoothing;
-            self.reset();
-        }
-    }
-
     pub fn reset(&mut self) {
         self.average_luma = None;
     }
@@ -83,6 +76,16 @@ impl Deflicker {
             return frame.clone();
         }
         scaled(frame, gain)
+    }
+}
+
+impl TemporalEffect for Deflicker {
+    fn smoothing_mut(&mut self) -> &mut f32 {
+        &mut self.smoothing
+    }
+
+    fn reset_history(&mut self) {
+        self.reset();
     }
 }
 

@@ -12,6 +12,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use crate::temporal_effect::TemporalEffect;
 use crate::{
     ByteCache, ContributorContent, ContributorId, CpuRenderer, DecodePolicy, DecodeSource,
     Generation, LatestIntent, LayerEffects, LayerFrame, Placement, Renderer, SceneSnapshot,

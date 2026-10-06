@@ -36,6 +36,7 @@ mod scene_scheduler;
 mod scene_versions;
 mod source_variants;
 mod stabilizer;
+mod temporal_effect;
 mod time_stretch;
 mod transport;
 mod video_frame;

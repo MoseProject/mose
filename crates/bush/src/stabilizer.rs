@@ -6,6 +6,7 @@
 //! path, so memory is constant. A repeated timestamp reuses the previous correction (a paused
 //! frame never drifts) and any discontinuity resets the path.
 
+use crate::temporal_effect::TemporalEffect;
 use crate::VideoFrame;
 
 /// Zoom applied to a stabilized layer (about its centre) to hide the moving borders.
@@ -50,14 +51,6 @@ impl Stabilizer {
         })
     }
 
-    /// Applies a validated smoothing weight and restarts history when it changes.
-    pub(crate) fn set_smoothing(&mut self, smoothing: f32) {
-        if self.smoothing != smoothing {
-            self.smoothing = smoothing;
-            self.reset();
-        }
-    }
-
     pub fn reset(&mut self) {
         self.previous = None;
         self.path = (0.0, 0.0);
@@ -97,6 +90,16 @@ impl Stabilizer {
         self.smoothed.1 += (self.path.1 - self.smoothed.1) * weight;
         self.last_correction = (self.smoothed.0 - self.path.0, self.smoothed.1 - self.path.1);
         self.last_correction
+    }
+}
+
+impl TemporalEffect for Stabilizer {
+    fn smoothing_mut(&mut self) -> &mut f32 {
+        &mut self.smoothing
+    }
+
+    fn reset_history(&mut self) {
+        self.reset();
     }
 }
 
