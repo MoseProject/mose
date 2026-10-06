@@ -141,14 +141,7 @@ fn run_transcription<R: Runtime>(
             }
             let document = TranscriptDocument::from_transcribe_segments(asset_id, None, &segments);
             if let Err(error) = avcore::save_transcript_document(&token.transcript_dir, &document) {
-                let _ = app.emit(
-                    TRANSCRIBE_EVENT,
-                    TranscribeEventPayload::Failed {
-                        asset_id,
-                        message: error.to_string(),
-                    },
-                );
-                return;
+                tracing::warn!(%error, "transcript sidecar could not be saved; applying text clips");
             }
             if token
                 .apply(&app, |project| {
