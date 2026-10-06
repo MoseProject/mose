@@ -12,7 +12,13 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["vite/client"]
+    "types": ["vite/client"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@components/*": ["./src/editor/*"],
+      "@tests/*": ["./tests/*"],
+      "@stories/*": ["./stories/*"]
+    }
   },
   "include": ["src", "tests", "stories", ".storybook", "vite.config.ts"]
 }

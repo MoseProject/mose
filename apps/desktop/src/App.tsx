@@ -5,9 +5,9 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { useI18n } from "./i18n";
 import { COMMANDS } from "./commands";
 import { loadKeymap } from "./keymap";
-import { Dialog } from "./editor/chrome/Dialog";
-import { ConfirmHost, ToastHost } from "./editor/chrome/Notifications";
-import { StatusBar } from "./editor/chrome/StatusBar";
+import { Dialog } from "@components/chrome/Dialog";
+import { ConfirmHost, ToastHost } from "@components/chrome/Notifications";
+import { StatusBar } from "@components/chrome/StatusBar";
 import { Home } from "./screens/Home";
 import { CrashReviewModal } from "./screens/CrashReviewModal";
 import { TopBar } from "./TopBar";
@@ -20,11 +20,11 @@ const Editor = lazy(async () => {
   return { default: module.Editor };
 });
 const ExportDialog = lazy(async () => {
-  const module = await import("./editor/export/ExportDialog");
+  const module = await import("@components/export/ExportDialog");
   return { default: module.ExportDialog };
 });
 const ExportPanel = lazy(async () => {
-  const module = await import("./editor/export/ExportPanel");
+  const module = await import("@components/export/ExportPanel");
   return { default: module.ExportPanel };
 });
 const Prefs = lazy(async () => {
@@ -32,7 +32,7 @@ const Prefs = lazy(async () => {
   return { default: module.Prefs };
 });
 const ShortcutsDialog = lazy(async () => {
-  const module = await import("./editor/chrome/ShortcutsDialog");
+  const module = await import("@components/chrome/ShortcutsDialog");
   return { default: module.ShortcutsDialog };
 });
 const WatchFolder = lazy(async () => {
@@ -40,7 +40,7 @@ const WatchFolder = lazy(async () => {
   return { default: module.WatchFolder };
 });
 const CommandPalette = lazy(async () => {
-  const module = await import("./editor/chrome/CommandPalette");
+  const module = await import("@components/chrome/CommandPalette");
   return { default: module.CommandPalette };
 });
 
