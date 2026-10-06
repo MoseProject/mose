@@ -34,19 +34,20 @@
 //! rendered file is produced by a real encode, not instant. `ui`'s callers (queueing an export,
 //! opening a preview) call this synchronously and block until it's done — no background-thread/
 //! progress-reporting path yet, a real UX rough edge for a long nested sequence. Caching (keyed
-//! on the nested sequence's own [`crate::timeline::Timeline`] content — cheap `PartialEq`, no
-//! hashing) means this cost is paid once per edit to that nested sequence, not on every call.
+//! on timeline/export inputs, source-file revisions, and descendant render generations) avoids
+//! reusing renders after a relink or a change to a child sequence.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::time::SystemTime;
 
 use crate::media::MediaAsset;
-use crate::project::{Project, Sequence};
+use crate::project::{Project, Sequence, SequenceExportSettings};
 use crate::render::{
-    render_export_job_multi_with_audio, resolve_audio_segments, resolve_privacy_blur_segments,
-    resolve_shape_segments, resolve_text_segments, resolve_timeline_segments_multi, RenderError,
-    RenderOutcome,
+    apply_export_aspect_ratio, render_export_job_multi_with_audio, resolve_audio_segments,
+    resolve_privacy_blur_segments, resolve_shape_segments, resolve_text_segments,
+    resolve_timeline_segments_multi, RenderError, RenderOutcome,
 };
 use crate::timeline::Timeline;
 
@@ -67,20 +68,135 @@ pub fn cache_dir_for_project(project: &Project) -> PathBuf {
     }
 }
 
-/// One nested sequence's rendered file, cached against the exact [`Timeline`] content it was
-/// rendered from — `ui`'s `App` owns a `HashMap<u64, NestedSequenceCache>` (mirroring
-/// `ExportPreviewCache`'s own "value-equality, not a version counter" pattern) so repeated calls
-/// after an unrelated edit don't re-render. Public so `ui` can store/compare it without this
-/// module needing to know anything about `App`.
+/// A rendered sequence and its inputs. Callers own the map; only this module constructs entries
+/// so descendant generations and file revisions stay consistent with the rendered content.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NestedSequenceCache {
     pub timeline: Timeline,
     pub rendered_path: PathBuf,
+    inputs: NestedRenderInputs,
+    generation: u64,
+    output_revision: Option<FileRevision>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct NestedRenderInputs {
+    project_id: u64,
+    project_path: Option<PathBuf>,
+    cache_dir: PathBuf,
+    export_settings: SequenceExportSettings,
+    media: Vec<RenderMediaInput>,
+    files: Vec<(PathBuf, Option<FileRevision>)>,
+    children: Vec<(u64, u64)>,
+}
+
+/// Render-relevant asset fields, deliberately excluding waveforms and other display data.
+#[derive(Debug, Clone, PartialEq)]
+struct RenderMediaInput {
+    id: u64,
+    source_path: PathBuf,
+    has_audio: bool,
+    resolution: Option<(u32, u32)>,
+    fps: Option<f32>,
+    bitrate_mbps: f32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FileRevision {
+    size: u64,
+    modified: SystemTime,
+}
+
+fn file_revision(path: &Path) -> Option<FileRevision> {
+    let metadata = std::fs::metadata(path).ok()?;
+    if !metadata.is_file() {
+        return None;
+    }
+    Some(FileRevision {
+        size: metadata.len(),
+        modified: metadata.modified().ok()?,
+    })
+}
+
+fn render_inputs(
+    project: &Project,
+    sequence: &Sequence,
+    cache_dir: &Path,
+    cache: &HashMap<u64, NestedSequenceCache>,
+) -> NestedRenderInputs {
+    let clips: Vec<_> = sequence
+        .timeline
+        .tracks
+        .iter()
+        .flat_map(|track| &track.clips)
+        .collect();
+    let asset_ids: HashSet<_> = clips
+        .iter()
+        .filter(|clip| clip.nested_sequence_id.is_none())
+        .map(|clip| clip.asset_id)
+        .collect();
+    let mut media: Vec<_> = project
+        .media_library
+        .iter()
+        .filter(|asset| asset_ids.contains(&asset.id))
+        .map(|asset| RenderMediaInput {
+            id: asset.id,
+            source_path: asset.source_path.clone(),
+            has_audio: asset.has_audio,
+            resolution: asset.resolution,
+            fps: asset.fps,
+            bitrate_mbps: asset.source_bitrate_mbps,
+        })
+        .collect();
+    media.sort_by_key(|asset| asset.id);
+    let mut paths: Vec<_> = media
+        .iter()
+        .map(|asset| asset.source_path.clone())
+        .collect();
+    for clip in &clips {
+        for (path, enabled) in [
+            (&clip.lut_path, true),
+            (
+                &clip.background_removal_mask_path,
+                clip.background_removal_enabled,
+            ),
+            (&clip.privacy_blur_mask_path, clip.privacy_blur_enabled),
+        ] {
+            if enabled && !path.is_empty() {
+                paths.push(PathBuf::from(path));
+            }
+        }
+    }
+    paths.sort();
+    paths.dedup();
+    let files = paths
+        .into_iter()
+        .map(|path| {
+            let revision = file_revision(&path);
+            (path, revision)
+        })
+        .collect();
+    let mut children: Vec<_> = clips
+        .iter()
+        .filter_map(|clip| clip.nested_sequence_id)
+        .filter_map(|id| cache.get(&id).map(|entry| (id, entry.generation)))
+        .collect();
+    children.sort_unstable();
+    children.dedup();
+    NestedRenderInputs {
+        project_id: project.id,
+        project_path: project.file_path.clone(),
+        cache_dir: cache_dir.to_path_buf(),
+        export_settings: sequence.export_settings,
+        media,
+        files,
+        children,
+    }
 }
 
 /// Renders every nested-sequence clip ([`crate::timeline::ClipInstance::nested_sequence_id`])
 /// reachable from `timeline`, recursively (a nested sequence's own clips may themselves be
-/// nested), skipping any whose `cache` already has a fresh (`Timeline`-equal) entry. Returns a
+/// nested), checking descendants before reusing an entry with equal render inputs. Returns a
 /// map from `nested_sequence_id` to a synthetic [`MediaAsset`] (`source_path` = the rendered
 /// file) that [`crate::render::resolve_timeline_segments_multi`]/[`resolve_audio_segments`] can
 /// resolve exactly like an ordinary asset-backed clip once merged into a `media_library` clone —
@@ -96,6 +212,17 @@ pub fn materialize_nested_sequences(
     cache_dir: &Path,
     cache: &mut HashMap<u64, NestedSequenceCache>,
 ) -> Result<HashMap<u64, MediaAsset>, RenderError> {
+    let sequence_ids: HashSet<_> = project
+        .sequences
+        .iter()
+        .map(|sequence| sequence.id)
+        .collect();
+    cache.retain(|id, entry| {
+        sequence_ids.contains(id)
+            && entry.inputs.project_id == project.id
+            && entry.inputs.project_path == project.file_path
+            && entry.inputs.cache_dir == cache_dir
+    });
     let mut visiting = HashSet::new();
     let mut assets = HashMap::new();
     materialize_inner(
@@ -134,16 +261,6 @@ fn materialize_inner(
             .find(|s| s.id == nested_id)
             .ok_or(RenderError::MissingNestedSequence)?;
 
-        if let Some(cached) = cache.get(&nested_id) {
-            if cached.timeline == nested_sequence.timeline {
-                assets.insert(
-                    nested_id,
-                    synthetic_asset(nested_id, &cached.rendered_path)?,
-                );
-                continue;
-            }
-        }
-
         if !visiting.insert(nested_id) {
             return Err(RenderError::CyclicNestedSequence);
         }
@@ -159,13 +276,34 @@ fn materialize_inner(
         )?;
         visiting.remove(&nested_id);
 
+        let inputs = render_inputs(project, nested_sequence, cache_dir, cache);
+        if let Some(cached) = cache.get(&nested_id) {
+            if cached.timeline == nested_sequence.timeline
+                && cached.inputs == inputs
+                && inputs.files.iter().all(|(_, revision)| revision.is_some())
+                && cached.output_revision.is_some()
+                && cached.output_revision == file_revision(&cached.rendered_path)
+            {
+                assets.insert(
+                    nested_id,
+                    synthetic_asset(nested_id, &cached.rendered_path)?,
+                );
+                continue;
+            }
+        }
+
         let rendered_path = render_nested_sequence(project, nested_sequence, cache_dir, assets)?;
         assets.insert(nested_id, synthetic_asset(nested_id, &rendered_path)?);
+        static NEXT_GENERATION: AtomicU64 = AtomicU64::new(0);
+        let output_revision = file_revision(&rendered_path);
         cache.insert(
             nested_id,
             NestedSequenceCache {
                 timeline: nested_sequence.timeline.clone(),
                 rendered_path,
+                inputs,
+                generation: NEXT_GENERATION.fetch_add(1, Ordering::Relaxed),
+                output_revision,
             },
         );
     }
@@ -185,6 +323,7 @@ fn render_nested_sequence(
     media_library.extend(already_materialized.values().cloned());
 
     let (track_segments, canvas) = resolve_timeline_segments_multi(sequence, &media_library)?;
+    let canvas = apply_export_aspect_ratio(canvas, sequence.export_settings.aspect_ratio);
     let audio_segments = resolve_audio_segments(sequence, &media_library)?;
     let text_segments = resolve_text_segments(sequence, canvas.width, canvas.height);
     let shape_segments = resolve_shape_segments(sequence, canvas.width, canvas.height);
