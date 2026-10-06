@@ -16,6 +16,7 @@ const FRAME_STEPS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60, 120, 300, 600, 1800, 3
 const MAX_IN_FLIGHT = 4;
 const MAX_QUEUED = 48;
 const MAX_CACHED_FRAMES = 600;
+const MAX_FRAME_BYTES = 32 * 1024 * 1024;
 
 /** A load that failed, with when, so it can be asked for again later: the file may have been
  *  offline or still arriving, and the backend retries after a while too. */
@@ -37,18 +38,34 @@ let inFlight = 0;
 // were requested before the bump are dropped when they arrive.
 const sources = new Map<number, string>();
 let epoch = 0;
+let projectNamespace: unknown;
+export function syncProject(namespace: unknown) {
+  if (projectNamespace !== namespace) {
+    projectNamespace = namespace;
+    sources.clear();
+    epoch += 1;
+    frames.clear();
+    queue.length = 0;
+    detailed.clear();
+    overview.clear();
+  }
+}
 
 /** Tells the cache which file each asset id stands for now; drops everything cached for ids
  *  that point to a different file than before (another project, a re-linked file). */
 export function syncAssets(assets: MediaAsset[]) {
-  let stale = false;
-  for (const asset of assets) {
-    const known = sources.get(asset.id);
-    if (known !== undefined && known !== asset.source_path) {
-      stale = true;
-    }
-    sources.set(asset.id, asset.source_path);
-  }
+  const next = new Map(
+    assets.map((asset) => {
+      return [asset.id, asset.source_path];
+    }),
+  );
+  const stale = sources.size !== next.size || [...sources].some(([id, path]) => {
+    return next.get(id) !== path;
+  });
+  sources.clear();
+  next.forEach((path, id) => {
+    return sources.set(id, path);
+  });
   if (stale) {
     epoch += 1;
     frames.clear();
@@ -71,6 +88,27 @@ export function frameStepSecs(secsPerTile: number): number {
   return step;
 }
 
+function trimFrames() {
+  let bytes = 0;
+  for (const entry of frames.values()) {
+    if (entry instanceof HTMLImageElement) {
+      bytes += entry.naturalWidth * entry.naturalHeight * 4;
+    }
+  }
+  for (const [key, entry] of frames) {
+    if (bytes <= MAX_FRAME_BYTES && frames.size <= MAX_CACHED_FRAMES) {
+      break;
+    }
+    if (entry === "pending") {
+      continue;
+    }
+    if (entry instanceof HTMLImageElement) {
+      bytes -= entry.naturalWidth * entry.naturalHeight * 4;
+    }
+    frames.delete(key);
+  }
+}
+
 function pump() {
   while (inFlight < MAX_IN_FLIGHT && queue.length > 0) {
     const job = queue.shift()!;
@@ -79,6 +117,7 @@ function pump() {
     const settle = (entry: FrameEntry) => {
       if (job.epoch === epoch) {
         frames.set(job.key, entry);
+        trimFrames();
       }
       inFlight -= 1;
       notify();
@@ -100,6 +139,8 @@ export function frameAt(assetId: number, secs: number, stepSecs: number): HTMLIm
   const key = `${assetId}:${millis}`;
   let entry = frames.get(key);
   if (entry instanceof HTMLImageElement) {
+    frames.delete(key);
+    frames.set(key, entry);
     return entry;
   }
   if (isFailed(entry) && Date.now() - entry.failedAt >= RETRY_MS) {
@@ -217,6 +258,10 @@ function fetchPeaks(
   url: string,
   durationSecs: number,
 ) {
+  if (waveInFlight >= 2) {
+    return;
+  }
+  waveInFlight += 1;
   const requestedIn = epoch;
   cache.set(assetId, "pending");
   void fetch(url)
@@ -231,18 +276,51 @@ function fetchPeaks(
       }
       const pyramid = buildPyramid(new Float32Array(buffer), durationSecs);
       cache.set(assetId, pyramid ?? { failedAt: Date.now() });
+      trimPeaks();
       notify();
     })
     .catch(() => {
       if (requestedIn === epoch) {
         cache.set(assetId, { failedAt: Date.now() });
       }
+    }).finally(() => {
+      waveInFlight -= 1;
+      notify();
     });
+}
+
+let waveInFlight = 0;
+const WAVE_BUDGET = 64 * 1024 * 1024;
+function trimPeaks() {
+  const cost = (value: WaveEntry) => {
+    return typeof value === "object" && "levels" in value
+    ? value.levels.reduce((bytes, level) => {
+      return bytes + level.byteLength;
+    }, 0) : 0;
+  };
+  let bytes = [...detailed.values(), ...overview.values()].reduce((sum, entry) => {
+    return sum + cost(entry);
+  }, 0);
+  for (const cache of [detailed, overview]) {
+    for (const [id, entry] of cache) {
+      if (bytes <= WAVE_BUDGET && cache.size <= 1500) {
+        break;
+      }
+      if (entry !== "pending") {
+        bytes -= cost(entry);
+        cache.delete(id);
+      }
+    }
+  }
 }
 
 /** The entry of `cache` for `assetId`, forgetting a failure once it is old enough to retry. */
 function entryFor(cache: Map<number, WaveEntry>, assetId: number): WaveEntry | undefined {
   const entry = cache.get(assetId);
+  if (entry && entry !== "pending") {
+    cache.delete(assetId);
+    cache.set(assetId, entry);
+  }
   if (isFailed(entry) && Date.now() - entry.failedAt >= RETRY_MS) {
     cache.delete(assetId);
     return undefined;

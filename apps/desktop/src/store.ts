@@ -164,6 +164,9 @@ const ERROR_CODES: Record<string, TextKey> = {
   outputIsSource: "exportOutputIsSource",
   outputInQueue: "exportOutputInQueue",
   exportPreparationBusy: "exportPreparationBusy",
+  exportPreparationCancelled: "exportPreparationCancelled",
+  analysisBusy: "analysisBusy",
+  analysisStale: "analysisStale",
   projectMissing: "projectMissing",
   projectNameEmpty: "projectNameEmpty",
 };
@@ -189,10 +192,16 @@ export async function run<T>(call: Promise<T>): Promise<T | undefined> {
  *  the selection, and selected clips that were deleted are unselected. */
 function adoptSession(view: SessionView) {
   const previous = sessionStore.get();
+  if (previous?.rev !== undefined && view.rev !== undefined && view.rev < previous.rev) {
+    return;
+  }
   sessionStore.set(view);
   const previousId = previous?.project.sequences[previous.project.active_sequence]?.id;
   const activeId = view.project.sequences[view.project.active_sequence]?.id;
-  if (previousId !== undefined && previousId !== activeId) {
+  if (
+    previousId !== undefined &&
+    (previousId !== activeId || previous?.projectEpoch !== view.projectEpoch)
+  ) {
     patchUi({ selectedClipIds: [] });
   }
   // Drop selections that no longer exist (undo, delete, project switch).
@@ -243,6 +252,7 @@ export async function connect() {
     adoptSession({
       ...current,
       rev: patch.rev,
+      projectEpoch: patch.projectEpoch,
       project: applyOps(current.project, patch.ops),
       filePath: patch.filePath,
       canUndo: patch.canUndo,
@@ -282,17 +292,17 @@ export async function connect() {
   });
   await onMatteGeneration((event) => {
     if (event.type === "failed") {
-      patchUi({ error: event.message });
+      patchUi({ error: describeError(event.message) });
     }
   });
   await onPrivacyBlur((event) => {
     if (event.type === "failed") {
-      patchUi({ error: event.message });
+      patchUi({ error: describeError(event.message) });
     }
   });
   await onTts((event) => {
     if (event.type === "failed") {
-      patchUi({ error: event.message });
+      patchUi({ error: describeError(event.message) });
     }
   });
   await onTranscribe((event) => {
@@ -302,7 +312,7 @@ export async function connect() {
     }
     transcribingAssetIdStore.set(null);
     if (event.type === "failed") {
-      patchUi({ error: event.message });
+      patchUi({ error: describeError(event.message) });
     } else if (event.type === "noSpeech") {
       patchUi({ error: t("transcribeNoSpeechFound") });
     }
@@ -313,3 +323,5 @@ export async function connect() {
   layerTemplatesStore.set(prefs.savedLayerTemplates);
   exportsStore.set(await api.listExports());
 }
+
+export const exportPreparationStore = createStore(false);

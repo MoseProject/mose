@@ -310,6 +310,7 @@ export interface PanelLayout {
 }
 
 export interface SessionView {
+  projectEpoch?: number;
   /** Revision of the update stream this snapshot is current as of. */
   rev?: number;
   project: Project;
@@ -321,6 +322,7 @@ export interface SessionView {
 
 /** A partial session update: `ops` turn the project at revision `base` into revision `rev`. */
 export interface SessionPatch {
+  projectEpoch?: number;
   base: number;
   rev: number;
   filePath: string | null;

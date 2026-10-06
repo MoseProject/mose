@@ -6,7 +6,7 @@ import styles from "./export.module.css";
 import { useEffect } from "react";
 import { formatTime, t } from "../../i18n";
 import { api } from "../../ipc";
-import { exportsStore, patchUi, run, useStore } from "../../store";
+import { exportsStore, exportPreparationStore, patchUi, run, useStore } from "../../store";
 import { Icon } from "../chrome/Icon";
 import type { ExportJobView } from "../../types";
 
@@ -17,6 +17,7 @@ const label = (job: ExportJobView) => {
 
 export function ExportPanel() {
   const jobs = useStore(exportsStore);
+  const preparing = useStore(exportPreparationStore);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -34,6 +35,18 @@ export function ExportPanel() {
       role="dialog"
       aria-label={t("exportQueue")}
     >
+      {preparing && (
+        <div role="status">
+          {t("exportPreparing")}
+          <button
+            onClick={() => {
+              return run(api.cancelExportPreparation());
+            }}
+          >
+            {t("cancel")}
+          </button>
+        </div>
+      )}
       <div className={cx(styles, baseStyles, "panel-title")}>
         <span>{t("exportQueue")}</span>
         <button

@@ -1,3 +1,5 @@
+import { exportPreparationStore } from "./store";
+let preparationRequests = 0;
 // The only module that talks to Rust. Command names and argument keys must match the
 // `#[tauri::command]` functions registered in src-tauri/src/main.rs (Tauri maps camelCase
 // argument keys onto snake_case Rust parameters).
@@ -579,7 +581,15 @@ export const api = {
     return invoke<{ path: string; exists: boolean } | null>("pick_export_path");
   },
   startExport: (path: string, rename: boolean) => {
-    return invoke<number>("start_export", { path, rename });
+    preparationRequests += 1;
+    exportPreparationStore.set(true);
+    return invoke<number>("start_export", { path, rename }).finally(() => {
+      preparationRequests -= 1;
+      exportPreparationStore.set(preparationRequests > 0);
+    });
+  },
+  cancelExportPreparation: () => {
+    return invoke<void>("cancel_export_preparation");
   },
   exportActiveSequenceSrt: () => {
     return invoke<boolean>("export_active_sequence_srt");

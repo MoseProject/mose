@@ -5,6 +5,7 @@ import baseStyles from "../styles/base.module.css";
 import styles from "./preview.module.css";
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
@@ -104,37 +105,34 @@ export function PreviewPanel() {
     };
   }, []);
 
-  const timecodeFps =
-    session?.project.media_library.find((item) => {
-      return item.kind === "Video" && item.fps;
-    })?.fps ?? 30;
-  const duration = session
-    ? Math.max(
-        0,
-        ...activeTimeline(session.project).tracks.flatMap((track) => {
-          return track.clips.map((clip) => {
-            return clip.start_secs + clipDuration(clip);
-          });
-        }),
-      )
-    : 0;
-
-  let clip: ClipInstance | undefined;
-  let asset: { resolution: [number, number] | null } | undefined;
-  if (session && ui.selectedClipIds.length === 1) {
-    clip = activeTimeline(session.project)
-      .tracks.flatMap((track) => {
-        return track.clips;
-      })
-      .find((c) => {
-        return c.id === ui.selectedClipIds[0];
-      });
-    asset =
-      clip &&
-      session.project.media_library.find((a) => {
-        return a.id === clip!.asset_id;
-      });
-  }
+  const timeline = session ? activeTimeline(session.project) : null;
+  const media = session?.project.media_library;
+  const { timecodeFps, duration, clip, asset } = useMemo(() => {
+    const timecodeFps =
+      media?.find((item) => {
+        return item.kind === "Video" && item.fps;
+      })?.fps ?? 30;
+    let duration = 0;
+    let clip: ClipInstance | undefined;
+    const selectedId = ui.selectedClipIds.length === 1 ? ui.selectedClipIds[0] : undefined;
+    for (const track of timeline?.tracks ?? []) {
+      for (const item of track.clips) {
+        duration = Math.max(duration, item.start_secs + clipDuration(item));
+        if (item.id === selectedId) {
+          clip = item;
+        }
+      }
+      for (const item of [...track.text_clips, ...track.shape_clips]) {
+        duration = Math.max(duration, item.start_secs + item.duration_secs);
+      }
+    }
+    const asset = clip
+      ? media?.find((item) => {
+          return item.id === clip.asset_id;
+        })
+      : undefined;
+    return { timecodeFps, duration, clip, asset };
+  }, [timeline, media, ui.selectedClipIds]);
 
   // Canvas rect (letterboxed to the export aspect ratio within the monitor) and the video's own
   // fit-preserving-aspect rect inside it -- shared by the layer-transform overlay, its drag

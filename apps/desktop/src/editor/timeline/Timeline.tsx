@@ -4,14 +4,14 @@ import editorStyles from "../../screens/editor.module.css";
 import { cx } from "../../cx";
 import baseStyles from "../../styles/base.module.css";
 import styles from "./timeline.module.css";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { formatTime, t } from "../../i18n";
 import { findCommand, shortcutLabel } from "../../commands";
 import { TIMELINE_ACTION_EVENT, type TimelineAction } from "../../editing";
 import { api } from "../../ipc";
 import { ContextMenu, type ContextMenuItem } from "../chrome/ContextMenu";
 import { TimelineMinimap } from "./TimelineMinimap";
-import { MEDIA_EVENT, syncAssets } from "./timelineMedia";
+import { MEDIA_EVENT, syncAssets, syncProject } from "./timelineMedia";
 import {
   assetDragStore,
   MAX_PX_PER_SEC,
@@ -45,6 +45,7 @@ import { activeTimeline, clipDuration, type SessionView, type Track } from "../.
 import { TrackHeader } from "./TrackHeader";
 import { type Drag, snapMove } from "./timelineDrag";
 import { MONO_FONT, drawClip, drawOverlayClip, readPalette, type Palette } from "./timelinePaint";
+import { visibleClips } from "./visibleClips";
 import { TimelineToolbar } from "./TimelineToolbar";
 
 /** Seeks sent while scrubbing the ruler are coalesced to preview cadence (egui: 33 ms). */
@@ -55,6 +56,13 @@ export function Timeline({ session }: { session: SessionView }) {
   const tracks = activeTimeline(session.project).tracks;
   const markers = activeTimeline(session.project).markers;
   const media = session.project.media_library;
+  const mediaById = useMemo(() => {
+    return new Map(
+      media.map((asset) => {
+        return [asset.id, asset];
+      }),
+    );
+  }, [media]);
   const [scrollSecs, setScrollSecs] = useState(0);
   const [scrollY, setScrollY] = useState(0);
   const [cursor, setCursor] = useState("default");
@@ -63,6 +71,7 @@ export function Timeline({ session }: { session: SessionView }) {
 
   const lanesRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const playheadRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef<Drag | null>(null);
   const sizeRef = useRef({ width: 0, height: 0 });
   const paletteRef = useRef<Palette | null>(null);
@@ -72,11 +81,12 @@ export function Timeline({ session }: { session: SessionView }) {
   // Everything draw() reads, refreshed every render so the rAF callback never sees stale data.
   // Cached frames and waveforms belong to an asset id; a new project reuses the ids.
   useLayoutEffect(() => {
+    syncProject(session.projectEpoch ?? `${session.project.id}:${session.filePath ?? "unsaved"}`);
     syncAssets(media);
-  }, [media]);
-  const stateRef = useRef({ tracks, markers, media, ui, scrollSecs, scrollY });
+  }, [media, session.projectEpoch, session.filePath, session.project.id]);
+  const stateRef = useRef({ tracks, markers, media, mediaById, ui, scrollSecs, scrollY });
   useLayoutEffect(() => {
-    stateRef.current = { tracks, markers, media, ui, scrollSecs, scrollY };
+    stateRef.current = { tracks, markers, media, mediaById, ui, scrollSecs, scrollY };
   });
 
   const draw = () => {
@@ -88,7 +98,7 @@ export function Timeline({ session }: { session: SessionView }) {
     paletteRef.current ??= readPalette();
     const palette = paletteRef.current;
     const { width, height } = sizeRef.current;
-    const { tracks, markers, media, ui, scrollSecs, scrollY } = stateRef.current;
+    const { tracks, markers, media, mediaById, ui, scrollSecs, scrollY } = stateRef.current;
     const px = ui.pxPerSec;
     const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -111,7 +121,18 @@ export function Timeline({ session }: { session: SessionView }) {
       ctx.fillRect(0, y, width, TRACK_HEIGHT);
       ctx.fillStyle = palette.border;
       ctx.fillRect(0, y + TRACK_HEIGHT - 1, width, 1);
-      for (const clip of track.clips) {
+      const from = scrollSecs;
+      const to = scrollSecs + width / px;
+      const visible = visibleClips(track.clips, from, to, clipDuration);
+      if (drag && drag.mode !== "scrub" && drag.mode !== "move") {
+        const dragged = track.clips.find(clip => {
+          return clip.id === drag.clipId;
+        });
+        if (dragged && !visible.includes(dragged)) {
+          visible.push(dragged);
+        }
+      }
+      for (const clip of visible) {
         let start = clip.start_secs;
         let end = start + clipDuration(clip);
         if (drag && drag.mode !== "scrub" && drag.clipId === clip.id) {
@@ -130,12 +151,28 @@ export function Timeline({ session }: { session: SessionView }) {
         if (right < 0 || left > width) {
           continue;
         } // horizontal culling before any per-clip work
-        const asset = media.find((a) => {
-          return a.id === clip.asset_id;
-        });
+        const asset = mediaById.get(clip.asset_id);
         drawClip(ctx, palette, track, clip, asset, left, right, y, width, ui.selectedClipIds, 1);
       }
-      for (const clip of [...track.text_clips, ...track.shape_clips]) {
+      const overlays = [
+        ...visibleClips(track.text_clips, from, to, (clip) => {
+          return clip.duration_secs;
+        }),
+        ...visibleClips(track.shape_clips, from, to, (clip) => {
+          return clip.duration_secs;
+        }),
+      ];
+      if (drag && drag.mode !== "scrub" && drag.mode !== "move") {
+        const dragged = track.text_clips.find((clip) => {
+          return clip.id === drag.clipId;
+        }) ?? track.shape_clips.find((clip) => {
+          return clip.id === drag.clipId;
+        });
+        if (dragged && !overlays.includes(dragged)) {
+          overlays.push(dragged);
+        }
+      }
+      for (const clip of overlays) {
         let start = clip.start_secs;
         let end = start + clip.duration_secs;
         if (drag && drag.mode !== "scrub" && drag.clipId === clip.id) {
@@ -183,9 +220,7 @@ export function Timeline({ session }: { session: SessionView }) {
               return c.id === drag.clipId;
             });
       if (clip && track) {
-        const asset = media.find((a) => {
-          return a.id === clip.asset_id;
-        });
+        const asset = mediaById.get(clip.asset_id);
         drawClip(ctx, palette, track, clip, asset, left, right, y, width, [clip.id], 0.75);
       } else if (overlay && track) {
         drawOverlayClip(ctx, palette, overlay, left, right, y, [overlay.id], 0.75);
@@ -255,6 +290,22 @@ export function Timeline({ session }: { session: SessionView }) {
         ctx.fillRect(Math.round(outX) - 6, 0, 7, 3);
       }
     }
+    drawPlayhead();
+  };
+
+  const drawPlayhead = () => {
+    const canvas = playheadRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!ctx) {
+      return;
+    }
+    const { width, height } = sizeRef.current;
+    const { ui, scrollSecs } = stateRef.current;
+    const px = ui.pxPerSec;
+    const palette = paletteRef.current ?? readPalette();
+    const dpr = window.devicePixelRatio || 1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
     const playheadX = timeToX(previewStore.get().playheadSecs, px, scrollSecs);
     if (playheadX >= -6 && playheadX <= width + 6) {
       ctx.fillStyle = palette.playhead;
@@ -267,9 +318,11 @@ export function Timeline({ session }: { session: SessionView }) {
     }
   };
 
+  const playheadDrawRef = useRef(drawPlayhead);
   const drawRef = useRef(draw);
   useLayoutEffect(() => {
     drawRef.current = draw;
+    playheadDrawRef.current = drawPlayhead;
   });
   const scheduleDraw = useCallback(() => {
     if (frameRef.current) {
@@ -294,10 +347,15 @@ export function Timeline({ session }: { session: SessionView }) {
       const height = lanes.clientHeight;
       sizeRef.current = { width, height };
       setViewWidth(width);
-      canvas.width = Math.round(width * dpr);
-      canvas.height = Math.round(height * dpr);
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
+      for (const layer of [canvas, playheadRef.current]) {
+        if (!layer) {
+          continue;
+        }
+        layer.width = Math.round(width * dpr);
+        layer.height = Math.round(height * dpr);
+        layer.style.width = `${width}px`;
+        layer.style.height = `${height}px`;
+      }
       scheduleDraw();
     });
     observer.observe(lanes);
@@ -315,7 +373,9 @@ export function Timeline({ session }: { session: SessionView }) {
 
   // Playhead ticks and library drags repaint without re-rendering React.
   useEffect(() => {
-    const stopPreview = previewStore.subscribe(scheduleDraw);
+    const stopPreview = previewStore.subscribe(() => {
+      return playheadDrawRef.current();
+    });
     const stopAssetDrag = assetDragStore.subscribe(scheduleDraw);
     return () => {
       stopPreview();
@@ -886,6 +946,11 @@ export function Timeline({ session }: { session: SessionView }) {
             onPointerUp={onPointerUp}
             onPointerCancel={cancelDrag}
             onWheel={onWheel}
+          />
+          <canvas
+            ref={playheadRef}
+            aria-hidden="true"
+            style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
           />
           <ul
             className={cx(styles, baseStyles, "sr-only")}
