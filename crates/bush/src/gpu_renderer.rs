@@ -49,8 +49,20 @@ struct LayerBuffers {
     uploaded_frame: Option<u64>,
 }
 
+/// Cumulative counters for profiling LUT reuse and the synchronous GPU-to-CPU boundary.
+/// Wait time includes pending compositor work; copy time measures the mapped host copy.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct GpuMetrics {
+    pub lut_uploads: u64,
+    pub lut_cache_hits: u64,
+    pub frames_read_back: u64,
+    pub readback_wait: std::time::Duration,
+    pub readback_copy: std::time::Duration,
+}
+
 pub struct GpuRenderer {
     uploads_skipped: u64,
+    metrics: GpuMetrics,
     device: wgpu::Device,
     queue: wgpu::Queue,
     pipeline: wgpu::ComputePipeline,
@@ -62,6 +74,7 @@ pub struct GpuRenderer {
     canvas: Option<Canvas>,
     layer_buffers: Vec<LayerBuffers>,
     empty_lut: wgpu::Buffer,
+    lut_buffers: crate::ByteCache<u64, Arc<wgpu::Buffer>>,
     softlight: wgpu::Buffer,
     blur: GpuBlur,
 }
@@ -177,10 +190,16 @@ impl GpuRenderer {
             canvas: None,
             layer_buffers: Vec::new(),
             uploads_skipped: 0,
+            metrics: GpuMetrics::default(),
             empty_lut,
+            lut_buffers: crate::ByteCache::new(32 * 1024 * 1024).expect("nonzero LUT budget"),
             softlight,
             blur,
         })
+    }
+
+    pub fn metrics(&self) -> GpuMetrics {
+        self.metrics
     }
 
     pub fn adapter_name(&self) -> &str {
@@ -452,11 +471,16 @@ impl Renderer for GpuRenderer {
             plans.push((index, geometry, layer.lut, blur));
         }
 
-        // LUT tables are uploaded per layer that needs one (padded to vec4 for storage layout).
-        let luts: Vec<Option<wgpu::Buffer>> = plans
+        // Immutable LUT versions share byte-budgeted GPU uploads across frames and layers.
+        let luts: Vec<Option<Arc<wgpu::Buffer>>> = plans
             .iter()
             .map(|(_, _, lut, _)| {
                 lut.map(|lut| {
+                    if let Some(buffer) = self.lut_buffers.get(&lut.cache_id()) {
+                        self.metrics.lut_cache_hits += 1;
+                        return Arc::clone(buffer);
+                    }
+                    self.metrics.lut_uploads += 1;
                     let mut data = Vec::with_capacity(lut.size().pow(3) * 16);
                     for entry in lut.entries() {
                         for value in entry {
@@ -464,12 +488,17 @@ impl Renderer for GpuRenderer {
                         }
                         data.extend_from_slice(&0.0_f32.to_le_bytes());
                     }
-                    self.device
-                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    let buffer = Arc::new(self.device.create_buffer_init(
+                        &wgpu::util::BufferInitDescriptor {
                             label: Some("bush-lut"),
                             contents: &data,
                             usage: wgpu::BufferUsages::STORAGE,
-                        })
+                        },
+                    ));
+                    let _ =
+                        self.lut_buffers
+                            .insert(lut.cache_id(), Arc::clone(&buffer), data.len());
+                    buffer
                 })
             })
             .collect();
@@ -518,7 +547,10 @@ impl Renderer for GpuRenderer {
                     },
                     wgpu::BindGroupEntry {
                         binding: 3,
-                        resource: lut.as_ref().unwrap_or(&self.empty_lut).as_entire_binding(),
+                        resource: lut
+                            .as_deref()
+                            .unwrap_or(&self.empty_lut)
+                            .as_entire_binding(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 4,
@@ -539,6 +571,7 @@ impl Renderer for GpuRenderer {
         encoder.copy_buffer_to_buffer(&canvas.storage, 0, &canvas.readback, 0, canvas_bytes);
         self.queue.submit([encoder.finish()]);
 
+        let waiting = std::time::Instant::now();
         let slice = canvas.readback.slice(..);
         let (sender, receiver) = std::sync::mpsc::channel();
         slice.map_async(wgpu::MapMode::Read, move |result| {
@@ -551,12 +584,16 @@ impl Renderer for GpuRenderer {
             .recv()
             .map_err(|_| RenderError::Gpu("readback callback dropped".into()))?
             .map_err(|error| RenderError::Gpu(format!("readback map failed: {error}")))?;
+        self.metrics.readback_wait += waiting.elapsed();
+        let copying = std::time::Instant::now();
         let view = slice
             .get_mapped_range()
             .map_err(|error| RenderError::Gpu(format!("mapped range unavailable: {error}")))?;
         let pixels = view.to_vec();
         drop(view);
         canvas.readback.unmap();
+        self.metrics.readback_copy += copying.elapsed();
+        self.metrics.frames_read_back += 1;
 
         VideoFrame::new(
             PixelFormat::Rgba8,

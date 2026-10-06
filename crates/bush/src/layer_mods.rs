@@ -103,13 +103,26 @@ pub enum LutError {
 
 /// A 3D colour lookup table with trilinear interpolation. Entries are ordered with red
 /// varying fastest, then green, then blue (the `.cube` convention).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct Lut3D {
+    #[cfg_attr(not(feature = "gpu"), allow(dead_code))]
+    cache_id: u64,
     size: usize,
     entries: Vec<[f32; 3]>,
 }
 
+impl PartialEq for Lut3D {
+    fn eq(&self, other: &Self) -> bool {
+        self.size == other.size && self.entries == other.entries
+    }
+}
+
 impl Lut3D {
+    #[cfg(feature = "gpu")]
+    pub(crate) fn cache_id(&self) -> u64 {
+        self.cache_id
+    }
+
     pub fn new(size: usize, entries: Vec<[f32; 3]>) -> Result<Self, LutError> {
         if !(2..=65).contains(&size) {
             return Err(LutError::InvalidSize(size));
@@ -127,7 +140,12 @@ impl Lut3D {
         {
             return Err(LutError::NonFiniteEntry);
         }
-        Ok(Self { size, entries })
+        static NEXT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        Ok(Self {
+            size,
+            entries,
+            cache_id: NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+        })
     }
 
     /// The identity table of edge length `size`.

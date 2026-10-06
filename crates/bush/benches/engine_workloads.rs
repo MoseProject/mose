@@ -389,6 +389,7 @@ fn bench_gpu_vs_cpu(c: &mut Criterion) {
         });
     }
     group.finish();
+    eprintln!("gpu metrics: {:?}", gpu.metrics());
 }
 
 #[cfg(not(feature = "gpu"))]
