@@ -227,6 +227,7 @@ impl Engine {
                 sources: Vec::new(),
                 deflickers: HashMap::new(),
                 stabilizers: HashMap::new(),
+                temporal_sources: HashMap::new(),
             }
             .run();
         });
@@ -418,6 +419,7 @@ struct EngineThread {
     deflickers: HashMap<ContributorId, crate::Deflicker>,
     /// Stabilizer state per contributor; only present while the effect is enabled.
     stabilizers: HashMap<ContributorId, crate::Stabilizer>,
+    temporal_sources: HashMap<ContributorId, crate::scene::MediaSource>,
 }
 
 enum RenderOutcome {
@@ -498,6 +500,26 @@ impl EngineThread {
 
     fn render(&mut self, request: &EngineRequest, cancel: &AtomicBool) -> RenderOutcome {
         let playhead = request.playhead_secs;
+        let active: HashMap<_, _> = request
+            .scene
+            .visible_contributors()
+            .filter(|c| c.is_active_at(playhead))
+            .filter_map(|c| match &c.content {
+                ContributorContent::Media(source) => Some((c.id, source)),
+                _ => None,
+            })
+            .collect();
+        self.deflickers.retain(|id, _| active.contains_key(id));
+        self.stabilizers.retain(|id, _| active.contains_key(id));
+        self.temporal_sources
+            .retain(|id, _| active.contains_key(id));
+        for (id, source) in active {
+            if self.temporal_sources.get(&id) != Some(source) {
+                self.deflickers.remove(&id);
+                self.stabilizers.remove(&id);
+                self.temporal_sources.insert(id, source.clone());
+            }
+        }
         // Decode every needed source frame up front so independent sources run in parallel.
         let needs: Vec<MediaNeed<'_>> = request
             .scene
@@ -584,6 +606,7 @@ impl EngineThread {
                 let stabilizer = self.stabilizers.entry(contributor.id).or_insert_with(|| {
                     crate::Stabilizer::new(smoothing).expect("validated smoothing weight")
                 });
+                stabilizer.set_smoothing(smoothing);
                 let (dx, dy) = stabilizer.analyze(&frame);
                 // Counter-translate onto the smooth path and zoom about the layer centre so
                 // the shifted borders stay outside the picture.
@@ -704,9 +727,11 @@ impl EngineThread {
 
     fn deflicker_for(&mut self, id: ContributorId, smoothing: f32) -> &mut crate::Deflicker {
         // Placement validation bounds the smoothing to (0, 1], which `new` accepts.
-        self.deflickers.entry(id).or_insert_with(|| {
+        let effect = self.deflickers.entry(id).or_insert_with(|| {
             crate::Deflicker::new(smoothing).expect("validated smoothing weight")
-        })
+        });
+        effect.set_smoothing(smoothing);
+        effect
     }
 
     /// Source frames for every need, in order: from the cache where possible, otherwise decoded

@@ -50,6 +50,14 @@ impl Stabilizer {
         })
     }
 
+    /// Applies a validated smoothing weight and restarts history when it changes.
+    pub(crate) fn set_smoothing(&mut self, smoothing: f32) {
+        if self.smoothing != smoothing {
+            self.smoothing = smoothing;
+            self.reset();
+        }
+    }
+
     pub fn reset(&mut self) {
         self.previous = None;
         self.path = (0.0, 0.0);
