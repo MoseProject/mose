@@ -198,6 +198,11 @@ int encode_write_packet(AVFormatContext *out_ctx, AVCodecContext *enc_ctx, AVStr
             return ret;
         }
         enc_pkt->stream_index = out_stream->index;
+        /* Some video encoders leave packet duration unset. Our video time base is one
+           canvas frame; without its duration, MP4's edit list can exclude the last packet. */
+        if (enc_ctx->codec_type == AVMEDIA_TYPE_VIDEO && enc_pkt->duration <= 0) {
+            enc_pkt->duration = 1;
+        }
         av_packet_rescale_ts(enc_pkt, enc_ctx->time_base, out_stream->time_base);
         /* Audio and video are encoded on different threads while an AudioWorker runs. */
         BridgeMutex *mux_lock = (BridgeMutex *)out_ctx->opaque;
