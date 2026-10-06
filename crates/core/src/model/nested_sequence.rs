@@ -70,13 +70,14 @@ pub fn cache_dir_for_project(project: &Project) -> PathBuf {
 
 /// A rendered sequence and its inputs. Callers own the map; only this module constructs entries
 /// so descendant generations and file revisions stay consistent with the rendered content.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct NestedSequenceCache {
     pub timeline: Timeline,
     pub rendered_path: PathBuf,
     inputs: NestedRenderInputs,
     generation: u64,
     output_revision: Option<FileRevision>,
+    artifact: std::sync::Arc<tempfile::TempPath>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -212,6 +213,23 @@ pub fn materialize_nested_sequences(
     cache_dir: &Path,
     cache: &mut HashMap<u64, NestedSequenceCache>,
 ) -> Result<HashMap<u64, MediaAsset>, RenderError> {
+    materialize_nested_sequences_with_cancel(
+        project,
+        timeline,
+        cache_dir,
+        cache,
+        &AtomicBool::new(false),
+    )
+}
+
+/// Cancellable materialization. Incomplete outputs are discarded; cache hits remain reusable.
+pub fn materialize_nested_sequences_with_cancel(
+    project: &Project,
+    timeline: &Timeline,
+    cache_dir: &Path,
+    cache: &mut HashMap<u64, NestedSequenceCache>,
+    cancel: &AtomicBool,
+) -> Result<HashMap<u64, MediaAsset>, RenderError> {
     let sequence_ids: HashSet<_> = project
         .sequences
         .iter()
@@ -232,6 +250,7 @@ pub fn materialize_nested_sequences(
         cache,
         &mut visiting,
         &mut assets,
+        cancel,
     )?;
     Ok(assets)
 }
@@ -243,6 +262,7 @@ fn materialize_inner(
     cache: &mut HashMap<u64, NestedSequenceCache>,
     visiting: &mut HashSet<u64>,
     assets: &mut HashMap<u64, MediaAsset>,
+    cancel: &AtomicBool,
 ) -> Result<(), RenderError> {
     let nested_ids: Vec<u64> = timeline
         .tracks
@@ -252,6 +272,9 @@ fn materialize_inner(
         .collect();
 
     for nested_id in nested_ids {
+        if cancel.load(Ordering::Acquire) {
+            return Err(RenderError::Cancelled);
+        }
         if assets.contains_key(&nested_id) {
             continue;
         }
@@ -273,6 +296,7 @@ fn materialize_inner(
             cache,
             visiting,
             assets,
+            cancel,
         )?;
         visiting.remove(&nested_id);
 
@@ -292,7 +316,8 @@ fn materialize_inner(
             }
         }
 
-        let rendered_path = render_nested_sequence(project, nested_sequence, cache_dir, assets)?;
+        let artifact = render_nested_sequence(project, nested_sequence, cache_dir, assets, cancel)?;
+        let rendered_path = artifact.to_path_buf();
         assets.insert(nested_id, synthetic_asset(nested_id, &rendered_path)?);
         static NEXT_GENERATION: AtomicU64 = AtomicU64::new(0);
         let output_revision = file_revision(&rendered_path);
@@ -304,6 +329,7 @@ fn materialize_inner(
                 inputs,
                 generation: NEXT_GENERATION.fetch_add(1, Ordering::Relaxed),
                 output_revision,
+                artifact,
             },
         );
     }
@@ -311,15 +337,20 @@ fn materialize_inner(
 }
 
 /// Renders `sequence` (whose own nested clips are already resolved in `already_materialized`)
-/// to a fresh file under `cache_dir`, named by sequence id — a later render of the same sequence
-/// overwrites it, no stale-file accumulation.
+/// to a unique file under `cache_dir`. A later render of the same sequence
+/// never overwrites a file still in use; the final owner removes the temporary artifact.
 fn render_nested_sequence(
     project: &Project,
     sequence: &Sequence,
     cache_dir: &Path,
     already_materialized: &HashMap<u64, MediaAsset>,
-) -> Result<PathBuf, RenderError> {
-    let mut media_library = project.media_library.clone();
+    cancel: &AtomicBool,
+) -> Result<std::sync::Arc<tempfile::TempPath>, RenderError> {
+    let mut media_library: Vec<_> = project
+        .media_library
+        .iter()
+        .map(MediaAsset::clone_without_waveform)
+        .collect();
     media_library.extend(already_materialized.values().cloned());
 
     let (track_segments, canvas) = resolve_timeline_segments_multi(sequence, &media_library)?;
@@ -330,7 +361,12 @@ fn render_nested_sequence(
     let privacy_blur_segments = resolve_privacy_blur_segments(sequence);
 
     std::fs::create_dir_all(cache_dir).map_err(RenderError::ReplaceOutput)?;
-    let output = cache_dir.join(format!("sequence_{}.mp4", sequence.id));
+    let output = tempfile::Builder::new()
+        .prefix(&format!("sequence_{}_", sequence.id))
+        .suffix(".mp4")
+        .tempfile_in(cache_dir)
+        .map_err(RenderError::ReplaceOutput)?
+        .into_temp_path();
 
     let outcome = render_export_job_multi_with_audio(
         &track_segments,
@@ -342,15 +378,13 @@ fn render_nested_sequence(
         &text_segments,
         &shape_segments,
         &privacy_blur_segments,
-        &AtomicBool::new(false),
+        cancel,
         |_percent| {},
     )?;
-    debug_assert_eq!(
-        outcome,
-        RenderOutcome::Completed,
-        "cancel is never set here"
-    );
-    Ok(output)
+    if outcome == RenderOutcome::Cancelled || cancel.load(Ordering::Acquire) {
+        return Err(RenderError::Cancelled);
+    }
+    Ok(std::sync::Arc::new(output))
 }
 
 /// The [`MediaAsset::id`] a nested sequence's synthetic asset gets, offset into a private range
@@ -401,3 +435,20 @@ fn synthetic_asset(
 #[cfg(test)]
 #[path = "nested_sequence/nested_sequence_test.rs"]
 mod tests;
+
+impl NestedSequenceCache {
+    /// Keeps this immutable render available while a consumer stages or decodes it.
+    pub fn artifact(&self) -> std::sync::Arc<tempfile::TempPath> {
+        self.artifact.clone()
+    }
+}
+
+impl PartialEq for NestedSequenceCache {
+    fn eq(&self, other: &Self) -> bool {
+        self.timeline == other.timeline
+            && self.rendered_path == other.rendered_path
+            && self.inputs == other.inputs
+            && self.generation == other.generation
+            && self.output_revision == other.output_revision
+    }
+}
