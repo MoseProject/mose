@@ -1,5 +1,8 @@
+import { cx } from "../cx";
+import baseStyles from "../styles/base.module.css";
+import styles from "./topbar.module.css";
 import { withShortcut } from "../commands";
-import { Icon } from "../editor/Icon";
+import { Icon } from "../editor/chrome/Icon";
 import { t } from "../i18n";
 import { api } from "../ipc";
 import { patchUi, run } from "../store";
@@ -21,7 +24,7 @@ export function ProjectActions({
       <Readout session={session} />
       <button
         data-testid="undo"
-        className="icon"
+        className={cx(styles, baseStyles, "icon")}
         aria-label={t("undo")}
         title={withShortcut(t("undo"), "undo")}
         disabled={!session.canUndo}
@@ -36,7 +39,7 @@ export function ProjectActions({
       </button>
       <button
         data-testid="redo"
-        className="icon"
+        className={cx(styles, baseStyles, "icon")}
         aria-label={t("redo")}
         title={withShortcut(t("redo"), "redo")}
         disabled={!session.canRedo}
@@ -51,7 +54,7 @@ export function ProjectActions({
       </button>
       <button
         data-testid="save-project"
-        className="icon"
+        className={cx(styles, baseStyles, "icon")}
         aria-label={t("save")}
         title={withShortcut(t("save"), "save")}
         onClick={() => {
@@ -65,7 +68,7 @@ export function ProjectActions({
       </button>
       <button
         data-testid="export-queue-toggle"
-        className={"icon " + (exportQueueOpen ? "active" : "")}
+        className={cx(styles, baseStyles, "icon " + (exportQueueOpen ? "active" : ""))}
         aria-label={t("exportQueue")}
         title={t("exportQueue")}
         aria-expanded={exportQueueOpen}
@@ -77,11 +80,11 @@ export function ProjectActions({
           name="queue"
           size={16}
         />
-        {activeExports > 0 && <span className="badge">{activeExports}</span>}
+        {activeExports > 0 && <span className={cx(styles, baseStyles, "badge")}>{activeExports}</span>}
       </button>
       <button
         data-testid="export"
-        className="primary export"
+        className={cx(styles, baseStyles, "primary export")}
         title={withShortcut(t("export"), "export")}
         onClick={() => {
           patchUi({ exportDialogOpen: true });

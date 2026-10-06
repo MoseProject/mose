@@ -1,3 +1,6 @@
+import { cx } from "../cx";
+import baseStyles from "../styles/base.module.css";
+import styles from "./topbar.module.css";
 import { formatTimecode, t } from "../i18n";
 import { previewStore, useStore } from "../store";
 import type { SessionView } from "../types";
@@ -11,13 +14,13 @@ export function Readout({ session }: { session: SessionView }) {
   });
   return (
     <div
-      className="readout"
+      className={cx(styles, baseStyles, "readout")}
       aria-label={t("timecode")}
     >
-      <span className="timecode mono">{formatTimecode(tick.playheadSecs, source?.fps ?? 30)}</span>
-      {source?.fps != null && <span className="muted mono">{Math.round(source.fps)} FPS</span>}
+      <span className={cx(styles, baseStyles, "timecode mono")}>{formatTimecode(tick.playheadSecs, source?.fps ?? 30)}</span>
+      {source?.fps != null && <span className={cx(styles, baseStyles, "muted mono")}>{Math.round(source.fps)} FPS</span>}
       {source?.resolution && (
-        <span className="muted mono">
+        <span className={cx(styles, baseStyles, "muted mono")}>
           {source.resolution[0]} × {source.resolution[1]}
         </span>
       )}

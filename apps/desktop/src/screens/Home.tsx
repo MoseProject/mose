@@ -1,6 +1,10 @@
+import exportStyles from "../editor/export/export.module.css";
+import { cx } from "../cx";
+import baseStyles from "../styles/base.module.css";
+import styles from "./home.module.css";
 import { useEffect, useState } from "react";
-import { Dialog } from "../editor/Dialog";
-import { Icon } from "../editor/Icon";
+import { Dialog } from "../editor/chrome/Dialog";
+import { Icon } from "../editor/chrome/Icon";
 import { formatTime, t } from "../i18n";
 import { api } from "../ipc";
 import { uniqueFunnyName } from "../projectNames";
@@ -117,18 +121,18 @@ export function Home() {
 
   return (
     <main
-      className="home"
+      className={cx(styles, baseStyles, exportStyles, "home")}
       data-testid="screen-home"
     >
-      <header className="home-head">
+      <header className={cx(styles, baseStyles, "home-head")}>
         <div>
           <h1>{t("projectsTitle")}</h1>
-          <p className="muted">{t("projectsSubtitle")}</p>
+          <p className={cx(styles, baseStyles, "muted")}>{t("projectsSubtitle")}</p>
         </div>
-        <div className="home-actions">
+        <div className={cx(styles, baseStyles, "home-actions")}>
           <button
             data-testid="new-project"
-            className="primary"
+            className={cx(styles, baseStyles, "primary")}
             onClick={() => {
               setCreating(true);
             }}
@@ -164,17 +168,17 @@ export function Home() {
 
       {session && (session.filePath || session.dirty) && (
         <section
-          className="home-current"
+          className={cx(styles, baseStyles, "home-current")}
           aria-label={t("continueEditing")}
         >
           <div>
-            <span className="muted">{t("continueEditing")}</span>
+            <span className={cx(styles, baseStyles, "muted")}>{t("continueEditing")}</span>
             <strong>{session.project.name}</strong>
-            {session.dirty && <span className="muted"> · {t("unsaved")}</span>}
+            {session.dirty && <span className={cx(styles, baseStyles, "muted")}> · {t("unsaved")}</span>}
           </div>
           <button
             data-testid="back-to-editor"
-            className="primary"
+            className={cx(styles, baseStyles, "primary")}
             onClick={() => {
               patchUi({ screen: "editor" });
             }}
@@ -185,8 +189,8 @@ export function Home() {
       )}
 
       {hasProjects && (
-        <div className="home-tools">
-          <label className="home-search">
+        <div className={cx(styles, baseStyles, "home-tools")}>
+          <label className={cx(styles, baseStyles, "home-search")}>
             <Icon name="search" />
             <input
               type="search"
@@ -209,7 +213,7 @@ export function Home() {
             <option value="modified">{t("sortModified")}</option>
             <option value="name">{t("sortName")}</option>
           </select>
-          <span className="muted">
+          <span className={cx(styles, baseStyles, "muted")}>
             {shown.length} {t("projectCount")}
           </span>
         </div>
@@ -217,13 +221,13 @@ export function Home() {
 
       {projects !== null && !hasProjects && (
         <div
-          className="home-empty"
+          className={cx(styles, baseStyles, "home-empty")}
           data-testid="projects-empty"
         >
           <h2>{t("projectsEmptyTitle")}</h2>
-          <p className="muted">{t("projectsEmptyHint")}</p>
+          <p className={cx(styles, baseStyles, "muted")}>{t("projectsEmptyHint")}</p>
           <button
-            className="primary"
+            className={cx(styles, baseStyles, "primary")}
             onClick={() => {
               setCreating(true);
             }}
@@ -233,21 +237,21 @@ export function Home() {
         </div>
       )}
 
-      {hasProjects && shown.length === 0 && <p className="muted">{t("projectsNoMatches")}</p>}
+      {hasProjects && shown.length === 0 && <p className={cx(styles, baseStyles, "muted")}>{t("projectsNoMatches")}</p>}
 
       {shown.length > 0 && (
         <ul
-          className="project-list"
+          className={cx(styles, baseStyles, "project-list")}
           aria-label={t("projectsTitle")}
         >
           {shown.map((project) => {
             return (
               <li
                 key={project.path}
-                className="project-row"
+                className={cx(styles, baseStyles, "project-row")}
               >
                 <button
-                  className="project-open"
+                  className={cx(styles, baseStyles, "project-open")}
                   title={project.path}
                   aria-label={t("openProjectNamed") + " " + project.name}
                   onClick={() => {
@@ -255,8 +259,8 @@ export function Home() {
                   }}
                 >
                   <strong>{project.name}</strong>
-                  <span className="muted project-folder">{project.folder}</span>
-                  <span className="muted project-meta">
+                  <span className={cx(styles, baseStyles, "muted project-folder")}>{project.folder}</span>
+                  <span className={cx(styles, baseStyles, "muted project-meta")}>
                     {new Date(project.modifiedUnixSecs * 1000).toLocaleString()}
                     {" · "}
                     {formatTime(project.durationSecs)}
@@ -266,9 +270,9 @@ export function Home() {
                     {project.mediaCount} {t("projectMediaCount")}
                   </span>
                 </button>
-                <div className="project-actions">
+                <div className={cx(styles, baseStyles, "project-actions")}>
                   <button
-                    className="icon"
+                    className={cx(styles, baseStyles, "icon")}
                     title={t("showInFolder")}
                     aria-label={t("showInFolder") + ": " + project.name}
                     onClick={() => {
@@ -278,7 +282,7 @@ export function Home() {
                     <Icon name="folder" />
                   </button>
                   <button
-                    className="icon"
+                    className={cx(styles, baseStyles, "icon")}
                     title={t("removeRecent")}
                     aria-label={t("removeRecent") + ": " + project.name}
                     onClick={() => {
@@ -289,8 +293,8 @@ export function Home() {
                   </button>
                 </div>
                 {project.autosavePath && (
-                  <div className="project-recovery">
-                    <span className="muted">{t("autosaveAvailable")}</span>
+                  <div className={cx(styles, baseStyles, "project-recovery")}>
+                    <span className={cx(styles, baseStyles, "muted")}>{t("autosaveAvailable")}</span>
                     <button
                       onClick={() => {
                         void run(
@@ -365,13 +369,13 @@ function NewProjectDialog({
       actions={
         <>
           <button
-            className="icon"
+            className={cx(styles, baseStyles, "icon")}
             onClick={onClose}
           >
             {t("cancel")}
           </button>
           <button
-            className="primary"
+            className={cx(styles, baseStyles, "primary")}
             disabled={!valid}
             onClick={submit}
           >
@@ -380,8 +384,8 @@ function NewProjectDialog({
         </>
       }
     >
-      <div className="name-row">
-        <label className="dialog-field">
+      <div className={cx(styles, baseStyles, "name-row")}>
+        <label className={cx(styles, baseStyles, "dialog-field")}>
           <span>{t("projectName")}</span>
           <input
             type="text"
@@ -402,7 +406,7 @@ function NewProjectDialog({
         </label>
         <button
           type="button"
-          className="icon"
+          className={cx(styles, baseStyles, "icon")}
           title={t("anotherName")}
           aria-label={t("anotherName")}
           onClick={() => {
@@ -414,7 +418,7 @@ function NewProjectDialog({
       </div>
       {!valid && (
         <p
-          className="dialog-error"
+          className={cx(styles, baseStyles, "dialog-error")}
           role="alert"
         >
           {t("projectNameEmpty")}

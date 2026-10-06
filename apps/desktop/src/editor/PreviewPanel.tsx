@@ -1,3 +1,8 @@
+import timelineStyles from "./timeline/timeline.module.css";
+import editorStyles from "../screens/editor.module.css";
+import { cx } from "../cx";
+import baseStyles from "../styles/base.module.css";
+import styles from "./preview.module.css";
 import {
   useEffect,
   useRef,
@@ -7,7 +12,7 @@ import {
 } from "react";
 import { formatTimecode, t } from "../i18n";
 import { api, frameUrl } from "../ipc";
-import { Icon } from "./Icon";
+import { Icon } from "./chrome/Icon";
 import { withShortcut } from "../commands";
 import { keymapStore } from "../keymap";
 import { shuttleStore, stopShuttle } from "../shuttle";
@@ -226,14 +231,14 @@ export function PreviewPanel() {
   if (tick.hasClip && tick.error) {
     body = (
       <span
-        className="muted"
+        className={cx(styles, baseStyles, timelineStyles, editorStyles, "muted")}
         title={tick.error}
       >
         {t("previewUnavailable")}
       </span>
     );
   } else if (!tick.hasClip) {
-    body = <span className="muted">{t("previewEmpty")}</span>;
+    body = <span className={cx(styles, baseStyles, "muted")}>{t("previewEmpty")}</span>;
   }
 
   let overlay: ReactNode = null;
@@ -258,7 +263,7 @@ export function PreviewPanel() {
 
     overlay = (
       <div
-        className="preview-canvas"
+        className={cx(styles, baseStyles, "preview-canvas")}
         style={{
           left: canvasRect.left,
           top: canvasRect.top,
@@ -268,7 +273,7 @@ export function PreviewPanel() {
       >
         <div
           data-testid="preview-layer"
-          className={`preview-layer ${draggable ? "draggable" : "animated"}`}
+          className={cx(styles, baseStyles, `preview-layer ${draggable ? "draggable" : "animated"}`)}
           style={{
             left: layerLeft - canvasRect.left,
             top: layerTop - canvasRect.top,
@@ -287,7 +292,7 @@ export function PreviewPanel() {
           {draggable && (
             <div
               data-testid="preview-layer-resize-handle"
-              className="preview-layer-handle"
+              className={cx(styles, baseStyles, "preview-layer-handle")}
               onPointerDown={(e) => {
                 return onHandlePointerDown(e, scaleX, scaleY);
               }}
@@ -316,7 +321,7 @@ export function PreviewPanel() {
         : "";
     drawingOverlay = (
       <div
-        className="preview-canvas"
+        className={cx(styles, baseStyles, "preview-canvas")}
         data-testid="shape-drawing-surface"
         style={{
           left: 0,
@@ -352,7 +357,7 @@ export function PreviewPanel() {
             );
           })}
         </svg>
-        <div className="drawing-shape-hint">
+        <div className={cx(styles, baseStyles, "drawing-shape-hint")}>
           {t("drawCustomShapeHint")} ({points.length} {points.length === 1 ? "pt" : "pts"})
         </div>
       </div>
@@ -429,15 +434,15 @@ export function PreviewPanel() {
   };
 
   return (
-    <section className="panel preview">
-      <div className="panel-title">
+    <section className={cx(styles, baseStyles, "panel preview")}>
+      <div className={cx(styles, baseStyles, "panel-title")}>
         <span>{t("programMonitor")}</span>
-        <span className="monitor-tools">
+        <span className={cx(styles, baseStyles, "monitor-tools")}>
           {(["50", "fit", "100"] as const).map((zoom) => {
             return (
               <button
                 key={zoom}
-                className={"chip " + (ui.monitorZoom === zoom ? "active" : "")}
+                className={cx(styles, baseStyles, "chip " + (ui.monitorZoom === zoom ? "active" : ""))}
                 aria-pressed={ui.monitorZoom === zoom}
                 title={t("monitorZoom")}
                 onClick={() => {
@@ -449,7 +454,7 @@ export function PreviewPanel() {
             );
           })}
           <button
-            className={"icon " + (ui.monitorGuides ? "active" : "")}
+            className={cx(styles, baseStyles, "icon " + (ui.monitorGuides ? "active" : ""))}
             aria-label={t("cmdToggleGuides")}
             aria-pressed={ui.monitorGuides}
             title={withShortcut(t("cmdToggleGuides"), "toggleGuides")}
@@ -463,7 +468,7 @@ export function PreviewPanel() {
       </div>
       <div
         ref={monitorRef}
-        className="monitor"
+        className={cx(styles, baseStyles, "monitor")}
         data-testid="preview-monitor"
         style={
           ui.tool === "text" || ui.drawingShapePoints !== null
@@ -521,7 +526,7 @@ export function PreviewPanel() {
         )}
         {ui.monitorGuides && hasCanvas && (
           <div
-            className="monitor-guides"
+            className={cx(styles, baseStyles, "monitor-guides")}
             data-testid="monitor-guides"
             aria-hidden="true"
             style={{
@@ -531,23 +536,23 @@ export function PreviewPanel() {
               height: canvasRect.height,
             }}
           >
-            <span className="guide-safe action" />
-            <span className="guide-safe title" />
-            <span className="guide-line v" />
-            <span className="guide-line h" />
+            <span className={cx(styles, baseStyles, "guide-safe action")} />
+            <span className={cx(styles, baseStyles, "guide-safe title")} />
+            <span className={cx(styles, baseStyles, "guide-line v")} />
+            <span className={cx(styles, baseStyles, "guide-line h")} />
           </div>
         )}
         {body}
         {overlay}
         {drawingOverlay}
       </div>
-      <div className="transport">
-        <div className="scrub">
-          <span className="mono time-now">{formatTimecode(tick.playheadSecs, timecodeFps)}</span>
+      <div className={cx(styles, baseStyles, "transport")}>
+        <div className={cx(styles, baseStyles, "scrub")}>
+          <span className={cx(styles, baseStyles, "mono time-now")}>{formatTimecode(tick.playheadSecs, timecodeFps)}</span>
           {shuttleState.direction !== 0 &&
             (shuttleState.direction < 0 || shuttleState.level > 1) && (
               <span
-                className="shuttle-badge"
+                className={cx(styles, baseStyles, "shuttle-badge")}
                 title={t("shuttleBadge")}
                 data-testid="shuttle-badge"
               >
@@ -556,7 +561,7 @@ export function PreviewPanel() {
             )}
           <input
             type="range"
-            className="scrubber"
+            className={cx(styles, baseStyles, "scrubber")}
             aria-label={t("seek")}
             min={0}
             max={Math.max(duration, 0.01)}
@@ -572,11 +577,11 @@ export function PreviewPanel() {
               return void run(api.seek(Number(e.target.value)));
             }}
           />
-          <span className="mono muted time-total">{formatTimecode(duration, timecodeFps)}</span>
+          <span className={cx(styles, baseStyles, "mono muted time-total")}>{formatTimecode(duration, timecodeFps)}</span>
         </div>
-        <div className="transport-controls">
+        <div className={cx(styles, baseStyles, "transport-controls")}>
           <button
-            className="icon"
+            className={cx(styles, baseStyles, "icon")}
             title={t("goToStart")}
             aria-label={t("goToStart")}
             onClick={() => {
@@ -589,7 +594,7 @@ export function PreviewPanel() {
             />
           </button>
           <button
-            className="icon"
+            className={cx(styles, baseStyles, "icon")}
             title={t("stepBack")}
             aria-label={t("stepBack")}
             onClick={() => {
@@ -602,7 +607,7 @@ export function PreviewPanel() {
             />
           </button>
           <button
-            className="play"
+            className={cx(styles, baseStyles, "play")}
             title={tick.playing ? t("pause") : t("play")}
             aria-label={tick.playing ? t("pause") : t("play")}
             onClick={() => {
@@ -616,7 +621,7 @@ export function PreviewPanel() {
             />
           </button>
           <button
-            className="icon"
+            className={cx(styles, baseStyles, "icon")}
             title={t("stepForward")}
             aria-label={t("stepForward")}
             onClick={() => {
@@ -629,7 +634,7 @@ export function PreviewPanel() {
             />
           </button>
           <button
-            className="icon"
+            className={cx(styles, baseStyles, "icon")}
             title={t("goToEnd")}
             aria-label={t("goToEnd")}
             onClick={() => {

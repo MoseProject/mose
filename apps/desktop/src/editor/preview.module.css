@@ -1,0 +1,209 @@
+/* ---- preview ---- */
+.monitor {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.monitor img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* On-canvas layer transform (drag to position, handle to resize) -- see PreviewPanel.tsx.
+   .preview-canvas mirrors the export canvas's own aspect ratio; only matches the plain <img>
+   above pixel-for-pixel when the export aspect ratio is "Original" (the common case), since
+   the <img> itself is fit to the whole .monitor box by the video's native aspect instead. */
+.preview-canvas {
+  position: absolute;
+  pointer-events: none;
+}
+
+.preview-layer {
+  position: absolute;
+  pointer-events: auto;
+  border: 1.5px solid var(--accent);
+  box-sizing: border-box;
+  /* .export-panel floats fixed over the whole viewport at z-index 5 and can visually overlap
+     the preview's bottom-right corner -- without this, a clip positioned there becomes
+     ungrabbable, since the export panel wins hit-testing at that point. */
+  z-index: 6;
+}
+
+.preview-layer.draggable {
+  cursor: grab;
+}
+
+.preview-layer.draggable:active {
+  cursor: grabbing;
+}
+
+.preview-layer.animated {
+  border-color: var(--text-muted);
+  cursor: default;
+}
+
+.drawing-shape-hint {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--surface);
+  padding: 3px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--border-subtle);
+}
+
+.preview-layer-handle {
+  position: absolute;
+  right: -8px;
+  bottom: -8px;
+  width: 16px;
+  height: 16px;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  border-radius: 3px;
+  cursor: nwse-resize;
+  pointer-events: auto;
+}
+
+.transport {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 18px 14px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface);
+}
+.scrub {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.scrub .time-now {
+  color: var(--accent);
+  font-size: 12px;
+}
+.scrub .time-total {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.scrub .scrubber {
+  flex: 1;
+}
+.transport-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+}
+.transport button.icon {
+  color: var(--text-primary);
+}
+.transport button.play {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: transparent;
+  border: 0;
+  color: var(--accent);
+}
+.transport button.play:hover:not(:disabled) {
+  background: var(--accent-tint);
+}
+.scrubber {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 14px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.scrubber::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--accent) var(--fill, 0%),
+    var(--border) var(--fill, 0%)
+  );
+}
+.scrubber::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: var(--text-primary);
+  border: 0;
+}
+
+/* ---- monitor zoom chips and guides ---- */
+.preview .panel-title {
+  align-items: center;
+}
+.monitor-tools {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+button.chip {
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+button.chip.active,
+button.chip[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.monitor {
+  overflow: hidden;
+}
+.monitor-guides {
+  position: absolute;
+  pointer-events: none;
+}
+.guide-safe {
+  position: absolute;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-sizing: border-box;
+}
+.guide-safe.action {
+  inset: 5%;
+}
+.guide-safe.title {
+  inset: 10%;
+  border-style: dashed;
+}
+.guide-line {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.18);
+}
+.guide-line.v {
+  width: 1px;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+}
+.guide-line.h {
+  height: 1px;
+  left: 0;
+  right: 0;
+  top: 50%;
+}
+

@@ -1,10 +1,14 @@
+import editorStyles from "../screens/editor.module.css";
+import { cx } from "../cx";
+import baseStyles from "../styles/base.module.css";
+import styles from "./timeline/timeline.module.css";
 import { useEffect, useState } from "react";
 import { TIMELINE_ACTION_EVENT } from "../editing";
 import { formatTime, t } from "../i18n";
 import { api } from "../ipc";
 import { run } from "../store";
-import { Icon } from "./Icon";
-import { Menu } from "./Menu";
+import { Icon } from "./chrome/Icon";
+import { Menu } from "./chrome/Menu";
 import type { MarkerKind, SessionView } from "../types";
 
 const markerKinds: MarkerKind[] = ["Standard", "ToDo", "Chapter", "Highlight"];
@@ -25,9 +29,9 @@ export function SequenceTabs({ session }: { session: SessionView }) {
     };
   }, [activeId]);
   return (
-    <div className="sequence-tabs">
+    <div className={cx(styles, baseStyles, editorStyles, "sequence-tabs")}>
       <div
-        className="tab-list"
+        className={cx(styles, baseStyles, "tab-list")}
         role="tablist"
         aria-label={t("sequences")}
       >
@@ -35,7 +39,7 @@ export function SequenceTabs({ session }: { session: SessionView }) {
           return (
             <div
               key={sequence.id}
-              className={`sequence-tab ${index === project.active_sequence ? "active" : ""}`}
+              className={cx(styles, baseStyles, `sequence-tab ${index === project.active_sequence ? "active" : ""}`)}
             >
               {renaming === sequence.id ? (
                 <input
@@ -123,7 +127,7 @@ export function SequenceTabs({ session }: { session: SessionView }) {
           );
         })}
         <button
-          className="icon"
+          className={cx(styles, baseStyles, "icon")}
           title={t("addSequence")}
           aria-label={t("addSequence")}
           onClick={() => {
@@ -141,9 +145,9 @@ export function SequenceTabs({ session }: { session: SessionView }) {
 function MarkerList({ session }: { session: SessionView }) {
   const markers = session.project.sequences[session.project.active_sequence].timeline.markers;
   return (
-    <details className="marker-list">
+    <details className={cx(styles, baseStyles, "marker-list")}>
       <summary>{t("markers")}</summary>
-      <div className="marker-pop">
+      <div className={cx(styles, baseStyles, "marker-pop")}>
         <button
           onClick={() => {
             return run(api.addMarker());
@@ -160,10 +164,10 @@ function MarkerList({ session }: { session: SessionView }) {
             return (
               <div
                 key={marker.id}
-                className="marker-row"
+                className={cx(styles, baseStyles, "marker-row")}
               >
                 <button
-                  className="icon"
+                  className={cx(styles, baseStyles, "icon")}
                   title={t("seekMarker")}
                   onClick={() => {
                     return run(api.seek(marker.position_secs));
@@ -214,7 +218,7 @@ function MarkerList({ session }: { session: SessionView }) {
                   />
                 )}
                 <button
-                  className="icon"
+                  className={cx(styles, baseStyles, "icon")}
                   title={t("removeMarker")}
                   aria-label={t("removeMarker")}
                   onClick={() => {

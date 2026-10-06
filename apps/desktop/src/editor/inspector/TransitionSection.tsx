@@ -1,3 +1,6 @@
+import { cx } from "../../cx";
+import baseStyles from "../../styles/base.module.css";
+import styles from "./inspector.module.css";
 import { t } from "../../i18n";
 import {
   BLEND_MODES,
@@ -63,7 +66,7 @@ export function TransitionSection({ clip, commit }: { clip: ClipInstance; commit
         }
         group="effects"
       >
-        <div className="field">
+        <div className={cx(styles, baseStyles, "field")}>
           <label>{t("transition")}</label>
           <select
             value={clip.transition_in}
@@ -123,7 +126,7 @@ export function TransitionSection({ clip, commit }: { clip: ClipInstance; commit
       </Section>
 
       <div
-        className="field"
+        className={cx(styles, baseStyles, "field")}
         data-group="inspector"
       >
         <label>{t("blendMode")}</label>

@@ -1,15 +1,19 @@
+import homeStyles from "../../screens/home.module.css";
+import { cx } from "../../cx";
+import baseStyles from "../../styles/base.module.css";
+import styles from "./library.module.css";
 import { useState } from "react";
 import { t } from "../../i18n";
 import { api } from "../../ipc";
 import { run } from "../../store";
-import { Dialog } from "../Dialog";
+import { Dialog } from "../chrome/Dialog";
 
 export function TtsButton() {
   const [text, setText] = useState<string | null>(null);
   if (text === null) {
     return (
       <button
-        className="icon"
+        className={cx(styles, baseStyles, homeStyles, "icon")}
         onClick={() => {
           return setText("");
         }}
@@ -35,9 +39,9 @@ export function TtsButton() {
           return setText(e.target.value);
         }}
       />
-      <div className="modal-actions">
+      <div className={cx(styles, baseStyles, "modal-actions")}>
         <button
-          className="icon"
+          className={cx(styles, baseStyles, "icon")}
           onClick={() => {
             return setText(null);
           }}
@@ -45,7 +49,7 @@ export function TtsButton() {
           {t("cancel")}
         </button>
         <button
-          className="icon primary"
+          className={cx(styles, baseStyles, "icon primary")}
           disabled={text.trim().length === 0}
           onClick={() => {
             void run(api.generateTts(text));

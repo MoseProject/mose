@@ -1,3 +1,6 @@
+import { cx } from "../../cx";
+import baseStyles from "../../styles/base.module.css";
+import styles from "./inspector.module.css";
 import { t } from "../../i18n";
 import { hasKeyframeAt, valueAt, withKeyframe, withoutKeyframe } from "../../keyframeAt";
 import { type ClipInstance, type ClipPatch } from "../../types";
@@ -94,10 +97,10 @@ export function ColorSection({
         />
       </Section>
       <div
-        className="clip-checks"
+        className={cx(styles, baseStyles, "clip-checks")}
         data-group="inspector"
       >
-        <label className="check">
+        <label className={cx(styles, baseStyles, "check")}>
           <input
             type="checkbox"
             checked={clip.frozen}
@@ -107,7 +110,7 @@ export function ColorSection({
           />
           {t("freeze")}
         </label>
-        <label className="check">
+        <label className={cx(styles, baseStyles, "check")}>
           <input
             type="checkbox"
             checked={clip.flipped_h}
@@ -119,10 +122,10 @@ export function ColorSection({
         </label>
       </div>
       <div
-        className="clip-checks"
+        className={cx(styles, baseStyles, "clip-checks")}
         data-group="audio"
       >
-        <label className="check">
+        <label className={cx(styles, baseStyles, "check")}>
           <input
             type="checkbox"
             checked={clip.voice_cleanup_enabled}

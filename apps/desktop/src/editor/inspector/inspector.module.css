@@ -1,0 +1,288 @@
+/* ---- inspector ---- */
+.inspector-body {
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.field {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 8px;
+  align-items: center;
+}
+
+.field label {
+  color: var(--text-secondary);
+}
+
+.field input[type="range"] {
+  grid-column: 1 / 3;
+}
+
+.check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--text-secondary);
+}
+
+/* Collapsible inspector property groups -- mirrors crates/ui/src/components/property.rs's
+   property_section (CollapsingHeader), closed by default unless the clip's own values differ
+   from default (see Inspector.tsx's per-section defaultOpen checks). */
+.property-section {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.property-section summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  cursor: pointer;
+  list-style: none;
+}
+.property-section summary:hover {
+  color: var(--text-primary);
+}
+
+.property-section summary::-webkit-details-marker {
+  display: none;
+}
+
+.property-section summary::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 140ms ease-out;
+}
+
+.property-section[open] > summary::after {
+  transform: rotate(45deg);
+}
+
+.property-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 0 12px;
+}
+
+.field select {
+  grid-column: 1 / 3;
+  width: 100%;
+}
+
+.keyframe-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.keyframe-list > label {
+  color: var(--text-secondary);
+}
+
+.keyframe-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.keyframe-row:has(input ~ input ~ input) {
+  grid-template-columns: 1fr 1fr 1fr auto;
+}
+
+.jobs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.job {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  font-size: 12px;
+}
+
+.job progress {
+  grid-column: 1 / 3;
+  width: 100%;
+  height: 4px;
+  accent-color: var(--accent);
+}
+
+.export-panel {
+  position: fixed;
+  top: 54px;
+  right: 8px;
+  width: 340px;
+  max-height: calc(100vh - 56px);
+  overflow: auto;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  z-index: 12;
+}
+.export-panel .panel-title {
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 6px 4px 10px;
+}
+.export-body {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.export-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+/* ---- inspector content ---- */
+.inspector-body {
+  overflow-x: hidden;
+  padding: 4px 12px 12px;
+  gap: 0;
+}
+.inspector-body input,
+.inspector-body select {
+  min-width: 0;
+  box-sizing: border-box;
+}
+.clip-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 2px 10px;
+}
+.clip-name {
+  font-weight: 600;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.clip-head .muted {
+  font-size: 11px;
+}
+.region-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.region-row input {
+  width: 100%;
+}
+.property-section-body > button {
+  text-align: left;
+}
+.inspector-body > div > .field {
+  padding: 8px 2px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* ---- inspector tabs and rows (Mose mockup) ---- */
+.inspector-body[data-tab="inspector"] [data-group]:not([data-group="inspector"]),
+.inspector-body[data-tab="effects"] [data-group]:not([data-group="effects"]),
+.inspector-body[data-tab="audio"] [data-group]:not([data-group="audio"]) {
+  display: none;
+}
+.inspector-body {
+  padding: 0 18px 14px;
+}
+.clip-head {
+  padding: 16px 0 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.clip-name {
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.property-section summary {
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  color: var(--text-primary);
+  padding: 14px 0 12px;
+}
+.property-section-body {
+  gap: 0;
+  padding: 0 0 14px;
+}
+.field.slider-field {
+  grid-template-columns: 71px 1fr 72px;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 0;
+}
+.field.slider-field input[type="range"] {
+  grid-column: auto;
+}
+.field.slider-field .mono {
+  text-align: center;
+  font-size: 11px;
+  padding: 5px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-workspace);
+}
+.field {
+  padding: 6px 0;
+}
+.field label,
+.check {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.inspector select {
+  height: 29px;
+  background: var(--bg-workspace);
+  border-color: var(--border);
+}
+.inspector input[type="number"],
+.inspector input:not([type]) {
+  height: 27px;
+  background: var(--bg-workspace);
+  text-align: center;
+}
+input[type="range"] {
+  height: 14px;
+}
+
+/* ---- section keyframe diamond ---- */
+.section-keyframe {
+  margin-left: auto;
+  padding: 2px;
+}
+.section-keyframe + .section-reset {
+  margin-left: 0;
+}
+.section-keyframe svg {
+  width: 12px;
+  height: 12px;
+}
+.section-keyframe.active svg {
+  fill: var(--accent);
+  color: var(--accent);
+}
+.section-keyframe:disabled {
+  opacity: 0.4;
+}
+

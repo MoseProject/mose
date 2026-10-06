@@ -1,8 +1,12 @@
+import homeStyles from "../screens/home.module.css";
+import { cx } from "../cx";
+import baseStyles from "../styles/base.module.css";
+import styles from "./chrome/chrome.module.css";
 import { useState } from "react";
 import { formatTime, t } from "../i18n";
 import { api } from "../ipc";
-import { Dialog } from "./Dialog";
-import { Icon } from "./Icon";
+import { Dialog } from "./chrome/Dialog";
+import { Icon } from "./chrome/Icon";
 import { patchUi, run, uiStore, useStore } from "../store";
 import type { SilenceGap } from "../types";
 
@@ -59,7 +63,7 @@ export function SilenceReviewPanel() {
   if (!open) {
     return (
       <button
-        className="icon"
+        className={cx(styles, baseStyles, homeStyles, "icon")}
         onClick={begin}
       >
         {t("silenceReview")}
@@ -73,16 +77,16 @@ export function SilenceReviewPanel() {
       onClose={close}
     >
       {gaps.length === 0 ? (
-        <p className="muted">{t("silenceReviewEmpty")}</p>
+        <p className={cx(styles, baseStyles, "muted")}>{t("silenceReviewEmpty")}</p>
       ) : (
         <div style={{ maxHeight: 320, overflowY: "auto" }}>
           {gaps.map((gap, index) => {
             return (
               <div
-                className="modal-row"
+                className={cx(styles, baseStyles, "modal-row")}
                 key={index}
               >
-                <label className="check">
+                <label className={cx(styles, baseStyles, "check")}>
                   <input
                     type="checkbox"
                     checked={gap.accepted}
@@ -95,7 +99,7 @@ export function SilenceReviewPanel() {
                   {`${formatTime(gap.startSecs)} - ${formatTime(gap.endSecs)} (${(gap.endSecs - gap.startSecs).toFixed(1)}s)`}
                 </label>
                 <button
-                  className="icon"
+                  className={cx(styles, baseStyles, "icon")}
                   aria-label={t("goToGap")}
                   title={t("goToGap")}
                   onClick={() => {
@@ -109,15 +113,15 @@ export function SilenceReviewPanel() {
           })}
         </div>
       )}
-      <div className="modal-actions">
+      <div className={cx(styles, baseStyles, "modal-actions")}>
         <button
-          className="icon"
+          className={cx(styles, baseStyles, "icon")}
           onClick={close}
         >
           {t("cancel")}
         </button>
         <button
-          className="icon primary"
+          className={cx(styles, baseStyles, "icon primary")}
           disabled={gaps.length === 0}
           onClick={apply}
         >

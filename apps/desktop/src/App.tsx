@@ -1,14 +1,17 @@
-import { useEffect, useSyncExternalStore } from "react";
-import { localeSnapshot, subscribeLocale, t } from "./i18n";
+import { cx } from "./cx";
+import baseStyles from "./styles/base.module.css";
+import styles from "./App.module.css";
+import { useEffect } from "react";
+import { useI18n } from "./i18n";
 import { COMMANDS } from "./commands";
 import { loadKeymap } from "./keymap";
-import { CommandPalette } from "./editor/CommandPalette";
-import { Dialog } from "./editor/Dialog";
-import { ExportDialog } from "./editor/ExportDialog";
-import { ExportPanel } from "./editor/ExportPanel";
-import { ConfirmHost, ToastHost } from "./editor/Notifications";
-import { ShortcutsDialog } from "./editor/ShortcutsDialog";
-import { StatusBar } from "./editor/StatusBar";
+import { CommandPalette } from "./editor/chrome/CommandPalette";
+import { Dialog } from "./editor/chrome/Dialog";
+import { ExportDialog } from "./editor/export/ExportDialog";
+import { ExportPanel } from "./editor/export/ExportPanel";
+import { ConfirmHost, ToastHost } from "./editor/chrome/Notifications";
+import { ShortcutsDialog } from "./editor/chrome/ShortcutsDialog";
+import { StatusBar } from "./editor/chrome/StatusBar";
 import { CrashReviewModal } from "./screens/CrashReviewModal";
 import { Editor } from "./screens/Editor";
 import { Home } from "./screens/Home";
@@ -22,7 +25,7 @@ import { connect, patchUi, run, sessionStore, uiStore, useStore } from "./store"
 export function App() {
   const session = useStore(sessionStore);
   const ui = useStore(uiStore);
-  useSyncExternalStore(subscribeLocale, localeSnapshot);
+  const { gettext: t } = useI18n();
 
   useEffect(() => {
     void run(connect()).then(() => {
@@ -83,7 +86,7 @@ export function App() {
   }, []);
 
   return (
-    <div className="app">
+    <div className={cx(styles, baseStyles, "app")}>
       <TopBar session={session} />
       {ui.screen === "home" || !session ? <Home /> : <Editor session={session} />}
       <StatusBar />

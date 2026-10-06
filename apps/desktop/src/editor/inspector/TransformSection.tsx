@@ -1,3 +1,6 @@
+import { cx } from "../../cx";
+import baseStyles from "../../styles/base.module.css";
+import styles from "./inspector.module.css";
 import { t } from "../../i18n";
 import { hasKeyframeAt, valueAt, withKeyframe, withoutKeyframe } from "../../keyframeAt";
 import { type ClipInstance, type ClipPatch } from "../../types";
@@ -82,7 +85,7 @@ export function TransformSection({
         });
       }}
     >
-      <div className="field-row">
+      <div className={cx(styles, baseStyles, "field-row")}>
         <NumberField
           label={t("positionX")}
           value={Math.round(position.x * canvasW)}
@@ -124,7 +127,7 @@ export function TransformSection({
           void commit({ rotationKeyframes: [{ time_fraction: 0, value }] });
         }}
       />
-      <p className="muted">
+      <p className={cx(styles, baseStyles, "muted")}>
         {positionAnimated || rotationAnimated ? t("transformAnimated") : t("transformHint")}
       </p>
     </Section>

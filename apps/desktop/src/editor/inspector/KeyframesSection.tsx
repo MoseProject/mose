@@ -1,5 +1,5 @@
 import { t } from "../../i18n";
-import { F32KeyframeList, PositionKeyframeList } from "../KeyframeEditor";
+import { F32KeyframeList, PositionKeyframeList } from "./KeyframeEditor";
 import { type ClipInstance, type ClipPatch } from "../../types";
 import { Section } from "./controls";
 

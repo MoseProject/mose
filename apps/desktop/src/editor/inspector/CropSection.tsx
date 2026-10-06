@@ -1,3 +1,6 @@
+import { cx } from "../../cx";
+import baseStyles from "../../styles/base.module.css";
+import styles from "./inspector.module.css";
 import { t } from "../../i18n";
 import { type ClipInstance, type ClipPatch } from "../../types";
 import { Section, Slider } from "./controls";
@@ -69,7 +72,7 @@ export function CropSection({ clip, commit }: { clip: ClipInstance; commit: Comm
           }}
         />
         <button
-          className="icon"
+          className={cx(styles, baseStyles, "icon")}
           onClick={() => {
             return commit({ cropX: 0, cropY: 0, cropW: 1, cropH: 1 });
           }}

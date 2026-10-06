@@ -1,0 +1,102 @@
+/* ---- top bar (Mose mockup: 50px, logo block, menu bar, timecode box) ---- */
+.topbar {
+  gap: 4px;
+  padding: 0 14px 0 0;
+  background: var(--bg);
+}
+.brand-box {
+  width: 57px;
+  height: 50px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-right: 1px solid var(--border-subtle);
+}
+.topbar .brand {
+  display: block;
+  border-radius: 5px;
+}
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 18px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.crumbs .project-name {
+  margin: 0;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dirty {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warning);
+  flex: none;
+}
+.menubar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+}
+.menubar .menubar-item {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  padding: 6px 10px;
+}
+.menubar .menubar-item:hover:not(:disabled),
+.menubar .menubar-item[aria-expanded="true"] {
+  background: var(--bg-hover);
+}
+.readout {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-right: 10px;
+  font-size: 12px;
+}
+.readout .timecode {
+  font-size: 14px;
+  color: var(--accent);
+  padding: 7px 16px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg);
+}
+.readout .muted {
+  color: var(--text-primary);
+}
+.topbar button.export {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  font-weight: 600;
+  margin-left: 6px;
+}
+.topbar button.icon {
+  position: relative;
+}
+.topbar .badge {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  margin: 0;
+}
+
+/* ---- save state in the top bar ---- */
+.save-state {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.save-state.saving {
+  color: var(--accent);
+}
+

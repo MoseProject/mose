@@ -1,6 +1,10 @@
-import logo from "./assets/logo.png";
+import shellStyles from "./App.module.css";
+import { cx } from "./cx";
+import baseStyles from "./styles/base.module.css";
+import styles from "./topbar/topbar.module.css";
+import logo from "./assets/logo";
 import { withShortcut } from "./commands";
-import { Icon } from "./editor/Icon";
+import { Icon } from "./editor/chrome/Icon";
 import { t } from "./i18n";
 import { keymapStore } from "./keymap";
 import { exportsStore, patchUi, uiStore, useStore } from "./store";
@@ -23,10 +27,10 @@ export function TopBar({ session }: { session: SessionView | null }) {
   const selected = ui.selectedClipIds;
 
   return (
-    <header className="topbar">
-      <div className="brand-box">
+    <header className={cx(styles, baseStyles, shellStyles, "topbar")}>
+      <div className={cx(styles, baseStyles, "brand-box")}>
         <img
-          className="brand"
+          className={cx(styles, baseStyles, "brand")}
           src={logo}
           alt="oca"
           width={24}
@@ -39,7 +43,7 @@ export function TopBar({ session }: { session: SessionView | null }) {
         screen={ui.screen}
         selected={selected}
       />
-      <span className="spacer" />
+      <span className={cx(styles, baseStyles, "spacer")} />
       {session && (
         <ProjectActions
           session={session}
@@ -48,7 +52,7 @@ export function TopBar({ session }: { session: SessionView | null }) {
         />
       )}
       <button
-        className="icon"
+        className={cx(styles, baseStyles, "icon")}
         aria-label={t("preferences")}
         title={withShortcut(t("preferences"), "settings")}
         onClick={() => {

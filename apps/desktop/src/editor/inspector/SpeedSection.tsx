@@ -1,3 +1,6 @@
+import { cx } from "../../cx";
+import baseStyles from "../../styles/base.module.css";
+import styles from "./inspector.module.css";
 import { t } from "../../i18n";
 import { api } from "../../ipc";
 import { run } from "../../store";
@@ -29,11 +32,11 @@ export function SpeedSection({ clip, commit }: { clip: ClipInstance; commit: Com
             return commit({ speedFactor: v });
           }}
         />
-        <div className="field">
+        <div className={cx(styles, baseStyles, "field")}>
           <span>{t("speedRamp")}</span>
-          <div className="export-actions">
+          <div className={cx(styles, baseStyles, "export-actions")}>
             <button
-              className="icon"
+              className={cx(styles, baseStyles, "icon")}
               onClick={() => {
                 return run(api.applySpeedRampToClip(clip.id, 0.5, 2.0, 4));
               }}
@@ -41,7 +44,7 @@ export function SpeedSection({ clip, commit }: { clip: ClipInstance; commit: Com
               {t("speedRampSlowToFast")}
             </button>
             <button
-              className="icon"
+              className={cx(styles, baseStyles, "icon")}
               onClick={() => {
                 return run(api.applySpeedRampToClip(clip.id, 2.0, 0.5, 4));
               }}

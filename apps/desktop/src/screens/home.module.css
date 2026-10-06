@@ -1,0 +1,255 @@
+/* ---- home ---- */
+.home {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: var(--bg-workspace);
+}
+
+.home h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.home .actions {
+  display: flex;
+  gap: 8px;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+.modal {
+  width: min(420px, 90vw);
+  max-height: 80vh;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.modal h3 {
+  margin-top: 0;
+}
+.modal input,
+.modal select {
+  width: 100%;
+  box-sizing: border-box;
+}
+.modal-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.modal-row:first-of-type {
+  border-top: none;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.recent-projects,
+.prefs {
+  width: min(720px, 90vw);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.recent-projects h2,
+.prefs h1 {
+  margin-top: 0;
+}
+.recent-project {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.recent-open {
+  flex: 1;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+}
+.prefs {
+  margin: auto;
+  display: grid;
+  gap: 14px;
+}
+.prefs label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.prefs input:not([type="checkbox"]) {
+  min-width: 260px;
+}
+
+/* ---- projects screen ---- */
+.home {
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 16px;
+  padding: 28px max(24px, calc((100% - 960px) / 2));
+  overflow: auto;
+}
+.home-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.home-head p {
+  margin: 4px 0 0;
+}
+.home-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.home-actions button,
+.home-empty button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.home-current {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+}
+.home-current div {
+  display: flex;
+  flex-direction: column;
+}
+.home-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.home-search {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.home-search input {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  padding: 7px 0;
+  min-width: 0;
+}
+.home-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 56px 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  text-align: center;
+}
+.home-empty h2,
+.home-empty p {
+  margin: 0;
+}
+.home-empty button {
+  margin-top: 10px;
+}
+.project-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.project-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 4px 8px 4px 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.project-row:hover,
+.project-row:focus-within {
+  border-color: var(--accent);
+}
+.project-open {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  text-align: left;
+  padding: 8px 10px;
+  background: transparent;
+  border: 0;
+  min-width: 0;
+}
+.project-open strong {
+  font-size: 14px;
+}
+.project-folder {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-meta {
+  font-size: 11px;
+}
+.project-actions {
+  display: flex;
+  gap: 2px;
+}
+.project-recovery {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 4px 10px 6px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* ---- new project name with its suggest button ---- */
+.name-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+.name-row .dialog-field {
+  flex: 1;
+}

@@ -1,0 +1,167 @@
+/* ---- editor ---- */
+.editor {
+  display: grid;
+  grid-template-columns:
+    57px var(--library-width, 340px) 6px minmax(0, 1fr) 6px var(--inspector-width, 296px)
+    84px;
+  grid-template-rows: minmax(200px, 1fr) 6px var(--timeline-height, 300px);
+  min-height: 0;
+  background: var(--bg-workspace);
+}
+
+.editor > .panel {
+  background: var(--surface);
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.editor .library {
+  grid-row: 1;
+  grid-column: 2;
+  border-right: 1px solid var(--border-subtle);
+}
+
+.editor .preview {
+  grid-row: 1;
+  grid-column: 4;
+  background: var(--bg-workspace);
+}
+
+.editor .inspector {
+  grid-row: 1;
+  grid-column: 6;
+  border-left: 1px solid var(--border-subtle);
+}
+
+.editor .splitter {
+  grid-row: 2;
+  grid-column: 2 / 8;
+  cursor: row-resize;
+  background: var(--border-subtle);
+}
+
+.editor .splitter:hover {
+  background: var(--accent-active);
+}
+
+.editor .timeline {
+  grid-row: 3;
+  grid-column: 2 / 8;
+}
+
+.panel-splitter {
+  grid-row: 1;
+  cursor: col-resize;
+  background: var(--border-subtle);
+}
+.panel-splitter:hover {
+  background: var(--accent-active);
+}
+.library-splitter {
+  grid-column: 3;
+}
+.inspector-splitter {
+  grid-column: 5;
+}
+.tab-list,
+.marker-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.sequence-tabs {
+  display: contents;
+}
+.tab-list {
+  overflow-x: auto;
+  max-width: 42vw;
+  padding: 0 6px;
+}
+.sequence-tab {
+  display: flex;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+}
+.sequence-tab.active {
+  background: var(--accent-tint);
+  border-color: var(--accent);
+}
+.sequence-tab button {
+  white-space: nowrap;
+}
+.sequence-tab input {
+  width: 110px;
+}
+.marker-list {
+  order: 1;
+  margin: 0 8px;
+  position: relative;
+  font-size: 12px;
+}
+.marker-list > summary {
+  cursor: pointer;
+  padding: 4px 8px;
+  color: var(--text-secondary);
+  list-style: none;
+}
+.marker-list[open] > summary {
+  color: var(--accent);
+}
+.marker-pop {
+  position: fixed;
+  right: 16px;
+  margin-top: 4px;
+  min-width: 360px;
+  max-height: 40vh;
+  overflow: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  z-index: 12;
+}
+.zoom-group {
+  order: 2;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.marker-row input {
+  width: 100px;
+}
+
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 20, 20, 0.78);
+  border: 2px solid var(--accent);
+  font-size: 20px;
+  z-index: 20;
+  pointer-events: none;
+}
+
+/* ---- surfaces as in the mockup: page, monitor well, timeline ---- */
+body {
+  background: var(--bg-page);
+}
+.app {
+  background: var(--bg);
+}
+.monitor {
+  background: var(--bg-viewer);
+}
+.editor > .timeline {
+  background: var(--bg-workspace);
+}
+

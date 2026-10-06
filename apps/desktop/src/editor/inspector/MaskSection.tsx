@@ -1,3 +1,6 @@
+import { cx } from "../../cx";
+import baseStyles from "../../styles/base.module.css";
+import styles from "./inspector.module.css";
 import { t } from "../../i18n";
 import { type ClipInstance, type ClipPatch, type MaskShape } from "../../types";
 import { Section, Slider } from "./controls";
@@ -33,7 +36,7 @@ export function MaskSection({ clip, commit }: { clip: ClipInstance; commit: Comm
         defaultOpen={clip.mask_shape !== "None"}
         group="effects"
       >
-        <div className="field">
+        <div className={cx(styles, baseStyles, "field")}>
           <label>{t("mask")}</label>
           <select
             value={clip.mask_shape}

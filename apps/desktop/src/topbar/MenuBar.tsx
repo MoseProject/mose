@@ -1,5 +1,8 @@
+import { cx } from "../cx";
+import baseStyles from "../styles/base.module.css";
+import styles from "./topbar.module.css";
 import { shortcutLabel } from "../commands";
-import { Menu } from "../editor/Menu";
+import { Menu } from "../editor/chrome/Menu";
 import { t } from "../i18n";
 import { api } from "../ipc";
 import { patchUi, run } from "../store";
@@ -17,7 +20,7 @@ export function MenuBar({
   selected: number[];
 }) {
   return (
-    <nav className="menubar">
+    <nav className={cx(styles, baseStyles, "menubar")}>
       {session && (
         <Menu
           variant="bar"

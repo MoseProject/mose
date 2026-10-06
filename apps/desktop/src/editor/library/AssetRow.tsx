@@ -1,6 +1,9 @@
+import { cx } from "../../cx";
+import baseStyles from "../../styles/base.module.css";
+import styles from "./library.module.css";
 import { useState } from "react";
 import { formatTime, t } from "../../i18n";
-import { Icon } from "../Icon";
+import { Icon } from "../chrome/Icon";
 import { api, thumbnailUrl } from "../../ipc";
 import { assetDragStore, run, transcribingAssetIdStore, useStore } from "../../store";
 import type { MediaAsset } from "../../types";
@@ -73,10 +76,10 @@ export function AssetRow({
     .join(" · ");
 
   const actions = (
-    <div className="asset-actions">
+    <div className={cx(styles, baseStyles, "asset-actions")}>
       {asset.has_audio && (
         <button
-          className="icon"
+          className={cx(styles, baseStyles, "icon")}
           title={transcribing ? t("transcribing") : t("transcribe")}
           aria-label={transcribing ? t("transcribing") : t("transcribe")}
           disabled={transcribingAssetId !== null}
@@ -91,7 +94,7 @@ export function AssetRow({
         </button>
       )}
       <button
-        className={`icon ${asset.favorited ? "active" : ""}`}
+        className={cx(styles, baseStyles, `icon ${asset.favorited ? "active" : ""}`)}
         title={t("favorite")}
         aria-label={t("favorite")}
         aria-pressed={asset.favorited}
@@ -112,7 +115,7 @@ export function AssetRow({
 
   return (
     <div
-      className={`asset ${asset.kind === "Audio" ? "audio" : ""}`}
+      className={cx(styles, baseStyles, `asset ${asset.kind === "Audio" ? "audio" : ""}`)}
       title={asset.source_path}
       tabIndex={0}
       onContextMenu={onContextMenu}
@@ -128,16 +131,16 @@ export function AssetRow({
       }}
     >
       {asset.kind === "Audio" ? (
-        <div className="audio-card">
-          <span className="audio-icon">
+        <div className={cx(styles, baseStyles, "audio-card")}>
+          <span className={cx(styles, baseStyles, "audio-icon")}>
             <Icon
               name="music"
               size={20}
             />
           </span>
-          <div className="audio-text">
-            <div className="name">{asset.file_name}</div>
-            <div className="meta">
+          <div className={cx(styles, baseStyles, "audio-text")}>
+            <div className={cx(styles, baseStyles, "name")}>{asset.file_name}</div>
+            <div className={cx(styles, baseStyles, "meta")}>
               {formatTime(asset.duration_secs)} {meta && `· ${meta}`}
             </div>
           </div>
@@ -145,10 +148,10 @@ export function AssetRow({
         </div>
       ) : (
         <>
-          <div className="thumb-wrap">
+          <div className={cx(styles, baseStyles, "thumb-wrap")}>
             {!thumbFailed ? (
               <img
-                className="thumb"
+                className={cx(styles, baseStyles, "thumb")}
                 src={thumbnailUrl(asset.id)}
                 alt=""
                 draggable={false}
@@ -157,18 +160,18 @@ export function AssetRow({
                 }}
               />
             ) : (
-              <div className="thumb">
+              <div className={cx(styles, baseStyles, "thumb")}>
                 <Icon
                   name="film"
                   size={22}
                 />
               </div>
             )}
-            <span className="duration mono">{formatTime(asset.duration_secs)}</span>
+            <span className={cx(styles, baseStyles, "duration mono")}>{formatTime(asset.duration_secs)}</span>
             {actions}
           </div>
-          <div className="name">{asset.file_name}</div>
-          <div className="meta">{meta}</div>
+          <div className={cx(styles, baseStyles, "name")}>{asset.file_name}</div>
+          <div className={cx(styles, baseStyles, "meta")}>{meta}</div>
         </>
       )}
     </div>

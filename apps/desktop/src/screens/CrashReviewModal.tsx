@@ -1,7 +1,11 @@
+import homeStyles from "./home.module.css";
+import { cx } from "../cx";
+import baseStyles from "../styles/base.module.css";
+import styles from "../editor/chrome/chrome.module.css";
 import { useEffect, useState } from "react";
 import { t } from "../i18n";
 import { api } from "../ipc";
-import { Dialog } from "../editor/Dialog";
+import { Dialog } from "../editor/chrome/Dialog";
 import { run } from "../store";
 import type { CrashReview } from "../types";
 
@@ -36,7 +40,7 @@ export function CrashReviewModal() {
     >
       <p>{t("crashReviewOffer")}</p>
       <button
-        className="icon"
+        className={cx(styles, baseStyles, homeStyles, "icon")}
         onClick={() => {
           return setShowPayload((v) => {
             return !v;
@@ -57,9 +61,9 @@ export function CrashReviewModal() {
           {crash.payloadPreview}
         </pre>
       )}
-      <div className="modal-actions">
+      <div className={cx(styles, baseStyles, "modal-actions")}>
         <button
-          className="icon"
+          className={cx(styles, baseStyles, "icon")}
           onClick={() => {
             return finish(() => {
               return api.sendCrashOnce();
@@ -69,7 +73,7 @@ export function CrashReviewModal() {
           {t("crashReviewSendOnce")}
         </button>
         <button
-          className="icon"
+          className={cx(styles, baseStyles, "icon")}
           onClick={() => {
             return finish(() => {
               return api.alwaysSendCrash();
@@ -79,7 +83,7 @@ export function CrashReviewModal() {
           {t("crashReviewAlwaysSend")}
         </button>
         <button
-          className="icon"
+          className={cx(styles, baseStyles, "icon")}
           onClick={() => {
             return finish(() => {
               return api.dismissCrashReview();

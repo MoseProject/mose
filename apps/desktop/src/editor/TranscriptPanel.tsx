@@ -1,3 +1,7 @@
+import homeStyles from "../screens/home.module.css";
+import { cx } from "../cx";
+import baseStyles from "../styles/base.module.css";
+import styles from "./chrome/chrome.module.css";
 import { useEffect, useState } from "react";
 import { formatTime, t } from "../i18n";
 import { api } from "../ipc";
@@ -9,7 +13,7 @@ import {
   type TranscriptHit,
   type TranscriptWord,
 } from "../types";
-import { Dialog } from "./Dialog";
+import { Dialog } from "./chrome/Dialog";
 
 /** Transcript search/seek popup -- egui's `App::show_transcript_panel` narrow modal shape. Two
  *  modes: off (default) filters the selected clip's own transcript; on (with a query) searches
@@ -59,7 +63,7 @@ export function TranscriptPanel({ session }: { session: SessionView }) {
   if (!open) {
     return (
       <button
-        className="icon"
+        className={cx(styles, baseStyles, homeStyles, "icon")}
         onClick={() => {
           return setOpen(true);
         }}
@@ -105,7 +109,7 @@ export function TranscriptPanel({ session }: { session: SessionView }) {
         }}
       />
       <label
-        className="check"
+        className={cx(styles, baseStyles, "check")}
         style={{ marginTop: 6 }}
       >
         <input
@@ -120,13 +124,13 @@ export function TranscriptPanel({ session }: { session: SessionView }) {
       <div style={{ maxHeight: 320, overflowY: "auto", marginTop: 8 }}>
         {searchProject ? (
           hits.length === 0 ? (
-            <p className="muted">{t("transcriptProjectEmpty")}</p>
+            <p className={cx(styles, baseStyles, "muted")}>{t("transcriptProjectEmpty")}</p>
           ) : (
             groupByAsset(hits).map(([assetId, assetName, words]) => {
               return (
                 <div key={assetId}>
                   <div
-                    className="muted"
+                    className={cx(styles, baseStyles, "muted")}
                     style={{ marginTop: 6 }}
                   >
                     {assetName}
@@ -149,9 +153,9 @@ export function TranscriptPanel({ session }: { session: SessionView }) {
             })
           )
         ) : !clip ? (
-          <p className="muted">{t("transcriptPanelNoClip")}</p>
+          <p className={cx(styles, baseStyles, "muted")}>{t("transcriptPanelNoClip")}</p>
         ) : !document ? (
-          <p className="muted">{t("transcriptPanelNoTranscript")}</p>
+          <p className={cx(styles, baseStyles, "muted")}>{t("transcriptPanelNoTranscript")}</p>
         ) : (
           document.words
             .filter((w) => {
@@ -172,9 +176,9 @@ export function TranscriptPanel({ session }: { session: SessionView }) {
             })
         )}
       </div>
-      <div className="modal-actions">
+      <div className={cx(styles, baseStyles, "modal-actions")}>
         <button
-          className="icon"
+          className={cx(styles, baseStyles, "icon")}
           onClick={() => {
             return setOpen(false);
           }}
@@ -209,7 +213,7 @@ function WordButton(props: {
 }) {
   return (
     <button
-      className={`icon ${props.active ? "active" : ""}`}
+      className={cx(styles, baseStyles, `icon ${props.active ? "active" : ""}`)}
       title={`${formatTime(props.word.start_secs)} (${(props.word.confidence * 100).toFixed(0)}%)`}
       style={{
         margin: "2px 4px 2px 0",

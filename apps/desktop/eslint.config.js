@@ -28,7 +28,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["**/*.test.{ts,tsx}", "src/testSupport.ts"],
+    files: ["**/*.test.{ts,tsx}", "tests/support/testSupport.ts"],
     languageOptions: { globals: { ...globals.node } },
   },
   // Prettier owns formatting; the rules below keep every statement and arrow body on its own

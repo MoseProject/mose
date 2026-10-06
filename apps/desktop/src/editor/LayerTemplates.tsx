@@ -1,9 +1,13 @@
+import homeStyles from "../screens/home.module.css";
+import { cx } from "../cx";
+import baseStyles from "../styles/base.module.css";
+import styles from "./chrome/chrome.module.css";
 import { useState } from "react";
 import { t } from "../i18n";
 import { api } from "../ipc";
 import { layerTemplatesStore, run, uiStore, useStore } from "../store";
 import type { SessionView } from "../types";
-import { Dialog } from "./Dialog";
+import { Dialog } from "./chrome/Dialog";
 
 /** Layer-group template list/save/apply popups -- egui's narrow `egui::Modal` exception
  *  (`spec/architecture/tauri-migration.md`'s parity notes), not a general-purpose dialog system. */
@@ -21,7 +25,7 @@ export function LayerTemplates({ session }: { session: SessionView }) {
   return (
     <>
       <button
-        className="icon"
+        className={cx(styles, baseStyles, homeStyles, "icon")}
         onClick={() => {
           return setListOpen((v) => {
             return !v;
@@ -31,7 +35,7 @@ export function LayerTemplates({ session }: { session: SessionView }) {
         {t("templates")}
       </button>
       <button
-        className="icon"
+        className={cx(styles, baseStyles, "icon")}
         disabled={selected.length < 2}
         onClick={() => {
           return setSaving("");
@@ -47,17 +51,17 @@ export function LayerTemplates({ session }: { session: SessionView }) {
             setListOpen(false);
           }}
         >
-          {templates.length === 0 && <p className="muted">{t("noSavedTemplates")}</p>}
+          {templates.length === 0 && <p className={cx(styles, baseStyles, "muted")}>{t("noSavedTemplates")}</p>}
           {templates.map((template, index) => {
             return (
               <div
-                className="modal-row"
+                className={cx(styles, baseStyles, "modal-row")}
                 key={index}
               >
                 <span>{template.name}</span>
                 <div>
                   <button
-                    className="icon"
+                    className={cx(styles, baseStyles, "icon")}
                     onClick={() => {
                       setApplying({
                         index,
@@ -71,7 +75,7 @@ export function LayerTemplates({ session }: { session: SessionView }) {
                     {t("applyTemplate")}
                   </button>
                   <button
-                    className="icon"
+                    className={cx(styles, baseStyles, "icon")}
                     onClick={() => {
                       return run(api.deleteLayerTemplate(index)).then((updated) => {
                         if (updated) {
@@ -106,9 +110,9 @@ export function LayerTemplates({ session }: { session: SessionView }) {
               return e.key === "Enter" && saving.trim() && confirmSave();
             }}
           />
-          <div className="modal-actions">
+          <div className={cx(styles, baseStyles, "modal-actions")}>
             <button
-              className="icon"
+              className={cx(styles, baseStyles, "icon")}
               onClick={() => {
                 return setSaving(null);
               }}
@@ -116,7 +120,7 @@ export function LayerTemplates({ session }: { session: SessionView }) {
               {t("cancel")}
             </button>
             <button
-              className="icon primary"
+              className={cx(styles, baseStyles, "icon primary")}
               disabled={saving.trim().length === 0}
               onClick={confirmSave}
             >
@@ -139,7 +143,7 @@ export function LayerTemplates({ session }: { session: SessionView }) {
             });
             return (
               <div
-                className="modal-row"
+                className={cx(styles, baseStyles, "modal-row")}
                 key={layerIndex}
               >
                 <span>
@@ -168,9 +172,9 @@ export function LayerTemplates({ session }: { session: SessionView }) {
               </div>
             );
           })}
-          <div className="modal-actions">
+          <div className={cx(styles, baseStyles, "modal-actions")}>
             <button
-              className="icon"
+              className={cx(styles, baseStyles, "icon")}
               onClick={() => {
                 return setApplying(null);
               }}
@@ -178,7 +182,7 @@ export function LayerTemplates({ session }: { session: SessionView }) {
               {t("cancel")}
             </button>
             <button
-              className="icon primary"
+              className={cx(styles, baseStyles, "icon primary")}
               disabled={applying.assetIds.every((id) => {
                 return id === null;
               })}

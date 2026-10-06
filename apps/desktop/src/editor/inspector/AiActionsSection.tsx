@@ -1,3 +1,6 @@
+import { cx } from "../../cx";
+import baseStyles from "../../styles/base.module.css";
+import styles from "./inspector.module.css";
 import { useState } from "react";
 import { t } from "../../i18n";
 import { api } from "../../ipc";
@@ -14,7 +17,7 @@ export function AiActionsSection({ clip }: { clip: ClipInstance }) {
         defaultOpen={false}
         group="effects"
       >
-        <div className="region-row">
+        <div className={cx(styles, baseStyles, "region-row")}>
           <input
             type="number"
             step={0.05}

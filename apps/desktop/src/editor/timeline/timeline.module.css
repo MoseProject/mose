@@ -1,0 +1,187 @@
+/* ---- timeline ---- */
+.timeline-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.timeline-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.track-headers {
+  flex: none;
+  border-right: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+
+.track-header {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.track-header .name {
+  flex: 1;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.timeline-lanes {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+
+.timeline-lanes canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+/* ---- timeline chrome ---- */
+.track-headers {
+  background: var(--bg-trackhead);
+}
+.track-header {
+  background: var(--bg-trackhead);
+  padding: 0 8px;
+}
+.track-header .name {
+  color: var(--text-primary);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+.timeline-toolbar {
+  gap: 2px;
+  padding: 4px 10px;
+  background: transparent;
+}
+.timeline-toolbar .panel-title {
+  color: var(--text-muted);
+}
+
+/* ---- timeline head (one row, as in the mockup) ---- */
+.timeline-toolbar {
+  padding: 0 14px;
+  min-height: 41px;
+  gap: 4px;
+}
+.timeline-toolbar .panel-title {
+  padding: 0 14px 0 0 !important;
+  font-size: 11px;
+  color: var(--text-primary);
+  letter-spacing: 0.06em;
+}
+.sequence-tab {
+  height: 41px;
+  padding: 0 8px 0 4px;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+}
+.sequence-tab.active {
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid var(--accent);
+}
+.sequence-tab > button[role="tab"] {
+  background: transparent;
+  border: 0;
+  color: var(--text-primary);
+  padding: 0 6px;
+}
+.tab-list {
+  display: flex;
+  align-items: stretch;
+}
+
+/* ---- timeline overview (minimap) ---- */
+.minimap {
+  position: relative;
+  height: 22px;
+  flex: none;
+  margin: 0 0 0 184px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+  touch-action: none;
+}
+.minimap-clip {
+  position: absolute;
+  background: var(--media-video-edge);
+  opacity: 0.8;
+  min-width: 1px;
+}
+.minimap-clip.audio {
+  background: var(--audio-edge);
+}
+.minimap-clip.text,
+.minimap-clip.shape {
+  background: var(--fx);
+}
+.minimap-window {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--accent-tint);
+  border: 1px solid var(--accent);
+  box-sizing: border-box;
+  pointer-events: none;
+}
+.track-header {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 2px;
+}
+.track-header-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.track-header-row .name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+button.icon.letter {
+  font-size: 11px;
+  font-weight: 600;
+  min-width: 22px;
+  padding: 1px 4px;
+}
+button.icon.letter.muted.active {
+  color: var(--error);
+}
+button.icon.letter.solo.active {
+  color: var(--warning);
+}
+.role-select {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  font-size: 11px;
+  padding: 0 4px;
+}
+
+/* ---- shuttle speed badge ---- */
+.shuttle-badge {
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--accent);
+  color: var(--bg-app, #000);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+

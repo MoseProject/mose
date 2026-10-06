@@ -1,6 +1,9 @@
+import { cx } from "../../cx";
+import baseStyles from "../../styles/base.module.css";
+import styles from "./inspector.module.css";
 import { type ReactNode } from "react";
-import { Icon } from "../Icon";
-import { useDraft } from "../../useDraft";
+import { Icon } from "../chrome/Icon";
+import { useDraft } from "../../hooks/useDraft";
 import { t } from "../../i18n";
 
 /** Collapsible property group, closed by default unless `defaultOpen` -- mirrors
@@ -41,7 +44,7 @@ export function Section({
 }) {
   return (
     <details
-      className="property-section"
+      className={cx(styles, baseStyles, "property-section")}
       open={defaultOpen}
       data-testid={testId}
       data-group={group}
@@ -50,7 +53,7 @@ export function Section({
         <span>{label}</span>
         {keyframe && (
           <button
-            className={"icon section-keyframe" + (keyframe.active ? " active" : "")}
+            className={cx(styles, baseStyles, "icon section-keyframe" + (keyframe.active ? " active" : ""))}
             aria-label={t("keyframeToggle") + ": " + label}
             aria-pressed={keyframe.active}
             title={keyframe.disabled ? t("keyframeOutside") : t("keyframeToggle")}
@@ -66,7 +69,7 @@ export function Section({
         )}
         {onReset && (
           <button
-            className="icon section-reset"
+            className={cx(styles, baseStyles, "icon section-reset")}
             aria-label={t("resetSection") + ": " + label}
             title={t("resetSection")}
             onClick={(e) => {
@@ -79,7 +82,7 @@ export function Section({
           </button>
         )}
       </summary>
-      <div className="property-section-body">{children}</div>
+      <div className={cx(styles, baseStyles, "property-section-body")}>{children}</div>
     </details>
   );
 }
@@ -101,7 +104,7 @@ export function Slider(props: {
     }
   };
   return (
-    <div className="field slider-field">
+    <div className={cx(styles, baseStyles, "field slider-field")}>
       <label>{props.label}</label>
       <input
         type="range"
@@ -116,7 +119,7 @@ export function Slider(props: {
         onKeyUp={commit}
         onBlur={commit}
       />
-      <span className="mono">{props.format(draft)}</span>
+      <span className={cx(styles, baseStyles, "mono")}>{props.format(draft)}</span>
     </div>
   );
 }
@@ -148,7 +151,7 @@ export function NumberField({
     }
   };
   return (
-    <label className="number-field">
+    <label className={cx(styles, baseStyles, "number-field")}>
       <span>{label}</span>
       <input
         type="number"
@@ -166,7 +169,7 @@ export function NumberField({
           }
         }}
       />
-      {suffix && <span className="muted">{suffix}</span>}
+      {suffix && <span className={cx(styles, baseStyles, "muted")}>{suffix}</span>}
     </label>
   );
 }

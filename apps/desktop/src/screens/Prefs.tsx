@@ -1,12 +1,16 @@
+import chromeStyles from "../editor/chrome/chrome.module.css";
+import { cx } from "../cx";
+import baseStyles from "../styles/base.module.css";
+import styles from "./settings.module.css";
 import { useEffect, useState, type ReactNode } from "react";
-import { localeFromPrefs, setLocale, t } from "../i18n";
+import { localeFromPrefs, t, useI18n } from "../i18n";
 import { api, onUpdateCheck } from "../ipc";
 import { run } from "../store";
 import type { ErrorReportingConsent, PathStatus, PrefsView, UpdateCheckEvent } from "../types";
 
 function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <fieldset className="settings-group">
+    <fieldset className={cx(styles, baseStyles, chromeStyles, "settings-group")}>
       <legend>{title}</legend>
       {children}
     </fieldset>
@@ -47,7 +51,7 @@ function PathField({
     status !== null &&
     ((kind === "file" && status === "folder") || (kind === "folder" && status === "file"));
   return (
-    <div className="path-field">
+    <div className={cx(styles, baseStyles, "path-field")}>
       <label>
         <span>{label}</span>
         <input
@@ -70,16 +74,17 @@ function PathField({
       >
         {t("browse")}
       </button>
-      {status === "missing" && <span className="path-status bad">{t("pathMissing")}</span>}
-      {wrongKind && <span className="path-status bad">{t("pathWrongKind")}</span>}
+      {status === "missing" && <span className={cx(styles, baseStyles, "path-status bad")}>{t("pathMissing")}</span>}
+      {wrongKind && <span className={cx(styles, baseStyles, "path-status bad")}>{t("pathWrongKind")}</span>}
       {(status === "file" || status === "folder") && !wrongKind && (
-        <span className="path-status ok">{t("pathOk")}</span>
+        <span className={cx(styles, baseStyles, "path-status ok")}>{t("pathOk")}</span>
       )}
     </div>
   );
 }
 
 export function Prefs() {
+  const { gettext: t, setLocale } = useI18n();
   const [prefs, setPrefs] = useState<PrefsView | null>(null);
   const [queuedReports, setQueuedReports] = useState(0);
   const [updateStatus, setUpdateStatus] = useState<UpdateCheckEvent | null>(null);
@@ -146,7 +151,7 @@ export function Prefs() {
   }
   return (
     <div
-      className="prefs"
+      className={cx(styles, baseStyles, "prefs")}
       data-testid="screen-prefs"
     >
       <Group title={t("settingsGeneral")}>
@@ -268,7 +273,7 @@ export function Prefs() {
         />
       </Group>
       <Group title={t("settingsPrivacy")}>
-        <label className="check">
+        <label className={cx(styles, baseStyles, "check")}>
           <input
             type="checkbox"
             checked={prefs.telemetryEnabled}
@@ -278,7 +283,7 @@ export function Prefs() {
           />{" "}
           {t("telemetryEnabled")}
         </label>
-        <label className="check">
+        <label className={cx(styles, baseStyles, "check")}>
           <input
             type="checkbox"
             checked={prefs.errorReportingConsent === "always_send"}
@@ -292,7 +297,7 @@ export function Prefs() {
           <label>
             {queuedReports} {t("queuedReports")}
             <button
-              className="icon"
+              className={cx(styles, baseStyles, "icon")}
               onClick={() => {
                 return void run(api.deleteQueuedReports()).then(() => {
                   return setQueuedReports(0);
@@ -314,17 +319,17 @@ export function Prefs() {
             {t("checkForUpdate")}
           </button>
           {updateStatus?.type === "upToDate" && (
-            <span className="muted">{t("updateCheckUpToDate")}</span>
+            <span className={cx(styles, baseStyles, "muted")}>{t("updateCheckUpToDate")}</span>
           )}
           {updateStatus?.type === "failed" && (
-            <span className="muted">{t("updateCheckFailed")}</span>
+            <span className={cx(styles, baseStyles, "muted")}>{t("updateCheckFailed")}</span>
           )}
           {updateStatus?.type === "newerVersionAvailable" && (
-            <span className="muted">
+            <span className={cx(styles, baseStyles, "muted")}>
               {t("updateAvailable")}: {updateStatus.version}{" "}
               {updateStatus.autoUpdateAvailable ? (
                 <button
-                  className="icon"
+                  className={cx(styles, baseStyles, "icon")}
                   onClick={() => {
                     return run(api.installAvailableUpdate(updateStatus.version));
                   }}
@@ -343,10 +348,10 @@ export function Prefs() {
             </span>
           )}
           {updateStatus?.type === "installed" && (
-            <span className="muted">
+            <span className={cx(styles, baseStyles, "muted")}>
               {t("updateInstalled")}{" "}
               <button
-                className="icon"
+                className={cx(styles, baseStyles, "icon")}
                 onClick={() => {
                   return run(api.restartAfterUpdate());
                 }}
@@ -356,12 +361,12 @@ export function Prefs() {
             </span>
           )}
           {updateStatus?.type === "installFailed" && (
-            <span className="muted">{t("updateInstallFailed")}</span>
+            <span className={cx(styles, baseStyles, "muted")}>{t("updateInstallFailed")}</span>
           )}
         </label>
       </Group>
       <p
-        className="settings-saved"
+        className={cx(styles, baseStyles, "settings-saved")}
         role="status"
       >
         {savedTick !== 0 ? t("settingsSaved") : ""}

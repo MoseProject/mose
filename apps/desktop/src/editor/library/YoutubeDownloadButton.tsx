@@ -1,8 +1,12 @@
+import homeStyles from "../../screens/home.module.css";
+import { cx } from "../../cx";
+import baseStyles from "../../styles/base.module.css";
+import styles from "./library.module.css";
 import { useState } from "react";
 import { t } from "../../i18n";
 import { api, onYoutubeDownload } from "../../ipc";
 import { run } from "../../store";
-import { Dialog } from "../Dialog";
+import { Dialog } from "../chrome/Dialog";
 
 export function YoutubeDownloadButton() {
   const [open, setOpen] = useState(false);
@@ -69,7 +73,7 @@ export function YoutubeDownloadButton() {
   if (!open) {
     return (
       <button
-        className="icon"
+        className={cx(styles, baseStyles, homeStyles, "icon")}
         onClick={openModal}
       >
         {t("youtubeDownload")}
@@ -96,7 +100,7 @@ export function YoutubeDownloadButton() {
           return setUrl(e.target.value);
         }}
       />
-      <div className="modal-row">
+      <div className={cx(styles, baseStyles, "modal-row")}>
         <select
           disabled={downloading}
           value={format}
@@ -145,10 +149,10 @@ export function YoutubeDownloadButton() {
           style={{ width: "100%" }}
         />
       )}
-      <div className="modal-actions">
+      <div className={cx(styles, baseStyles, "modal-actions")}>
         {downloading ? (
           <button
-            className="icon"
+            className={cx(styles, baseStyles, "icon")}
             onClick={() => {
               return void run(api.cancelYoutubeDownload());
             }}
@@ -158,7 +162,7 @@ export function YoutubeDownloadButton() {
         ) : (
           <>
             <button
-              className="icon"
+              className={cx(styles, baseStyles, "icon")}
               onClick={() => {
                 return setOpen(false);
               }}
@@ -166,7 +170,7 @@ export function YoutubeDownloadButton() {
               {t("cancel")}
             </button>
             <button
-              className="icon primary"
+              className={cx(styles, baseStyles, "icon primary")}
               disabled={url.trim().length === 0}
               onClick={start}
             >

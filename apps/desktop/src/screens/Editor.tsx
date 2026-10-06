@@ -1,11 +1,14 @@
+import { cx } from "../cx";
+import baseStyles from "../styles/base.module.css";
+import styles from "./editor.module.css";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AudioMeter } from "../editor/AudioMeter";
+import { AudioMeter } from "../editor/chrome/AudioMeter";
 import { ToolRail } from "../editor/ToolRail";
-import { Inspector } from "../editor/Inspector";
+import { Inspector } from "../editor/inspector/Inspector";
 import { MediaLibrary } from "../editor/MediaLibrary";
 import { PreviewPanel } from "../editor/PreviewPanel";
-import { Timeline } from "../editor/Timeline";
+import { Timeline } from "../editor/timeline/Timeline";
 import { t } from "../i18n";
 import { api } from "../ipc";
 import { commandForEvent } from "../commands";
@@ -202,7 +205,7 @@ export function Editor({ session }: { session: SessionView }) {
   return (
     <div
       ref={editorRef}
-      className="editor"
+      className={cx(styles, baseStyles, "editor")}
       data-testid="screen-editor"
       style={
         {
@@ -215,14 +218,14 @@ export function Editor({ session }: { session: SessionView }) {
       <ToolRail />
       <MediaLibrary session={session} />
       <div
-        className="panel-splitter library-splitter"
+        className={cx(styles, baseStyles, "panel-splitter library-splitter")}
         onPointerDown={(e) => {
           startPanelResize("library")(e);
         }}
       />
       <PreviewPanel />
       <div
-        className="panel-splitter inspector-splitter"
+        className={cx(styles, baseStyles, "panel-splitter inspector-splitter")}
         onPointerDown={(e) => {
           startPanelResize("inspector")(e);
         }}
@@ -230,11 +233,11 @@ export function Editor({ session }: { session: SessionView }) {
       <Inspector session={session} />
       <AudioMeter />
       <div
-        className="splitter"
+        className={cx(styles, baseStyles, "splitter")}
         onPointerDown={startResize}
       />
       <Timeline session={session} />
-      {dropping && <div className="drop-overlay">{t("dropToImport")}</div>}
+      {dropping && <div className={cx(styles, baseStyles, "drop-overlay")}>{t("dropToImport")}</div>}
     </div>
   );
 }

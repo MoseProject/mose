@@ -1,0 +1,105 @@
+/* ---- audio meter (right of the inspector) ---- */
+.audio-meter {
+  grid-row: 1;
+  grid-column: 7;
+  position: relative;
+  background: var(--bg-meter);
+  border-left: 1px solid var(--border-subtle);
+}
+.meter-scale {
+  position: absolute;
+  right: 43px;
+  top: 34px;
+  bottom: 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.meter-bars {
+  position: absolute;
+  right: 18px;
+  top: 40px;
+  bottom: 54px;
+  display: flex;
+  gap: 12px;
+}
+.meter-bar {
+  position: relative;
+  width: 4px;
+  background: linear-gradient(to bottom, var(--error) 0 8%, #efdb3f 8% 20%, var(--success) 20%);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+}
+.meter-cover {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  background: var(--bg-meter);
+  transition: height 60ms linear;
+}
+.meter-channels {
+  position: absolute;
+  right: 14px;
+  bottom: 28px;
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* ---- meter peak hold ---- */
+.meter-hold {
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  height: 2px;
+  background: var(--text-primary);
+  transform: translateY(1px);
+}
+.meter-hold.clip {
+  background: var(--error);
+  box-shadow: 0 0 4px var(--error);
+}
+
+/* ---- meter loudness targets and LUFS readout ---- */
+.meter-target {
+  position: absolute;
+  left: -5px;
+  right: -5px;
+  height: 0;
+  border-top: 1px dashed var(--text-muted);
+  pointer-events: none;
+}
+.meter-target.active {
+  border-top: 1px solid var(--accent);
+}
+.meter-lufs {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 11px;
+  line-height: 1.1;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.meter-lufs small {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.meter-lufs.ok {
+  color: var(--success);
+}
+.meter-lufs.hot {
+  color: var(--error);
+}
+.meter-lufs.low {
+  color: #efdb3f;
+}
+

@@ -1,0 +1,64 @@
+/* ---- settings dialog ---- */
+.prefs {
+  width: auto;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  gap: 4px;
+  max-height: 68vh;
+  overflow: auto;
+  margin: 0;
+}
+.settings-group {
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  margin: 0;
+  padding: 12px 0 8px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.settings-group legend {
+  padding: 0 8px 0 0;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.path-field {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 8px;
+  align-items: end;
+}
+.path-field label {
+  display: grid;
+  gap: 4px;
+  justify-content: stretch;
+}
+.path-field label input {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+.path-field input[aria-invalid="true"] {
+  border-color: var(--error);
+}
+.path-status {
+  grid-column: 1 / -1;
+  font-size: 11px;
+}
+.path-status.ok {
+  color: var(--success);
+}
+.path-status.bad {
+  color: var(--error);
+}
+.settings-saved {
+  margin: 0;
+  min-height: 16px;
+  font-size: 11px;
+  color: var(--success);
+  text-align: right;
+}
+

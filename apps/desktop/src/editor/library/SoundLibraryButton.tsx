@@ -1,9 +1,13 @@
+import homeStyles from "../../screens/home.module.css";
+import { cx } from "../../cx";
+import baseStyles from "../../styles/base.module.css";
+import styles from "./library.module.css";
 import { useState } from "react";
 import { formatTime, t } from "../../i18n";
 import { api } from "../../ipc";
 import { run } from "../../store";
 import type { LibraryTrack } from "../../types";
-import { Dialog } from "../Dialog";
+import { Dialog } from "../chrome/Dialog";
 
 export function SoundLibraryButton() {
   const [open, setOpen] = useState(false);
@@ -21,7 +25,7 @@ export function SoundLibraryButton() {
   return (
     <>
       <button
-        className="icon"
+        className={cx(styles, baseStyles, homeStyles, "icon")}
         onClick={toggle}
       >
         {t("soundLibrary")}
@@ -34,13 +38,13 @@ export function SoundLibraryButton() {
           }}
         >
           {!tracks || tracks.length === 0 ? (
-            <p className="muted">{t("soundLibraryEmpty")}</p>
+            <p className={cx(styles, baseStyles, "muted")}>{t("soundLibraryEmpty")}</p>
           ) : (
             <div style={{ maxHeight: 320, overflowY: "auto" }}>
               {tracks.map((track) => {
                 return (
                   <div
-                    className="modal-row"
+                    className={cx(styles, baseStyles, "modal-row")}
                     key={track.path}
                   >
                     <span>
@@ -48,7 +52,7 @@ export function SoundLibraryButton() {
                       {formatTime(track.durationSecs)})
                     </span>
                     <button
-                      className="icon"
+                      className={cx(styles, baseStyles, "icon")}
                       onClick={() => {
                         void run(api.importMedia([track.path]));
                         setOpen(false);

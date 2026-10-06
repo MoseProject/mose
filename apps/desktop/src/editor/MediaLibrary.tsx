@@ -1,8 +1,12 @@
+import editorStyles from "../screens/editor.module.css";
+import { cx } from "../cx";
+import baseStyles from "../styles/base.module.css";
+import styles from "./library/library.module.css";
 import { useState } from "react";
 import { t } from "../i18n";
-import { Icon } from "./Icon";
-import { ContextMenu } from "./ContextMenu";
-import { Menu } from "./Menu";
+import { Icon } from "./chrome/Icon";
+import { ContextMenu } from "./chrome/ContextMenu";
+import { Menu } from "./chrome/Menu";
 import { api } from "../ipc";
 import { askConfirm, pushToast } from "../notifications";
 import { run } from "../store";
@@ -80,11 +84,11 @@ export function MediaLibrary({ session }: { session: SessionView }) {
 
   return (
     <section
-      className="panel library"
+      className={cx(styles, baseStyles, editorStyles, "panel library")}
       aria-label={t("mediaLibrary")}
     >
       <div
-        className="panel-tabs"
+        className={cx(styles, baseStyles, "panel-tabs")}
         role="tablist"
       >
         {TABS.map(([id, label]) => {
@@ -93,7 +97,7 @@ export function MediaLibrary({ session }: { session: SessionView }) {
               key={id}
               role="tab"
               aria-selected={tab === id}
-              className={tab === id ? "active" : ""}
+              className={cx(styles, baseStyles, tab === id ? "active" : "")}
               onClick={() => {
                 return setTab(id);
               }}
@@ -103,7 +107,7 @@ export function MediaLibrary({ session }: { session: SessionView }) {
           );
         })}
         <button
-          className="import-btn"
+          className={cx(styles, baseStyles, "import-btn")}
           onClick={() => {
             return run(api.importMediaDialog());
           }}
@@ -128,8 +132,8 @@ export function MediaLibrary({ session }: { session: SessionView }) {
           <YoutubeDownloadButton />
         </Menu>
       </div>
-      <div className="search-row">
-        <label className="search">
+      <div className={cx(styles, baseStyles, "search-row")}>
+        <label className={cx(styles, baseStyles, "search")}>
           <Icon
             name="search"
             size={14}
@@ -145,7 +149,7 @@ export function MediaLibrary({ session }: { session: SessionView }) {
           />
         </label>
         <button
-          className={`icon ${view === "grid" ? "active" : ""}`}
+          className={cx(styles, baseStyles, `icon ${view === "grid" ? "active" : ""}`)}
           aria-label={t("viewGrid")}
           title={t("viewGrid")}
           aria-pressed={view === "grid"}
@@ -159,7 +163,7 @@ export function MediaLibrary({ session }: { session: SessionView }) {
           />
         </button>
         <button
-          className={`icon ${view === "list" ? "active" : ""}`}
+          className={cx(styles, baseStyles, `icon ${view === "list" ? "active" : ""}`)}
           aria-label={t("viewList")}
           title={t("viewList")}
           aria-pressed={view === "list"}
@@ -173,15 +177,15 @@ export function MediaLibrary({ session }: { session: SessionView }) {
           />
         </button>
       </div>
-      <div className="media-head">
+      <div className={cx(styles, baseStyles, "media-head")}>
         <span>{t("projectMedia")}</span>
-        <span className="count">
+        <span className={cx(styles, baseStyles, "count")}>
           {assets.length} {t("items")}
         </span>
       </div>
-      <div className={`asset-list ${view}`}>
+      <div className={cx(styles, baseStyles, `asset-list ${view}`)}>
         {assets.length === 0 ? (
-          <div className="empty-state">
+          <div className={cx(styles, baseStyles, "empty-state")}>
             {all.length === 0 ? t("libraryEmpty") : t("libraryNoMatches")}
           </div>
         ) : (

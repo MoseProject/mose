@@ -1,0 +1,174 @@
+/* Dark/teal palette ported 1:1 from crates/ui/src/theme.rs so both shells look the same while
+   they coexist. Change a token there and here together. */
+:root {
+  /* Palette from the Mose reference mockup (mockup/mose_pixel_mockup/src/styles.css). */
+  --bg-page: #020709;
+  --bg: #05090c;
+  --bg-viewer: #05090b;
+  --bg-meter: #071014;
+  --bg-trackhead: #091115;
+  --bg-workspace: #081014;
+  --surface: #0b1317;
+  --bg-elevated: #101a1f;
+  --surface-2: #162026;
+  --bg-hover: #1a262c;
+  --border-subtle: #18262c;
+  --border: #24363d;
+  --border-strong: #35494f;
+  --text-primary: #e6ecef;
+  --text-secondary: #bfc8cb;
+  --text-muted: #8d9aa0;
+  --text-disabled: #46545a;
+  --accent: #20b9c3;
+  --accent-hover: #2bc7d1;
+  --accent-active: #0f7f86;
+  --accent-tint: rgba(32, 185, 195, 0.1);
+  --icon-default: #9aa7ac;
+  --icon-hover: #e3e8e9;
+  --media-video: #203f59;
+  --media-video-edge: #426485;
+  --audio-tint: #1f5b46;
+  --audio-edge: #34775f;
+  --fx: #754115;
+  --error: #ff5f49;
+  --warning: #d5a84a;
+  --success: #36e76e;
+  --playhead: #ff5d44;
+
+  --radius: 4px;
+  --font-ui: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "Cascadia Mono", "Consolas", ui-monospace, monospace;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font: 13px/1.4 var(--font-ui);
+  overflow: hidden;
+  user-select: none;
+}
+
+button {
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+button:disabled {
+  color: var(--text-disabled);
+  cursor: default;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+button.icon {
+  background: transparent;
+  border-color: transparent;
+  color: var(--icon-default);
+  padding: 2px 6px;
+}
+
+button.icon:hover:not(:disabled) {
+  color: var(--icon-hover);
+  background: var(--bg-hover);
+}
+
+button.icon.active {
+  color: var(--accent);
+}
+
+select,
+input[type="number"] {
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2px 6px;
+}
+
+input[type="range"] {
+  accent-color: var(--accent);
+  width: 100%;
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* ---- accessibility: visible focus, reduced motion ---- */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+input:focus-visible,
+select:focus-visible {
+  outline-offset: 0;
+}
+canvas:focus-visible {
+  outline-offset: -2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .task-bar.indeterminate > span {
+    width: 100%;
+    opacity: 0.45;
+    transform: none;
+  }
+}
+

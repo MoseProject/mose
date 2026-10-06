@@ -1,0 +1,42 @@
+/* ---- shell ---- */
+.app {
+  display: grid;
+  grid-template-rows: 50px 1fr;
+  height: 100%;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.topbar .project-name {
+  font-weight: 600;
+  margin: 0 8px;
+}
+
+.topbar .spacer {
+  flex: 1;
+}
+
+.error-banner {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  background: var(--bg-elevated);
+  border: 1px solid var(--error);
+  color: var(--text-primary);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  max-width: 70vw;
+  z-index: 10;
+}
+

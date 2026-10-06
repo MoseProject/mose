@@ -1,8 +1,12 @@
+import homeStyles from "./home.module.css";
+import { cx } from "../cx";
+import baseStyles from "../styles/base.module.css";
+import styles from "../editor/chrome/chrome.module.css";
 import { useEffect, useState } from "react";
 import { t } from "../i18n";
 import { api, onWatchFolder } from "../ipc";
 import { run } from "../store";
-import { Dialog } from "../editor/Dialog";
+import { Dialog } from "../editor/chrome/Dialog";
 import type { LoudnessMetrics, WatchFolderStatus } from "../types";
 
 interface Row {
@@ -107,11 +111,11 @@ export function WatchFolder({ open = true, onClose }: { open?: boolean; onClose?
       }}
     >
       <div
-        className="prefs"
+        className={cx(styles, baseStyles, homeStyles, "prefs")}
         data-testid="screen-watch"
       >
         <label>
-          <span className={watchPath ? "" : "muted"}>{watchPath ?? t("watchFolderNone")}</span>
+          <span className={cx(styles, baseStyles, watchPath ? "" : "muted")}>{watchPath ?? t("watchFolderNone")}</span>
           <button
             onClick={choose}
             disabled={running}
@@ -120,7 +124,7 @@ export function WatchFolder({ open = true, onClose }: { open?: boolean; onClose?
           </button>
         </label>
         <button
-          className={running ? "" : "primary"}
+          className={cx(styles, baseStyles, running ? "" : "primary")}
           disabled={!watchPath || running}
           onClick={start}
         >
@@ -129,17 +133,17 @@ export function WatchFolder({ open = true, onClose }: { open?: boolean; onClose?
         {running && <button onClick={stop}>{t("watchFolderStop")}</button>}
         <div style={{ maxHeight: 400, overflowY: "auto" }}>
           {rows.length === 0 ? (
-            <p className="muted">{t("watchFolderEmpty")}</p>
+            <p className={cx(styles, baseStyles, "muted")}>{t("watchFolderEmpty")}</p>
           ) : (
             rows.map((row) => {
               return (
                 <div
-                  className="modal-row"
+                  className={cx(styles, baseStyles, "modal-row")}
                   key={row.path}
                 >
                   <div>
                     <div>{row.path.split(/[/\\]/).pop()}</div>
-                    <div className="muted">
+                    <div className={cx(styles, baseStyles, "muted")}>
                       {row.status === "stabilizing" && t("watchFolderStabilizing")}
                       {row.status === "processing" &&
                         `${t("watchFolderProcessing")} ${row.percent}%`}
@@ -152,7 +156,7 @@ export function WatchFolder({ open = true, onClose }: { open?: boolean; onClose?
                   </div>
                   {row.status === "done" && !row.addedToProject && watchPath && (
                     <button
-                      className="icon"
+                      className={cx(styles, baseStyles, "icon")}
                       onClick={() => {
                         void run(api.addWatchedFileToProject(watchPath, row.path));
                         setRows((prev) => {
