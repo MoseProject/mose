@@ -140,7 +140,8 @@ fn new_engine(canvas: (u32, u32)) -> Option<Engine> {
 }
 
 /// Whether two projects look the same in the preview: the same media and the same tracks in every
-/// sequence (compound clips read the others). Everything else (names, export settings, layout,
+/// sequence (compound clips read the others). Nested render export settings also affect the
+/// preview; the active sequence's export-only settings do not. Everything else (names, layout,
 /// the stored playhead) is destructured and ignored on purpose, so a new field in these structs
 /// has to be placed on one side or the other here.
 fn same_preview_content(a: &avcore::Project, b: &avcore::Project) -> bool {
@@ -170,7 +171,7 @@ fn same_preview_content(a: &avcore::Project, b: &avcore::Project) -> bool {
             id,
             name: _,
             timeline,
-            export_settings: _,
+            export_settings,
         } = x;
         let avcore::Timeline {
             tracks,
@@ -179,6 +180,15 @@ fn same_preview_content(a: &avcore::Project, b: &avcore::Project) -> bool {
             multicam_groups,
         } = timeline;
         *id == y.id
+            && (*export_settings == y.export_settings
+                || !a.sequences.iter().any(|sequence| {
+                    sequence.timeline.tracks.iter().any(|track| {
+                        track
+                            .clips
+                            .iter()
+                            .any(|clip| clip.nested_sequence_id == Some(*id))
+                    })
+                }))
             && *tracks == y.timeline.tracks
             && *markers == y.timeline.markers
             && *multicam_groups == y.timeline.multicam_groups
