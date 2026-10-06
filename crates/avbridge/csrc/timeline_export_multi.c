@@ -191,6 +191,9 @@ typedef struct {
     ClipSegment matte_segment;
     int active_segment_index;
     int matte_active;
+    int search_cursor;
+    int ordered_segments;
+    double last_search_time;
     AVPacket *video_packet;
     AVPacket *matte_packet;
     AVFrame *video_frame;
@@ -631,6 +634,12 @@ EncodeStatus avbridge_encode_timeline_export_multi(
         track->video.seg_open = -1;
         track->matte.seg_open = -1;
         track->active_segment_index = -1;
+        track->ordered_segments = 1;
+        for (int j = 1; j < track_n_segs[i + 1]; j++) {
+            if (track_segs[i + 1][j].timeline_start_secs <
+                track_segs[i + 1][j - 1].timeline_start_secs)
+                track->ordered_segments = 0;
+        }
         track->video_packet = av_packet_alloc();
         track->matte_packet = av_packet_alloc();
         track->video_frame = av_frame_alloc();
@@ -811,7 +820,10 @@ EncodeStatus avbridge_encode_timeline_export_multi(
                         for (int i = 0; i < overlay_track_count; i++) {
                             int track_index = i + 1;
                             int active_index = -1;
-                            for (int s = 0; s < track_n_segs[track_index]; s++) {
+                            OverlayTrackState *search = &overlay_tracks[i];
+                            if (ftl < search->last_search_time) search->search_cursor = 0;
+                            search->last_search_time = ftl;
+                            for (int s = search->search_cursor; s < track_n_segs[track_index]; s++) {
                                 const ClipSegment *candidate = &track_segs[track_index][s];
                                 double speed =
                                     candidate->speed_factor > 0.0f ? candidate->speed_factor : 1.0f;
@@ -819,6 +831,12 @@ EncodeStatus avbridge_encode_timeline_export_multi(
                                     candidate->timeline_start_secs +
                                     (candidate->source_out_secs - candidate->source_in_secs) /
                                         speed;
+                                if (s == search->search_cursor && end <= ftl) {
+                                    search->search_cursor++;
+                                    continue;
+                                }
+                                if (search->ordered_segments && candidate->timeline_start_secs > ftl)
+                                    break;
                                 if (ftl >= candidate->timeline_start_secs && ftl < end) {
                                     active_index = s;
                                     break;
