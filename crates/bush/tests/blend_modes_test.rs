@@ -29,7 +29,13 @@ fn table(mode: BlendMode) -> Vec<u8> {
         .unwrap()
         .render(256, 256, 0.0, &[LayerFrame::new(&backdrop), top])
         .unwrap();
-    output.pixels().chunks_exact(4).map(|p| p[0]).collect()
+    output
+        .pixels()
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|p| p[0])
+        .collect()
 }
 
 fn crc32(bytes: &[u8]) -> u32 {

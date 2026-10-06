@@ -157,7 +157,7 @@ fn silence_stays_silent_and_stereo_channels_stay_in_phase() {
     let mut stretcher = TimeStretcher::new(0.8, 2).unwrap();
     stretcher.reset(0.0);
     let output = stretcher.render(10_000, &mut reader(&source, 2)).unwrap();
-    for pair in output.chunks_exact(2) {
+    for pair in output.as_chunks::<2>().0.iter() {
         assert_eq!(pair[0], pair[1]);
     }
 }

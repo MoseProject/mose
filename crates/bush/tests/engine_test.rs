@@ -161,8 +161,10 @@ fn raster_overlay_composites_above_video_in_layer_order() {
     let (_, frame) = expect_frame(&engine);
     assert!(frame
         .pixels()
-        .chunks_exact(4)
-        .all(|pixel| pixel == [255, 0, 255, 255]));
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .all(|pixel| *pixel == [255, 0, 255, 255]));
 }
 
 #[test]
@@ -386,14 +388,16 @@ fn fade_in_and_keyframed_position_are_applied_per_frame() {
     // At the clip start: fully faded out, so the canvas is empty.
     engine.submit(request(timeline.clone(), 0.0)).unwrap();
     let (_, start) = expect_frame(&engine);
-    assert!(start.pixels().chunks_exact(4).all(|p| p[3] == 0));
+    assert!(start.pixels().as_chunks::<4>().0.iter().all(|p| p[3] == 0));
 
     // Halfway: half opacity and shifted right by half the width, so the left half is empty.
     engine.submit(request(timeline, 0.5)).unwrap();
     let (_, middle) = expect_frame(&engine);
     let row = width as usize * 4;
     let left_empty = middle.pixels()[..row / 2 - 8]
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .all(|p| p[3] == 0);
     let right_alpha = middle.pixels()[row - 8 + 3];
     assert!(left_empty, "left half should be uncovered");

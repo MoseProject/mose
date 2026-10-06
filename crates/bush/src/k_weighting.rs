@@ -185,7 +185,9 @@ mod tests {
     fn mono_counts_on_both_sides() {
         let stereo = KWeighting::new(48_000).energy(&sine(48_000, 997.0, 0.5, 4_800), 2);
         let mono: Vec<f32> = sine(48_000, 997.0, 0.5, 4_800)
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|pair| pair[0])
             .collect();
         let mono_energy = KWeighting::new(48_000).energy(&mono, 1);

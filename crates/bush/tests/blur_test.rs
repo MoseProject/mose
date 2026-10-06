@@ -26,7 +26,9 @@ fn at(frame: &VideoFrame, x: u32, y: u32) -> [u8; 4] {
 fn luma_sum(frame: &VideoFrame) -> u64 {
     frame
         .pixels()
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|p| u64::from(p[0]))
         .sum()
 }
@@ -77,7 +79,12 @@ fn an_impulse_spreads_symmetrically_and_conserves_energy() {
         (after - before).abs() / before < 0.35,
         "energy {before} -> {after}"
     );
-    assert!(blurred.pixels().chunks_exact(4).all(|p| p[3] == 255));
+    assert!(blurred
+        .pixels()
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .all(|p| p[3] == 255));
 }
 
 #[test]
@@ -146,7 +153,12 @@ fn sharpen_overshoots_at_edges_and_preserves_geometry_and_alpha() {
     assert!(at(&sharp, 30, 5)[0] > 160);
     assert_eq!(at(&sharp, 5, 5), at(&edge, 5, 5));
     assert_eq!(at(&sharp, 55, 5), at(&edge, 55, 5));
-    assert!(sharp.pixels().chunks_exact(4).all(|p| p[3] == 200));
+    assert!(sharp
+        .pixels()
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .all(|p| p[3] == 200));
     assert_eq!(
         (sharp.width(), sharp.height(), sharp.timestamp_secs()),
         (60, 10, 0.25)

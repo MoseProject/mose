@@ -612,8 +612,10 @@ fn identity_lut_is_a_no_op_and_an_inverting_lut_inverts() {
     // A 2-point trilinear table is exactly 1 - c, so bytes invert (to within rounding).
     for (inverted, original) in output
         .pixels()
-        .chunks_exact(4)
-        .zip(source.pixels().chunks_exact(4))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(source.pixels().as_chunks::<4>().0.iter())
     {
         for channel in 0..3 {
             assert!(
@@ -786,7 +788,9 @@ fn sepia_must_be_a_unit_fraction() {
 fn opaque_pixels(output: &VideoFrame) -> Vec<usize> {
     output
         .pixels()
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .enumerate()
         .filter(|(_, pixel)| pixel[3] != 0)
         .map(|(index, _)| index)

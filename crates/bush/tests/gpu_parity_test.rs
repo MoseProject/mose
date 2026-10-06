@@ -67,8 +67,10 @@ fn compare(
     let mut differing_pixels = 0;
     for (left, right) in expected
         .pixels()
-        .chunks_exact(4)
-        .zip(actual.pixels().chunks_exact(4))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(actual.pixels().as_chunks::<4>().0.iter())
     {
         let difference = left
             .iter()
