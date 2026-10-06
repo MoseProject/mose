@@ -2,9 +2,9 @@
 //! a blank project, with the preview engine detached (its commands are collected on a channel)
 //! and every user directory pointed at a scratch folder, so no test touches real preferences.
 
+use crate::preview::mailbox::Receiver;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
-use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex, MutexGuard, Once};
 
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
@@ -15,6 +15,18 @@ use crate::prefs::PrefsDocument;
 use crate::preview_engine::{Command, PreviewEngine};
 use crate::services::Services;
 use crate::state::{AppState, Session, SESSION_CHANGED, SESSION_PATCH};
+
+/// Observes asynchronous session events only after pending publications complete.
+pub struct SessionEventCounter {
+    seen: Arc<AtomicUsize>,
+    app: AppHandle<MockRuntime>,
+}
+impl SessionEventCounter {
+    pub fn load(&self, ordering: Ordering) -> usize {
+        self.app.state::<AppState>().publication.flush();
+        self.seen.load(ordering)
+    }
+}
 
 /// How long a test waits for a background worker before giving up.
 const WAIT: std::time::Duration = std::time::Duration::from_secs(120);
@@ -252,9 +264,9 @@ impl Harness {
             .map(|body| body.deserialize::<serde_json::Value>().unwrap())
     }
 
-    /// Counts the `session-changed` events published from now on: one per command that
-    /// changed the session, none for a rejected or no-op edit.
-    pub fn count_session_events(&self) -> Arc<AtomicUsize> {
+    /// Counts completed session publications from now on. Pending snapshots may coalesce.
+    pub fn count_session_events(&self) -> SessionEventCounter {
+        self.state().publication.flush();
         let seen = Arc::new(AtomicUsize::new(0));
         for event in [SESSION_CHANGED, SESSION_PATCH] {
             let counter = Arc::clone(&seen);
@@ -262,7 +274,10 @@ impl Harness {
                 counter.fetch_add(1, Ordering::SeqCst);
             });
         }
-        seen
+        SessionEventCounter {
+            seen,
+            app: self.app.handle().clone(),
+        }
     }
 
     /// Moves the preview engine's live playhead, the one edits such as split-at-playhead read.

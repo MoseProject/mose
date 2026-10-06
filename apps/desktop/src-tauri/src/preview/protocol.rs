@@ -49,12 +49,26 @@ type Stamped = (Bytes, Instant);
 /// One shared decode of a waveform and when it was started.
 type WaveSlot = (Instant, Arc<OnceLock<Bytes>>);
 
+type FileRevision = Option<(u64, std::time::SystemTime)>;
+#[derive(Default)]
+struct CacheIdentity {
+    epoch: Option<u64>,
+    sources: Option<std::collections::HashSet<PathBuf>>,
+    versions: HashMap<PathBuf, (FileRevision, Instant)>,
+    wave_durations: HashMap<PathBuf, u64>,
+}
+fn file_revision(path: &Path) -> FileRevision {
+    let metadata = std::fs::metadata(path).ok()?;
+    Some((metadata.len(), metadata.modified().ok()?))
+}
+
 pub struct ThumbnailCache {
     entries: Mutex<HashMap<PathBuf, Stamped>>,
     tiles: Mutex<HashMap<(PathBuf, u64), Stamped>>,
     waves: Mutex<HashMap<PathBuf, WaveSlot>>,
     workers: TileWorkers,
     retry_after: Duration,
+    identity: Mutex<CacheIdentity>,
 }
 
 impl Default for ThumbnailCache {
@@ -69,6 +83,15 @@ pub(crate) fn handle_with<R: Runtime>(
     path: &str,
     respond: impl FnOnce(Response<Vec<u8>>) + Send + 'static,
 ) {
+    let responder = Arc::new(Mutex::new(Some(respond)));
+    let respond = {
+        let responder = responder.clone();
+        move |response| {
+            if let Some(reply) = lock_or_recover(&responder).take() {
+                reply(response);
+            }
+        }
+    };
     let mut parts = path.trim_start_matches('/').splitn(2, '/');
     match (parts.next(), parts.next()) {
         (Some("frame"), _) => {
@@ -84,23 +107,37 @@ pub(crate) fn handle_with<R: Runtime>(
             };
             if ids.next() == Some("coarse") {
                 // The overview stored with the project, already in memory: no decode.
-                respond(bytes_or_not_found(
-                    coarse_wave_bytes(&asset),
-                    "application/octet-stream",
-                ));
+                let state = app.state::<AppState>();
+                let session = state.session();
+                let coarse = session
+                    .project
+                    .media_library
+                    .iter()
+                    .find(|a| a.id == asset.id)
+                    .and_then(coarse_wave_bytes);
+                respond(bytes_or_not_found(coarse, "application/octet-stream"));
                 return;
             }
             if !asset.has_audio {
                 respond(not_found());
                 return;
             }
+            let state = app.state::<AppState>();
+            let epoch = state.session().project_epoch;
             let app = app.clone();
-            // A full audio decode: minutes on a multi-hour recording, never on the IPC thread.
-            std::thread::spawn(move || {
+            if !state.media_work.submit(true, move || {
+                if app.state::<AppState>().session().project_epoch != epoch {
+                    respond(not_found());
+                    return;
+                }
                 let cache = app.state::<ThumbnailCache>();
                 let bytes = cache.get_or_wave(&asset.source_path, asset.duration_secs);
                 respond(bytes_or_not_found(bytes, "application/octet-stream"));
-            });
+            }) {
+                if let Some(reply) = lock_or_recover(&responder).take() {
+                    reply(overloaded());
+                }
+            }
         }
         (Some("thumb"), Some(rest)) => {
             let mut ids = rest.splitn(2, '/');
@@ -122,16 +159,25 @@ pub(crate) fn handle_with<R: Runtime>(
                 respond(not_found());
                 return;
             };
+            let state = app.state::<AppState>();
+            let epoch = state.session().project_epoch;
             let app = app.clone();
-            // Frame sampling decodes video; keep it off the webview's IPC thread.
-            std::thread::spawn(move || {
+            if !state.media_work.submit(true, move || {
+                if app.state::<AppState>().session().project_epoch != epoch {
+                    respond(not_found());
+                    return;
+                }
                 let cache = app.state::<ThumbnailCache>();
                 let bytes = match at_millis {
                     Some(millis) => cache.get_or_extract_at(&source, millis),
                     None => cache.get_or_extract(&source),
                 };
                 respond(jpeg_or_not_found(bytes));
-            });
+            }) {
+                if let Some(reply) = lock_or_recover(&responder).take() {
+                    reply(overloaded());
+                }
+            }
         }
         _ => respond(not_found()),
     }
@@ -159,7 +205,7 @@ fn find_asset<R: Runtime>(app: &AppHandle<R>, asset_id: u64) -> Option<avcore::M
         .media_library
         .iter()
         .find(|asset| asset.id == asset_id)
-        .cloned()
+        .map(avcore::MediaAsset::clone_without_waveform)
 }
 
 impl ThumbnailCache {
@@ -170,7 +216,81 @@ impl ThumbnailCache {
             waves: Mutex::default(),
             workers: TileWorkers::default(),
             retry_after,
+            identity: Mutex::default(),
         }
+    }
+
+    /// Release removed media and every previous project namespace, including pending cells.
+    pub fn sync_project(&self, epoch: u64, project: &avcore::Project) {
+        let mut known = lock_or_recover(&self.identity);
+        if known.epoch.is_some_and(|old| old != epoch) {
+            lock_or_recover(&self.entries).clear();
+            lock_or_recover(&self.tiles).clear();
+            lock_or_recover(&self.waves).clear();
+        }
+        known.epoch = Some(epoch);
+        let sources: std::collections::HashSet<_> = project
+            .media_library
+            .iter()
+            .flat_map(|asset| {
+                std::iter::once(asset.source_path.as_path()).chain(asset.proxy_path.as_deref())
+            })
+            .collect();
+        known
+            .versions
+            .retain(|path, _| sources.contains(path.as_path()));
+        known
+            .wave_durations
+            .retain(|path, _| sources.contains(path.as_path()));
+        known.sources = Some(sources.iter().map(|path| path.to_path_buf()).collect());
+        lock_or_recover(&self.entries).retain(|path, _| sources.contains(path.as_path()));
+        lock_or_recover(&self.tiles).retain(|(path, _), _| sources.contains(path.as_path()));
+        lock_or_recover(&self.waves).retain(|path, _| sources.contains(path.as_path()));
+    }
+
+    fn begin_source(&self, source: &Path) -> Option<(Option<u64>, FileRevision)> {
+        let revision = file_revision(source);
+        let mut identity = lock_or_recover(&self.identity);
+        if identity
+            .sources
+            .as_ref()
+            .is_some_and(|sources| !sources.contains(source))
+        {
+            return None;
+        }
+        if identity.versions.get(source).map(|v| v.0) != Some(revision) {
+            lock_or_recover(&self.entries).remove(source);
+            lock_or_recover(&self.tiles).retain(|(path, _), _| path != source);
+            lock_or_recover(&self.waves).remove(source);
+        }
+        if identity.versions.len() >= 1500 && !identity.versions.contains_key(source) {
+            if let Some(oldest) = identity
+                .versions
+                .iter()
+                .min_by_key(|(_, v)| v.1)
+                .map(|(path, _)| path.clone())
+            {
+                identity.versions.remove(&oldest);
+                identity.wave_durations.remove(&oldest);
+            }
+        }
+        identity
+            .versions
+            .insert(source.to_path_buf(), (revision, Instant::now()));
+        Some((identity.epoch, revision))
+    }
+
+    fn accepts(
+        identity: &CacheIdentity,
+        source: &Path,
+        token: &(Option<u64>, FileRevision),
+    ) -> bool {
+        identity.epoch == token.0
+            && identity.versions.get(source).map(|v| v.0) == Some(token.1)
+            && identity
+                .sources
+                .as_ref()
+                .is_none_or(|sources| sources.contains(source))
     }
 
     /// Whether a remembered result can still be served: a success always, a failure until it
@@ -180,11 +300,15 @@ impl ThumbnailCache {
     }
 
     fn get_or_extract_at(&self, source: &Path, millis: u64) -> Bytes {
+        let token = self.begin_source(source)?;
         let key = (source.to_path_buf(), millis);
         if let Some(cached) = lock_or_recover(&self.tiles)
-            .get(&key)
+            .get_mut(&key)
             .filter(|entry| self.is_fresh(entry))
         {
+            if cached.0.is_some() {
+                cached.1 = Instant::now();
+            }
             return cached.0.clone();
         }
         let extracted = self
@@ -192,11 +316,13 @@ impl ThumbnailCache {
             .extract(source, millis as f64 / 1000.0, THUMBNAIL_MAX_DIM)
             .map(Arc::new);
         {
-            let mut tiles = lock_or_recover(&self.tiles);
-            if tiles.len() >= MAX_TILE_ENTRIES {
-                tiles.clear();
+            let identity = lock_or_recover(&self.identity);
+            if !Self::accepts(&identity, source, &token) {
+                return None;
             }
+            let mut tiles = lock_or_recover(&self.tiles);
             tiles.insert(key, (extracted.clone(), Instant::now()));
+            trim_images(&mut tiles, 32 * 1024 * 1024);
         }
         extracted
     }
@@ -204,8 +330,31 @@ impl ThumbnailCache {
     /// The detailed waveform of `source` as little-endian `f32` (min, max) pairs. Concurrent
     /// requests for one file share a single decode pass.
     fn get_or_wave(&self, source: &Path, duration_secs: f64) -> Bytes {
+        let token = self.begin_source(source)?;
+        {
+            let mut identity = lock_or_recover(&self.identity);
+            if identity
+                .wave_durations
+                .insert(source.to_path_buf(), duration_secs.to_bits())
+                != Some(duration_secs.to_bits())
+            {
+                lock_or_recover(&self.waves).remove(source);
+            }
+        }
         let cell = {
+            let identity = lock_or_recover(&self.identity);
+            if !Self::accepts(&identity, source, &token) {
+                return None;
+            }
             let mut waves = lock_or_recover(&self.waves);
+            if waves.len() >= 64 && !waves.contains_key(source) {
+                let oldest = waves
+                    .iter()
+                    .filter(|(_, slot)| slot.1.get().is_some())
+                    .min_by_key(|(_, slot)| slot.0)
+                    .map(|(path, _)| path.clone())?;
+                waves.remove(&oldest);
+            }
             let slot = waves
                 .entry(source.to_path_buf())
                 .or_insert_with(|| (Instant::now(), Arc::default()));
@@ -214,36 +363,92 @@ impl ThumbnailCache {
             if failed && slot.0.elapsed() >= self.retry_after {
                 *slot = (Instant::now(), Arc::default());
             }
+            if slot.1.get().is_some_and(Option::is_some) {
+                slot.0 = Instant::now();
+            }
             slot.1.clone()
         };
-        cell.get_or_init(|| {
-            let peaks = avcore::generate_detailed_waveform(source, duration_secs)
-                .inspect_err(|error| tracing::warn!(%error, "failed to compute waveform"))
-                .ok()?;
-            let mut bytes = Vec::with_capacity(peaks.len() * 8);
-            for (min, max) in peaks {
-                bytes.extend_from_slice(&min.to_le_bytes());
-                bytes.extend_from_slice(&max.to_le_bytes());
-            }
-            Some(Arc::new(bytes))
-        })
-        .clone()
+        let result = cell
+            .get_or_init(|| {
+                let peaks = avcore::generate_detailed_waveform(source, duration_secs)
+                    .inspect_err(|error| tracing::warn!(%error, "failed to compute waveform"))
+                    .ok()?;
+                let mut bytes = Vec::with_capacity(peaks.len() * 8);
+                for (min, max) in peaks {
+                    bytes.extend_from_slice(&min.to_le_bytes());
+                    bytes.extend_from_slice(&max.to_le_bytes());
+                }
+                Some(Arc::new(bytes))
+            })
+            .clone();
+        let identity = lock_or_recover(&self.identity);
+        if !Self::accepts(&identity, source, &token) {
+            return None;
+        }
+        let mut waves = lock_or_recover(&self.waves);
+        while waves
+            .values()
+            .filter_map(|slot| slot.1.get()?.as_ref())
+            .map(|bytes| bytes.len())
+            .sum::<usize>()
+            > 64 * 1024 * 1024
+        {
+            let Some(oldest) = waves
+                .iter()
+                .filter(|(_, slot)| slot.1.get().is_some())
+                .min_by_key(|(_, slot)| slot.0)
+                .map(|(path, _)| path.clone())
+            else {
+                break;
+            };
+            waves.remove(&oldest);
+        }
+        result
     }
 
     fn get_or_extract(&self, source: &Path) -> Option<Arc<Vec<u8>>> {
+        let token = self.begin_source(source)?;
         if let Some(cached) = lock_or_recover(&self.entries)
-            .get(source)
+            .get_mut(source)
             .filter(|entry| self.is_fresh(entry))
         {
+            if cached.0.is_some() {
+                cached.1 = Instant::now();
+            }
             return cached.0.clone();
         }
         let extracted = self
             .workers
             .extract(source, THUMBNAIL_AT_SECS, POSTER_MAX_DIM)
             .map(Arc::new);
-        lock_or_recover(&self.entries)
-            .insert(source.to_path_buf(), (extracted.clone(), Instant::now()));
+        let identity = lock_or_recover(&self.identity);
+        if !Self::accepts(&identity, source, &token) {
+            return None;
+        }
+        let mut entries = lock_or_recover(&self.entries);
+        entries.insert(source.to_path_buf(), (extracted.clone(), Instant::now()));
+        trim_images(&mut entries, 16 * 1024 * 1024);
         extracted
+    }
+}
+
+fn trim_images<K: Clone + Eq + std::hash::Hash>(entries: &mut HashMap<K, Stamped>, budget: usize) {
+    let mut bytes: usize = entries
+        .values()
+        .filter_map(|entry| entry.0.as_ref())
+        .map(|v| v.len())
+        .sum();
+    while entries.len() > MAX_TILE_ENTRIES || bytes > budget {
+        let Some(key) = entries
+            .iter()
+            .min_by_key(|(_, entry)| entry.1)
+            .map(|(key, _)| key.clone())
+        else {
+            break;
+        };
+        if let Some((value, _)) = entries.remove(&key) {
+            bytes = bytes.saturating_sub(value.map_or(0, |v| v.len()));
+        }
     }
 }
 
@@ -261,6 +466,15 @@ fn bytes_or_not_found(bytes: Option<Arc<Vec<u8>>>, content_type: &str) -> Respon
             .unwrap_or_else(|_| not_found()),
         None => not_found(),
     }
+}
+
+fn overloaded() -> Response<Vec<u8>> {
+    let mut response = Response::new(Vec::new());
+    *response.status_mut() = StatusCode::TOO_MANY_REQUESTS;
+    response
+        .headers_mut()
+        .insert(header::RETRY_AFTER, header::HeaderValue::from_static("1"));
+    response
 }
 
 fn not_found() -> Response<Vec<u8>> {

@@ -81,7 +81,12 @@ fn downscale_to_rgb(
     let mut rgb = vec![0u8; (width * height * 3) as usize];
     if (width, height) == (src_width, src_height) {
         // No resampling: a straight alpha-dropping copy, much cheaper than per-pixel indexing.
-        for (dst, src) in rgb.chunks_exact_mut(3).zip(rgba.chunks_exact(4)) {
+        for (dst, src) in rgb
+            .as_chunks_mut::<3>()
+            .0
+            .iter_mut()
+            .zip(rgba.as_chunks::<4>().0.iter())
+        {
             dst.copy_from_slice(&src[..3]);
         }
         return Some((width, height, rgb));

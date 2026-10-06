@@ -118,10 +118,12 @@ fn the_waveform_route_serves_little_endian_peak_pairs() {
     assert_eq!(response.body().len(), expected);
     let floats: Vec<f32> = response
         .body()
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
         .collect();
-    assert!(floats.chunks_exact(2).all(|p| p[0] <= p[1]));
+    assert!(floats.as_chunks::<2>().0.iter().all(|p| p[0] <= p[1]));
     assert!(floats.iter().any(|v| *v != 0.0));
 }
 

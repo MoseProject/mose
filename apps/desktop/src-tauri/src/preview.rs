@@ -19,3 +19,7 @@ pub(crate) mod frames;
 pub(crate) mod preview_engine;
 pub(crate) mod protocol;
 pub(crate) mod tile_workers;
+
+pub(crate) mod mailbox;
+
+pub(crate) mod media_work;

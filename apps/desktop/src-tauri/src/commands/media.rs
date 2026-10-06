@@ -90,9 +90,19 @@ fn import_paths<R: Runtime>(app: &AppHandle<R>, paths: Vec<PathBuf>) {
         )
     };
     for path in paths {
-        let app = app.clone();
+        let worker_app = app.clone();
         let proxy_dir = proxy_dir.clone();
-        std::thread::spawn(move || import_one(&app, &path, epoch, &proxy_dir));
+        let file_name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        if !app.state::<AppState>().media_work.submit(false, move || {
+            if worker_app.state::<AppState>().session().project_epoch == epoch {
+                import_one(&worker_app, &path, epoch, &proxy_dir);
+            }
+        }) {
+            let _ = app.emit(IMPORT_FAILED_EVENT, ImportFailedPayload { file_name });
+        }
     }
 }
 
@@ -135,11 +145,17 @@ fn import_one<R: Runtime>(app: &AppHandle<R>, path: &Path, epoch: u64, proxy_dir
         asset.waveform_peaks = waveform_peaks
     });
 
+    if app.state::<AppState>().session().project_epoch != epoch {
+        return;
+    }
     let loudness = avcore::measure_loudness(path)
         .inspect_err(|error| tracing::warn!(%error, "failed to measure loudness"))
         .ok();
     update_asset(app, epoch, asset_id, |asset| asset.loudness = loudness);
 
+    if app.state::<AppState>().session().project_epoch != epoch {
+        return;
+    }
     if kind == MediaKind::Video {
         let proxy_path = avcore::ensure_proxy(path, proxy_dir, PreviewQuality::default())
             .inspect_err(|error| tracing::warn!(%error, "failed to generate proxy"))
@@ -187,9 +203,13 @@ pub fn rehydrate_proxies<R: Runtime>(app: &AppHandle<R>, epoch: u64) {
     if sources.is_empty() {
         return;
     }
+    let state = app.state::<AppState>();
     let app = app.clone();
-    std::thread::spawn(move || {
+    let submitted = state.media_work.submit(false, move || {
         for (asset_id, source) in sources {
+            if app.state::<AppState>().session().project_epoch != epoch {
+                return;
+            }
             if !source.exists() {
                 continue;
             }
@@ -212,6 +232,9 @@ pub fn rehydrate_proxies<R: Runtime>(app: &AppHandle<R>, epoch: u64) {
             }
         }
     });
+    if !submitted {
+        tracing::warn!("proxy rehydration rejected: media queue is full");
+    }
 }
 
 /// Applies `change` only if the project open when the background work started is still the

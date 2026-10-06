@@ -13,9 +13,10 @@
 //! JPEG-encoded into a one-slot [`LatestFrame`] served by the `oca://` protocol; the webview
 //! learns a new one exists from the throttled [`PREVIEW_TICK`] event.
 
+use crate::preview::mailbox::{self, Receiver, Sender};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::{self, Sender};
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -102,12 +103,12 @@ impl PreviewEngine {
     /// [`spawn`] with the playback loop passed in, so tests can run it with a fake audio output.
     pub(crate) fn spawn_with<R: Runtime>(
         app: AppHandle<R>,
-        run: impl Fn(mpsc::Receiver<Command>, AppHandle<R>, LatestFrame, Arc<AtomicU64>)
+        run: impl Fn(Receiver<Command>, AppHandle<R>, LatestFrame, Arc<AtomicU64>)
             + Send
             + Sync
             + 'static,
     ) -> Self {
-        let (tx, commands) = mpsc::channel();
+        let (tx, commands) = command_channel();
         let latest: LatestFrame = Arc::new(Mutex::new(None));
         let playhead_bits = Arc::new(AtomicU64::new(0f64.to_bits()));
         let engine_latest = Arc::clone(&latest);
@@ -128,8 +129,8 @@ impl PreviewEngine {
     /// An engine with no playback thread behind it: the receiver hands back every command a
     /// test's code under test sent, so assertions can read them in order.
     #[cfg(test)]
-    pub(crate) fn detached() -> (Self, mpsc::Receiver<Command>) {
-        let (tx, rx) = mpsc::channel();
+    pub(crate) fn detached() -> (Self, Receiver<Command>) {
+        let (tx, rx) = command_channel();
         let engine = Self {
             tx,
             latest: Arc::new(Mutex::new(None)),
@@ -201,8 +202,8 @@ impl PreviewEngine {
 /// are forwarded, which is what lets a new loop take over the queue.
 fn supervise<R: Runtime>(
     app: &AppHandle<R>,
-    commands: mpsc::Receiver<Command>,
-    run: &(impl Fn(mpsc::Receiver<Command>, AppHandle<R>, LatestFrame, Arc<AtomicU64>)
+    commands: Receiver<Command>,
+    run: &(impl Fn(Receiver<Command>, AppHandle<R>, LatestFrame, Arc<AtomicU64>)
           + Send
           + Sync
           + 'static),
@@ -214,7 +215,7 @@ fn supervise<R: Runtime>(
     let mut crashes: Vec<Instant> = Vec::new();
     let mut first = true;
     loop {
-        let (inner_tx, inner_rx) = mpsc::channel();
+        let (inner_tx, inner_rx) = command_channel();
         if !first {
             if let Some(project) = &project {
                 let _ = inner_tx.send(Command::Content {
@@ -298,3 +299,33 @@ pub(crate) fn preview_source_path(asset: &MediaAsset) -> Option<PathBuf> {
 #[cfg(test)]
 #[path = "preview_engine_test.rs"]
 mod tests;
+
+fn command_channel() -> (Sender<Command>, Receiver<Command>) {
+    mailbox::channel(64, |queue, command| {
+        match &command {
+            Command::Content { .. } => {
+                if let Some(old) = queue
+                    .iter_mut()
+                    .find(|c| matches!(c, Command::Content { .. }))
+                {
+                    *old = command;
+                    return None;
+                }
+            }
+            Command::MaxDim(_) => {
+                if let Some(old) = queue.iter_mut().find(|c| matches!(c, Command::MaxDim(_))) {
+                    *old = command;
+                    return None;
+                }
+            }
+            Command::Step(delta) => {
+                if let Some(Command::Step(old)) = queue.back_mut() {
+                    *old = old.saturating_add(*delta);
+                    return None;
+                }
+            }
+            _ => {}
+        }
+        Some(command)
+    })
+}

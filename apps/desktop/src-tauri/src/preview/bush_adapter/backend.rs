@@ -15,10 +15,11 @@
 //! for the next frame only after the previous one arrived (or a safety timeout), otherwise a
 //! render slower than the poll interval would never finish.
 
+use crate::preview::mailbox::{self, Receiver, Sender};
 use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::{self, RecvTimeoutError, TryRecvError};
+use std::sync::mpsc::{RecvTimeoutError, TryRecvError};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -196,7 +197,7 @@ fn same_preview_content(a: &avcore::Project, b: &avcore::Project) -> bool {
 }
 
 pub fn run<R: Runtime>(
-    rx: mpsc::Receiver<Command>,
+    rx: Receiver<Command>,
     app: AppHandle<R>,
     latest: LatestFrame,
     playhead_bits: Arc<AtomicU64>,
@@ -206,7 +207,7 @@ pub fn run<R: Runtime>(
 
 /// [`run`] with the audio output factory passed in.
 pub(crate) fn run_with_audio<R: Runtime>(
-    rx: mpsc::Receiver<Command>,
+    rx: Receiver<Command>,
     app: AppHandle<R>,
     latest: LatestFrame,
     playhead_bits: Arc<AtomicU64>,
@@ -549,14 +550,17 @@ struct EncoderShared {
 }
 
 struct Encoder {
-    tx: mpsc::Sender<bush::VideoFrame>,
+    tx: Sender<bush::VideoFrame>,
     shared: Arc<EncoderShared>,
 }
 
 /// JPEG-encodes frames off the playback thread into the latest-frame slot. If frames queue up
 /// while one encodes, only the newest is encoded.
 fn spawn_encoder(latest: LatestFrame) -> Encoder {
-    let (tx, rx) = mpsc::channel::<bush::VideoFrame>();
+    let (tx, rx) = mailbox::channel::<bush::VideoFrame>(1, |queue, frame| {
+        queue.clear();
+        Some(frame)
+    });
     let shared = Arc::new(EncoderShared::default());
     let worker = Arc::clone(&shared);
     std::thread::Builder::new()

@@ -31,6 +31,7 @@ pub type Op = Value;
 pub struct SyncState {
     /// Number of the last event sent; the webview's copy is at this revision.
     pub rev: u64,
+    pub published_rev: u64,
     pub published: Option<Arc<Project>>,
     /// The project epoch `published` belongs to: a different one means another project was
     /// opened, which is sent whole.
@@ -41,6 +42,7 @@ pub struct SyncState {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Flags {
+    pub project_epoch: u64,
     pub file_path: Option<String>,
     pub can_undo: bool,
     pub can_redo: bool,
@@ -67,7 +69,7 @@ pub fn strip_waveform(asset: &mut Value) {
         let present =
             matches!(fields.get("waveform_peaks"), Some(Value::Array(peaks)) if !peaks.is_empty());
         fields.insert("waveform_peaks".into(), Value::Null);
-        fields.insert("has_waveform".into(), Value::Bool(present));
+        fields.entry("has_waveform").or_insert(Value::Bool(present));
     }
 }
 
@@ -79,7 +81,7 @@ fn asset_json(asset: &MediaAsset) -> Value {
         .is_some_and(|peaks| !peaks.is_empty());
     let mut json = serde_json::to_value(MediaAsset {
         waveform_peaks: None,
-        ..asset.clone()
+        ..asset.clone_without_waveform()
     })
     .unwrap_or(Value::Null);
     if let Value::Object(fields) = &mut json {
@@ -315,3 +317,40 @@ pub(crate) fn tests_support_asset() -> MediaAsset {
 #[cfg(test)]
 #[path = "session_sync_test.rs"]
 mod tests;
+
+/// Serialize borrowed project fields and borrowed metadata, excluding waveform payloads.
+pub(crate) fn serialize_project<S: serde::Serializer>(
+    project: &Project,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    use serde::ser::SerializeMap;
+    let Project {
+        id,
+        name,
+        last_edited,
+        summary,
+        media_library,
+        sequences,
+        active_sequence,
+        file_path: _,
+        panel_layout,
+        smart_bins,
+        recent_asset_ids,
+    } = project;
+    let mut map = serializer.serialize_map(Some(10))?;
+    map.serialize_entry("id", id)?;
+    map.serialize_entry("name", name)?;
+    map.serialize_entry("last_edited", last_edited)?;
+    map.serialize_entry("summary", summary)?;
+    // Each asset is small metadata; no waveform Vec is cloned or serialized here.
+    map.serialize_entry(
+        "media_library",
+        &media_library.iter().map(asset_json).collect::<Vec<_>>(),
+    )?;
+    map.serialize_entry("sequences", sequences)?;
+    map.serialize_entry("active_sequence", active_sequence)?;
+    map.serialize_entry("panel_layout", panel_layout)?;
+    map.serialize_entry("smart_bins", smart_bins)?;
+    map.serialize_entry("recent_asset_ids", recent_asset_ids)?;
+    map.end()
+}

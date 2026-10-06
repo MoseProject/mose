@@ -107,6 +107,7 @@ impl Session {
     pub fn view_at(&self, rev: u64) -> SessionView<'_> {
         SessionView {
             rev,
+            project_epoch: self.project_epoch,
             project: &self.project,
             file_path: self
                 .project
@@ -127,6 +128,8 @@ impl Session {
 pub struct SessionView<'a> {
     /// Revision of the update stream this snapshot is current as of.
     pub rev: u64,
+    pub project_epoch: u64,
+    #[serde(serialize_with = "crate::session_sync::serialize_project")]
     pub project: &'a Project,
     pub file_path: Option<String>,
     pub can_undo: bool,
@@ -181,7 +184,11 @@ pub struct AppState {
     pub preview: PreviewEngine,
     pub exports: Arc<ExportQueue>,
     /// Admission for one export preparation, whose nested renders share one mutable cache.
+    pub export_preparation_cancel: Mutex<Option<Arc<std::sync::atomic::AtomicBool>>>,
     pub export_preparing: Arc<std::sync::atomic::AtomicBool>,
+    pub publication: crate::session::publication::Publication,
+    pub media_work: crate::preview::media_work::MediaWork,
+    pub analysis_running: Arc<std::sync::atomic::AtomicBool>,
     /// What `Ctrl+C`/`Ctrl+X` last captured, for `Ctrl+V` -- transient, never serialized, and
     /// not scoped to a project or sequence, same as `ui::App::clipboard_clip`.
     pub clip_clipboard: Mutex<Option<(Vec<ClipInstance>, TrackKind)>>,
@@ -248,7 +255,11 @@ impl AppState {
             prefs: Mutex::new(prefs),
             preview,
             exports,
+            export_preparation_cancel: Mutex::new(None),
             export_preparing: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            publication: Default::default(),
+            media_work: Default::default(),
+            analysis_running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             clip_clipboard: Mutex::new(None),
             formatting_clipboard: Mutex::new(None),
             transcribing_asset_id: Mutex::new(None),
@@ -293,45 +304,81 @@ pub fn publish<R: Runtime>(app: &AppHandle<R>, session: &Session) {
     if session.dirty {
         state.edits.touch();
     }
-    let next = Arc::new(session.project.clone());
-    state.preview.set_content_shared(Arc::clone(&next));
-    // Held across the emit so updates leave in the order their revisions were given.
-    let mut sync = lock_or_recover(&state.sync);
-    sync.rev += 1;
-    let rev = sync.rev;
-    let patch = match &sync.published {
-        Some(prev) if sync.epoch == session.project_epoch => {
-            Some(crate::session_sync::diff(prev, &next))
-        }
-        _ => None,
-    };
-    sync.published = Some(next);
-    sync.epoch = session.project_epoch;
-    match patch {
-        Some(ops) => {
-            let view = session.view();
-            let _ = app.emit(
-                SESSION_PATCH,
-                crate::session_sync::Patch {
-                    base: rev - 1,
-                    rev,
-                    flags: crate::session_sync::Flags {
-                        file_path: view.file_path,
-                        can_undo: view.can_undo,
-                        can_redo: view.can_redo,
-                        dirty: view.dirty,
-                    },
-                    ops,
-                },
-            );
-        }
-        None => {
-            let _ = app.emit(
-                SESSION_CHANGED,
-                crate::session_sync::snapshot(&session.view_at(rev)),
-            );
+    if let Some(cache) = app.try_state::<crate::protocol::ThumbnailCache>() {
+        cache.sync_project(session.project_epoch, &session.project);
+    }
+    let mut metadata = session.project.render_snapshot();
+    // Publication diffs track waveform presence only. Real peaks remain exclusively in Session
+    // and the binary waveform protocol; this private snapshot must never be persisted.
+    for (asset, original) in metadata
+        .media_library
+        .iter_mut()
+        .zip(&session.project.media_library)
+    {
+        if original
+            .waveform_peaks
+            .as_ref()
+            .is_some_and(|peaks| !peaks.is_empty())
+        {
+            asset.waveform_peaks = Some(vec![(0.0, 0.0)]);
         }
     }
+    let next = Arc::new(metadata);
+    let rev = {
+        let mut sync = lock_or_recover(&state.sync);
+        sync.rev += 1;
+        sync.rev
+    };
+    let epoch = session.project_epoch;
+    let view = session.view();
+    let flags = crate::session_sync::Flags {
+        project_epoch: epoch,
+        file_path: view.file_path,
+        can_undo: view.can_undo,
+        can_redo: view.can_redo,
+        dirty: view.dirty,
+    };
+    let app = app.clone();
+    state.publication.submit(move || {
+        let state = app.state::<AppState>();
+        state.preview.set_content_shared(Arc::clone(&next));
+        let (previous, previous_epoch, base) = {
+            let sync = lock_or_recover(&state.sync);
+            (sync.published.clone(), sync.epoch, sync.published_rev)
+        };
+        let patch = previous
+            .filter(|_| previous_epoch == epoch)
+            .map(|prev| crate::session_sync::diff(&prev, &next));
+        match patch {
+            Some(ops) => {
+                let _ = app.emit(
+                    SESSION_PATCH,
+                    crate::session_sync::Patch {
+                        base,
+                        rev,
+                        flags,
+                        ops,
+                    },
+                );
+            }
+            None => {
+                let view = SessionView {
+                    rev,
+                    project_epoch: epoch,
+                    project: &next,
+                    file_path: flags.file_path,
+                    can_undo: flags.can_undo,
+                    can_redo: flags.can_redo,
+                    dirty: flags.dirty,
+                };
+                let _ = app.emit(SESSION_CHANGED, crate::session_sync::snapshot(&view));
+            }
+        }
+        let mut sync = lock_or_recover(&state.sync);
+        sync.published = Some(next);
+        sync.published_rev = rev;
+        sync.epoch = epoch;
+    });
 }
 
 /// An empty, never-saved project -- what "Novo projeto" builds in the egui shell.

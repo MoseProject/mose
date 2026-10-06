@@ -17,7 +17,7 @@ use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Condvar, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use avcore::FrameSampler;
 
@@ -34,11 +34,16 @@ const IDLE: Duration = Duration::from_millis(300);
 /// A decode slower than this is given up on and reported as a miss.
 const SAMPLE_DEADLINE: Duration = Duration::from_millis(800);
 
+type FileRevision = Option<(u64, std::time::SystemTime)>;
+type OpenDecoder = (PathBuf, FileRevision, FrameSampler);
+
 struct Job {
     source: PathBuf,
     at_secs: f64,
     max_dim: u32,
     reply: Sender<Option<Vec<u8>>>,
+    revision: FileRevision,
+    queued: Instant,
 }
 
 #[derive(Default)]
@@ -77,27 +82,40 @@ impl TileWorkers {
     /// is free to decode it.
     pub fn extract(&self, source: &Path, at_secs: f64, max_dim: u32) -> Option<Vec<u8>> {
         let (reply, answer) = channel();
-        lock_or_recover(&self.shared.queue).jobs.push_back(Job {
+        let revision = std::fs::metadata(source)
+            .ok()
+            .and_then(|m| Some((m.len(), m.modified().ok()?)));
+        let mut queue = lock_or_recover(&self.shared.queue);
+        if queue.closed || queue.jobs.len() >= 64 {
+            return None;
+        }
+        queue.jobs.push_back(Job {
             source: source.to_path_buf(),
             at_secs,
             max_dim,
             reply,
+            revision,
+            queued: Instant::now(),
         });
+        drop(queue);
         self.shared.wake.notify_one();
-        answer.recv().ok().flatten()
+        answer.recv_timeout(Duration::from_secs(5)).ok().flatten()
     }
 }
 
 impl Drop for TileWorkers {
     fn drop(&mut self) {
-        lock_or_recover(&self.shared.queue).closed = true;
+        let mut queue = lock_or_recover(&self.shared.queue);
+        queue.closed = true;
+        queue.jobs.clear();
+        drop(queue);
         self.shared.wake.notify_all();
     }
 }
 
 fn work(shared: &Shared) {
     // The decoder of the file served last, kept for the next request on it.
-    let mut open: Option<(PathBuf, FrameSampler)> = None;
+    let mut open: Option<OpenDecoder> = None;
     loop {
         let job = {
             let mut queue = lock_or_recover(&shared.queue);
@@ -118,23 +136,29 @@ fn work(shared: &Shared) {
                 }
             }
         };
+        if job.queued.elapsed() >= Duration::from_secs(5) {
+            continue;
+        }
         let jpeg = serve(&mut open, &job);
         let _ = job.reply.send(jpeg);
     }
 }
 
-fn serve(open: &mut Option<(PathBuf, FrameSampler)>, job: &Job) -> Option<Vec<u8>> {
+fn serve(open: &mut Option<OpenDecoder>, job: &Job) -> Option<Vec<u8>> {
     if !job.source.exists() {
         *open = None;
         return None;
     }
-    if open.as_ref().is_none_or(|(path, _)| *path != job.source) {
+    if open
+        .as_ref()
+        .is_none_or(|(path, revision, _)| *path != job.source || *revision != job.revision)
+    {
         *open = FrameSampler::open(&job.source)
             .ok()
-            .map(|sampler| (job.source.clone(), sampler));
+            .map(|sampler| (job.source.clone(), job.revision, sampler));
     }
-    let (_, sampler) = open.as_ref()?;
-    let frame = sampler.sample(job.at_secs, SAMPLE_DEADLINE);
+    let (_, _, sampler) = open.as_ref()?;
+    let frame = sampler.sample_scaled(job.at_secs, SAMPLE_DEADLINE, job.max_dim);
     if frame.is_none() {
         // A decoder that failed or ran late may be stuck mid-GOP; start over next time.
         *open = None;
