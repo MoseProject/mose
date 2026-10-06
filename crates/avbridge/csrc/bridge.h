@@ -400,11 +400,13 @@ typedef enum {
    On success, writes the raw JSON report (NUL-terminated, truncated to fit if longer than
    out_json_len - 1 bytes) into `out_json` for the caller to parse. The loudnorm filter has no
    queryable struct API for its final stats — it only prints them via av_log() when it
-   processes EOF — so this is the only way to get them out of libavfilter directly.
+   is destroyed after EOF — so this is the only way to get them out of libavfilter directly.
 
    NOT thread-safe: installs a process-global libavutil log callback for the call's duration
    (reset to av_log_default_callback before returning) — do not call this from multiple
-   threads concurrently. */
+   threads concurrently or replace the FFmpeg callback during a measurement. Capture writes
+   and teardown are synchronized against concurrent FFmpeg logging, and only this measurement's
+   loudnorm context is captured. Unrelated messages use av_log_default_callback. */
 LoudnessStatus avbridge_measure_loudness(const char *in_path, char *out_json, size_t out_json_len);
 
 typedef enum {

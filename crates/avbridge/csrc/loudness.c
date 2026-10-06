@@ -19,6 +19,29 @@
 #include <stdarg.h>
 #include <string.h>
 
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+static SRWLOCK loudness_log_mutex = SRWLOCK_INIT;
+static void lock_loudness_log(void) {
+    AcquireSRWLockExclusive(&loudness_log_mutex);
+}
+static void unlock_loudness_log(void) {
+    ReleaseSRWLockExclusive(&loudness_log_mutex);
+}
+#else
+#include <pthread.h>
+static pthread_mutex_t loudness_log_mutex = PTHREAD_MUTEX_INITIALIZER;
+static void lock_loudness_log(void) {
+    pthread_mutex_lock(&loudness_log_mutex);
+}
+static void unlock_loudness_log(void) {
+    pthread_mutex_unlock(&loudness_log_mutex);
+}
+#endif
+
 #include <libavcodec/avcodec.h>
 #include <libavfilter/avfilter.h>
 #include <libavfilter/buffersink.h>
@@ -27,33 +50,41 @@
 #include <libavutil/channel_layout.h>
 #include <libavutil/log.h>
 
-/* Global by necessity: av_log_set_callback() takes a plain function pointer with no user-data
-   parameter, so there is nowhere else to stash where the current call's capture buffer is.
-   Matches the NOT THREAD-SAFE contract documented on avbridge_measure_loudness() in
-   bridge.h. */
+/* Measurement calls remain serialized by the caller. Every callback, including logs from
+   unrelated FFmpeg workers, shares this lock with capture setup and teardown. */
 static char *g_loudness_log_buf = NULL;
 static size_t g_loudness_log_cap = 0;
 static size_t g_loudness_log_len = 0;
 static int g_loudness_log_print_prefix = 1;
+static AVFilterContext *g_loudness_log_filter = NULL;
 
 static void loudness_log_callback(void *avcl, int level, const char *fmt, va_list vl) {
-    /* loudnorm's JSON report prints at AV_LOG_INFO; anything noisier (DEBUG/VERBOSE) is not
-       needed and anything we'd want less of would print at WARNING or above regardless. */
-    if (level > AV_LOG_INFO || !g_loudness_log_buf ||
-        g_loudness_log_len + 1 >= g_loudness_log_cap) {
+    lock_loudness_log();
+    if (!g_loudness_log_filter || avcl != g_loudness_log_filter || level > AV_LOG_INFO) {
+        unlock_loudness_log();
+        av_log_default_callback(avcl, level, fmt, vl);
+        return;
+    }
+    if (!g_loudness_log_buf || g_loudness_log_cap == 0 ||
+        g_loudness_log_len >= g_loudness_log_cap - 1) {
+        unlock_loudness_log();
         return;
     }
     char line[1024];
     int written =
         av_log_format_line2(avcl, level, fmt, vl, line, sizeof(line), &g_loudness_log_print_prefix);
     if (written <= 0) {
+        unlock_loudness_log();
         return;
     }
+    /* The formatter returns the required size, not the number stored in `line`. */
+    size_t available = (size_t)written < sizeof(line) ? (size_t)written : sizeof(line) - 1;
     size_t remaining = g_loudness_log_cap - g_loudness_log_len - 1;
-    size_t to_copy = (size_t)written < remaining ? (size_t)written : remaining;
+    size_t to_copy = available < remaining ? available : remaining;
     memcpy(g_loudness_log_buf + g_loudness_log_len, line, to_copy);
     g_loudness_log_len += to_copy;
     g_loudness_log_buf[g_loudness_log_len] = '\0';
+    unlock_loudness_log();
 }
 
 /* Simpler than init_audio_filter_chain(): analysis only, nothing downstream needs the
@@ -208,12 +239,20 @@ LoudnessStatus avbridge_measure_loudness(const char *in_path, char *out_json, si
         goto cleanup;
     }
 
-    /* Install the log capture only around the pipeline run — loudnorm prints its JSON report
-       via av_log() while processing the flush below, there is no queryable struct API. */
+    /* Capture only this graph's loudnorm filter, including its report during teardown. */
+    lock_loudness_log();
+    const AVFilter *loudnorm = avfilter_get_by_name("loudnorm");
+    for (unsigned int i = 0; i < chain.graph->nb_filters; i++) {
+        if (chain.graph->filters[i]->filter == loudnorm) {
+            g_loudness_log_filter = chain.graph->filters[i];
+            break;
+        }
+    }
     g_loudness_log_buf = out_json;
     g_loudness_log_cap = out_json_len;
     g_loudness_log_len = 0;
     g_loudness_log_print_prefix = 1;
+    unlock_loudness_log();
     av_log_set_callback(loudness_log_callback);
     log_installed = 1;
 
@@ -233,13 +272,16 @@ cleanup:
     free_audio_filter_chain(&chain);
 
     if (log_installed) {
-        if (status == LOUDNESS_OK && (!out_json || out_json[0] == '\0')) {
+        lock_loudness_log();
+        if (status == LOUDNESS_OK && (!out_json || out_json_len == 0 || out_json[0] == '\0')) {
             status = LOUDNESS_ERR_NO_REPORT;
         }
-        av_log_set_callback(av_log_default_callback);
         g_loudness_log_buf = NULL;
         g_loudness_log_cap = 0;
         g_loudness_log_len = 0;
+        g_loudness_log_filter = NULL;
+        unlock_loudness_log();
+        av_log_set_callback(av_log_default_callback);
     }
     avcodec_free_context(&dec_ctx);
     av_frame_free(&dec_frame);

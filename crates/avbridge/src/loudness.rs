@@ -58,8 +58,9 @@ pub enum LoudnessError {
 /// Process-global mutex serializing access to `avbridge_measure_loudness()`. Required because
 /// the C implementation installs a process-global FFmpeg `av_log` callback and stores the
 /// caller's output buffer in process-global variables for the duration of each call. Concurrent
-/// calls would race these globals, corrupting memory. This mutex enforces the documented
-/// "not thread-safe" contract at the Rust API boundary.
+/// measurements would replace one another's capture state. The C callback separately protects
+/// buffer access against logs from other FFmpeg workers. This mutex enforces the documented
+/// single-measurement contract at the Rust API boundary.
 pub(crate) static LOUDNESS_MUTEX: Mutex<()> = Mutex::new(());
 
 /// Measures integrated loudness / true peak / loudness range via a single-pass `loudnorm`
@@ -86,8 +87,8 @@ pub fn measure_loudness_json(path: &Path) -> Result<String, LoudnessError> {
     // is a valid, writable buffer of `buf.len()` bytes; the C side never writes past that
     // length and always NUL-terminates within it on success. `bridge.c` closes the decoder
     // and filter graph contexts on every exit path. The LOUDNESS_MUTEX ensures no other thread
-    // can enter this unsafe block concurrently, preventing races on the process-global
-    // g_loudness_log_buf/g_loudness_log_cap/g_loudness_log_len variables.
+    // can enter this unsafe block concurrently. The C capture lock synchronizes callbacks
+    // with buffer writes and detachment before returning.
     let status = unsafe {
         avbridge_measure_loudness(c_path.as_ptr(), buf.as_mut_ptr() as *mut c_char, buf.len())
     };
