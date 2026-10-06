@@ -123,3 +123,7 @@ impl<T> Drop for Receiver<T> {
         self.0.space.notify_all();
     }
 }
+
+#[cfg(test)]
+#[path = "mailbox_test.rs"]
+mod tests;

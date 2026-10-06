@@ -158,3 +158,7 @@ fn source_revision(source: &std::path::Path) -> Option<(u64, std::time::SystemTi
     let metadata = std::fs::metadata(source).ok()?;
     Some((metadata.len(), metadata.modified().ok()?))
 }
+
+#[cfg(test)]
+#[path = "analysis_job_test.rs"]
+mod tests;

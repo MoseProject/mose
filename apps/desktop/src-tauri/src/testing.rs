@@ -255,7 +255,13 @@ impl Harness {
             cmd: command.into(),
             callback: tauri::ipc::CallbackFn(0),
             error: tauri::ipc::CallbackFn(1),
-            url: "http://tauri.localhost".parse().unwrap(),
+            url: if cfg!(any(target_os = "windows", target_os = "android")) {
+                "http://tauri.localhost"
+            } else {
+                "tauri://localhost"
+            }
+            .parse()
+            .unwrap(),
             body: tauri::ipc::InvokeBody::Json(arguments),
             headers: Default::default(),
             invoke_key: tauri::test::INVOKE_KEY.to_string(),
@@ -331,6 +337,7 @@ impl Harness {
 
     /// The preview commands sent so far, draining the channel.
     pub fn drain_preview(&self) -> Vec<Command> {
+        self.state().publication.flush();
         self.preview.try_iter().collect()
     }
 }

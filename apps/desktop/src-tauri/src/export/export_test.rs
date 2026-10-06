@@ -432,3 +432,46 @@ fn finishing_updates_the_job_it_belongs_to_and_ignores_one_that_is_gone() {
     queue.finish(h.handle(), 99, Ok(avcore::RenderOutcome::Completed));
     queue.finish(h.handle(), 99, Err(avcore::RenderError::EmptyTimeline));
 }
+
+fn queued_owned_input(h: &Harness, queue: &ExportQueue) -> PathBuf {
+    h.add_fixture_clip();
+    let prepared = prepare_export(&h.session().project).unwrap();
+    let input_dir = queue.input_cache_dir().join("prepared_regression");
+    std::fs::create_dir_all(&input_dir).unwrap();
+    let input = input_dir.join("nested.mp4");
+    std::fs::copy(crate::testing::fixture("video.mp4"), &input).unwrap();
+    let mut queued = job(1, ExportJobStatus::Queued);
+    queued.track_segments = prepared.track_segments;
+    for segment in queued.track_segments.iter_mut().flatten() {
+        segment.source_path = input.clone();
+    }
+    put(queue, vec![queued]);
+    input_dir
+}
+
+#[test]
+fn queued_inputs_survive_reload_and_are_released_after_persisted_completion() {
+    let h = harness();
+    let queue = queue(&h);
+    let inputs = queued_owned_input(&h, &queue);
+    assert!(queue.persist());
+    let reloaded = Arc::new(ExportQueue::load(queue.config_dir.clone()));
+    assert_eq!(status_of(&reloaded, 1), Some(ExportJobStatus::Queued));
+    assert!(inputs.join("nested.mp4").exists());
+    assert_eq!(reloaded.input_directories(1), vec![inputs.clone()]);
+    reloaded.finish(h.handle(), 1, Ok(avcore::RenderOutcome::Completed));
+    assert!(!inputs.exists());
+    let saved = ExportQueue::load(queue.config_dir.clone());
+    assert_eq!(status_of(&saved, 1), Some(ExportJobStatus::Done));
+}
+
+#[test]
+fn failed_queue_persistence_preserves_owned_inputs() {
+    let h = harness();
+    let queue = queue(&h);
+    let inputs = queued_owned_input(&h, &queue);
+    std::fs::create_dir_all(avcore::export_queue_path(&queue.config_dir)).unwrap();
+    queue.finish(h.handle(), 1, Ok(avcore::RenderOutcome::Completed));
+    assert_eq!(status_of(&queue, 1), Some(ExportJobStatus::Done));
+    assert!(inputs.join("nested.mp4").exists());
+}

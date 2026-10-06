@@ -567,7 +567,7 @@ mod tests {
     }
 
     #[test]
-    fn a_failed_thumbnail_is_not_retried_within_the_window() {
+    fn a_new_source_revision_invalidates_a_cached_thumbnail_failure() {
         let cache = ThumbnailCache::with_retry(Duration::from_secs(3600));
         let late = std::env::temp_dir().join(format!("oca_early_{}.mp4", std::process::id()));
         let _ = std::fs::remove_file(&late);
@@ -575,8 +575,8 @@ mod tests {
         assert!(cache.get_or_extract(&late).is_none());
         std::fs::copy(fixture(), &late).unwrap();
         assert!(
-            cache.get_or_extract(&late).is_none(),
-            "still remembered as a miss"
+            cache.get_or_extract(&late).is_some(),
+            "a newly available source must invalidate the old miss"
         );
         let _ = std::fs::remove_file(&late);
     }

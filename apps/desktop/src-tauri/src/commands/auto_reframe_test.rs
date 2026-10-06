@@ -110,16 +110,16 @@ fn when_detection_fails_the_crop_stays_centered() {
 #[test]
 fn starting_is_refused_without_a_model_clip_resolution_or_when_busy() {
     let (h, asset, clip) = ready();
-    *h.state().auto_reframing_clip_id.lock().unwrap() = Some(1);
+    let permit = AnalysisPermit::acquire(&h.handle()).unwrap();
     assert_eq!(
         auto_reframe_clip(h.handle(), clip),
-        Err("an auto-reframe is already running".to_string())
+        Err("analysisBusy".to_string())
     );
     assert_eq!(
         dynamic_auto_reframe_clip(h.handle(), clip),
-        Err("an auto-reframe is already running".to_string())
+        Err("analysisBusy".to_string())
     );
-    *h.state().auto_reframing_clip_id.lock().unwrap() = None;
+    drop(permit);
 
     assert_eq!(
         auto_reframe_clip(h.handle(), 999),
