@@ -395,6 +395,7 @@ export const ptBR = {
   "openExportFolder": "Mostrar na pasta",
   "exportOutputIsSource": "Esse arquivo é uma mídia do projeto. Escolha outro nome para a exportação.",
   "exportOutputInQueue": "Já existe uma exportação para esse arquivo na fila.",
+  "exportPreparationBusy": "Uma exportação está sendo preparada. Aguarde ela entrar na fila antes de iniciar outra.",
   "confirmQuitTitle": "Sair do oca?",
   "anotherName": "Sugerir outro nome",
   "savingProject": "Salvando…",

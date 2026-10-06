@@ -395,6 +395,7 @@ export const en = {
   "openExportFolder": "Show in folder",
   "exportOutputIsSource": "That file is a media file of the project. Pick another name for the export.",
   "exportOutputInQueue": "An export to that file is already in the queue.",
+  "exportPreparationBusy": "An export is being prepared. Wait until it enters the queue before starting another.",
   "confirmQuitTitle": "Quit oca?",
   "anotherName": "Suggest another name",
   "savingProject": "Saving…",

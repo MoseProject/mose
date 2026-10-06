@@ -163,6 +163,7 @@ const ERROR_CODES: Record<string, TextKey> = {
   pathMissing: "pathMissing",
   outputIsSource: "exportOutputIsSource",
   outputInQueue: "exportOutputInQueue",
+  exportPreparationBusy: "exportPreparationBusy",
   projectMissing: "projectMissing",
   projectNameEmpty: "projectNameEmpty",
 };
