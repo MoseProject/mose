@@ -688,7 +688,9 @@ fn mean_red_at(path: &std::path::Path, secs: f64) -> f64 {
     };
     let reds: Vec<f64> = frame
         .pixels
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|px| f64::from(px[0]))
         .collect();
     reds.iter().sum::<f64>() / reds.len() as f64
