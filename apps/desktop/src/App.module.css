@@ -5,6 +5,29 @@
   height: 100%;
 }
 
+.app-loading {
+  display: grid;
+  min-height: 0;
+  place-items: center;
+  background: var(--bg);
+}
+
+.app-loading::after {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--border-subtle);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  content: "";
+  animation: app-loading-spin 0.8s linear infinite;
+}
+
+@keyframes app-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .topbar {
   display: flex;
   align-items: center;
@@ -39,4 +62,3 @@
   max-width: 70vw;
   z-index: 10;
 }
-

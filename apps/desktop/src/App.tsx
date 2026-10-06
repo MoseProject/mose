@@ -1,31 +1,60 @@
 import { cx } from "./cx";
 import baseStyles from "./styles/base.module.css";
 import styles from "./App.module.css";
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useI18n } from "./i18n";
 import { COMMANDS } from "./commands";
 import { loadKeymap } from "./keymap";
-import { CommandPalette } from "./editor/chrome/CommandPalette";
 import { Dialog } from "./editor/chrome/Dialog";
-import { ExportDialog } from "./editor/export/ExportDialog";
-import { ExportPanel } from "./editor/export/ExportPanel";
 import { ConfirmHost, ToastHost } from "./editor/chrome/Notifications";
-import { ShortcutsDialog } from "./editor/chrome/ShortcutsDialog";
 import { StatusBar } from "./editor/chrome/StatusBar";
-import { CrashReviewModal } from "./screens/CrashReviewModal";
-import { Editor } from "./screens/Editor";
 import { Home } from "./screens/Home";
-import { Prefs } from "./screens/Prefs";
-import { WatchFolder } from "./screens/WatchFolder";
+import { CrashReviewModal } from "./screens/CrashReviewModal";
 import { TopBar } from "./TopBar";
 import { api, onCloseRequested } from "./ipc";
 import { askChoice, askConfirm } from "./notifications";
 import { connect, patchUi, run, sessionStore, uiStore, useStore } from "./store";
 
+const Editor = lazy(async () => {
+  const module = await import("./screens/Editor");
+  return { default: module.Editor };
+});
+const ExportDialog = lazy(async () => {
+  const module = await import("./editor/export/ExportDialog");
+  return { default: module.ExportDialog };
+});
+const ExportPanel = lazy(async () => {
+  const module = await import("./editor/export/ExportPanel");
+  return { default: module.ExportPanel };
+});
+const Prefs = lazy(async () => {
+  const module = await import("./screens/Prefs");
+  return { default: module.Prefs };
+});
+const ShortcutsDialog = lazy(async () => {
+  const module = await import("./editor/chrome/ShortcutsDialog");
+  return { default: module.ShortcutsDialog };
+});
+const WatchFolder = lazy(async () => {
+  const module = await import("./screens/WatchFolder");
+  return { default: module.WatchFolder };
+});
+const CommandPalette = lazy(async () => {
+  const module = await import("./editor/chrome/CommandPalette");
+  return { default: module.CommandPalette };
+});
+
 export function App() {
   const session = useStore(sessionStore);
   const ui = useStore(uiStore);
   const { gettext: t } = useI18n();
+  const [watchFolderRequested, setWatchFolderRequested] = useState(ui.watchOpen);
+
+  useEffect(() => {
+    if (ui.watchOpen) {
+      setWatchFolderRequested(true);
+    }
+  }, [ui.watchOpen]);
 
   useEffect(() => {
     void run(connect()).then(() => {
@@ -88,10 +117,32 @@ export function App() {
   return (
     <div className={cx(styles, baseStyles, "app")}>
       <TopBar session={session} />
-      {ui.screen === "home" || !session ? <Home /> : <Editor session={session} />}
+      {ui.screen === "home" || !session ? (
+        <Home />
+      ) : (
+        <Suspense
+          fallback={
+            <div
+              className={cx(styles, baseStyles, "app-loading")}
+              aria-busy="true"
+              role="status"
+            />
+          }
+        >
+          <Editor session={session} />
+        </Suspense>
+      )}
       <StatusBar />
-      {session && ui.exportQueueOpen && <ExportPanel />}
-      {session && ui.exportDialogOpen && <ExportDialog session={session} />}
+      {session && ui.exportQueueOpen && (
+        <Suspense fallback={null}>
+          <ExportPanel />
+        </Suspense>
+      )}
+      {session && ui.exportDialogOpen && (
+        <Suspense fallback={null}>
+          <ExportDialog session={session} />
+        </Suspense>
+      )}
       {ui.settingsOpen && (
         <Dialog
           title={t("preferences")}
@@ -100,17 +151,31 @@ export function App() {
             patchUi({ settingsOpen: false });
           }}
         >
-          <Prefs />
+          <Suspense fallback={null}>
+            <Prefs />
+          </Suspense>
         </Dialog>
       )}
-      <WatchFolder
-        open={ui.watchOpen}
-        onClose={() => {
-          patchUi({ watchOpen: false });
-        }}
-      />
-      {ui.shortcutsOpen && <ShortcutsDialog />}
-      {ui.paletteOpen && <CommandPalette />}
+      {watchFolderRequested && (
+        <Suspense fallback={null}>
+          <WatchFolder
+            open={ui.watchOpen}
+            onClose={() => {
+              patchUi({ watchOpen: false });
+            }}
+          />
+        </Suspense>
+      )}
+      {ui.shortcutsOpen && (
+        <Suspense fallback={null}>
+          <ShortcutsDialog />
+        </Suspense>
+      )}
+      {ui.paletteOpen && (
+        <Suspense fallback={null}>
+          <CommandPalette />
+        </Suspense>
+      )}
       <ConfirmHost />
       <ToastHost />
       <CrashReviewModal />
