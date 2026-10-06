@@ -478,3 +478,98 @@ This compiles existing test targets without executing them. The frontend error m
 locale entries were inspected; frontend type checking was unavailable because the local
 `node_modules/.bin/tsc` executable is absent. The AST graph was refreshed. No tests or benchmarks
 were added or run.
+
+## Correction batch 5: remaining implementation findings
+
+The changes below complete the implementation pass for F01–F16. Earlier batches describe
+historical intermediate states; their remaining implementation limits are superseded below.
+Runtime acceptance and measurements listed at the end are separate from implementation status.
+
+| Finding | Implemented correction |
+| --- | --- |
+| F03 | Pack sampled analysis frames directly into bounded working planes. Scene detection retains adjacent grayscale frames; segmentation processes samples immediately; privacy and motion retain grayscale working data. Reframe sampling requests its working resolution directly. |
+| F04 | Admit one analysis across features with an ownership guard. Capture project epoch, sequence, source revision/path, clip, resolution, settings and output directory together; validate again before applying an undoable result. Release admission on errors and panic. |
+| F05 | Share bounded interactive/background worker pools across protocol and import work. Bound tile jobs, reject overload, expire queued tile requests, and stop obsolete project jobs between stages. |
+| F06 | Bound backend tiles/posters/waveforms by bytes and entries, promote successful hits, prune project/source changes, and reject stale insertions. Bound frontend image/waveform caches and concurrent waveform loads; clear on project epoch and source changes. |
+| F07 | Cancel export preparation from the frontend or dropped command future, propagate cancellation through nested rendering, and avoid enqueueing cancelled preparation. |
+| F08 | Give each nested render a unique owned temporary artifact. Queued exports own persistent linked/copied inputs independent of cache eviction; clean them after terminal queue state is persisted. |
+| F10 | Coalesce content and dimension changes before enqueueing; aggregate adjacent steps; bound transport admission and retain only the latest pending encoded frame. |
+| F11 | Borrow metadata for IPC serialization, omit waveform arrays from render/export snapshots, and move diffing, serialization and preview dispatch to a publication worker with one pending snapshot. Patch bases refer to the last emitted revision. |
+| F12 | Memoize preview derivations and asset lookup, index immutable clip intervals, paint only visible clips, and repaint the playhead on a separate canvas. Preserve drag ghosts and overlay trim feedback. |
+| F13 | Cache immutable LUT versions in a 32 MiB GPU cache. Expose cumulative LUT upload/hit and synchronous readback wait/copy counters; print them in the existing GPU benchmark. |
+| F14 | Update temporal smoothing on reused effects, reset history on changed source/configuration, and prune inactive contributor state. |
+| F15 | Use deques and incremental shared undo/redo byte accounting, including serialized dynamic payloads. Retain a single oversized newest snapshot explicitly. |
+| F16 | Advance overlay search cursors for sequential export, preserve original overlap priority, handle unsorted segments, and reset on backward time. |
+
+### Resource policies and practical limits
+
+- Worker counts and budgets are safety policies, not measured optimal settings: two interactive
+  and two background media workers, 64 pending jobs per class; four tile decoder workers with
+  64 queued jobs, five-second queue expiry and 800 ms sampling deadline. Native decoders may
+  still start their own threads. Overloaded protocol requests return 429 with a retry hint.
+- Analysis uses a longest side of 320 pixels for scene/motion/privacy/matte working data and
+  960 pixels for reframe. Native decoder allocations remain at source resolution. Privacy
+  retains at most 400 grayscale samples plus masks (about 81.92 MB at square 320 pixels),
+  motion at most 60 grayscale samples (6.14 MB), and matte at most 40 masks (4.10 MB), excluding
+  native decoder/model/allocator memory. These are calculated payload bounds, not measured RSS.
+  Downsampling's accuracy on representative real footage still needs runtime verification.
+- Cache budgets cover payloads, not all allocator/browser overhead: backend tiles 32 MiB,
+  posters 16 MiB, waveforms 64 MiB; frontend decoded frames 32 MiB and waveforms 64 MiB.
+  Entry caps also bound negative entries. Size/mtime revision checks are not content hashes or
+  file watchers; frontend invalidation follows project/source updates.
+- Undo estimates a serialized payload with a conservative multiplier, not exact allocations or
+  vector capacity. The default estimated budget is 100 MiB across undo and redo, with at most
+  100 steps. One oversized newest step may exceed that budget. Timeline snapshot cloning
+  remains; this pass does not introduce persistent data structures or per-operation undo.
+- Publication still copies timeline and media metadata under the session lock. It no longer
+  copies real waveform arrays there or computes/serializes patches there. Pending intermediate
+  snapshots can coalesce; the frontend rejects older full snapshots and resets selection/cache
+  state on project epoch changes. Existing test event counters now await publication completion.
+- Export input ownership survives ordinary queue reloads. Files are released only after terminal
+  queue persistence succeeds. Crash orphan collection and atomic destination reservation across
+  concurrent external writers are not introduced. Cancellation after enqueue is a queue action.
+- GPU readback remains synchronous. The measurements below justify profiling that boundary;
+  they do not establish that a platform-specific texture or pipelining redesign is appropriate.
+
+### Validation evidence
+
+Two executions of the existing GPU-only `engine_workloads` quick benchmark completed on the
+Apple M4 with identical current code, except printing counters in the second run:
+
+| Scenario | First estimate | Second estimate |
+| --- | ---: | ---: |
+| 1080p, 2 layers | 1.7782 ms | 2.1202 ms |
+| 1080p, 4 layers with effects | 3.2672 ms | 3.5450 ms |
+| 4K, 2 layers | 7.3268 ms | 7.3427 ms |
+| 4K, 6 layers with effects | 19.526 ms | 18.090 ms |
+
+Second-run counters: 1 LUT upload, 1,015 LUT cache hits, 1,340 readbacks, cumulative readback
+wait 4.462374955 s and mapped host copy 759.146262 ms. Counts span all scenarios and warmup;
+these totals are not per-scenario latency. The quick runs vary substantially and have no
+pre-change baseline, so no percentage improvement is claimed.
+
+Desktop all-target compilation passed during implementation. Rust checks compile existing test
+binaries without executing tests. Mechanical fixed-size chunk iterator changes adapt existing
+code to the Rust 1.99 Clippy convention; no new test cases were added or run.
+
+Frontend validation is partial: the interval-index module passed strict TypeScript checking,
+and changed frontend files passed TypeScript syntax transpilation. Full typecheck/lint/build
+could not complete because dependencies were unavailable: the configured npm mirror returned
+403 and the public registry failed DNS resolution. The lockfile was restored unchanged.
+Real-media analysis quality, project-switch concurrency, export restart/cancellation and C/GPU
+pixel parity remain runtime acceptance work; they are not reported as proven by compilation.
+
+Final static checks passed:
+
+- `FFMPEG_DIR=/opt/homebrew CARGO_BUILD_JOBS=1 cargo clippy -p desktop -p bush -p core
+  -p avbridge --all-targets --offline -- -D warnings`.
+- `FFMPEG_DIR=/opt/homebrew CARGO_BUILD_JOBS=1 cargo clippy -p bush --features gpu
+  --all-targets --offline -- -D warnings`.
+- `cargo fmt --all --check`, `git diff --check`, and syntax transpilation of all ten changed
+  frontend files (zero syntax diagnostics).
+- `graphify update .` refreshed the AST graph. It reported six pre-existing JSON source files
+  without graph nodes and refreshed community names; these warnings did not stop extraction.
+
+The whole-workspace Clippy attempt was interrupted after resource exhaustion and a Python
+binding build wait; the successful commands above cover every modified Rust crate. Frontend
+build/typecheck/lint and runtime acceptance remain unverified, rather than marked complete.
