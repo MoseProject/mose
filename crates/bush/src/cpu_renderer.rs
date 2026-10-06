@@ -783,15 +783,21 @@ fn blend_pixel(destination: &mut [u8], source: &[u8], opacity: f32, mode: BlendM
     }
     let destination_alpha = destination[3] as f32 / 255.0;
     let output_alpha = source_alpha + destination_alpha * (1.0 - source_alpha);
-    if mode == BlendMode::Normal && destination_alpha == 1.0 && output_alpha == 1.0 {
-        // Over an opaque backdrop the general formula below reduces to this, with the same
-        // floating point result: the `(1 - ab)` term is exactly zero, the blend is the source and
-        // dividing by an alpha of exactly one changes nothing.
-        let keep = 1.0 - source_alpha;
+    if destination[3] == 255 {
+        // Shared with WGSL: 24-bit coverage keeps byte interpolation independent of FMA
+        // contraction and reciprocal rounding. The largest numerator is below u32::MAX.
+        const SCALE: u32 = 1 << 24;
+        let opacity = (opacity * SCALE as f32).round() as u32;
+        let alpha = (u32::from(source[3]) * opacity + 127) / 255;
+        let keep = SCALE - alpha;
         for channel in 0..3 {
-            let premultiplied = source_alpha * (source[channel] as f32 / 255.0)
-                + keep * (destination[channel] as f32 / 255.0);
-            destination[channel] = (premultiplied * 255.0).round() as u8;
+            let blended = u32::from(crate::blend8::blend8(
+                mode,
+                source[channel],
+                destination[channel],
+            ));
+            let backdrop = u32::from(destination[channel]);
+            destination[channel] = ((alpha * blended + keep * backdrop + SCALE / 2) / SCALE) as u8;
         }
         destination[3] = 255;
         return;

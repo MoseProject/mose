@@ -57,8 +57,10 @@ const FLAG_FLIP_Y: u32 = 32u;
 @group(0) @binding(3) var<storage, read> lut: array<vec4<f32>>;
 
 // Rust f32::round for non-negative values (half away from zero); WGSL round() is half-to-even.
+// Comparing the fraction also avoids rounding an already integral value when x + 0.5 loses precision.
 fn rnd(x: f32) -> f32 {
-    return floor(x + 0.5);
+    let integral = floor(x);
+    return integral + select(0.0, 1.0, x - integral >= 0.5);
 }
 
 @group(0) @binding(4) var<storage, read> softlight: array<u32>;
@@ -352,6 +354,22 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     } else if (backdrop_bytes.w == 0.0) {
         out_rgb = rgb_bytes;
         out_alpha = rnd(source_alpha * 255.0);
+    } else if (backdrop_bytes.w == 255.0) {
+        // Share the CPU's 24-bit fixed-point coverage for an opaque backdrop. Integer
+        // interpolation prevents backend FMA/division rounding from changing half-way bytes.
+        let scale = 16777216u;
+        let opacity = u32(rnd(p.opacity * f32(scale)));
+        let alpha = (u32(alpha_byte) * opacity + 127u) / 255u;
+        let keep = scale - alpha;
+        let source_bytes = vec3<u32>(rgb_bytes);
+        let backdrop = vec3<u32>(backdrop_bytes.xyz);
+        let blended = vec3<u32>(
+            blend_int(p.blend, source_bytes.x, backdrop.x),
+            blend_int(p.blend, source_bytes.y, backdrop.y),
+            blend_int(p.blend, source_bytes.z, backdrop.z),
+        );
+        out_rgb = vec3<f32>((alpha * blended + keep * backdrop + vec3<u32>(scale / 2u)) / scale);
+        out_alpha = 255.0;
     } else {
         let backdrop_alpha = backdrop_bytes.w / 255.0;
         let output_alpha = source_alpha + backdrop_alpha * (1.0 - source_alpha);
