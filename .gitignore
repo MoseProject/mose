@@ -14,6 +14,7 @@ e2e/__pycache__
 /token-optimizer/
 # Generated or local-only, never checked in
 /apps/desktop/coverage/
+/apps/desktop/storybook-static/
 .DS_Store
 /aqtinstall.log
 /mockup/
