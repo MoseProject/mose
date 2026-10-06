@@ -73,8 +73,8 @@ pub use bundle::{
     validate_bundled_resources, BundledResource, MissingBundleResources,
 };
 pub use collab_bundle::{
-    export_collab_bundle, import_collab_bundle, import_collab_bundle_with_limits, CollabBundleError,
-    CollabBundleImportLimits,
+    export_collab_bundle, import_collab_bundle, import_collab_bundle_with_limits,
+    CollabBundleError, CollabBundleImportLimits,
 };
 pub use dynamic_reframe::{
     augment_sample_times_for_cuts, fill_reframe_gaps, select_subject_center,

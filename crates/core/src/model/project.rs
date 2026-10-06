@@ -130,6 +130,39 @@ pub struct PanelLayout {
 }
 
 impl Project {
+    /// An immutable render snapshot. Waveforms belong to the editor and are not render inputs.
+    pub fn render_snapshot(&self) -> Self {
+        let Self {
+            id,
+            name,
+            last_edited,
+            summary,
+            media_library,
+            sequences,
+            active_sequence,
+            file_path,
+            panel_layout,
+            smart_bins,
+            recent_asset_ids,
+        } = self;
+        Self {
+            id: *id,
+            name: name.clone(),
+            last_edited: *last_edited,
+            summary: summary.clone(),
+            media_library: media_library
+                .iter()
+                .map(MediaAsset::clone_without_waveform)
+                .collect(),
+            sequences: sequences.clone(),
+            active_sequence: *active_sequence,
+            file_path: file_path.clone(),
+            panel_layout: *panel_layout,
+            smart_bins: smart_bins.clone(),
+            recent_asset_ids: recent_asset_ids.clone(),
+        }
+    }
+
     /// The active tab's timeline — what the Editor screen and every clip-editing `ui::App`
     /// method actually read. Panics if `active_sequence` is out of bounds, which shouldn't
     /// happen given `sequences` is never empty and every mutation keeps the index in range —

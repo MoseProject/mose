@@ -79,6 +79,18 @@ impl FrameSampler {
     /// a slow or missing sample by shrinking its result rather than failing the whole run over
     /// one frame, so that is this primitive's own contract.
     pub fn sample(&self, at_secs: f64, deadline: Duration) -> Option<SampledFrame> {
+        self.sample_scaled(at_secs, deadline, u32::MAX)
+    }
+
+    /// Samples directly into a bounded RGBA working plane, preserving aspect ratio.
+    /// Fractional analysis coordinates remain in source coordinates. Native decode memory is
+    /// still owned by the decoder; this bounds retained analysis pixels and avoids a full RGBA copy.
+    pub fn sample_scaled(
+        &self,
+        at_secs: f64,
+        deadline: Duration,
+        max_side: u32,
+    ) -> Option<SampledFrame> {
         let started = Instant::now();
         let never_cancelled = AtomicBool::new(false);
         let frame = self
@@ -90,19 +102,40 @@ impl FrameSampler {
         if started.elapsed() > deadline {
             return None;
         }
-        let (width, height) = (frame.width(), frame.height());
-        let row_bytes = width as usize * 4;
+        let (source_w, source_h) = (frame.width(), frame.height());
+        if source_w == 0 || source_h == 0 || max_side == 0 {
+            return None;
+        }
+        let scale = (max_side as f64 / source_w.max(source_h) as f64).min(1.0);
+        let width = ((source_w as f64 * scale).round() as u32).max(1);
+        let height = ((source_h as f64 * scale).round() as u32).max(1);
+        let len = (width as usize)
+            .checked_mul(height as usize)?
+            .checked_mul(4)?;
+        let mut rgba = vec![0; len];
         let stride = frame.stride_bytes();
         let pixels = frame.pixels();
-        let rgba = if stride == row_bytes {
-            pixels.get(..row_bytes * height as usize)?.to_vec()
-        } else {
-            let mut packed = Vec::with_capacity(row_bytes * height as usize);
+        if width == source_w && height == source_h {
+            let row_bytes = width as usize * 4;
             for row in 0..height as usize {
-                packed.extend_from_slice(pixels.get(row * stride..row * stride + row_bytes)?);
+                rgba[row * row_bytes..(row + 1) * row_bytes]
+                    .copy_from_slice(pixels.get(row * stride..row * stride + row_bytes)?);
             }
-            packed
-        };
+            return Some(SampledFrame {
+                width,
+                height,
+                rgba,
+            });
+        }
+        for y in 0..height as usize {
+            let sy = y * source_h as usize / height as usize;
+            for x in 0..width as usize {
+                let sx = x * source_w as usize / width as usize;
+                let source = sy.checked_mul(stride)?.checked_add(sx * 4)?;
+                let dest = (y * width as usize + x) * 4;
+                rgba[dest..dest + 4].copy_from_slice(pixels.get(source..source + 4)?);
+            }
+        }
         Some(SampledFrame {
             width,
             height,

@@ -82,6 +82,44 @@ fn default_has_audio() -> bool {
 }
 
 impl MediaAsset {
+    /// Clones render and display metadata without retaining waveform samples.
+    pub fn clone_without_waveform(&self) -> Self {
+        let Self {
+            id,
+            file_name,
+            source_path,
+            kind,
+            has_audio,
+            duration_secs,
+            codec,
+            source_bitrate_mbps,
+            resolution,
+            fps,
+            sample_rate_khz,
+            loudness,
+            proxy_path,
+            waveform_peaks: _,
+            favorited,
+        } = self;
+        Self {
+            id: *id,
+            file_name: file_name.clone(),
+            source_path: source_path.clone(),
+            kind: *kind,
+            has_audio: *has_audio,
+            duration_secs: *duration_secs,
+            codec: codec.clone(),
+            source_bitrate_mbps: *source_bitrate_mbps,
+            resolution: *resolution,
+            fps: *fps,
+            sample_rate_khz: *sample_rate_khz,
+            loudness: *loudness,
+            proxy_path: proxy_path.clone(),
+            waveform_peaks: None,
+            favorited: *favorited,
+        }
+    }
+
     /// This asset's duration as a display-ready timecode (e.g. `"02:14"`).
     pub fn duration_label(&self) -> String {
         format_timecode(self.duration_secs)
