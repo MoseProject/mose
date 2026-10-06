@@ -9,7 +9,7 @@ import {
   subscribeLocale,
   t,
   type TextKey,
-} from "./i18n";
+} from "../src/i18n";
 
 afterEach(() => {
   return setLocale("pt-BR");
@@ -43,8 +43,8 @@ describe("locale", () => {
     // text. Reading the file keeps this test honest about newly added keys.
     const { readFileSync } = await import("node:fs");
     const { resolve } = await import("node:path");
-    const source = readFileSync(resolve(__dirname, "i18n.ts"), "utf8");
-    const keys = [...source.matchAll(/^ {2}(\w+): \{/gm)].map((match) => {
+    const source = readFileSync(resolve(__dirname, "i18n/locales/en.ts"), "utf8");
+    const keys = [...source.matchAll(/^ {2}"?(\w+)"?:/gm)].map((match) => {
       return match[1] as TextKey;
     });
     expect(keys.length).toBeGreaterThan(100);
