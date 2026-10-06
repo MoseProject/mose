@@ -75,6 +75,11 @@ const FORMAT_VERSION: u8 = 1;
 /// keyframes, so 256 MiB is generous headroom, not a tight fit.
 const MAX_DECOMPRESSED_BYTES: u64 = 256 * 1024 * 1024;
 
+/// Largest encoded project produced from a payload within the decoding budget, including
+/// its magic, version, and size header. Bundle readers apply this before allocating input.
+pub(crate) const MAX_PROJECT_FILE_BYTES: u64 = (PROJECT_MAGIC.len() + 1 + 4) as u64
+    + lz4_flex::block::get_maximum_output_size(MAX_DECOMPRESSED_BYTES as usize) as u64;
+
 #[derive(Debug)]
 pub enum PersistError {
     Io(std::io::Error),

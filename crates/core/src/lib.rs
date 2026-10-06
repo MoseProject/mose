@@ -72,7 +72,10 @@ pub use bundle::{
     bundled_resource_path, bundled_resources_dir, configure_bundled_runtime, resource_path_in,
     validate_bundled_resources, BundledResource, MissingBundleResources,
 };
-pub use collab_bundle::{export_collab_bundle, import_collab_bundle, CollabBundleError};
+pub use collab_bundle::{
+    export_collab_bundle, import_collab_bundle, import_collab_bundle_with_limits, CollabBundleError,
+    CollabBundleImportLimits,
+};
 pub use dynamic_reframe::{
     augment_sample_times_for_cuts, fill_reframe_gaps, select_subject_center,
     smooth_subject_centers, sparse_crop_keyframes, CropKeyframeAxes, ReframeSample,

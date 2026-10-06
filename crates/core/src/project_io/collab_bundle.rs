@@ -35,11 +35,33 @@ use crate::proxy::{self, PreviewQuality};
 const PROJECT_ENTRY_NAME: &str = "project.ocproj";
 const PROXIES_ENTRY_PREFIX: &str = "proxies/";
 
+/// Extraction budgets for collaboration imports. Project data additionally follows the
+/// persistence format's encoded/decompressed size limits.
+#[derive(Debug, Clone, Copy)]
+pub struct CollabBundleImportLimits {
+    /// Maximum archive entries, including entries that will not be extracted.
+    pub max_entries: usize,
+    /// Maximum combined bytes of extracted proxy files, independent of ZIP size metadata.
+    pub max_proxy_bytes: u64,
+}
+
+impl Default for CollabBundleImportLimits {
+    fn default() -> Self {
+        // Handoffs may contain many hours of encoded video. These are safety ceilings,
+        // not performance targets; callers can supply a smaller disk budget or a larger handoff.
+        Self {
+            max_entries: 10_000,
+            max_proxy_bytes: 64 * 1024 * 1024 * 1024,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum CollabBundleError {
     Io(std::io::Error),
     Zip(zip::result::ZipError),
     Persist(PersistError),
+    Invalid(&'static str),
 }
 
 impl std::fmt::Display for CollabBundleError {
@@ -48,6 +70,9 @@ impl std::fmt::Display for CollabBundleError {
             CollabBundleError::Io(e) => write!(f, "failed to access the bundle file: {e}"),
             CollabBundleError::Zip(e) => write!(f, "failed to read/write the bundle archive: {e}"),
             CollabBundleError::Persist(e) => write!(f, "failed to (de)serialize the project: {e}"),
+            CollabBundleError::Invalid(reason) => {
+                write!(f, "invalid collaboration bundle: {reason}")
+            }
         }
     }
 }
@@ -137,50 +162,97 @@ fn safe_proxy_entry_filename(embedded_path: &str) -> Option<PathBuf> {
 /// first), if any — this is what lets preview work immediately without a source file present.
 /// Returns the loaded [`Project`] with `file_path` already set to `dest_project_path`, matching
 /// [`persistence::load_project_from_file`]'s convention of leaving that to the caller otherwise.
+/// Uses [`CollabBundleImportLimits::default`]: at most 10,000 entries and 64 GiB of proxies.
+/// Validates and stages all extracted files before replacing the destination project.
+/// A successful import replaces that project's proxy cache with the bundled proxies, preventing
+/// unrelated cached files from being reused. Callers must serialize imports to the same path.
 pub fn import_collab_bundle(
     zip_path: &Path,
     dest_project_path: &Path,
 ) -> Result<Project, CollabBundleError> {
+    import_collab_bundle_with_limits(
+        zip_path,
+        dest_project_path,
+        CollabBundleImportLimits::default(),
+    )
+}
+
+/// Imports with an explicit extraction budget. The project is replaced atomically only after
+/// proxy publication succeeds. On publication failure, the previous cache is restored; if
+/// restoration also fails, the error identifies the retained recovery directory.
+/// Project/cache replacement is not one crash-atomic filesystem transaction.
+pub fn import_collab_bundle_with_limits(
+    zip_path: &Path,
+    dest_project_path: &Path,
+    limits: CollabBundleImportLimits,
+) -> Result<Project, CollabBundleError> {
     let file = File::open(zip_path)?;
     let mut zip = zip::ZipArchive::new(file)?;
+    if zip.len() > limits.max_entries {
+        return Err(CollabBundleError::Invalid("too many archive entries"));
+    }
 
     let project_bytes = {
-        let mut entry = zip.by_name(PROJECT_ENTRY_NAME)?;
+        let entry = zip.by_name(PROJECT_ENTRY_NAME)?;
+        if entry.size() > persistence::MAX_PROJECT_FILE_BYTES {
+            return Err(CollabBundleError::Invalid("project entry is too large"));
+        }
         let mut bytes = Vec::new();
-        entry.read_to_end(&mut bytes)?;
+        entry
+            .take(persistence::MAX_PROJECT_FILE_BYTES + 1)
+            .read_to_end(&mut bytes)?;
+        if bytes.len() as u64 > persistence::MAX_PROJECT_FILE_BYTES {
+            return Err(CollabBundleError::Invalid("project entry is too large"));
+        }
         bytes
     };
-    if let Some(parent) = dest_project_path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    fs::write(dest_project_path, &project_bytes)?;
-
     let mut project: Project = persistence::from_project_bytes(&project_bytes)?;
+    if project.active_sequence >= project.sequences.len() {
+        return Err(CollabBundleError::Invalid("active sequence is missing"));
+    }
     project.file_path = Some(dest_project_path.to_path_buf());
 
+    let parent = dest_project_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent)?;
+    let staging = tempfile::tempdir_in(parent)?;
+    let staged_proxies = staging.path().join("proxies");
+    fs::create_dir(&staged_proxies)?;
     let proxy_dir = proxy::cache_dir_for_project(&project);
-    fs::create_dir_all(&proxy_dir)?;
-
-    let proxy_entry_names: Vec<String> = zip
-        .file_names()
-        .filter(|n| n.starts_with(PROXIES_ENTRY_PREFIX) && n.len() > PROXIES_ENTRY_PREFIX.len())
-        .map(str::to_string)
-        .collect();
-    for name in proxy_entry_names {
-        let file_name = &name[PROXIES_ENTRY_PREFIX.len()..];
-        // A bundle is attacker-controllable data (shared by a collaborator, or downloaded from
-        // anywhere) -- never trust an embedded entry path. `safe_proxy_entry_filename` keeps only
-        // the final path component, discarding any `../`/absolute-path segments a malicious
-        // archive might embed to write outside `proxy_dir` (zip-slip, CWE-22); an entry with no
-        // valid basename at all (e.g. `..`, `.`, or a bare separator) is skipped rather than
-        // guessed at, matching this function's existing "known gap, not silently wrong" tolerance
-        // for other partial/malformed bundle contents.
+    let mut proxy_bytes = 0u64;
+    for index in 0..zip.len() {
+        let entry = zip.by_index_raw(index)?;
+        if entry.is_dir() {
+            continue;
+        }
+        let Some(file_name) = entry.name().strip_prefix(PROXIES_ENTRY_PREFIX) else {
+            continue;
+        };
+        // Preserve flat-name extraction, but reject collisions instead of silently overwriting
+        // an earlier staged entry. All files are created in a fresh, private staging directory.
         let Some(safe_name) = safe_proxy_entry_filename(file_name) else {
             continue;
         };
-        let mut entry = zip.by_name(&name)?;
-        let mut out = File::create(proxy_dir.join(safe_name))?;
-        io::copy(&mut entry, &mut out)?;
+        let remaining = limits.max_proxy_bytes - proxy_bytes;
+        if entry.size() > remaining {
+            return Err(CollabBundleError::Invalid(
+                "proxy extraction budget exceeded",
+            ));
+        }
+        // Open a decoder only for an entry that will actually be extracted.
+        drop(entry);
+        let entry = zip.by_index(index)?;
+        let mut out = File::create_new(staged_proxies.join(safe_name))?;
+        let copied = io::copy(&mut entry.take(remaining.saturating_add(1)), &mut out)?;
+        if copied > remaining {
+            return Err(CollabBundleError::Invalid(
+                "proxy extraction budget exceeded",
+            ));
+        }
+        proxy_bytes += copied;
+        out.sync_all()?;
     }
 
     for asset in &mut project.media_library {
@@ -191,10 +263,66 @@ pub fn import_collab_bundle(
         ]
         .into_iter()
         .map(|quality| proxy::proxy_path_for(&asset.source_path, &proxy_dir, quality))
-        .find(|candidate| candidate.exists());
+        .find(|candidate| {
+            candidate
+                .file_name()
+                .is_some_and(|name| staged_proxies.join(name).is_file())
+        });
     }
 
+    let mut staged_project = tempfile::NamedTempFile::new_in(staging.path())?;
+    staged_project.write_all(&project_bytes)?;
+    staged_project.as_file().sync_all()?;
+    publish_import(staging, staged_project, dest_project_path, &proxy_dir)?;
     Ok(project)
+}
+
+fn publish_import(
+    staging: tempfile::TempDir,
+    project: tempfile::NamedTempFile,
+    dest_project_path: &Path,
+    proxy_dir: &Path,
+) -> Result<(), CollabBundleError> {
+    let backup = staging.path().join("previous-proxies");
+    let had_cache = match fs::symlink_metadata(proxy_dir) {
+        Ok(metadata) if metadata.is_dir() => true,
+        Ok(_) => return Err(CollabBundleError::Invalid("proxy cache is not a directory")),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => false,
+        Err(error) => return Err(error.into()),
+    };
+    if had_cache {
+        fs::rename(proxy_dir, &backup)?;
+    }
+    let mut installed_cache = false;
+    let published = fs::rename(staging.path().join("proxies"), proxy_dir).and_then(|()| {
+        installed_cache = true;
+        project
+            .persist(dest_project_path)
+            .map(drop)
+            .map_err(|error| error.error)
+    });
+    if let Err(publish_error) = published {
+        let restored = (|| {
+            if installed_cache {
+                fs::rename(proxy_dir, staging.path().join("failed-proxies"))?;
+            }
+            if had_cache {
+                fs::rename(&backup, proxy_dir)?;
+            }
+            Ok::<(), io::Error>(())
+        })();
+        if let Err(restore_error) = restored {
+            let recovery = staging.keep();
+            return Err(io::Error::other(format!(
+                "bundle publication failed: {publish_error}; cache restoration failed: \
+                 {restore_error}; recovery files retained at {}",
+                recovery.display()
+            ))
+            .into());
+        }
+        return Err(publish_error.into());
+    }
+    Ok(())
 }
 
 #[cfg(test)]
