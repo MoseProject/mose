@@ -416,3 +416,32 @@ Rust formatting checks for the changed project I/O modules, and `git diff --chec
 The first compilation attempt failed while spawning a native compiler with
 `Resource temporarily unavailable`; the single-job retry completed successfully.
 The AST graph was refreshed. No tests or performance benchmarks were added or run.
+
+## Correction batch 3: nested render cache inputs
+
+F08 invalidation changes:
+
+- Traverse descendants and check cycles before accepting a cache hit. Record descendant render
+  generations so a grandchild edit or re-render invalidates its ancestors even when their own
+  timeline text has not changed.
+- Include the sequence's export settings and referenced media's render fields (source path,
+  resolution, frame rate, bitrate, audio presence). The key excludes waveforms and display data.
+- Record size/mtime revisions of referenced source files and active LUT/mask files. Missing or
+  unreadable revisions prevent reuse. Also verify the output file's revision before reusing it.
+- Partition entries by project ID, project path, and cache directory; remove entries from other
+  project namespaces and deleted sequences before traversal. Equivalent input data with the same
+  namespace remains reusable rather than relying on sequence ID alone.
+- Apply the child sequence's export aspect ratio to its render canvas, matching ordinary export
+  preparation. Nested render normalization already used its own target LUFS.
+- Rebuild desktop preview when export settings of a referenced nested sequence change. Preserve
+  the existing behavior of ignoring export-only settings for an unreferenced active sequence.
+
+Remaining limits: size/mtime revisions are not content hashes and require another materialization
+call to observe filesystem changes; this does not introduce a file watcher. Nested output names
+are still shared between preview and export caches, so concurrent writers and the lifetime of
+files consumed by queued exports need a separate artifact-ownership correction. Session-lock
+duration in F07 is unchanged. Runtime cache/cycle/aspect-ratio regressions remain pending.
+
+Validation: `FFMPEG_DIR=/opt/homebrew CARGO_BUILD_JOBS=1 cargo check -p desktop --offline`
+passed, including core and the desktop preview integration. Rust formatting checks and
+`git diff --check` passed, and the AST graph was refreshed. No tests or benchmarks were run.
