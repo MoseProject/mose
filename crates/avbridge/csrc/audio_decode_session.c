@@ -175,6 +175,9 @@ DecodeStatus avbridge_audio_seek(AvbridgeAudioSession *session, double timestamp
     AVStream *stream = session->format->streams[session->stream_index];
     int64_t target =
         av_rescale_q((int64_t)(timestamp_secs * AV_TIME_BASE), AV_TIME_BASE_Q, stream->time_base);
+    /* AAC can have a priming packet before timestamp zero. Seeking directly to zero skips
+       that packet and leaves the first decoded block silent while overlap state rebuilds. */
+    if (timestamp_secs == 0.0) target = INT64_MIN;
     if (av_seek_frame(session->format, session->stream_index, target, AVSEEK_FLAG_BACKWARD) < 0)
         return DECODE_ERR_SEEK;
     avcodec_flush_buffers(session->decoder);
