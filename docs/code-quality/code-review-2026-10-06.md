@@ -381,3 +381,38 @@ crates/avbridge/csrc/loudness.c`, Rust formatting check, and `git diff --check` 
 The AST graph was refreshed. Runtime regressions, ASan, race detection, and Windows compilation
 have not been run; these fixes have compilation evidence rather than runtime validation.
 The remaining findings are still pending.
+
+## Correction batch 2: collaboration bundle import
+
+Initial corrections were committed separately: `93f437da` (avbridge) and `289319f7` (review).
+
+F09 implementation:
+
+- Bound the ZIP project entry both by advertised size and actual bytes read. Derive its encoded
+  ceiling from the existing 256 MiB persistence payload limit and LZ4's maximum encoded size,
+  keeping the format's header allowance in the persistence module.
+- Deserialize the project and reject a missing active sequence before touching destination files.
+- Stage all proxy files in a fresh temporary directory on the destination filesystem. Preserve
+  basename sanitization, reject duplicate staged filenames, and verify reads/checksums before
+  publishing. Unknown entries are inspected without opening an unnecessary decoder.
+- Provide explicit import budgets, with defaults of 10,000 archive entries and 64 GiB of total
+  extracted proxies. These are safety policies rather than measured optimal values; callers can
+  select smaller budgets or explicitly permit larger valid handoffs. Actual streamed byte counts
+  enforce the disk budget independently of advertised ZIP sizes.
+- Flush staged files, retain the previous proxy cache as a backup, and publish the project with
+  an atomic tempfile replacement only after the new proxy cache is installed. Restore the cache
+  if publication fails; retain recovery files and report their location if restoration also fails.
+- Successful imports replace the cache with bundled proxies, so unrelated old proxy files cannot
+  silently satisfy the imported project's lookup. Concurrent imports to one destination must be
+  serialized by the caller.
+
+Limitations: project/cache publication spans multiple filesystem operations and is not a single
+crash-atomic transaction. The ZIP library still parses its central directory before the entry
+count is checked; this batch bounds project reading and extraction, not every internal ZIP parser
+allocation. Runtime fault-injection and Windows validation remain pending.
+
+Validation: `FFMPEG_DIR=/opt/homebrew CARGO_BUILD_JOBS=1 cargo check -p core --offline`,
+Rust formatting checks for the changed project I/O modules, and `git diff --check` passed.
+The first compilation attempt failed while spawning a native compiler with
+`Resource temporarily unavailable`; the single-job retry completed successfully.
+The AST graph was refreshed. No tests or performance benchmarks were added or run.
