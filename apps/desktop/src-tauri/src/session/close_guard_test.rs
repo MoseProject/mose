@@ -63,7 +63,12 @@ fn a_pending_export_holds_the_close_back_until_it_is_done() {
     h.add_fixture_clip();
     h.session().dirty = false;
     let output = path_in(&h.dir, "closing.mp4");
-    crate::commands::export::start_export(h.handle(), output.display().to_string(), false).unwrap();
+    tauri::async_runtime::block_on(crate::commands::export::start_export(
+        h.handle(),
+        output.display().to_string(),
+        false,
+    ))
+    .unwrap();
 
     let request = pending_loss(&h.handle()).expect("the export is still running");
     assert!(request.exporting);
@@ -82,8 +87,12 @@ fn a_failed_export_does_not_block_closing() {
     h.add_fixture_clip();
     h.session().dirty = false;
     let blocked = path_in(&h.dir, "no-such-dir").join("out.mp4");
-    crate::commands::export::start_export(h.handle(), blocked.display().to_string(), false)
-        .unwrap();
+    tauri::async_runtime::block_on(crate::commands::export::start_export(
+        h.handle(),
+        blocked.display().to_string(),
+        false,
+    ))
+    .unwrap();
 
     wait_until_nothing_is_pending(&h);
     let jobs = crate::commands::export::list_exports(h.state());

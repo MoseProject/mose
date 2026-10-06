@@ -180,6 +180,8 @@ pub struct AppState {
     pub prefs: Mutex<PrefsDocument>,
     pub preview: PreviewEngine,
     pub exports: Arc<ExportQueue>,
+    /// Admission for one export preparation, whose nested renders share one mutable cache.
+    pub export_preparing: Arc<std::sync::atomic::AtomicBool>,
     /// What `Ctrl+C`/`Ctrl+X` last captured, for `Ctrl+V` -- transient, never serialized, and
     /// not scoped to a project or sequence, same as `ui::App::clipboard_clip`.
     pub clip_clipboard: Mutex<Option<(Vec<ClipInstance>, TrackKind)>>,
@@ -246,6 +248,7 @@ impl AppState {
             prefs: Mutex::new(prefs),
             preview,
             exports,
+            export_preparing: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             clip_clipboard: Mutex::new(None),
             formatting_clipboard: Mutex::new(None),
             transcribing_asset_id: Mutex::new(None),

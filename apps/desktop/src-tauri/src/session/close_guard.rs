@@ -14,8 +14,10 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! Closing the window must not throw away work without asking. When the project has unsaved
-//! changes or an export is still queued or rendering, the close is held back and the webview is
+//! changes or an export is preparing, queued, or rendering, the close is held back and the webview is
 //! asked to confirm; [`quit_app`] is what it calls once the user agrees.
+
+use std::sync::atomic::Ordering;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
@@ -30,7 +32,7 @@ pub const CLOSE_REQUESTED_EVENT: &str = "close-requested";
 pub struct CloseRequest {
     /// The open project has changes that were never saved.
     pub dirty: bool,
-    /// At least one export is waiting or running and would be lost.
+    /// At least one export is preparing, waiting, or running and would be lost.
     pub exporting: bool,
 }
 
@@ -38,14 +40,15 @@ pub struct CloseRequest {
 pub fn pending_loss<R: Runtime>(app: &AppHandle<R>) -> Option<CloseRequest> {
     let state = app.state::<AppState>();
     let dirty = state.session().dirty;
-    let exporting = state.exports.snapshot().iter().any(|job| {
-        matches!(
-            job.status,
-            avcore::ExportJobStatus::Queued
-                | avcore::ExportJobStatus::Rendering { .. }
-                | avcore::ExportJobStatus::Paused { .. }
-        )
-    });
+    let exporting = state.export_preparing.load(Ordering::Acquire)
+        || state.exports.snapshot().iter().any(|job| {
+            matches!(
+                job.status,
+                avcore::ExportJobStatus::Queued
+                    | avcore::ExportJobStatus::Rendering { .. }
+                    | avcore::ExportJobStatus::Paused { .. }
+            )
+        });
     (dirty || exporting).then_some(CloseRequest { dirty, exporting })
 }
 

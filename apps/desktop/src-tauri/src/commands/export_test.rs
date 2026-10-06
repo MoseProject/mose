@@ -3,6 +3,15 @@ use avcore::{ExportJobStatus, GpuEncoderPreference};
 use super::*;
 use crate::testing::{harness, path_in, Harness};
 
+/// Existing synchronous assertions await the command's asynchronous preparation boundary.
+fn start_export(
+    app: tauri::AppHandle<tauri::test::MockRuntime>,
+    path: String,
+    rename: bool,
+) -> Result<u64, String> {
+    tauri::async_runtime::block_on(super::start_export(app, path, rename))
+}
+
 /// Waits until every queued export has finished one way or the other.
 fn wait_exports(h: &Harness) {
     let started = std::time::Instant::now();

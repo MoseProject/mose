@@ -1,4 +1,8 @@
 use std::path::{Path, PathBuf};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
 use avcore::GpuEncoderPreference;
 use tauri::{AppHandle, Manager, Runtime, State};
@@ -38,44 +42,82 @@ pub async fn pick_export_path<R: Runtime>(
 /// Queues the active sequence for export to `path`. With `rename`, an existing file is kept and
 /// the output goes to the next free `<stem> (n)` sibling instead of overwriting it.
 #[tauri::command]
-pub fn start_export<R: Runtime>(
+pub async fn start_export<R: Runtime>(
     app: AppHandle<R>,
     path: String,
     rename: bool,
 ) -> Result<u64, String> {
-    let (prepared, title) = {
+    let permit = {
+        let state = app.state::<AppState>();
+        ExportPreparationPermit::acquire(Arc::clone(&state.export_preparing))?
+    };
+    let project = {
         let state = app.state::<AppState>();
         let session = state.session();
-        // A compound clip needs its nested sequence rendered and merged in first -- same
-        // synchronous, blocks-this-call tradeoff `ui::App`'s own export path takes (see
-        // `avcore::nested_sequence`'s doc comment), cached across exports via
-        // `AppState::nested_sequence_cache` so re-exporting the same sequence doesn't re-render
-        // unchanged nested content.
-        let project = {
-            let cache_dir = avcore::nested_sequence::cache_dir_for_project(&session.project);
-            let mut cache = crate::state::lock_or_recover(&state.nested_sequence_cache);
-            let nested_assets = avcore::nested_sequence::materialize_nested_sequences(
-                &session.project,
-                session.project.timeline(),
-                &cache_dir,
-                &mut cache,
-            )
-            .map_err(|e| e.to_string())?;
-            let mut project = session.project.clone();
-            project.media_library.extend(nested_assets.into_values());
-            project
-        };
-        (
-            prepare_export(&project)?,
-            session.project.active_sequence().name.clone(),
-        )
+        session.project.clone()
     };
+    let (reply, result) = tokio::sync::oneshot::channel();
+    std::thread::Builder::new()
+        .name("export-preparation".to_string())
+        .spawn(move || {
+            let prepared = prepare_and_enqueue_export(app, project, path, rename);
+            drop(permit);
+            let _ = reply.send(prepared);
+        })
+        .map_err(|error| format!("failed to start export preparation: {error}"))?;
+    result
+        .await
+        .map_err(|_| "export preparation stopped before completion".to_string())?
+}
+
+/// Releases admission on success, early errors, a failed spawn, or a worker panic.
+struct ExportPreparationPermit(Arc<AtomicBool>);
+
+impl ExportPreparationPermit {
+    fn acquire(running: Arc<AtomicBool>) -> Result<Self, String> {
+        running
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .map_err(|_| "exportPreparationBusy".to_string())?;
+        Ok(Self(running))
+    }
+}
+
+impl Drop for ExportPreparationPermit {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
+    }
+}
+
+fn prepare_and_enqueue_export<R: Runtime>(
+    app: AppHandle<R>,
+    mut project: avcore::Project,
+    path: String,
+    rename: bool,
+) -> Result<u64, String> {
     let mut output = PathBuf::from(path);
     if rename && output.exists() {
         output = avcore::next_available_path(&output);
     }
     let exports = app.state::<AppState>().exports.clone();
-    check_output_is_free(&app, &exports, &output)?;
+    check_output_is_free(&app, &exports, &output, &project)?;
+    let title = project.active_sequence().name.clone();
+    let nested_assets = {
+        let state = app.state::<AppState>();
+        let cache_dir = avcore::nested_sequence::cache_dir_for_project(&project);
+        let mut cache = crate::state::lock_or_recover(&state.nested_sequence_cache);
+        avcore::nested_sequence::materialize_nested_sequences(
+            &project,
+            project.timeline(),
+            &cache_dir,
+            &mut cache,
+        )
+        .map_err(|error| error.to_string())?
+    };
+    project.media_library.extend(nested_assets.into_values());
+    let prepared = prepare_export(&project)?;
+    // Project switches during preparation do not change the requested export. Protect both
+    // that snapshot's inputs (including materialized children) and the currently open media.
+    check_output_is_free(&app, &exports, &output, &project)?;
     Ok(exports.enqueue(app.clone(), title, output, prepared))
 }
 
@@ -98,19 +140,27 @@ fn check_output_is_free<R: Runtime>(
     app: &AppHandle<R>,
     exports: &crate::export::ExportQueue,
     output: &Path,
+    snapshot: &avcore::Project,
 ) -> Result<(), String> {
-    let is_source = {
+    let (current_sources, current_nested_cache): (Vec<PathBuf>, PathBuf) = {
         let state = app.state::<AppState>();
         let session = state.session();
-        session.project.media_library.iter().any(|asset| {
-            same_file(&asset.source_path, output)
-                || asset
-                    .proxy_path
-                    .as_deref()
-                    .is_some_and(|proxy| same_file(proxy, output))
-        })
+        (
+            source_paths(&session.project)
+                .map(Path::to_path_buf)
+                .collect(),
+            avcore::nested_sequence::cache_dir_for_project(&session.project),
+        )
     };
-    if is_source {
+    let snapshot_nested_cache = avcore::nested_sequence::cache_dir_for_project(snapshot);
+    // Reject cache destinations before materialization can write its own output there.
+    let is_cache_output = output.parent().is_some_and(|parent| {
+        same_file(parent, &snapshot_nested_cache) || same_file(parent, &current_nested_cache)
+    });
+    let is_source = source_paths(snapshot)
+        .chain(current_sources.iter().map(PathBuf::as_path))
+        .any(|source| same_file(source, output));
+    if is_source || is_cache_output {
         return Err("outputIsSource".to_string());
     }
     let busy = exports.snapshot().iter().any(|job| {
@@ -123,6 +173,12 @@ fn check_output_is_free<R: Runtime>(
         return Err("outputInQueue".to_string());
     }
     Ok(())
+}
+
+fn source_paths(project: &avcore::Project) -> impl Iterator<Item = &Path> {
+    project.media_library.iter().flat_map(|asset| {
+        std::iter::once(asset.source_path.as_path()).chain(asset.proxy_path.as_deref())
+    })
 }
 
 #[tauri::command]
