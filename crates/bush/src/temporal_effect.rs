@@ -13,3 +13,7 @@ pub(crate) trait TemporalEffect {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "temporal_effect_test.rs"]
+mod tests;
