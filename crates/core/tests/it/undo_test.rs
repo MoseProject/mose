@@ -160,3 +160,29 @@ fn small_timelines_keep_every_step_up_to_the_capacity() {
     }
     assert_eq!(kept, 100);
 }
+
+#[test]
+fn dynamic_snapshot_payloads_evict_history_and_keep_one_oversized_step() {
+    let mut stack = UndoStack::with_limits(10, 10_000);
+    stack.push(sequence_named("small"));
+    let large = sequence_named(&"x".repeat(8_000));
+    stack.push(large.clone());
+    assert_eq!(stack.undo(sequence_named("current")), Some(large));
+    assert!(
+        !stack.can_undo(),
+        "the older small snapshot must be evicted"
+    );
+    assert!(stack.can_redo());
+}
+
+#[test]
+fn undo_and_redo_share_the_zero_byte_budget_but_preserve_the_newest_step() {
+    let mut stack = UndoStack::with_limits(10, 0);
+    stack.push(sequence_named("before"));
+    let restored = stack.undo(sequence_named("after")).unwrap();
+    assert_eq!(restored.name, "before");
+    assert!(!stack.can_undo());
+    assert_eq!(stack.redo(restored).unwrap().name, "after");
+    assert!(!stack.can_redo());
+    assert!(stack.can_undo());
+}

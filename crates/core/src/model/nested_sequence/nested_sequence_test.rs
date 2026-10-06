@@ -321,7 +321,7 @@ fn reuses_the_cached_render_when_the_nested_timeline_is_unchanged() {
     nested_clip.nested_sequence_id = Some(2);
     let parent_timeline = timeline_with(vec![video_track(1, vec![nested_clip])]);
 
-    let proj = project(
+    let mut proj = project(
         vec![sequence(1, parent_timeline.clone()), child],
         vec![asset],
     );
@@ -340,6 +340,54 @@ fn reuses_the_cached_render_when_the_nested_timeline_is_unchanged() {
     let second_path = second.get(&2).unwrap().source_path.clone();
 
     assert_eq!(first_path, second_path, "same cached render path reused");
+    let lease = cache.get(&2).unwrap().artifact();
+    proj.sequences[1].timeline.clip_mut(1).unwrap().gain_db = 3.0;
+    let changed =
+        materialize_nested_sequences(&proj, &parent_timeline, &cache_dir, &mut cache).unwrap();
+    let changed_path = changed.get(&2).unwrap().source_path.clone();
+    assert_ne!(
+        changed_path, first_path,
+        "an edited child needs a new immutable render"
+    );
+    assert!(
+        first_path.exists(),
+        "the old consumer still owns its render"
+    );
+    let changed_lease = cache.get(&2).unwrap().artifact();
+    cache.clear();
+    assert!(changed_path.exists());
+    drop(changed_lease);
+    assert!(!changed_path.exists());
+    assert!(
+        first_path.exists(),
+        "a consumer lease must keep the render alive"
+    );
+    drop(lease);
+    assert!(
+        !first_path.exists(),
+        "the last lease must release the render"
+    );
 
     let _ = std::fs::remove_dir_all(&cache_dir);
+}
+
+#[test]
+fn cancelled_materialization_creates_no_render_or_cache_entry() {
+    let mut nested = clip(10, 0, 0.0, 0.0, 0.3);
+    nested.nested_sequence_id = Some(2);
+    let parent = timeline_with(vec![video_track(1, vec![nested])]);
+    let child = timeline_with(vec![]);
+    let proj = project(
+        vec![sequence(1, parent.clone()), sequence(2, child)],
+        vec![],
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let mut cache = HashMap::new();
+    let cancel = AtomicBool::new(true);
+    assert!(matches!(
+        materialize_nested_sequences_with_cancel(&proj, &parent, dir.path(), &mut cache, &cancel),
+        Err(RenderError::Cancelled)
+    ));
+    assert!(cache.is_empty());
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
 }

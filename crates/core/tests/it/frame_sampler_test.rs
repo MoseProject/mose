@@ -91,3 +91,29 @@ fn an_expired_deadline_skips_the_sample() {
     let sampler = FrameSampler::open(&fixture("video.mp4")).unwrap();
     assert!(sampler.sample(0.5, Duration::ZERO).is_none());
 }
+
+#[test]
+fn scaled_samples_bound_pixels_preserve_aspect_and_do_not_upscale() {
+    let sampler = FrameSampler::open(&fixture("video.mp4")).unwrap();
+    let full = sampler.sample(0.0, Duration::from_secs(10)).unwrap();
+    let scaled = sampler
+        .sample_scaled(0.0, Duration::from_secs(10), 32)
+        .unwrap();
+    assert_eq!(
+        scaled.width.max(scaled.height),
+        32.min(full.width.max(full.height))
+    );
+    assert_eq!(
+        scaled.rgba.len(),
+        (scaled.width * scaled.height * 4) as usize
+    );
+    let expected_height = full.height as f64 * scaled.width as f64 / full.width as f64;
+    assert!((scaled.height as f64 - expected_height).abs() <= 1.0);
+    let unchanged = sampler
+        .sample_scaled(0.0, Duration::from_secs(10), u32::MAX)
+        .unwrap();
+    assert_eq!(unchanged.rgba, full.rgba);
+    assert!(sampler
+        .sample_scaled(0.0, Duration::from_secs(10), 0)
+        .is_none());
+}
