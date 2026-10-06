@@ -445,3 +445,36 @@ duration in F07 is unchanged. Runtime cache/cycle/aspect-ratio regressions remai
 Validation: `FFMPEG_DIR=/opt/homebrew CARGO_BUILD_JOBS=1 cargo check -p desktop --offline`
 passed, including core and the desktop preview integration. Rust formatting checks and
 `git diff --check` passed, and the AST graph was refreshed. No tests or benchmarks were run.
+
+## Correction batch 4: export preparation
+
+F07 lock-duration and dispatch changes:
+
+- Capture a project snapshot under the session lock, then perform nested rendering and export
+  preparation on a named native worker. The asynchronous Tauri command awaits a oneshot reply;
+  FFmpeg work no longer runs while holding the session mutex or on the command executor.
+- Admit one preparation per application before cloning or spawning. The shared nested-render
+  cache already serializes this work; explicit admission avoids accumulating waiting workers
+  and project snapshots. Translate the busy error in both frontend languages. This is an
+  admission policy, not a benchmark-derived optimal worker count.
+- Release admission through an ownership guard on success, errors, failed thread creation, and
+  worker unwind. Release it before delivering the result so the next request can proceed.
+- Preserve the project captured at request time even if the user edits or switches projects
+  during preparation. Protect both its source/proxy paths and those of the currently open
+  project when checking the output. Copy current paths under the session lock and perform
+  filesystem canonicalization outside it. Reject destinations in either nested-render cache.
+- Include preparation in the close guard before an export job has entered the queue. Adapt
+  existing Rust test callers to await the command without introducing new test cases.
+
+Remaining limits: preparation has no cancellation control; dropping the IPC reply does not stop
+the worker or prevent the requested job from entering the queue. The snapshot still clones the
+complete project, including waveform data (F11), and retains it during preparation. Shared
+nested-render artifact ownership (F08) and broader output-path reservation races remain pending.
+No runtime responsiveness, CPU, RAM, or throughput improvement has been measured.
+
+Validation: `FFMPEG_DIR=/opt/homebrew CARGO_BUILD_JOBS=1 cargo check -p desktop --all-targets
+--offline`, formatting checks for the five changed Rust files, and `git diff --check` passed.
+This compiles existing test targets without executing them. The frontend error mapping and both
+locale entries were inspected; frontend type checking was unavailable because the local
+`node_modules/.bin/tsc` executable is absent. The AST graph was refreshed. No tests or benchmarks
+were added or run.
