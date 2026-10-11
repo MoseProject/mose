@@ -185,3 +185,50 @@ fn a_limit_shrinks_the_decoded_frame_and_keeps_its_content() {
     assert_eq!((again.width(), again.height()), (info.width, info.height));
     assert_eq!(again.pixels(), full.pixels());
 }
+
+#[test]
+fn decoded_video_is_opaque_whatever_its_size() {
+    let cancel = AtomicBool::new(false);
+    let mut source = DecodeSource::open(&fixture()).unwrap();
+    let info = source.info();
+    assert!(source.frame_at(0.4, &cancel).unwrap().unwrap().is_opaque());
+    source.set_output_limit(Some((info.width / 2, info.height / 2)));
+    assert!(source.frame_at(0.4, &cancel).unwrap().unwrap().is_opaque());
+}
+
+/// swscale left the alpha of the last pixels of each row unwritten when the width is not a
+/// multiple of 8 -- the default 480p proxy is 854 wide -- which showed as a transparent strip.
+#[test]
+fn a_width_that_is_not_a_multiple_of_eight_is_opaque_to_the_last_pixel() {
+    let Some(ffmpeg) = ["ffmpeg"].into_iter().find(|name| {
+        std::process::Command::new(name)
+            .arg("-version")
+            .output()
+            .is_ok()
+    }) else {
+        return;
+    };
+    let dir = std::env::temp_dir().join(format!("bush-odd-width-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let cancel = AtomicBool::new(false);
+    for width in [642, 850, 854, 1366] {
+        let path = dir.join(format!("w{width}.mp4"));
+        let made = std::process::Command::new(ffmpeg)
+            .args(["-v", "error", "-y", "-f", "lavfi", "-i"])
+            .arg(format!("testsrc2=size={width}x120:rate=30:duration=0.5"))
+            .args(["-c:v", "mpeg4", "-pix_fmt", "yuv420p"])
+            .arg(&path)
+            .status()
+            .unwrap();
+        assert!(made.success());
+        let mut source = DecodeSource::open(&path).unwrap();
+        let frame = source.frame_at(0.2, &cancel).unwrap().unwrap();
+        assert_eq!(frame.width(), width);
+        assert!(frame.is_opaque(), "{width} px wide has see-through pixels");
+        // Also when the frame is reduced on the way out.
+        source.set_output_limit(Some((width / 2, 60)));
+        let reduced = source.frame_at(0.2, &cancel).unwrap().unwrap();
+        assert!(reduced.is_opaque(), "{width} px wide, reduced");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
