@@ -407,3 +407,52 @@ fn an_empty_media_path_is_rejected() {
         SceneError::EmptyMediaPath
     );
 }
+
+mod decode_limit {
+    use bush::{CropRect, LayerTransform, Placement};
+
+    fn fitted() -> Placement {
+        Placement {
+            fit_canvas: true,
+            ..Placement::default()
+        }
+    }
+
+    #[test]
+    fn a_stretched_layer_needs_the_canvas_size_over_its_crop() {
+        assert_eq!(fitted().decode_limit(1280, 720), Some((1280, 720)));
+        let zoomed = Placement {
+            transform: LayerTransform {
+                scale_x: 2.0,
+                scale_y: 2.0,
+                crop: CropRect {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 0.5,
+                    height: 0.5,
+                },
+                ..LayerTransform::default()
+            },
+            ..fitted()
+        };
+        assert_eq!(zoomed.decode_limit(1280, 720), Some((5120, 2880)));
+    }
+
+    #[test]
+    fn anything_that_reads_source_pixels_one_by_one_keeps_the_decoded_size() {
+        assert_eq!(Placement::default().decode_limit(1280, 720), None);
+        for tweak in [
+            (|p: &mut Placement| p.blur_sigma = 2.0) as fn(&mut Placement),
+            |p| p.sharpen = 1.0,
+            |p| p.glitch = 0.5,
+            |p| p.shake = 5.0,
+            |p| p.stabilize = Some(0.5),
+            |p| p.effects.pixelize_block = 8,
+            |p| p.effects.blur_sigma = 3.0,
+        ] {
+            let mut placement = fitted();
+            tweak(&mut placement);
+            assert_eq!(placement.decode_limit(1280, 720), None);
+        }
+    }
+}

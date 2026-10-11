@@ -145,3 +145,43 @@ fn a_target_further_than_the_frame_cap_is_a_search_limit_error() {
     // The same request within the default cap succeeds.
     assert!(source.frame_at(0.6, &cancel).unwrap().is_some());
 }
+
+fn mean_rgb(frame: &bush::VideoFrame) -> [f64; 3] {
+    let mut sum = [0u64; 3];
+    for pixel in frame.pixels().chunks_exact(4) {
+        for channel in 0..3 {
+            sum[channel] += u64::from(pixel[channel]);
+        }
+    }
+    let count = (frame.pixels().len() / 4) as f64;
+    sum.map(|total| total as f64 / count)
+}
+
+#[test]
+fn a_limit_shrinks_the_decoded_frame_and_keeps_its_content() {
+    let cancel = AtomicBool::new(false);
+    let mut source = DecodeSource::open(&fixture()).unwrap();
+    let info = source.info();
+    let full = source.frame_at(0.4, &cancel).unwrap().unwrap();
+    assert_eq!((full.width(), full.height()), (info.width, info.height));
+
+    // A box about a third of the size: the aspect ratio stays, the average colour stays.
+    source.set_output_limit(Some((info.width / 3, info.height / 3)));
+    let small = source.frame_at(0.4, &cancel).unwrap().unwrap();
+    assert!(small.width() <= info.width / 3 + 1 && small.width() >= info.width / 3);
+    assert!(small.height() <= info.height / 3 + 1 && small.height() >= info.height / 3);
+    assert_eq!(
+        small.pixels().len(),
+        small.width() as usize * small.height() as usize * 4
+    );
+    for (a, b) in mean_rgb(&full).iter().zip(mean_rgb(&small)) {
+        assert!((a - b).abs() < 3.0, "mean colour moved from {a} to {b}");
+    }
+
+    // A box that is not smaller, or none, goes back to the decoded size, and the frame held for
+    // a repeated target is not the small one.
+    source.set_output_limit(Some((info.width * 2, info.height * 2)));
+    let again = source.frame_at(0.4, &cancel).unwrap().unwrap();
+    assert_eq!((again.width(), again.height()), (info.width, info.height));
+    assert_eq!(again.pixels(), full.pixels());
+}
