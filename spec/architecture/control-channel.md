@@ -19,3 +19,19 @@ agents). Idea taken from FilmCraft's JSON control channel, deliberately smaller.
 
 Code: `src-tauri/src/control.rs` (server, token, hub), `src/control.ts` (window side).
 Not built, on purpose: calling backend commands by name, remote (non-loopback) access.
+
+## MCP server
+
+`crates/mcp` builds `oca-mcp`, a Model Context Protocol server on stdio (newline-delimited
+JSON-RPC 2.0) that lets an agent drive the running app through the channel above. It is a
+standalone binary, like `ytbridge`: it depends only on `serde_json`.
+
+1. Start the app with `OCA_CONTROL_PORT=0`; it writes `control.json` to its config directory
+   (`%APPDATA%\com.pacopacoca.oca`, `~/.config/com.pacopacoca.oca` or
+   `~/Library/Application Support/com.pacopacoca.oca`).
+2. Register the server with the agent, e.g. `oca-mcp --control-file <path to control.json>`
+   (or set `OCA_CONTROL_FILE`).
+
+Tools: `list_commands`, `run_command {id}`, `get_session`. A command that fails (for example a
+disabled one) is a tool error, not a protocol error. The server can do exactly what the control
+channel allows and nothing more.
