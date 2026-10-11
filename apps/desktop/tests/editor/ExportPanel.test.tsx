@@ -197,6 +197,12 @@ describe("export summary", () => {
     );
   });
 
+  it("calls a cut that copied the picture a lossless copy", () => {
+    expect(exportSummary(done({ encoder: "copy", tookSecs: 4, videoSecs: 40 }))).toBe(
+      `${t("encoderCopy")} · 00:04.00 · 10.0x`,
+    );
+  });
+
   it("copes with no encoder and with a video of no length", () => {
     expect(exportSummary(done({ encoder: null, tookSecs: 5, videoSecs: 0 }))).toBe(
       `${t("encoderUnknown")} · 00:05.00`,

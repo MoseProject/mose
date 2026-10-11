@@ -409,6 +409,11 @@ fn progress_only_moves_running_or_paused_jobs() {
 
 #[test]
 fn finishing_updates_the_job_it_belongs_to_and_ignores_one_that_is_gone() {
+    let report = || ExportReport {
+        encoder: Some("libopenh264".to_string()),
+        took_secs: 2.0,
+        video_secs: 4.0,
+    };
     let h = harness();
     let queue = queue(&h);
     put(
@@ -419,16 +424,54 @@ fn finishing_updates_the_job_it_belongs_to_and_ignores_one_that_is_gone() {
             job(3, ExportJobStatus::Rendering { percent: 10 }),
         ],
     );
-    queue.finish(h.handle(), 1, Ok(avcore::RenderOutcome::Completed));
-    queue.finish(h.handle(), 2, Err(avcore::RenderError::EmptyTimeline));
-    queue.finish(h.handle(), 3, Ok(avcore::RenderOutcome::Cancelled));
+    queue.finish(
+        h.handle(),
+        1,
+        Ok(avcore::RenderOutcome::Completed),
+        report(),
+    );
+    queue.finish(
+        h.handle(),
+        2,
+        Err(avcore::RenderError::EmptyTimeline),
+        report(),
+    );
+    queue.finish(
+        h.handle(),
+        3,
+        Ok(avcore::RenderOutcome::Cancelled),
+        report(),
+    );
     assert_eq!(status_of(&queue, 1), Some(ExportJobStatus::Done));
     assert!(matches!(
         status_of(&queue, 2),
         Some(ExportJobStatus::Failed { .. })
     ));
     assert_eq!(status_of(&queue, 3), None);
+    // Only a finished export has a report to show; a failed or cancelled one has none.
+    let reported = |id: u64| {
+        queue
+            .snapshot()
+            .into_iter()
+            .find(|job| job.id == id)
+            .and_then(|job| job.report)
+    };
+    assert_eq!(
+        reported(1).and_then(|r| r.encoder).as_deref(),
+        Some("libopenh264")
+    );
+    assert!(reported(2).is_none());
 
-    queue.finish(h.handle(), 99, Ok(avcore::RenderOutcome::Completed));
-    queue.finish(h.handle(), 99, Err(avcore::RenderError::EmptyTimeline));
+    queue.finish(
+        h.handle(),
+        99,
+        Ok(avcore::RenderOutcome::Completed),
+        report(),
+    );
+    queue.finish(
+        h.handle(),
+        99,
+        Err(avcore::RenderError::EmptyTimeline),
+        report(),
+    );
 }

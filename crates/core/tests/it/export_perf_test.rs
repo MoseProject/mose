@@ -143,6 +143,14 @@ fn export_perf() {
     };
     let length = asset.duration_secs.min(20.0);
     time_export("plain clip", &asset, vec![clip(1, 1, 0.0, 0.0, length)]);
+    // A cut out of the middle: the case a lossless cut takes when the file suits it.
+    let from = (asset.duration_secs * 0.12).min(asset.duration_secs - 1.0);
+    let to = (asset.duration_secs * 0.85).max(from + 0.5);
+    time_export(
+        "cut from the middle",
+        &asset,
+        vec![clip(1, 1, 0.0, from, to)],
+    );
     let half = length / 2.0;
     time_export(
         "two cuts",
@@ -232,6 +240,16 @@ fn export_perf() {
         }),
     );
     time_export("speed 2x", &asset, one(&|c| c.speed_factor = 2.0));
+    // What dropping a video on the timeline makes: the picture on V1 and its sound on A1.
+    let mut audio = track(vec![clip(2, 1, 0.0, 0.0, length)]);
+    audio.id = 5;
+    audio.kind = TrackKind::Audio;
+    time_tracks(
+        "video with its audio track",
+        &asset,
+        vec![track(vec![clip(1, 1, 0.0, 0.0, length)]), audio],
+        length,
+    );
     let mut layer = clip(2, 1, 0.0, 0.0, length);
     layer.layer_scale_x = 0.4;
     layer.layer_scale_y = 0.4;
