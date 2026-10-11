@@ -407,6 +407,51 @@ impl Contributor {
         resolved
     }
 
+    /// Whether this contributor, once its frame is known to be opaque, paints every pixel of a
+    /// `canvas_width` x `canvas_height` canvas at `playhead_secs` and so hides everything below
+    /// it: a video stretched to at least the canvas, centred or offset by less than the overhang,
+    /// unrotated, fully opaque, normal blend, and nothing that makes pixels see-through or moves
+    /// them (mask, chroma key, blur, glitch, shake, stabilization, matte, cropping past the frame).
+    pub fn covers_canvas_at(
+        &self,
+        playhead_secs: f64,
+        canvas_width: u32,
+        canvas_height: u32,
+    ) -> bool {
+        if !matches!(self.content, ContributorContent::Media(_)) {
+            return false;
+        }
+        let p = self.placement_at(playhead_secs);
+        let crop = p.transform.crop;
+        let plain = p.fit_canvas
+            && p.blend == BlendMode::Normal
+            && p.opacity >= 1.0
+            && p.effects.mask.is_none()
+            && p.effects.chroma_key.is_none()
+            && p.effects.blur_sigma == 0.0
+            && p.effects.sharpen == 0.0
+            && p.blur_sigma == 0.0
+            && p.sharpen == 0.0
+            && p.glitch == 0.0
+            && p.shake == 0.0
+            && p.stabilize.is_none()
+            && p.alpha_matte.is_none()
+            && p.transform.rotation_deg == 0.0
+            && crop.x >= 0.0
+            && crop.y >= 0.0
+            && crop.x + crop.width <= 1.0
+            && crop.y + crop.height <= 1.0;
+        if !plain {
+            return false;
+        }
+        let (canvas_width, canvas_height) = (canvas_width as f32, canvas_height as f32);
+        let drawn_width = p.transform.scale_x.abs() * canvas_width;
+        let drawn_height = p.transform.scale_y.abs() * canvas_height;
+        let x = ((canvas_width - drawn_width) / 2.0).round() + p.x as f32;
+        let y = ((canvas_height - drawn_height) / 2.0).round() + p.y as f32;
+        x <= 0.0 && y <= 0.0 && x + drawn_width >= canvas_width && y + drawn_height >= canvas_height
+    }
+
     /// Whether the contributor is on the timeline at `playhead_secs` (end exclusive).
     pub fn is_active_at(&self, playhead_secs: f64) -> bool {
         let start = self.placement.timeline_start_secs;

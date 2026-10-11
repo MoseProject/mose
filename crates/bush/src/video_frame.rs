@@ -1,6 +1,7 @@
 //! Validated decoded-video output passed from a decoder to Bush's renderer.
 
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::OnceLock;
 
 /// The pixel layout currently accepted by Bush's renderer boundary.
 ///
@@ -33,6 +34,8 @@ pub struct VideoFrame {
     stride_bytes: usize,
     timestamp_secs: f64,
     pixels: Vec<u8>,
+    /// Whether every pixel's alpha is 255, found the first time it is asked.
+    opaque: OnceLock<bool>,
 }
 
 impl PartialEq for VideoFrame {
@@ -91,6 +94,25 @@ impl VideoFrame {
             stride_bytes,
             timestamp_secs,
             pixels,
+            opaque: OnceLock::new(),
+        })
+    }
+
+    /// Whether no pixel is see-through (alpha 255 everywhere). Decoded video always is; the answer
+    /// is kept, so asking again costs nothing.
+    pub fn is_opaque(&self) -> bool {
+        *self.opaque.get_or_init(|| {
+            let row_bytes = self.width as usize * self.format.bytes_per_pixel();
+            self.pixels
+                .chunks(self.stride_bytes)
+                .take(self.height as usize)
+                .all(|row| {
+                    row[..row_bytes]
+                        .as_chunks::<4>()
+                        .0
+                        .iter()
+                        .all(|pixel| pixel[3] == 255)
+                })
         })
     }
 
