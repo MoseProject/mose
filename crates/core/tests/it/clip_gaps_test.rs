@@ -139,9 +139,11 @@ fn keyframed_crop_and_colour_become_filter_stages() {
     clip.crop_x_keyframes = vec![key(0.0, 0.0), key(1.0, 0.25)];
     clip.brightness_keyframes = vec![key(0.0, 0.0), key(1.0, 0.2)];
     let chain = clip.keyframe_video_filter_chain(30, 1, 4.0).unwrap();
-    // A keyframed crop is a per-pixel `geq` window; keyframed brightness is a `geq` too.
+    // A keyframed crop is a per-pixel `geq` window; keyframed brightness is a lookup table that
+    // `sendcmd` rewrites over time.
     assert!(chain.contains("geq="), "{chain}");
-    assert!(chain.contains("lum='clip((lum(X,Y)"), "{chain}");
+    assert!(chain.contains("sendcmd=c='0.0000 lutyuv@kc"), "{chain}");
+    assert!(!chain.contains("lum(X,Y)/255"), "{chain}");
 }
 
 #[test]

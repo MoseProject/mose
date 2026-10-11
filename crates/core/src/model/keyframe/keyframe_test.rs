@@ -380,14 +380,14 @@ fn gain_filter_db_expr_uses_t_for_an_animated_ramp() {
 #[test]
 fn color_balance_filter_expr_is_none_when_everything_is_neutral() {
     assert_eq!(
-        color_balance_filter_expr(&[], &[], &[], 0.0, 1.0, 1.0, 5.0),
+        color_balance_filter_expr(&[], &[], &[], 0.0, 1.0, 1.0, 5.0, 1, 30.0),
         None
     );
 }
 
 #[test]
 fn color_balance_filter_expr_is_one_lut_for_unanimated_axes() {
-    let expr = color_balance_filter_expr(&[], &[], &[], 0.3, 1.0, 1.2, 5.0).unwrap();
+    let expr = color_balance_filter_expr(&[], &[], &[], 0.3, 1.0, 1.2, 5.0, 1, 30.0).unwrap();
     assert!(expr.starts_with("lutyuv=y='clip((val/maxval-0.5)*1.0000000+0.5+(0.3000000)"));
     assert!(expr.contains("u='clip((val-(maxval+1)/2)*1.2000000"));
     assert!(expr.contains(":v='"));
@@ -396,9 +396,10 @@ fn color_balance_filter_expr_is_one_lut_for_unanimated_axes() {
 
 #[test]
 fn color_balance_filter_expr_leaves_neutral_planes_out_of_the_lut() {
-    let luma_only = color_balance_filter_expr(&[], &[], &[], 0.3, 1.0, 1.0, 5.0).unwrap();
+    let luma_only = color_balance_filter_expr(&[], &[], &[], 0.3, 1.0, 1.0, 5.0, 1, 30.0).unwrap();
     assert!(!luma_only.contains(":u=") && !luma_only.contains(":v="));
-    let chroma_only = color_balance_filter_expr(&[], &[], &[], 0.0, 1.0, 1.5, 5.0).unwrap();
+    let chroma_only =
+        color_balance_filter_expr(&[], &[], &[], 0.0, 1.0, 1.5, 5.0, 1, 30.0).unwrap();
     assert!(chroma_only.starts_with("lutyuv=u="));
 }
 
@@ -417,20 +418,57 @@ fn ramp(from: f32, to: f32) -> Vec<Keyframe<f32>> {
 
 #[test]
 fn color_balance_filter_expr_animates_saturation_alone_with_hue() {
-    let expr = color_balance_filter_expr(&[], &[], &ramp(0.5, 1.5), 0.0, 1.0, 1.0, 5.0).unwrap();
+    let expr =
+        color_balance_filter_expr(&[], &[], &ramp(0.5, 1.5), 0.0, 1.0, 1.0, 5.0, 1, 30.0).unwrap();
     assert!(expr.starts_with("hue=s='"));
     assert!(expr.ends_with("'"));
     assert!(expr.contains("if(lt(t,"));
 }
 
 #[test]
-fn color_balance_filter_expr_animates_brightness_with_geq() {
-    let expr = color_balance_filter_expr(&ramp(-0.5, 0.5), &[], &[], 0.0, 1.5, 1.0, 5.0).unwrap();
-    // 8-bit planar input, and the frame time under geq's own name for it.
-    assert!(expr.starts_with("format=yuv420p,geq=lum="));
-    assert!(expr.contains("if(lt(T,"));
-    // The un-animated contrast axis still uses its own constant.
-    assert!(expr.contains("*(1.5000000)"));
+fn color_balance_filter_expr_animates_brightness_with_a_lookup_table_rewritten_over_time() {
+    let expr =
+        color_balance_filter_expr(&ramp(-0.5, 0.5), &[], &[], 0.0, 1.5, 1.0, 5.0, 9, 30.0).unwrap();
+    assert!(!expr.contains("geq"));
+    assert!(expr.starts_with("sendcmd=c='0.0000 lutyuv@kc9 y val*1.50000+"));
+    assert!(expr.ends_with("',lutyuv@kc9=y=val"));
+    // 150 frames, sampled down to the cap.
+    assert_eq!(expr.matches("lutyuv@kc9 y").count(), 64);
+    // The un-animated contrast axis keeps its constant in every command.
+    assert!(!expr.contains("val*1.00000"));
+}
+
+#[test]
+fn an_animated_luma_ramp_moves_from_the_first_value_to_the_last() {
+    // brightness -0.5 -> 0.5 over 4 s, contrast 1: offset = 255 * brightness.
+    let expr =
+        color_balance_filter_expr(&ramp(-0.5, 0.5), &[], &[], 0.0, 1.0, 1.0, 4.0, 1, 4.0).unwrap();
+    // 16 frames -> 16 samples, the first at -0.5 (offset -127.5), the last just before +0.5.
+    assert!(expr.contains("0.0000 lutyuv@kc1 y val*1.00000+-127.500;"));
+    assert!(expr.contains("2.0000 lutyuv@kc1 y val*1.00000+0.000;"));
+    assert_eq!(expr.matches("lutyuv@kc1 y").count(), 16);
+}
+
+#[test]
+fn animated_luma_keeps_a_constant_saturation_in_the_lookup_table_and_animates_it_with_hue() {
+    let constant =
+        color_balance_filter_expr(&ramp(0.0, 0.3), &[], &[], 0.0, 1.0, 1.4, 4.0, 2, 30.0).unwrap();
+    assert!(constant.contains("lutyuv@kc2=y=val:u='clip((val-(maxval+1)/2)*1.4000000"));
+    assert!(!constant.contains("hue="));
+    let animated = color_balance_filter_expr(
+        &ramp(0.0, 0.3),
+        &[],
+        &ramp(0.5, 1.5),
+        0.0,
+        1.0,
+        1.0,
+        4.0,
+        2,
+        30.0,
+    )
+    .unwrap();
+    assert!(animated.contains(",hue=s='"));
+    assert!(!animated.contains(":u="));
 }
 
 #[test]

@@ -291,6 +291,12 @@ fn sorted_and_all_default(
     (sorted, all_default)
 }
 
+/// Most moments at which an animated brightness or contrast rewrites its lookup table. The
+/// commands travel inside the filter chain's text, which has a fixed-size buffer on the C side,
+/// so they are sampled rather than sent for every frame; a ramp of the whole range then moves
+/// about four levels per step at the very worst.
+const MAX_COLOR_SAMPLES: usize = 64;
+
 const KENBURNS_MIN_SCALE: f32 = 0.1;
 const KENBURNS_MAX_SCALE: f32 = 20.0;
 
@@ -524,9 +530,10 @@ fn color_axis_expr(
 /// brightness`, chroma scaled around its midpoint by `saturation`):
 /// - nothing animated: one `lutyuv`, whose table is computed once (fast);
 /// - only saturation animated: `hue=s=<expr>`, evaluated per frame (fast);
-/// - brightness or contrast animated: a `geq` with per-frame expressions, which is correct but
-///   runs at a fraction of real time at 1080p. It is preceded by `format=yuv420p` because `geq`
-///   addresses 8-bit samples and would reset an alpha plane.
+/// - brightness or contrast animated: a `lutyuv` whose `y` expression `sendcmd` rewrites at up to
+///   [`MAX_COLOR_SAMPLES`] moments, because `lutyuv` evaluates its expression once (a per-pixel
+///   `geq` here ran at under 10 fps at 1080p). `clip_id` names the instance so two clips in one
+///   graph do not receive each other's commands; `fps` sets how many moments a short clip has.
 pub fn color_balance_filter_expr(
     brightness_keyframes: &[Keyframe<f32>],
     contrast_keyframes: &[Keyframe<f32>],
@@ -535,6 +542,8 @@ pub fn color_balance_filter_expr(
     contrast: f32,
     saturation: f32,
     timeline_duration_secs: f64,
+    clip_id: u64,
+    fps: f64,
 ) -> Option<String> {
     let geq_time = "T";
     let brightness_expr =
@@ -567,12 +576,61 @@ pub fn color_balance_filter_expr(
         return Some(format!("hue=s='{hue_time_expr}'"));
     }
 
-    let b = brightness_expr.unwrap_or_else(|| format!("{brightness:.7}"));
-    let c = contrast_expr.unwrap_or_else(|| format!("{contrast:.7}"));
-    let s = saturation_expr.unwrap_or_else(|| format!("{saturation:.7}"));
-    Some(format!(
-        "format=yuv420p,geq=lum='clip((lum(X,Y)/255-0.5)*({c})+0.5+({b}),0,1)*255'         :cb='clip((cb(X,Y)-128)*({s})+128,0,255)'         :cr='clip((cr(X,Y)-128)*({s})+128,0,255)'"
-    ))
+    // Brightness or contrast animated. The luma curve is `y' = contrast * y + offset`, so it is a
+    // lookup table that changes over time: a `lutyuv` whose `y` expression `sendcmd` rewrites at a
+    // handful of moments (a table is cheap, a per-pixel `geq` is not). Saturation, when animated,
+    // goes through `hue` after it, as in the saturation-only case.
+    let sorted_axis = |keyframes: &[Keyframe<f32>], default: f32| -> Option<Vec<Keyframe<f32>>> {
+        let (sorted, all_default) = sorted_and_all_default(keyframes, |v| v, default);
+        (keyframes.len() > 1 && !all_default).then_some(sorted)
+    };
+    let value_at = |keyframes: &[Keyframe<f32>], constant: f32, default: f32, secs: f64| -> f32 {
+        if keyframes.len() == 1 && (keyframes[0].value - default).abs() > 1e-4 {
+            return keyframes[0].value;
+        }
+        match sorted_axis(keyframes, default) {
+            None => constant,
+            Some(sorted) => {
+                let at = |frac: f32| frac.clamp(0.0, 1.0) as f64 * timeline_duration_secs;
+                if secs <= at(sorted[0].time_fraction) {
+                    return sorted[0].value;
+                }
+                for w in sorted.windows(2) {
+                    let (pa, pb) = (at(w[0].time_fraction), at(w[1].time_fraction));
+                    if secs <= pb {
+                        let span = (pb - pa).max(1e-6);
+                        let mix = ((secs - pa) / span).clamp(0.0, 1.0) as f32;
+                        return w[0].value + (w[1].value - w[0].value) * mix;
+                    }
+                }
+                sorted[sorted.len() - 1].value
+            }
+        }
+    };
+    let frames = (timeline_duration_secs * fps).ceil().max(1.0);
+    let samples = frames.min(MAX_COLOR_SAMPLES as f64) as usize;
+    let mut commands = String::new();
+    for k in 0..samples {
+        let secs = timeline_duration_secs * k as f64 / samples as f64;
+        let b = value_at(brightness_keyframes, brightness, 0.0, secs);
+        let c = value_at(contrast_keyframes, contrast, 1.0, secs);
+        let offset = 255.0 * (0.5 - 0.5 * c + b);
+        commands.push_str(&format!(
+            "{secs:.4} lutyuv@kc{clip_id} y val*{c:.5}+{offset:.3};"
+        ));
+    }
+    let mut chain = format!("sendcmd=c='{commands}',lutyuv@kc{clip_id}=y=val");
+    if saturation_expr.is_none() && saturation != 1.0 {
+        for plane in ["u", "v"] {
+            chain.push_str(&format!(
+                ":{plane}='clip((val-(maxval+1)/2)*{saturation:.7}+(maxval+1)/2,minval,maxval)'"
+            ));
+        }
+    }
+    if let Some(expr) = color_axis_expr(saturation_keyframes, 1.0, "t", timeline_duration_secs) {
+        chain.push_str(&format!(",hue=s='{expr}'"));
+    }
+    Some(chain)
 }
 
 /// Builds one axis's value expression for `crate::shape_render::build_shape_filter_desc`'s `geq`

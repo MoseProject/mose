@@ -557,3 +557,61 @@ fn animated_opacity_blends_the_layer_into_what_is_underneath() {
         "end is the green layer: {late:?}"
     );
 }
+
+#[test]
+fn animated_brightness_brightens_the_picture_over_the_clip() {
+    let Some((ffmpeg, _)) = oracles() else {
+        return;
+    };
+    let grey = solid(&ffmpeg, "brightness_grey.mp4", "0x606060");
+    let mut ramped = clip(1, 1, 0.0, 0.0, 1.0);
+    ramped.brightness_keyframes = vec![
+        avcore::Keyframe {
+            time_fraction: 0.0,
+            value: 0.0,
+        },
+        avcore::Keyframe {
+            time_fraction: 1.0,
+            value: 0.4,
+        },
+    ];
+    let track = Track {
+        id: 1,
+        name: "V1".to_string(),
+        kind: TrackKind::Video,
+        clips: vec![ramped],
+        text_clips: vec![],
+        shape_clips: vec![],
+        visible: true,
+        audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
+        locked: false,
+        color_label: None,
+    };
+    let output = scratch("brightness_out.mp4");
+    let outcome = render_timeline_export(
+        &sequence_with(vec![track]),
+        &[media(&grey, 1)],
+        &output,
+        -14.0,
+        avcore::GpuEncoderPreference::Cpu,
+        &AtomicBool::new(false),
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, RenderOutcome::Completed);
+    let early = pixel(&ffmpeg, &output, 1, 160, 90);
+    let middle = pixel(&ffmpeg, &output, 15, 160, 90);
+    let late = pixel(&ffmpeg, &output, 28, 160, 90);
+    eprintln!("brightness ramp: {early:?} {middle:?} {late:?}");
+    // 0.4 of full scale is about 100 levels by the last frame, and half that in the middle.
+    assert!(
+        i32::from(late[0]) - i32::from(early[0]) > 80,
+        "{early:?} -> {late:?}"
+    );
+    assert!(
+        (i32::from(middle[0]) - i32::from(early[0]) - 50).abs() < 20,
+        "{early:?} -> {middle:?}"
+    );
+}
