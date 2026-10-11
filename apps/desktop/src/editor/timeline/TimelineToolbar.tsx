@@ -185,7 +185,7 @@ export function TimelineToolbar({
         <Icon name="chevronRight" />
       </button>
       <select
-        className={cx(styles, baseStyles, "role-select")}
+        className={cx(styles, baseStyles, "frame-rate-select")}
         aria-label={t("frameRateLabel")}
         title={t("frameRateLabel")}
         data-testid="frame-rate-select"
