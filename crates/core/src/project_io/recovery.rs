@@ -182,6 +182,6 @@ pub fn scan_candidates(root: &Path, skip: Option<&Path>) -> Vec<RecoveryCandidat
             }
         }
     }
-    found.sort_by(|a, b| b.saved_unix_secs.cmp(&a.saved_unix_secs));
+    found.sort_by_key(|candidate| std::cmp::Reverse(candidate.saved_unix_secs));
     found
 }
