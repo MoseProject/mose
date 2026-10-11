@@ -11,7 +11,7 @@ vi.mock("../../src/ipc", () => {
 
 const { EffectsBrowser, filterCatalog } = await import("../../src/editor/library/EffectsBrowser");
 const { api } = await import("../../src/ipc");
-const { patchUi } = await import("../../src/store");
+const { effectDragStore, patchUi } = await import("../../src/store");
 
 const session = (): SessionView => {
   return makeSession([
@@ -32,6 +32,7 @@ const session = (): SessionView => {
 beforeEach(() => {
   vi.clearAllMocks();
   patchUi({ selectedClipIds: [7] });
+  effectDragStore.set(null);
 });
 afterEach(() => {
   cleanup();
@@ -57,14 +58,49 @@ describe("EffectsBrowser", () => {
     expect(api.updateClip).toHaveBeenCalledWith(9, { transitionIn: "Fade" });
   });
 
-  it("asks for a clip and disables the effects while none is selected", () => {
+  it("says what to do while no clip is selected, and does nothing on a click then", () => {
     patchUi({ selectedClipIds: [] });
     render(<EffectsBrowser session={session()} />);
     expect(screen.getByText(t("effectsNeedClip"))).toBeTruthy();
-    const item = screen.getByTestId("effect-transitions-Fade") as HTMLButtonElement;
-    expect(item.disabled).toBe(true);
+    fireEvent.click(screen.getByTestId("effect-transitions-Fade"));
+    expect(api.updateClip).not.toHaveBeenCalled();
+  });
+
+  it("turns a press and a move into a drag the timeline can drop, and clears it on release", () => {
+    vi.useFakeTimers();
+    render(<EffectsBrowser session={session()} />);
+    const item = screen.getByTestId("effect-transitions-Zoom");
+    fireEvent.pointerDown(item, { button: 0, clientX: 10, clientY: 10 });
+    fireEvent(window, new MouseEvent("pointermove", { clientX: 11, clientY: 10 }));
+    expect(effectDragStore.get()).toBeNull();
+    fireEvent(window, new MouseEvent("pointermove", { clientX: 60, clientY: 40 }));
+    expect(effectDragStore.get()).toMatchObject({
+      label: t("transitionZoom"),
+      patch: { transitionIn: "Zoom" },
+      clientX: 60,
+    });
+    expect(screen.getByText(t("transitionZoom"), { selector: "div" })).toBeTruthy();
+    fireEvent(window, new MouseEvent("pointerup", { clientX: 60, clientY: 40 }));
+    expect(effectDragStore.get()).not.toBeNull();
+    vi.runAllTimers();
+    expect(effectDragStore.get()).toBeNull();
+    // The click that follows a drag released over the same button applies nothing.
     fireEvent.click(item);
     expect(api.updateClip).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it("cancels a drag on Escape", () => {
+    render(<EffectsBrowser session={session()} />);
+    fireEvent.pointerDown(screen.getByTestId("effect-masks-Circle"), {
+      button: 0,
+      clientX: 0,
+      clientY: 0,
+    });
+    fireEvent(window, new MouseEvent("pointermove", { clientX: 50, clientY: 50 }));
+    expect(effectDragStore.get()).not.toBeNull();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(effectDragStore.get()).toBeNull();
   });
 
   it("filters by effect or folder name and says when nothing matches", () => {

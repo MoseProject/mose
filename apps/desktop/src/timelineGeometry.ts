@@ -232,3 +232,24 @@ export function zoomAround(
   const next = Math.min(maxPxPerSec, Math.max(minPxPerSec, pxPerSec * factor));
   return { pxPerSec: next, scrollSecs: Math.max(0, anchorSecs - anchorX / next) };
 }
+
+/** The video clip under a point in track space (`y` already includes the vertical scroll), or null
+ *  over the ruler, empty lanes, locked tracks and text or shape overlays: the clips an effect
+ *  dropped from the Effects tab can land on. */
+export function effectTarget(
+  tracks: Track[],
+  x: number,
+  y: number,
+  pxPerSec: number,
+  scrollSecs: number,
+): { span: TimelineSpan; trackIndex: number } | null {
+  if (y < RULER_HEIGHT || x < 0) {
+    return null;
+  }
+  const hit = hitTest(tracks, x, y, pxPerSec, scrollSecs);
+  if (!hit || tracks[hit.trackIndex].locked) {
+    return null;
+  }
+  const found = findSpan(tracks, hit.clipId);
+  return found && !found.span.overlay ? found : null;
+}

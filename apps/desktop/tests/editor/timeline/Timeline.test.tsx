@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { timelineAction } from "../../../src/editing";
 import { t } from "../../../src/i18n";
-import { assetDragStore, previewStore, uiStore } from "../../../src/store";
+import { assetDragStore, effectDragStore, previewStore, uiStore } from "../../../src/store";
 import { makeSession } from "../../support/testSupport";
 import type { PreviewTick, SessionView, Track } from "../../../src/types";
 
@@ -32,6 +32,7 @@ vi.mock("../../../src/ipc", () => {
   const names = [
     "seek",
     "addAssetToTimeline",
+    "updateClip",
     "selectSequence",
     "moveOverlayClip",
     "slideClip",
@@ -346,6 +347,7 @@ beforeEach(() => {
   resetUi();
   previewStore.set(tick());
   assetDragStore.set(null);
+  effectDragStore.set(null);
 });
 afterEach(() => {
   cleanup();
@@ -1324,5 +1326,57 @@ describe("frame rate picker", () => {
     (session.project as unknown as { frame_rate: unknown }).frame_rate = { num: 25, den: 1 };
     mount(session);
     expect((screen.getByTestId("frame-rate-select") as HTMLSelectElement).value).toBe("25/1");
+  });
+});
+
+describe("dropping an effect", () => {
+  const drop = (x: number, y: number) => {
+    return act(() => {
+      return void window.dispatchEvent(new MouseEvent("pointerup", { clientX: x, clientY: y }));
+    });
+  };
+  const dragging = (x: number, y: number) => {
+    act(() => {
+      return effectDragStore.set({
+        label: "Slide",
+        patch: { transitionIn: "Slide" },
+        clientX: x,
+        clientY: y,
+      });
+    });
+  };
+
+  it("applies the effect to the video clip under the pointer and selects it", () => {
+    mount();
+    dragging(200, ROW(0));
+    drop(200, ROW(0));
+    expect(calls.updateClip).toHaveBeenCalledWith(1, { transitionIn: "Slide" });
+    expect(uiStore.get().selectedClipIds).toEqual([1]);
+  });
+
+  it("outlines the clip it would land on while dragging", () => {
+    mount();
+    sets.length = 0;
+    dragging(200, ROW(0));
+    flush();
+    expect(sets).toContainEqual(["lineWidth", 2]);
+    sets.length = 0;
+    dragging(200, ROW(3));
+    flush();
+    expect(sets).not.toContainEqual(["lineWidth", 2]);
+  });
+
+  it("ignores empty lanes, the ruler, overlays, locked tracks and a release with no drag", () => {
+    mount();
+    drop(200, ROW(0));
+    dragging(700, ROW(0));
+    drop(700, ROW(0));
+    dragging(200, 10);
+    drop(200, 10);
+    dragging(240, ROW(3));
+    drop(240, ROW(3));
+    dragging(200, ROW(4));
+    drop(200, ROW(4));
+    expect(calls.updateClip).not.toHaveBeenCalled();
   });
 });

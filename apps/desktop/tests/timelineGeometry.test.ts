@@ -3,6 +3,7 @@ import {
   RULER_HEIGHT,
   TRACK_HEIGHT,
   dissolveSpanSecs,
+  effectTarget,
   findSpan,
   fitPxPerSec,
   hitTest,
@@ -320,5 +321,29 @@ describe("dissolveSpanSecs", () => {
     expect(dissolveSpanSecs(trackWith([clip(1, 0, 10), apart]), apart)).toBe(0);
     const fade = { ...clip(2, 9, 10), transition_in: "Fade" as const };
     expect(dissolveSpanSecs(trackWith([clip(1, 0, 10), fade]), fade)).toBe(0);
+  });
+});
+
+describe("effectTarget", () => {
+  const video = track(1, [clip(1, 0, 10)]);
+  const overlayTrack = { ...track(2, []), kind: "Text" as const, text_clips: [textClip(5, 0, 4)] };
+  const locked = { ...track(3, [clip(7, 0, 10)]), locked: true };
+  const lane = (index: number) => {
+    return RULER_HEIGHT + index * TRACK_HEIGHT + TRACK_HEIGHT / 2;
+  };
+
+  it("finds the video clip under the point and its track", () => {
+    const found = effectTarget([video], 200, lane(0), 40, 0);
+    expect(found?.span.id).toBe(1);
+    expect(found?.trackIndex).toBe(0);
+  });
+
+  it("is null over the ruler, an empty stretch, text overlays and locked tracks", () => {
+    const tracks = [video, overlayTrack, locked];
+    expect(effectTarget(tracks, 200, RULER_HEIGHT - 4, 40, 0)).toBeNull();
+    expect(effectTarget(tracks, 900, lane(0), 40, 0)).toBeNull();
+    expect(effectTarget(tracks, -3, lane(0), 40, 0)).toBeNull();
+    expect(effectTarget(tracks, 40, lane(1), 40, 0)).toBeNull();
+    expect(effectTarget(tracks, 200, lane(2), 40, 0)).toBeNull();
   });
 });

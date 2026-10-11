@@ -1,12 +1,13 @@
 import { cx } from "../../cx";
 import baseStyles from "../../styles/base.module.css";
 import styles from "./library.module.css";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { t } from "../../i18n";
 import { api } from "../../ipc";
-import { run, uiStore, useStore } from "../../store";
+import { effectDragStore, run, uiStore, useStore } from "../../store";
 import { activeTimeline, BLEND_MODES, type ClipPatch, type SessionView } from "../../types";
 import { Icon } from "../chrome/Icon";
+import { trackPointerDrag } from "./pointerDrag";
 
 interface Effect {
   id: string;
@@ -75,6 +76,22 @@ export function filterCatalog(folders: Folder[], query: string): Folder[] {
     });
 }
 
+/** The label that follows the pointer while an effect is dragged toward the timeline. */
+export function EffectDragGhost() {
+  const drag = useStore(effectDragStore);
+  if (!drag) {
+    return null;
+  }
+  return (
+    <div
+      className={cx(styles, baseStyles, "effect-ghost")}
+      style={{ left: drag.clientX + 14, top: drag.clientY + 14 }}
+    >
+      {drag.label}
+    </div>
+  );
+}
+
 /** A searchable tree of effects that applies the picked one to the selected video clips. */
 export function EffectsBrowser({ session }: { session: SessionView }) {
   const [query, setQuery] = useState("");
@@ -90,6 +107,29 @@ export function EffectsBrowser({ session }: { session: SessionView }) {
       return clip.id;
     });
   const folders = filterCatalog(catalog(), query);
+  // A press that became a drag also ends in a click when released over the same button.
+  const dragged = useRef(false);
+  const startDrag = (e: React.PointerEvent, effect: Effect) => {
+    if (e.button !== 0) {
+      return;
+    }
+    dragged.current = false;
+    trackPointerDrag(
+      e,
+      (ev) => {
+        dragged.current = true;
+        effectDragStore.set({
+          label: effect.label,
+          patch: effect.patch,
+          clientX: ev.clientX,
+          clientY: ev.clientY,
+        });
+      },
+      () => {
+        effectDragStore.set(null);
+      },
+    );
+  };
   const apply = async (patch: ClipPatch) => {
     for (const id of videoIds) {
       await run(api.updateClip(id, patch));
@@ -101,6 +141,7 @@ export function EffectsBrowser({ session }: { session: SessionView }) {
       className={cx(styles, baseStyles, "effects-browser")}
       data-testid="effects-browser"
     >
+      <EffectDragGhost />
       <div className={cx(styles, baseStyles, "search-row")}>
         <label className={cx(styles, baseStyles, "search")}>
           <Icon
@@ -118,9 +159,9 @@ export function EffectsBrowser({ session }: { session: SessionView }) {
           />
         </label>
       </div>
-      {videoIds.length === 0 && (
-        <p className={cx(styles, baseStyles, "effects-hint")}>{t("effectsNeedClip")}</p>
-      )}
+      <p className={cx(styles, baseStyles, "effects-hint")}>
+        {videoIds.length === 0 ? t("effectsNeedClip") : t("effectsDragHint")}
+      </p>
       <div className={cx(styles, baseStyles, "effects-tree")}>
         {folders.length === 0 ? (
           <div className={cx(styles, baseStyles, "empty-state")}>{t("effectsNoMatches")}</div>
@@ -138,9 +179,16 @@ export function EffectsBrowser({ session }: { session: SessionView }) {
                     <button
                       key={effect.id}
                       className={cx(styles, baseStyles, "effects-item")}
-                      disabled={videoIds.length === 0}
                       data-testid={`effect-${folder.id}-${effect.id}`}
+                      title={videoIds.length === 0 ? t("effectsDragHint") : undefined}
+                      onPointerDown={(e) => {
+                        return startDrag(e, effect);
+                      }}
                       onClick={() => {
+                        if (dragged.current) {
+                          dragged.current = false;
+                          return;
+                        }
                         return apply(effect.patch);
                       }}
                     >

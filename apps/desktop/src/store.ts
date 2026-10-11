@@ -24,7 +24,7 @@ import {
   onTts,
 } from "./ipc";
 import { localeFromPrefs, setLocale, t, type TextKey } from "./i18n";
-import type { ExportJobView, LayerTemplate, PreviewTick, SessionView } from "./types";
+import type { ClipPatch, ExportJobView, LayerTemplate, PreviewTick, SessionView } from "./types";
 
 export interface Store<T> {
   get: () => T;
@@ -145,6 +145,17 @@ export interface AssetDrag {
 }
 
 export const assetDragStore = createStore<AssetDrag | null>(null);
+
+/** An effect being dragged from the Effects tab onto a clip of the timeline. */
+export interface EffectDrag {
+  label: string;
+  /** What dropping it changes on the clip, the same patch the inspector would send. */
+  patch: ClipPatch;
+  clientX: number;
+  clientY: number;
+}
+
+export const effectDragStore = createStore<EffectDrag | null>(null);
 
 /** Low enough to see a whole ten-hour timeline in an ordinary window. */
 export const MIN_PX_PER_SEC = 0.01;
