@@ -15,7 +15,7 @@
 use crate::project::Sequence;
 use crate::timeline::{ClipInstance, TrackKind};
 use avbridge::Canvas;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// One CF-09 slice 4 privacy-blur clip snapshotted from the sequence at export-queue time — same
@@ -67,6 +67,63 @@ pub fn resolve_privacy_blur_segments(sequence: &Sequence) -> Vec<PrivacyBlurSegm
 /// holds each sampled frame until the next one, same tolerance the background-removal matte
 /// already relies on for a clip whose sampling rate doesn't match the canvas exactly.
 pub(crate) const MAX_PRIVACY_BLUR_MATTE_FRAMES: usize = 10_000;
+
+/// A matte video built for one privacy-blur segment, deleted when dropped.
+pub(crate) struct PaddedMatte(PathBuf);
+
+impl PaddedMatte {
+    pub(crate) fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for PaddedMatte {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
+/// Builds each segment's matte for the export to blur inside its own encode. Returns the mattes
+/// of the segments up to the first one that does not build, so a caller comparing the count with
+/// the segments' falls back to the pass for the lot.
+pub(crate) fn privacy_blur_mattes(
+    output: &Path,
+    canvas: Canvas,
+    canvas_duration_secs: f64,
+    segments: &[PrivacyBlurSegment],
+) -> Vec<PaddedMatte> {
+    static TEMP_ID: AtomicU64 = AtomicU64::new(0);
+    let (Some(parent), Some(stem)) = (output.parent(), output.file_stem().and_then(|s| s.to_str()))
+    else {
+        return Vec::new();
+    };
+    let mut mattes = Vec::new();
+    for segment in segments {
+        let id = TEMP_ID.fetch_add(1, Ordering::Relaxed);
+        let path = parent.join(format!(
+            "{stem}.oca-privacy-blur-matte-{}-{id}.mp4",
+            std::process::id()
+        ));
+        let built = build_padded_matte(
+            Path::new(&segment.mask_path),
+            &path,
+            canvas.width,
+            canvas.height,
+            canvas.fps_num,
+            canvas.fps_den,
+            segment.start_secs,
+            segment.duration_secs,
+            canvas_duration_secs,
+        );
+        let matte = PaddedMatte(path);
+        if let Err(error) = built {
+            tracing::error!(%error, output = %output.display(), "privacy blur matte build failed");
+            break;
+        }
+        mattes.push(matte);
+    }
+    mattes
+}
 
 /// Applies every privacy-blur segment to an already-written export file in place, one at a time
 /// (each pass's own output feeds the next, same chaining [`apply_text_overlay_pass`]/
