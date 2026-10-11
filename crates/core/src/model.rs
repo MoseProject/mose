@@ -14,6 +14,7 @@
 
 //! The project data model: sequences, timelines, clips, keyframes, undo.
 
+pub mod frame_rate;
 pub mod keyframe;
 pub mod media;
 pub mod multicam_sync;

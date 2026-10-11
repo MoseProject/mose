@@ -198,6 +198,7 @@ fn large_project(asset_count: usize, clips_per_track: usize) -> Project {
         panel_layout: None,
         smart_bins: Vec::new(),
         recent_asset_ids: Vec::new(),
+        frame_rate: None,
     }
 }
 

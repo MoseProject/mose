@@ -164,6 +164,7 @@ fn project(media_library: Vec<MediaAsset>, sequences: Vec<Sequence>) -> Project 
         panel_layout: None,
         smart_bins: vec![],
         recent_asset_ids: vec![],
+        frame_rate: None,
     }
 }
 
