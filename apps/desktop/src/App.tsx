@@ -4,6 +4,7 @@ import styles from "./App.module.css";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useI18n } from "./i18n";
 import { COMMANDS } from "./commands";
+import { listenForControlRequests } from "./control";
 import { loadKeymap } from "./keymap";
 import { Dialog } from "@components/chrome/Dialog";
 import { ConfirmHost, ToastHost } from "@components/chrome/Notifications";
@@ -66,6 +67,16 @@ export function App() {
         ),
       );
     });
+  }, []);
+
+  // Answers the control channel's requests (only sent when the backend runs the channel).
+  useEffect(() => {
+    const unlisten = listenForControlRequests();
+    return () => {
+      void unlisten.then((stop) => {
+        return stop();
+      });
+    };
   }, []);
 
   // Closing the window with unsaved changes or exports still running asks first. With unsaved
