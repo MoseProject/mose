@@ -42,6 +42,12 @@ struct ExportSettings {
     gpu_encoder_preference: GpuEncoderPreference,
     #[serde(default = "one")]
     worker_count: usize,
+    /// Master the export audio to the sequence's target loudness. Off leaves the mix as is.
+    #[serde(default = "yes")]
+    normalize_audio: bool,
+}
+fn yes() -> bool {
+    true
 }
 fn one() -> usize {
     1
@@ -51,6 +57,7 @@ impl Default for ExportSettings {
         Self {
             gpu_encoder_preference: GpuEncoderPreference::Auto,
             worker_count: 1,
+            normalize_audio: true,
         }
     }
 }
@@ -145,6 +152,19 @@ impl ExportQueue {
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .gpu_encoder_preference = p;
+        self.save_settings()
+    }
+    pub fn normalize_audio(&self) -> bool {
+        self.settings
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .normalize_audio
+    }
+    pub fn set_normalize_audio(&self, on: bool) -> Result<(), String> {
+        self.settings
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .normalize_audio = on;
         self.save_settings()
     }
     pub fn set_worker_count(&self, n: usize) -> Result<(), String> {
@@ -341,6 +361,11 @@ impl ExportQueue {
             let queue = Arc::clone(self);
             let worker_app = app.clone();
             let gpu = self.gpu_encoder_preference();
+            let target_lufs = if self.normalize_audio() {
+                job.target_lufs
+            } else {
+                avcore::NO_NORMALIZATION
+            };
             std::thread::spawn(move || {
                 let tracks = if job.track_segments.is_empty() {
                     vec![job.segments.clone()]
@@ -354,7 +379,7 @@ impl ExportQueue {
                     &job.audio_segments,
                     job.canvas,
                     &PathBuf::from(&job.output_path),
-                    job.target_lufs,
+                    target_lufs,
                     gpu,
                     &job.text_segments,
                     &job.shape_segments,

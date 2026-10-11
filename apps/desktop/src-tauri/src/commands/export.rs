@@ -166,6 +166,14 @@ pub fn set_export_worker_count(
     state.exports.set_worker_count(worker_count)
 }
 #[tauri::command]
+pub fn set_normalize_audio(state: State<'_, AppState>, enabled: bool) -> Result<(), String> {
+    state.exports.set_normalize_audio(enabled)
+}
+#[tauri::command]
+pub fn get_normalize_audio(state: State<'_, AppState>) -> bool {
+    state.exports.normalize_audio()
+}
+#[tauri::command]
 pub fn get_gpu_encoder_preference(state: State<'_, AppState>) -> GpuEncoderPreference {
     state.exports.gpu_encoder_preference()
 }

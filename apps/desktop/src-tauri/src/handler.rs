@@ -30,6 +30,8 @@ macro_rules! all_commands {
             $crate::commands::export::set_gpu_encoder_preference,
             $crate::commands::export::set_export_worker_count,
             $crate::commands::export::get_gpu_encoder_preference,
+            $crate::commands::export::set_normalize_audio,
+            $crate::commands::export::get_normalize_audio,
             $crate::commands::export::export_active_sequence_srt,
             $crate::commands::export::list_exports,
             $crate::commands::prefs::get_prefs,
