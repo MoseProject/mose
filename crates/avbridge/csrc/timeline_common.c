@@ -230,6 +230,33 @@ int build_entry_transition(const ClipSegment *seg, int fps_num, int fps_den, dou
     return 0;
 }
 
+/* Replaces every "@CANVAS@" in `in` with "<width>x<height>", the token core puts in a chain it
+   builds before the export canvas is final (zoompan needs its output size spelled out). Returns 0,
+   or -1 if the result would not fit in `out`. */
+static int expand_canvas_token(const char *in, int canvas_width, int canvas_height, char *out,
+                               size_t cap) {
+    static const char token[] = "@CANVAS@";
+    char size[32];
+    snprintf(size, sizeof(size), "%dx%d", canvas_width, canvas_height);
+    size_t used = 0;
+    while (*in) {
+        const char *hit = strstr(in, token);
+        size_t chunk = hit ? (size_t)(hit - in) : strlen(in);
+        if (used + chunk + 1 > cap) return -1;
+        memcpy(out + used, in, chunk);
+        used += chunk;
+        in += chunk;
+        if (!hit) break;
+        size_t n = strlen(size);
+        if (used + n + 1 > cap) return -1;
+        memcpy(out + used, size, n);
+        used += n;
+        in += sizeof(token) - 1;
+    }
+    out[used] = '\0';
+    return 0;
+}
+
 /* The whole video filter graph of one segment: canvas conform (scale, pad around the segment's
    anchor, fps), the clip's own effect filters, an optional entry transition and a final format
    lock for the encoder. Rebuilt for every segment since filters and transitions differ; avfilter's
@@ -242,6 +269,14 @@ int build_segment_vfilter(const ClipSegment *seg, int canvas_width, int canvas_h
        geq expression (see case 3 below) can each independently run past a thousand
        bytes. */
     const char *clip_filter = (seg->video_filter && seg->video_filter[0]) ? seg->video_filter : "";
+    char clip_filter_expanded[8192];
+    if (strstr(clip_filter, "@CANVAS@")) {
+        if (expand_canvas_token(clip_filter, canvas_width, canvas_height, clip_filter_expanded,
+                                sizeof(clip_filter_expanded)) < 0) {
+            return -1;
+        }
+        clip_filter = clip_filter_expanded;
+    }
     char setpts_str[192];
     build_setpts_str(seg, seg->source_out_secs - seg->source_in_secs, setpts_str,
                      sizeof(setpts_str));

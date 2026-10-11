@@ -297,6 +297,13 @@ fn sorted_and_all_default(
 /// about four levels per step at the very worst.
 const MAX_COLOR_SAMPLES: usize = 64;
 
+/// Stands for the export canvas's `WIDTHxHEIGHT` in a filter chain built before the canvas is
+/// final; `avbridge` replaces it when it assembles a segment's graph.
+pub const CANVAS_SIZE_TOKEN: &str = "@CANVAS@";
+
+/// The largest zoom `zoompan` accepts.
+const ZOOMPAN_MAX_ZOOM: f32 = 10.0;
+
 const KENBURNS_MIN_SCALE: f32 = 0.1;
 const KENBURNS_MAX_SCALE: f32 = 20.0;
 
@@ -316,6 +323,7 @@ pub fn scale_filter_expr(
     fps_num: u32,
     fps_den: u32,
     timeline_duration_secs: f64,
+    zoompan_ok: bool,
 ) -> Option<String> {
     if keyframes.is_empty() {
         return None;
@@ -338,6 +346,21 @@ pub fn scale_filter_expr(
     let total_frames = (timeline_duration_secs * fps_num as f64 / fps_den.max(1) as f64).max(1.0);
     let n_last = (total_frames - 1.0).max(1.0);
 
+    // A zoom in (every value at least 1, `zoompan`'s own range) is a crop and a rescale, which
+    // `zoompan` does at 10 times the speed of the per-pixel `geq` below. It restarts the frame
+    // timestamps, so it is only used where the caller says nothing downstream depends on them
+    // (an export graph that renumbers its own output frames), and it needs the canvas size,
+    // which the C side fills in for `CANVAS_SIZE_TOKEN`.
+    let zoom_in_only = sorted.iter().all(|k| {
+        let v = clamp_scale(k.value);
+        (1.0..=ZOOMPAN_MAX_ZOOM).contains(&v)
+    });
+    if zoompan_ok && zoom_in_only {
+        let z = piecewise_expr(&sorted, n_last, "on", clamp_scale);
+        return Some(format!(
+            "zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={CANVAS_SIZE_TOKEN}:fps={fps_num}/{fps_den}"
+        ));
+    }
     let z = piecewise_expr(&sorted, n_last, "N", clamp_scale);
     let sx = format!("((X-W/2)/({z})+W/2)");
     let sy = format!("((Y-H/2)/({z})+H/2)");

@@ -35,6 +35,7 @@ impl ClipInstance {
         fps_num: u32,
         fps_den: u32,
         timeline_duration_secs: f64,
+        zoompan_ok: bool,
     ) -> Option<String> {
         let mut stages = Vec::new();
         if self.has_crop_keyframes() {
@@ -59,6 +60,7 @@ impl ClipInstance {
             fps_num,
             fps_den,
             timeline_duration_secs,
+            zoompan_ok,
         ) {
             stages.push(scale);
         }

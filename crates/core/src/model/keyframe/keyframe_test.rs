@@ -224,7 +224,7 @@ fn smooth_speed_ramp_source_secs_at_matches_plain_multiply_for_a_constant_speed(
 
 #[test]
 fn scale_filter_expr_is_none_for_no_keyframes() {
-    assert_eq!(scale_filter_expr(&[], 30, 1, 5.0), None);
+    assert_eq!(scale_filter_expr(&[], 30, 1, 5.0, false), None);
 }
 
 #[test]
@@ -233,7 +233,7 @@ fn scale_filter_expr_is_none_for_a_single_unity_keyframe() {
         time_fraction: 0.0,
         value: 1.0,
     }];
-    assert_eq!(scale_filter_expr(&keyframes, 30, 1, 5.0), None);
+    assert_eq!(scale_filter_expr(&keyframes, 30, 1, 5.0, false), None);
 }
 
 #[test]
@@ -242,7 +242,7 @@ fn scale_filter_expr_is_static_crop_scale_for_a_single_non_unity_keyframe() {
         time_fraction: 0.0,
         value: 2.0,
     }];
-    let expr = scale_filter_expr(&keyframes, 30, 1, 5.0).unwrap();
+    let expr = scale_filter_expr(&keyframes, 30, 1, 5.0, false).unwrap();
     assert!(expr.starts_with("crop=iw/2.00000:ih/2.00000"));
     assert!(!expr.contains("geq"));
 }
@@ -259,7 +259,7 @@ fn scale_filter_expr_is_none_when_every_keyframe_is_unity() {
             value: 1.0,
         },
     ];
-    assert_eq!(scale_filter_expr(&keyframes, 30, 1, 5.0), None);
+    assert_eq!(scale_filter_expr(&keyframes, 30, 1, 5.0, false), None);
 }
 
 #[test]
@@ -274,10 +274,47 @@ fn scale_filter_expr_builds_a_geq_expression_for_an_animated_ramp() {
             value: 1.5,
         },
     ];
-    let expr = scale_filter_expr(&keyframes, 30, 1, 5.0).unwrap();
+    let expr = scale_filter_expr(&keyframes, 30, 1, 5.0, false).unwrap();
     assert!(expr.starts_with("geq=lum="));
     assert!(expr.contains("if(lt(N,"));
     assert!(expr.contains("if(between(N,"));
+}
+
+fn zoom(from: f32, to: f32) -> Vec<Keyframe<f32>> {
+    vec![
+        Keyframe {
+            time_fraction: 0.0,
+            value: from,
+        },
+        Keyframe {
+            time_fraction: 1.0,
+            value: to,
+        },
+    ]
+}
+
+#[test]
+fn a_zoom_in_ramp_uses_zoompan_where_the_graph_allows_it() {
+    let expr = scale_filter_expr(&zoom(1.0, 1.5), 30, 1, 5.0, true).unwrap();
+    assert!(expr.starts_with("zoompan=z='"));
+    assert!(expr.contains("if(between(on,"));
+    assert!(expr.contains(&format!("d=1:s={CANVAS_SIZE_TOKEN}:fps=30/1")));
+    assert!(!expr.contains("geq"));
+}
+
+#[test]
+fn a_zoom_ramp_keeps_the_geq_where_zoompan_would_break_or_cannot_go() {
+    // Not allowed here (an overlay graph pairs layers by timestamp).
+    assert!(scale_filter_expr(&zoom(1.0, 1.5), 30, 1, 5.0, false)
+        .unwrap()
+        .starts_with("geq="));
+    // A zoom out is outside zoompan's range, and so is a zoom past 10.
+    assert!(scale_filter_expr(&zoom(1.0, 0.5), 30, 1, 5.0, true)
+        .unwrap()
+        .starts_with("geq="));
+    assert!(scale_filter_expr(&zoom(1.0, 12.0), 30, 1, 5.0, true)
+        .unwrap()
+        .starts_with("geq="));
 }
 
 #[test]

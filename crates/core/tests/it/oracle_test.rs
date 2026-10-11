@@ -615,3 +615,91 @@ fn animated_brightness_brightens_the_picture_over_the_clip() {
         "{early:?} -> {middle:?}"
     );
 }
+
+#[test]
+fn an_animated_zoom_in_magnifies_the_picture_about_its_centre() {
+    let Some((ffmpeg, _)) = oracles() else {
+        return;
+    };
+    // Red on the left three quarters, green on the right quarter: the boundary is at x = 240 of 320.
+    let split = scratch("zoom_split.mp4");
+    let status = Command::new(&ffmpeg)
+        .args(["-v", "error", "-y", "-f", "lavfi", "-i"])
+        .arg("color=c=red:s=320x180:r=30:d=1,drawbox=x=240:y=0:w=80:h=180:color=green:t=fill")
+        .args([
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:sample_rate=48000:d=1",
+        ])
+        .args([
+            "-c:v",
+            "mpeg4",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-shortest",
+        ])
+        .arg(&split)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let mut zoomed = clip(1, 1, 0.0, 0.0, 1.0);
+    zoomed.scale_keyframes = vec![
+        avcore::Keyframe {
+            time_fraction: 0.0,
+            value: 1.0,
+        },
+        avcore::Keyframe {
+            time_fraction: 1.0,
+            value: 2.0,
+        },
+    ];
+    let track = Track {
+        id: 1,
+        name: "V1".to_string(),
+        kind: TrackKind::Video,
+        clips: vec![zoomed],
+        text_clips: vec![],
+        shape_clips: vec![],
+        visible: true,
+        audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
+        locked: false,
+        color_label: None,
+    };
+    let output = scratch("zoom_out.mp4");
+    let outcome = render_timeline_export(
+        &sequence_with(vec![track]),
+        &[media(&split, 1)],
+        &output,
+        -14.0,
+        avcore::GpuEncoderPreference::Cpu,
+        &AtomicBool::new(false),
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, RenderOutcome::Completed);
+    // The boundary sits at 160 + 80 * zoom: x = 240 at the start, 280 half-way, off the frame at the end.
+    let start = pixel(&ffmpeg, &output, 0, 300, 90);
+    let early_green = pixel(&ffmpeg, &output, 0, 250, 90);
+    let middle_red = pixel(&ffmpeg, &output, 15, 270, 90);
+    let middle_green = pixel(&ffmpeg, &output, 15, 292, 90);
+    let end = pixel(&ffmpeg, &output, 29, 300, 90);
+    assert!(is_close(start, [0, 128, 0], 50), "start {start:?}");
+    assert!(
+        is_close(early_green, [0, 128, 0], 50),
+        "early {early_green:?}"
+    );
+    assert!(
+        is_close(middle_red, [255, 0, 0], 50),
+        "middle left {middle_red:?}"
+    );
+    assert!(
+        is_close(middle_green, [0, 128, 0], 50),
+        "middle right {middle_green:?}"
+    );
+    assert!(is_close(end, [255, 0, 0], 50), "end {end:?}");
+}
