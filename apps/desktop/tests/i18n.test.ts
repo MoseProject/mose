@@ -43,7 +43,7 @@ describe("locale", () => {
     // text. Reading the file keeps this test honest about newly added keys.
     const { readFileSync } = await import("node:fs");
     const { resolve } = await import("node:path");
-    const source = readFileSync(resolve(__dirname, "i18n/locales/en.ts"), "utf8");
+    const source = readFileSync(resolve(__dirname, "../src/i18n/locales/en.ts"), "utf8");
     const keys = [...source.matchAll(/^ {2}"?(\w+)"?:/gm)].map((match) => {
       return match[1] as TextKey;
     });
