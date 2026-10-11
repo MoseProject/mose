@@ -530,3 +530,15 @@ pub(crate) fn encode_timeline_export_multi_status(
         other => Err(EncodeError::Unknown(other)),
     }
 }
+
+/// The video encoder the calling thread opened last (`"h264_nvenc"`, `"libopenh264"`, ...), or
+/// `None` if it opened none. An export runs on one thread, so reading this right after it says
+/// where that export's frames were encoded.
+pub fn last_video_encoder() -> Option<String> {
+    // SAFETY: the C side returns a NUL-terminated string in thread-local storage, valid until this
+    // thread opens another encoder; it is copied out before anything else can.
+    let name = unsafe { std::ffi::CStr::from_ptr(crate::ffi::avbridge_last_video_encoder()) }
+        .to_string_lossy()
+        .into_owned();
+    (!name.is_empty()).then_some(name)
+}

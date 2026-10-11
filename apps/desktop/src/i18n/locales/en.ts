@@ -403,6 +403,9 @@ export const en = {
   confirmOverwriteTitle: "Replace the file?",
   confirmOverwriteAction: "Replace",
   confirmKeepBoth: "Save under another name",
+  encoderGpu: "GPU",
+  encoderCpu: "CPU",
+  encoderUnknown: "encoder unknown",
   etaRemaining: "left",
   openExportFolder: "Show in folder",
   exportOutputIsSource:

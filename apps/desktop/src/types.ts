@@ -504,6 +504,16 @@ export interface ExportJobView {
   status: ExportStatus;
   percent: number;
   elapsedSecs: number | null;
+  /** Once the job has run: where it was encoded and how long it took. */
+  report?: ExportReport | null;
+}
+
+export interface ExportReport {
+  /** `h264_nvenc`, `libopenh264`, ... or null when none was opened. */
+  encoder: string | null;
+  tookSecs: number;
+  /** Length of the exported video. */
+  videoSecs: number;
 }
 
 export interface ClipPatch {

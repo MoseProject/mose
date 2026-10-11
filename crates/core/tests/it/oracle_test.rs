@@ -788,3 +788,43 @@ fn a_text_caption_is_burned_into_the_export_in_its_window_only() {
     // A pixel or two at the box edge can keep a trace of it: encoder bleed, not the caption.
     assert!(row(25) <= 2, "the caption is still there after it ended");
 }
+
+#[test]
+fn an_export_reports_which_encoder_it_ran_on() {
+    let Some((ffmpeg, _)) = oracles() else {
+        return;
+    };
+    let source = solid(&ffmpeg, "encoder_name_src.mp4", "blue");
+    let output = scratch("encoder_name_out.mp4");
+    let track = Track {
+        id: 1,
+        name: "V1".to_string(),
+        kind: TrackKind::Video,
+        clips: vec![clip(1, 1, 0.0, 0.0, 1.0)],
+        text_clips: vec![],
+        shape_clips: vec![],
+        visible: true,
+        audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
+        locked: false,
+        color_label: None,
+    };
+    let outcome = render_timeline_export(
+        &sequence_with(vec![track]),
+        &[media(&source, 1)],
+        &output,
+        -14.0,
+        avcore::GpuEncoderPreference::Cpu,
+        &AtomicBool::new(false),
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, RenderOutcome::Completed);
+    // Forced to the CPU: the software encoder the build has, never a hardware one.
+    let name = avcore::last_video_encoder().expect("an encoder was opened");
+    assert!(
+        name == "libopenh264" || name == "libx264",
+        "unexpected encoder {name}"
+    );
+}

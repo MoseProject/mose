@@ -22,6 +22,19 @@ pub struct ExportJobView {
     pub status: ExportJobStatus,
     pub percent: u8,
     pub elapsed_secs: Option<f64>,
+    /// Once the job has run: the encoder it used and how long it took against the length of the
+    /// video, so a slow export can say whether it ran on the GPU or the CPU.
+    pub report: Option<ExportReport>,
+}
+/// Where and how fast an export ran.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportReport {
+    /// `h264_nvenc`, `libopenh264`, ... or `None` when none was opened.
+    pub encoder: Option<String>,
+    pub took_secs: f64,
+    /// Length of the exported video; the speed is this over `took_secs`.
+    pub video_secs: f64,
 }
 #[derive(Serialize, Deserialize)]
 struct ExportSettings {
@@ -72,6 +85,7 @@ pub struct ExportQueue {
     jobs: Mutex<Vec<ExportJob>>,
     controls: Mutex<HashMap<u64, Arc<RenderControl>>>,
     started: Mutex<HashMap<u64, Instant>>,
+    reports: Mutex<HashMap<u64, ExportReport>>,
     config_dir: PathBuf,
     settings: Mutex<ExportSettings>,
 }
@@ -90,12 +104,14 @@ impl ExportQueue {
             jobs: Mutex::new(jobs),
             controls: Mutex::new(HashMap::new()),
             started: Mutex::new(HashMap::new()),
+            reports: Mutex::new(HashMap::new()),
             config_dir,
             settings: Mutex::new(settings),
         }
     }
     pub fn snapshot(&self) -> Vec<ExportJobView> {
         let starts = self.started.lock().unwrap_or_else(|p| p.into_inner());
+        let reports = self.reports.lock().unwrap_or_else(|p| p.into_inner());
         self.jobs
             .lock()
             .unwrap_or_else(|p| p.into_inner())
@@ -113,6 +129,7 @@ impl ExportQueue {
                     status: j.status.clone(),
                     percent,
                     elapsed_secs: starts.get(&j.id).map(|s| s.elapsed().as_secs_f64()),
+                    report: reports.get(&j.id).cloned(),
                 }
             })
             .collect()
@@ -331,6 +348,7 @@ impl ExportQueue {
                     job.track_segments.clone()
                 };
                 let mut last = 0;
+                let started_at = Instant::now();
                 let result = avcore::render_export_job_multi_with_audio(
                     &tracks,
                     &job.audio_segments,
@@ -350,7 +368,15 @@ impl ExportQueue {
                         control.wait_if_paused();
                     },
                 );
-                queue.finish(worker_app, job.id, result)
+                // The export ran on this thread, so this is the encoder it opened.
+                let report = ExportReport {
+                    encoder: avcore::last_video_encoder(),
+                    took_secs: started_at.elapsed().as_secs_f64(),
+                    video_secs: tracks
+                        .first()
+                        .map_or(0.0, |track| track.iter().map(segment_output_secs).sum()),
+                };
+                queue.finish(worker_app, job.id, result, report)
             });
         }
     }
@@ -367,7 +393,14 @@ impl ExportQueue {
         app: AppHandle<R>,
         id: u64,
         result: Result<RenderOutcome, avcore::RenderError>,
+        report: ExportReport,
     ) {
+        if matches!(result, Ok(RenderOutcome::Completed)) {
+            self.reports
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .insert(id, report);
+        }
         let mut jobs = self.jobs.lock().unwrap_or_else(|p| p.into_inner());
         match result {
             Ok(RenderOutcome::Completed) => {
@@ -402,3 +435,13 @@ impl ExportQueue {
 #[cfg(test)]
 #[path = "export/export_test.rs"]
 mod tests;
+
+/// How long one clip segment plays in the export: its source range over its speed.
+fn segment_output_secs(segment: &ClipSegment) -> f64 {
+    let speed = if segment.speed_factor > 0.0 {
+        f64::from(segment.speed_factor)
+    } else {
+        1.0
+    };
+    (segment.source_out_secs - segment.source_in_secs) / speed
+}

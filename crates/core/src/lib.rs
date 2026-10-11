@@ -64,8 +64,8 @@ pub use auto_reframe::{
     compute_reframe_crop, detect_faces, main_subject_center, CropRect, FaceBox, ReframeError,
 };
 pub use avbridge::{
-    extract_pcm_16k_mono, AudioSegment, Canvas, ClipSegment, GpuEncoderPreference, PcmError,
-    ShapeSegment,
+    extract_pcm_16k_mono, last_video_encoder, AudioSegment, Canvas, ClipSegment,
+    GpuEncoderPreference, PcmError, ShapeSegment,
 };
 pub use background_removal::{encode_matte_video, segment_person, MatteEncodeError, SegmentError};
 pub use bundle::{

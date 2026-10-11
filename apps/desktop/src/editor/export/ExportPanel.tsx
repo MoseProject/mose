@@ -93,6 +93,33 @@ export function ExportPanel() {
     </section>
   );
 }
+/** The encoders that run on a graphics chip rather than the processor. */
+const HARDWARE_ENCODERS = ["nvenc", "qsv", "amf", "vaapi", "videotoolbox"];
+
+/** What a finished job says about how it ran: the encoder (CPU or GPU), how long it took and how
+ *  many times faster than the video's own length. Null until the job has a report. */
+export function exportSummary(job: ExportJobView): string | null {
+  const report = job.report;
+  if (!report) {
+    return null;
+  }
+  const hardware = report.encoder
+    ? HARDWARE_ENCODERS.some((name) => {
+        return report.encoder!.includes(name);
+      })
+    : false;
+  const parts = [
+    report.encoder
+      ? `${report.encoder} (${hardware ? t("encoderGpu") : t("encoderCpu")})`
+      : t("encoderUnknown"),
+    formatTime(report.tookSecs),
+  ];
+  if (report.tookSecs > 0 && report.videoSecs > 0) {
+    parts.push(`${(report.videoSecs / report.tookSecs).toFixed(1)}x`);
+  }
+  return parts.join(" · ");
+}
+
 /** Seconds left, extrapolated from progress so far; null until the estimate is steady. */
 export function remainingSecs(job: ExportJobView): number | null {
   const elapsed = job.elapsedSecs ?? 0;
@@ -105,6 +132,7 @@ export function remainingSecs(job: ExportJobView): number | null {
 function Job({ job }: { job: ExportJobView }) {
   const current = label(job);
   const remaining = current === "Rendering" ? remainingSecs(job) : null;
+  const summary = exportSummary(job);
   return (
     <div
       className={cx(styles, baseStyles, inspectorStyles, "job")}
@@ -114,6 +142,14 @@ function Job({ job }: { job: ExportJobView }) {
       <span className={cx(styles, baseStyles, "muted")}>
         {current} {job.percent > 0 && `${job.percent}%`}
       </span>
+      {current === "Done" && summary && (
+        <span
+          className={cx(styles, baseStyles, "muted")}
+          data-testid="export-summary"
+        >
+          {summary}
+        </span>
+      )}
       {(current === "Rendering" || current === "Paused") && (
         <>
           <progress
