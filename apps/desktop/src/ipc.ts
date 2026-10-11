@@ -247,6 +247,9 @@ export const api = {
   setProjectFrameRate: (frameRate: FrameRate | null) => {
     return invoke<void>("set_project_frame_rate", { frameRate });
   },
+  controlReady: () => {
+    return invoke<void>("control_ready");
+  },
   controlReply: (requestId: number, ok: boolean, value: unknown) => {
     return invoke<void>("control_reply", { requestId, ok, value });
   },

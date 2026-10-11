@@ -74,9 +74,12 @@ async function answer(request: ControlRequest) {
   }
 }
 
-/** Starts answering forwarded requests. Nothing is sent unless the backend runs the channel. */
-export function listenForControlRequests() {
-  return onControlRequest((request) => {
+/** Starts answering forwarded requests, then tells the backend the window is listening (a
+ *  request sent before that would be lost). Nothing is sent unless the backend runs the channel. */
+export async function listenForControlRequests() {
+  const unlisten = await onControlRequest((request) => {
     void answer(request);
   });
+  await api.controlReady();
+  return unlisten;
 }
