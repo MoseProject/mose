@@ -83,7 +83,7 @@ export function Dialog({
     >
       <div
         ref={panel}
-        className={cx(styles, baseStyles, wide ? "modal wide" : "modal")}
+        className={cx(styles, baseStyles, homeStyles, wide ? "modal wide" : "modal")}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -92,7 +92,7 @@ export function Dialog({
       >
         <h3 id={titleId}>{title}</h3>
         {children}
-        {actions && <div className={cx(styles, baseStyles, "modal-actions")}>{actions}</div>}
+        {actions && <div className={cx(styles, baseStyles, homeStyles, "modal-actions")}>{actions}</div>}
       </div>
     </div>
   );

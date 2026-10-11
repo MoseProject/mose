@@ -888,7 +888,7 @@ export function Timeline({ session }: { session: SessionView }) {
             onWheel={onWheel}
           />
           <ul
-            className={cx(styles, baseStyles, "sr-only")}
+            className={cx(styles, baseStyles, chromeStyles, "sr-only")}
             aria-label={t("timelineClips")}
           >
             {orderedClips.map((clip) => {
@@ -908,7 +908,7 @@ export function Timeline({ session }: { session: SessionView }) {
           </ul>
           {tracks.length === 0 && (
             <div
-              className={cx(styles, baseStyles, "empty-state")}
+              className={cx(styles, baseStyles, libraryStyles, "empty-state")}
               style={{ position: "absolute", top: RULER_HEIGHT + 16, width: "100%" }}
             >
               {t("timelineEmpty")}

@@ -63,7 +63,14 @@ export function Menu({
       ref={root}
     >
       <button
-        className={cx(styles, baseStyles, variant === "bar" ? "menu-trigger menubar-item" : "icon menu-trigger")}
+        className={cx(
+          styles,
+          baseStyles,
+          toolrailStyles,
+          libraryStyles,
+          topbarStyles,
+          variant === "bar" ? "menu-trigger menubar-item" : "icon menu-trigger",
+        )}
         data-testid={testId}
         aria-label={ariaLabel}
         aria-haspopup="menu"

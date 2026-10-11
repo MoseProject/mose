@@ -45,7 +45,7 @@
   width: 100%;
   box-sizing: border-box;
 }
-.modal-row {
+:global(.modal-row) {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -53,10 +53,10 @@
   padding: 6px 0;
   border-top: 1px solid var(--border-subtle);
 }
-.modal-row:first-of-type {
+:global(.modal-row):first-of-type {
   border-top: none;
 }
-.modal-actions {
+:global(.modal-actions) {
   display: flex;
   justify-content: flex-end;
   gap: 8px;

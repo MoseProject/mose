@@ -31,7 +31,7 @@ export function SequenceTabs({ session }: { session: SessionView }) {
   return (
     <div className={cx(styles, baseStyles, editorStyles, "sequence-tabs")}>
       <div
-        className={cx(styles, baseStyles, "tab-list")}
+        className={cx(styles, baseStyles, editorStyles, "tab-list")}
         role="tablist"
         aria-label={t("sequences")}
       >
@@ -145,9 +145,9 @@ export function SequenceTabs({ session }: { session: SessionView }) {
 function MarkerList({ session }: { session: SessionView }) {
   const markers = session.project.sequences[session.project.active_sequence].timeline.markers;
   return (
-    <details className={cx(styles, baseStyles, "marker-list")}>
+    <details className={cx(styles, baseStyles, editorStyles, "marker-list")}>
       <summary>{t("markers")}</summary>
-      <div className={cx(styles, baseStyles, "marker-pop")}>
+      <div className={cx(styles, baseStyles, editorStyles, "marker-pop")}>
         <button
           onClick={() => {
             return run(api.addMarker());
@@ -164,7 +164,7 @@ function MarkerList({ session }: { session: SessionView }) {
             return (
               <div
                 key={marker.id}
-                className={cx(styles, baseStyles, "marker-row")}
+                className={cx(styles, baseStyles, editorStyles, "marker-row")}
               >
                 <button
                   className={cx(styles, baseStyles, "icon")}

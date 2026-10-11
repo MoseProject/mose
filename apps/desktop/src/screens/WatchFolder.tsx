@@ -1,4 +1,5 @@
 import homeStyles from "./home.module.css";
+import settingsStyles from "./settings.module.css";
 import { cx } from "../cx";
 import baseStyles from "../styles/base.module.css";
 import styles from "../editor/chrome/chrome.module.css";
@@ -111,7 +112,7 @@ export function WatchFolder({ open = true, onClose }: { open?: boolean; onClose?
       }}
     >
       <div
-        className={cx(styles, baseStyles, homeStyles, "prefs")}
+        className={cx(styles, baseStyles, homeStyles, settingsStyles, "prefs")}
         data-testid="screen-watch"
       >
         <label>

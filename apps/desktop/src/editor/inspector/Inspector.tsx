@@ -75,7 +75,7 @@ export function Inspector({ session }: { session: SessionView }) {
   return (
     <section className={cx(styles, baseStyles, libraryStyles, editorStyles, "panel inspector")}>
       <div
-        className={cx(styles, baseStyles, "panel-tabs")}
+        className={cx(styles, baseStyles, libraryStyles, "panel-tabs")}
         role="tablist"
       >
         {(clip ? (["inspector", "effects", "audio"] as const) : (["inspector"] as const)).map(
@@ -146,7 +146,7 @@ export function Inspector({ session }: { session: SessionView }) {
         ) : selectedClipIds.length > 1 ? (
           <MultiSelection ids={selectedClipIds} />
         ) : (
-          <div className={cx(styles, baseStyles, "empty-state")}>{t("noClipSelected")}</div>
+          <div className={cx(styles, baseStyles, libraryStyles, "empty-state")}>{t("noClipSelected")}</div>
         )}
       </div>
     </section>

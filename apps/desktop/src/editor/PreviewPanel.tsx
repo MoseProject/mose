@@ -446,7 +446,7 @@ export function PreviewPanel() {
   };
 
   return (
-    <section className={cx(styles, baseStyles, "panel preview")}>
+    <section className={cx(styles, baseStyles, editorStyles, "panel preview")}>
       <div className={cx(styles, baseStyles, "panel-title")}>
         <span>{t("programMonitor")}</span>
         <span className={cx(styles, baseStyles, "monitor-tools")}>
@@ -480,7 +480,7 @@ export function PreviewPanel() {
       </div>
       <div
         ref={monitorRef}
-        className={cx(styles, baseStyles, "monitor")}
+        className={cx(styles, baseStyles, editorStyles, "monitor")}
         data-testid="preview-monitor"
         style={
           ui.tool === "text" || ui.drawingShapePoints !== null
@@ -564,7 +564,7 @@ export function PreviewPanel() {
           {shuttleState.direction !== 0 &&
             (shuttleState.direction < 0 || shuttleState.level > 1) && (
               <span
-                className={cx(styles, baseStyles, "shuttle-badge")}
+                className={cx(styles, baseStyles, timelineStyles, "shuttle-badge")}
                 title={t("shuttleBadge")}
                 data-testid="shuttle-badge"
               >
