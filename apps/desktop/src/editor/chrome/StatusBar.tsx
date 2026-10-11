@@ -2,7 +2,13 @@ import { cx } from "../../cx";
 import baseStyles from "../../styles/base.module.css";
 import styles from "./chrome.module.css";
 import { t } from "../../i18n";
-import { exportsStore, patchUi, sessionStore, transcribingAssetIdStore, useStore } from "../../store";
+import {
+  exportsStore,
+  patchUi,
+  sessionStore,
+  transcribingAssetIdStore,
+  useStore,
+} from "../../store";
 import type { ExportJobView } from "../../types";
 
 interface Task {
@@ -84,7 +90,11 @@ export function StatusBar() {
             }}
           >
             <span
-              className={cx(styles, baseStyles, "task-bar" + (task.percent === null ? " indeterminate" : ""))}
+              className={cx(
+                styles,
+                baseStyles,
+                "task-bar" + (task.percent === null ? " indeterminate" : ""),
+              )}
               aria-hidden="true"
             >
               <span style={task.percent === null ? undefined : { width: task.percent + "%" }} />
@@ -96,7 +106,9 @@ export function StatusBar() {
           </button>
         );
       })}
-      {tasks.length > 4 && <span className={cx(styles, baseStyles, "muted")}>+{tasks.length - 4}</span>}
+      {tasks.length > 4 && (
+        <span className={cx(styles, baseStyles, "muted")}>+{tasks.length - 4}</span>
+      )}
     </div>
   );
 }

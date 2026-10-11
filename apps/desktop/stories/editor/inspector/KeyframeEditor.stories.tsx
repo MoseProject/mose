@@ -1,6 +1,9 @@
 import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { F32KeyframeList, PositionKeyframeList } from "../../../src/editor/inspector/KeyframeEditor";
+import {
+  F32KeyframeList,
+  PositionKeyframeList,
+} from "../../../src/editor/inspector/KeyframeEditor";
 import type { Keyframe, Position } from "../../../src/types";
 
 function KeyframeLists() {

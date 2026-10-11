@@ -185,7 +185,6 @@ button.icon.letter.solo.active {
   font-variant-numeric: tabular-nums;
 }
 
-
 /* The frame rate picker keeps a readable width; the toolbar wraps instead of squeezing it. */
 .frame-rate-select {
   flex: none;

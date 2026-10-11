@@ -184,7 +184,9 @@ export function Home() {
           <div>
             <span className={cx(styles, baseStyles, "muted")}>{t("continueEditing")}</span>
             <strong>{session.project.name}</strong>
-            {session.dirty && <span className={cx(styles, baseStyles, "muted")}> · {t("unsaved")}</span>}
+            {session.dirty && (
+              <span className={cx(styles, baseStyles, "muted")}> · {t("unsaved")}</span>
+            )}
           </div>
           <button
             data-testid="back-to-editor"
@@ -311,7 +313,9 @@ export function Home() {
         </div>
       )}
 
-      {hasProjects && shown.length === 0 && <p className={cx(styles, baseStyles, "muted")}>{t("projectsNoMatches")}</p>}
+      {hasProjects && shown.length === 0 && (
+        <p className={cx(styles, baseStyles, "muted")}>{t("projectsNoMatches")}</p>
+      )}
 
       {shown.length > 0 && (
         <ul
@@ -333,7 +337,9 @@ export function Home() {
                   }}
                 >
                   <strong>{project.name}</strong>
-                  <span className={cx(styles, baseStyles, "muted project-folder")}>{project.folder}</span>
+                  <span className={cx(styles, baseStyles, "muted project-folder")}>
+                    {project.folder}
+                  </span>
                   <span className={cx(styles, baseStyles, "muted project-meta")}>
                     {new Date(project.modifiedUnixSecs * 1000).toLocaleString()}
                     {" · "}
@@ -368,7 +374,9 @@ export function Home() {
                 </div>
                 {project.autosavePath && (
                   <div className={cx(styles, baseStyles, "project-recovery")}>
-                    <span className={cx(styles, baseStyles, "muted")}>{t("autosaveAvailable")}</span>
+                    <span className={cx(styles, baseStyles, "muted")}>
+                      {t("autosaveAvailable")}
+                    </span>
                     <button
                       onClick={() => {
                         void run(

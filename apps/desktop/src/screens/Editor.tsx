@@ -237,7 +237,9 @@ export function Editor({ session }: { session: SessionView }) {
         onPointerDown={startResize}
       />
       <Timeline session={session} />
-      {dropping && <div className={cx(styles, baseStyles, "drop-overlay")}>{t("dropToImport")}</div>}
+      {dropping && (
+        <div className={cx(styles, baseStyles, "drop-overlay")}>{t("dropToImport")}</div>
+      )}
     </div>
   );
 }

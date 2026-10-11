@@ -58,7 +58,10 @@ function IconGallery() {
             key={name}
             style={{ display: "flex", alignItems: "center", gap: 8 }}
           >
-            <Icon name={name} size={18} />
+            <Icon
+              name={name}
+              size={18}
+            />
             <span>{name}</span>
           </div>
         );

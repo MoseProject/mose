@@ -3,7 +3,10 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../src/i18n";
 import type { Keyframe, Position } from "../../../src/types";
-import { F32KeyframeList, PositionKeyframeList } from "../../../src/editor/inspector/KeyframeEditor";
+import {
+  F32KeyframeList,
+  PositionKeyframeList,
+} from "../../../src/editor/inspector/KeyframeEditor";
 
 afterEach(() => {
   return cleanup();

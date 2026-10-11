@@ -7,9 +7,6 @@ export type TextKey = keyof typeof en;
 
 const translations: Record<Locale, Record<TextKey, string>> = { "pt-BR": ptBR, en };
 
-
-
-
 export function detectLocale(): Locale {
   return navigator.language.toLowerCase().startsWith("pt") ? "pt-BR" : "en";
 }
@@ -44,7 +41,6 @@ export function subscribeLocale(listener: () => void) {
 export function localeSnapshot() {
   return current;
 }
-
 
 export function gettext(key: TextKey): string {
   return translations[current][key];

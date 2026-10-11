@@ -285,7 +285,11 @@ export function PreviewPanel() {
       >
         <div
           data-testid="preview-layer"
-          className={cx(styles, baseStyles, `preview-layer ${draggable ? "draggable" : "animated"}`)}
+          className={cx(
+            styles,
+            baseStyles,
+            `preview-layer ${draggable ? "draggable" : "animated"}`,
+          )}
           style={{
             left: layerLeft - canvasRect.left,
             top: layerTop - canvasRect.top,
@@ -454,7 +458,11 @@ export function PreviewPanel() {
             return (
               <button
                 key={zoom}
-                className={cx(styles, baseStyles, "chip " + (ui.monitorZoom === zoom ? "active" : ""))}
+                className={cx(
+                  styles,
+                  baseStyles,
+                  "chip " + (ui.monitorZoom === zoom ? "active" : ""),
+                )}
                 aria-pressed={ui.monitorZoom === zoom}
                 title={t("monitorZoom")}
                 onClick={() => {
@@ -560,7 +568,9 @@ export function PreviewPanel() {
       </div>
       <div className={cx(styles, baseStyles, "transport")}>
         <div className={cx(styles, baseStyles, "scrub")}>
-          <span className={cx(styles, baseStyles, "mono time-now")}>{formatTimecode(tick.playheadSecs, timecodeFps)}</span>
+          <span className={cx(styles, baseStyles, "mono time-now")}>
+            {formatTimecode(tick.playheadSecs, timecodeFps)}
+          </span>
           {shuttleState.direction !== 0 &&
             (shuttleState.direction < 0 || shuttleState.level > 1) && (
               <span
@@ -589,7 +599,9 @@ export function PreviewPanel() {
               return void run(api.seek(Number(e.target.value)));
             }}
           />
-          <span className={cx(styles, baseStyles, "mono muted time-total")}>{formatTimecode(duration, timecodeFps)}</span>
+          <span className={cx(styles, baseStyles, "mono muted time-total")}>
+            {formatTimecode(duration, timecodeFps)}
+          </span>
         </div>
         <div className={cx(styles, baseStyles, "transport-controls")}>
           <button

@@ -16,9 +16,14 @@ const meta = {
       <>
         <label className={cx(styles, baseStyles, exportStyles, "dialog-field")}>
           Project name
-          <input autoFocus defaultValue="Gameplay highlights" />
+          <input
+            autoFocus
+            defaultValue="Gameplay highlights"
+          />
         </label>
-        <p className={cx(styles, baseStyles, "muted")}>Choose a name that helps you find this edit later.</p>
+        <p className={cx(styles, baseStyles, "muted")}>
+          Choose a name that helps you find this edit later.
+        </p>
       </>
     ),
     actions: (

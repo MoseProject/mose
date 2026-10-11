@@ -92,7 +92,9 @@ export function Dialog({
       >
         <h3 id={titleId}>{title}</h3>
         {children}
-        {actions && <div className={cx(styles, baseStyles, homeStyles, "modal-actions")}>{actions}</div>}
+        {actions && (
+          <div className={cx(styles, baseStyles, homeStyles, "modal-actions")}>{actions}</div>
+        )}
       </div>
     </div>
   );
