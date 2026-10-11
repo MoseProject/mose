@@ -32,6 +32,10 @@ use avbridge::Canvas;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
+/// Pass as `target_lufs` to export without loudness normalization: the audio keeps its mix and
+/// gains, with only the true-peak safety limiter applied.
+pub const NO_NORMALIZATION: f32 = f32::NAN;
+
 /// Renders `source` to `output`, applying single-pass loudnorm normalization to
 /// `target_lufs` and copying video untouched. Blocks the calling thread until the render
 /// finishes, is cancelled, or fails — callers on a UI thread should run this from a background

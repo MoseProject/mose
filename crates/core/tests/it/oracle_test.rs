@@ -267,6 +267,32 @@ fn the_export_hits_the_loudness_target_as_ffmpeg_measures_it() {
 }
 
 #[test]
+fn the_single_pass_export_leaves_loudness_alone_when_normalisation_is_off() {
+    let Some((ffmpeg, _)) = oracles() else {
+        return;
+    };
+    let source = generate(&ffmpeg, "plain_src.mp4", 12, 800);
+    let (source_lufs, _) = ebur128(&ffmpeg, &source);
+    let output = scratch("plain_out.mp4");
+    let outcome = render_export(
+        &source,
+        &output,
+        avcore::NO_NORMALIZATION,
+        12.0,
+        &AtomicBool::new(false),
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, RenderOutcome::Completed);
+    let (lufs, _) = ebur128(&ffmpeg, &output);
+    assert!(
+        (lufs - source_lufs).abs() <= 1.5,
+        "source {source_lufs:.1} LUFS, export {lufs:.1} LUFS"
+    );
+    let _ = (std::fs::remove_file(source), std::fs::remove_file(output));
+}
+
+#[test]
 fn a_cut_timeline_is_exactly_as_long_as_its_clips() {
     let Some((ffmpeg, ffprobe_bin)) = oracles() else {
         return;
@@ -1080,9 +1106,36 @@ fn a_cut_without_a_whole_gop_between_its_points_is_left_to_the_normal_export() {
 
 #[test]
 fn a_single_cut_export_copies_the_picture_and_normalises_the_sound() {
-    let Some((ffmpeg, ffprobe_bin)) = oracles() else {
+    let Some((lufs, peak, _)) = single_cut_export(-14.0, "single_cut_out.mp4") else {
         return;
     };
+    assert!((lufs + 14.0).abs() <= 1.0, "loudness {lufs}");
+    assert!(peak <= -0.9, "peak {peak}");
+}
+
+#[test]
+fn an_export_without_normalisation_keeps_the_source_loudness() {
+    let Some((lufs, peak, source_lufs)) =
+        single_cut_export(avcore::NO_NORMALIZATION, "single_cut_plain.mp4")
+    else {
+        return;
+    };
+    // The source is quiet (volume 0.05); normalising would lift it to -14 LUFS.
+    assert!(
+        source_lufs < -25.0,
+        "test source is too loud: {source_lufs}"
+    );
+    assert!(
+        (lufs - source_lufs).abs() <= 1.5,
+        "source {source_lufs:.1} LUFS, export {lufs:.1} LUFS"
+    );
+    assert!(peak <= -0.9, "peak {peak}");
+}
+
+/// Cuts 3.5 s..9.4 s of a numbered, quiet clip and checks the picture; returns the export's
+/// loudness, peak and the source's loudness.
+fn single_cut_export(target: f32, out_name: &str) -> Option<(f64, f64, f64)> {
+    let (ffmpeg, ffprobe_bin) = oracles()?;
     // Numbered frames with a tone, keyframe every 2 s.
     let source = scratch("numbered_sound.mp4");
     let status = Command::new(&ffmpeg)
@@ -1110,7 +1163,7 @@ fn a_single_cut_export_copies_the_picture_and_normalises_the_sound() {
         .status()
         .unwrap();
     assert!(status.success());
-    let output = scratch("single_cut_out.mp4");
+    let output = scratch(out_name);
     let track = Track {
         id: 1,
         name: "V1".to_string(),
@@ -1129,7 +1182,7 @@ fn a_single_cut_export_copies_the_picture_and_normalises_the_sound() {
         &sequence_with(vec![track]),
         &[media(&source, 1)],
         &output,
-        -14.0,
+        target,
         avcore::GpuEncoderPreference::Cpu,
         &AtomicBool::new(false),
         |_| {},
@@ -1157,6 +1210,6 @@ fn a_single_cut_export_copies_the_picture_and_normalises_the_sound() {
         );
     }
     let (lufs, peak) = ebur128(&ffmpeg, &output);
-    assert!((lufs + 14.0).abs() <= 1.0, "loudness {lufs}");
-    assert!(peak <= -0.9, "peak {peak}");
+    let (source_lufs, _) = ebur128(&ffmpeg, &source);
+    Some((lufs, peak, source_lufs))
 }

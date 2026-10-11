@@ -48,6 +48,10 @@ static inline void bridge_enable_decoder_threads(AVCodecContext *ctx) {
 /* Mastering every export's audio goes through: denoise, loudness to the target, true-peak limit. */
 #define MASTERING_LOUDNORM_ARGS_FORMAT "I=%.1f:TP=-1.0:LRA=11"
 #define MASTERING_LIMITER_ARGS "limit=0.95:attack=5:release=50"
+/* Same chain with normalization switched off: only the true-peak safety limiter stays, so a
+   user-applied gain can't clip. Selected when the target loudness is NaN (see
+   avbridge_normalization_enabled). */
+#define MASTERING_FILTER_NO_NORMALIZE "alimiter=" MASTERING_LIMITER_ARGS
 #define MASTERING_FILTER_FORMAT                                                                    \
     "afftdn,loudnorm=" MASTERING_LOUDNORM_ARGS_FORMAT ",alimiter=" MASTERING_LIMITER_ARGS
 

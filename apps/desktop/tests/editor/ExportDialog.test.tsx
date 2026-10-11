@@ -11,6 +11,8 @@ vi.mock("../../src/ipc", () => {
     api: {
       getGpuEncoderPreference: vi.fn().mockResolvedValue("auto"),
       setGpuEncoderPreference: vi.fn().mockResolvedValue(undefined),
+      getNormalizeAudio: vi.fn().mockResolvedValue(true),
+      setNormalizeAudio: vi.fn().mockResolvedValue(undefined),
       setExportSettings: vi.fn().mockResolvedValue(undefined),
     },
     exportActiveSequence: vi.fn().mockResolvedValue(undefined),
@@ -47,6 +49,7 @@ const session = (overrides: { aspect?: string; lufs?: number; loudness?: number 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(api.getGpuEncoderPreference).mockResolvedValue("auto");
+  vi.mocked(api.getNormalizeAudio).mockResolvedValue(true);
   uiStore.set({ ...uiStore.get(), exportDialogOpen: true, exportQueueOpen: false });
 });
 afterEach(() => {
@@ -96,6 +99,7 @@ describe("ExportDialog", () => {
     });
     expect(api.setExportSettings).toHaveBeenCalledWith(-23, "Square");
     expect(api.setGpuEncoderPreference).toHaveBeenCalledWith("auto");
+    expect(api.setNormalizeAudio).toHaveBeenCalledWith(true);
     expect(uiStore.get().exportDialogOpen).toBe(false);
     expect(uiStore.get().exportQueueOpen).toBe(true);
     // The overwrite question is an in-app dialog whose buttons name the two outcomes.
@@ -106,6 +110,22 @@ describe("ExportDialog", () => {
     const second = ask();
     fireEvent.click(await screen.findByText(t("confirmKeepBoth")));
     expect(await second).toBe(false);
+  });
+
+  it("can export without normalization, even with an out-of-range target left in the field", async () => {
+    vi.mocked(api.getNormalizeAudio).mockResolvedValue(false);
+    render(<ExportDialog session={session()} />);
+    const box = screen.getByLabelText(t("normalizeAudio")) as HTMLInputElement;
+    await waitFor(() => {
+      expect(box.checked).toBe(false);
+    });
+    fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "" } });
+    fireEvent.click(screen.getByText(t("exportChooseFile")));
+    await waitFor(() => {
+      expect(exportActiveSequence).toHaveBeenCalledTimes(1);
+    });
+    expect(api.setNormalizeAudio).toHaveBeenCalledWith(false);
+    expect(api.setExportSettings).toHaveBeenCalledWith(-14, "Original");
   });
 
   it("accepts a custom loudness target and rejects one out of range", async () => {

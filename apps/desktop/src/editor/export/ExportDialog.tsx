@@ -41,10 +41,16 @@ export function ExportDialog({ session }: { session: SessionView }) {
   const [aspect, setAspect] = useState<ExportAspectRatio>(settings.aspect_ratio);
   const [lufs, setLufs] = useState(settings.target_lufs);
   const [gpu, setGpu] = useState("auto");
+  const [normalize, setNormalize] = useState(true);
   const measured = measuredLufs(session);
-  const lufsValid = Number.isFinite(lufs) && lufs >= MIN_LUFS && lufs <= MAX_LUFS;
+  const lufsValid = !normalize || (Number.isFinite(lufs) && lufs >= MIN_LUFS && lufs <= MAX_LUFS);
 
   useEffect(() => {
+    void run(api.getNormalizeAudio()).then((value) => {
+      if (typeof value === "boolean") {
+        setNormalize(value);
+      }
+    });
     void run(api.getGpuEncoderPreference()).then((value) => {
       if (value) {
         setGpu(value);
@@ -63,7 +69,8 @@ export function ExportDialog({ session }: { session: SessionView }) {
     close();
     patchUi({ exportQueueOpen: true });
     await run(api.setGpuEncoderPreference(gpu));
-    await run(api.setExportSettings(lufs, aspect));
+    await run(api.setNormalizeAudio(normalize));
+    await run(api.setExportSettings(Number.isFinite(lufs) ? lufs : settings.target_lufs, aspect));
     await run(
       exportActiveSequence(() => {
         return askConfirm({
@@ -124,7 +131,21 @@ export function ExportDialog({ session }: { session: SessionView }) {
           })}
         </div>
       </fieldset>
-      <fieldset className={cx(styles, baseStyles, "dialog-group")}>
+      <label className={cx(styles, baseStyles, "dialog-field")}>
+        <input
+          type="checkbox"
+          checked={normalize}
+          onChange={(e) => {
+            setNormalize(e.target.checked);
+          }}
+        />
+        <span>{t("normalizeAudio")}</span>
+      </label>
+      {!normalize && <p className={cx(styles, baseStyles, "muted")}>{t("normalizeAudioHint")}</p>}
+      <fieldset
+        className={cx(styles, baseStyles, "dialog-group")}
+        disabled={!normalize}
+      >
         <legend>{t("loudnessTarget")}</legend>
         <div
           className={cx(styles, baseStyles, "segmented")}

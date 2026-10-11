@@ -636,6 +636,12 @@ export const api = {
   setGpuEncoderPreference: (preference: string) => {
     return invoke<void>("set_gpu_encoder_preference", { preference });
   },
+  setNormalizeAudio: (enabled: boolean) => {
+    return invoke<void>("set_normalize_audio", { enabled });
+  },
+  getNormalizeAudio: () => {
+    return invoke<boolean>("get_normalize_audio");
+  },
   getGpuEncoderPreference: () => {
     return invoke<string>("get_gpu_encoder_preference");
   },
