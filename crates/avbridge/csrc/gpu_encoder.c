@@ -24,6 +24,7 @@
 #include <libavutil/cpu.h>
 #include <libavutil/hwcontext.h>
 #include <libavutil/log.h>
+#include <libavutil/opt.h>
 
 #ifdef __linux__
 #include <unistd.h>
@@ -48,9 +49,18 @@ static enum AVPixelFormat pix_fmt_for_encoder_name(const char *encoder_name) {
 #define BRIDGE_THREAD_LOCAL _Thread_local
 #endif
 static BRIDGE_THREAD_LOCAL char last_encoder_name[32];
+static BRIDGE_THREAD_LOCAL int high_profile_requested;
+
+void request_high_profile_encoders(int on) {
+    high_profile_requested = on;
+}
 
 const char *avbridge_last_video_encoder(void) {
     return last_encoder_name;
+}
+
+void record_video_encoder_name(const char *name) {
+    snprintf(last_encoder_name, sizeof(last_encoder_name), "%s", name);
 }
 
 const AVCodec *find_cpu_h264_encoder(void) {
@@ -98,6 +108,12 @@ static AVCodecContext *try_open_encoder(const char *encoder_name, int canvas_wid
            slices; with the default single slice it runs on one core however many threads it is
            given. A slice per core, up to the thread count: about 1.6x at 1080p on four cores,
            for a slightly larger file. */
+        if (high_profile_requested) {
+            /* For the few pictures a lossless cut encodes beside copied ones: High profile with
+               CABAC like the footage it joins (the speed it costs does not matter for them). */
+            av_opt_set(ctx->priv_data, "profile", "high", 0);
+            av_opt_set(ctx->priv_data, "coder", "cabac", 0);
+        }
         int cores = av_cpu_count();
         ctx->slices =
             cores < 1 ? 1 : (cores > SOFTWARE_ENCODER_THREADS ? SOFTWARE_ENCODER_THREADS : cores);
@@ -109,7 +125,7 @@ static AVCodecContext *try_open_encoder(const char *encoder_name, int canvas_wid
         avcodec_free_context(&ctx);
         return NULL;
     }
-    snprintf(last_encoder_name, sizeof(last_encoder_name), "%s", encoder_name);
+    record_video_encoder_name(encoder_name);
     if (out_pix_fmt) {
         *out_pix_fmt = ctx->pix_fmt;
     }

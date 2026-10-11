@@ -812,4 +812,26 @@ DecodeStatus avbridge_audio_next_block(AvbridgeAudioSession *session, const uint
 void avbridge_audio_free_block(DecodedAudioBlock *block);
 void avbridge_audio_close(AvbridgeAudioSession *session);
 
+typedef enum {
+    SMART_CUT_OK = 0,
+    /* Nothing was written: the clip or the cut does not suit a copy (another codec, a variable
+       frame rate, an open GOP, no whole GOP between the cut points). Export the usual way. */
+    SMART_CUT_NOT_APPLICABLE = 1,
+    SMART_CUT_CANCELLED = 2,
+    /* Writing started and failed: delete `out_path` and export the usual way. */
+    SMART_CUT_ERROR = 3
+} SmartCutStatus;
+
+/* Writes the video of `in_path` between `in_secs` and `out_secs` to `out_path` (video only, no
+   audio), frame accurate, without encoding what lies between the keyframes next to the cut
+   points: that part is copied packet for packet, and only the pictures at the two ends are
+   decoded and encoded again. Needs an H.264 4:2:0 stream of the canvas's size and a constant
+   frame rate equal to the canvas's; `canvas_bit_rate_bps` is for the re-encoded ends. Times are
+   source timestamps, as in ClipSegment. progress_cb may be NULL; `cancel` may be NULL. */
+SmartCutStatus avbridge_smart_cut_video(const char *in_path, double in_secs, double out_secs,
+                                        int canvas_width, int canvas_height, int canvas_fps_num,
+                                        int canvas_fps_den, int64_t canvas_bit_rate_bps,
+                                        const char *out_path, ProgressCallback progress_cb,
+                                        void *progress_user_data, const uint8_t *cancel);
+
 #endif
