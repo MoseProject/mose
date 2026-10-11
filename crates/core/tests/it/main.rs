@@ -17,6 +17,7 @@ mod clip_gaps_test;
 mod collab_bundle_test;
 mod error_reporting_test;
 mod export_perf_test;
+mod import_perf_test;
 mod frame_sampler_test;
 mod loudness_test;
 mod lut_test;
