@@ -15,6 +15,7 @@ import { YoutubeDownloadButton } from "./library/YoutubeDownloadButton";
 import { SoundLibraryButton } from "./library/SoundLibraryButton";
 import { TtsButton } from "./library/TtsButton";
 import { AssetRow } from "./library/AssetRow";
+import { EffectsBrowser } from "./library/EffectsBrowser";
 
 /** Whether any clip in any sequence plays `assetId`. */
 function assetInUse(session: SessionView, assetId: number): boolean {
@@ -45,11 +46,15 @@ async function removeAsset(session: SessionView, asset: MediaAsset) {
 }
 
 /** Pixels the pointer must travel before a press on an asset becomes a drag. */
-type LibraryTab = "media" | "favorites" | "recent";
-const TABS: [LibraryTab, "libraryTabMedia" | "libraryTabFavorites" | "libraryTabRecent"][] = [
+type LibraryTab = "media" | "favorites" | "recent" | "effects";
+const TABS: [
+  LibraryTab,
+  "libraryTabMedia" | "libraryTabFavorites" | "libraryTabRecent" | "libraryTabEffects",
+][] = [
   ["media", "libraryTabMedia"],
   ["favorites", "libraryTabFavorites"],
   ["recent", "libraryTabRecent"],
+  ["effects", "libraryTabEffects"],
 ];
 
 export function MediaLibrary({ session }: { session: SessionView }) {
@@ -106,103 +111,109 @@ export function MediaLibrary({ session }: { session: SessionView }) {
             </button>
           );
         })}
-        <button
-          className={cx(styles, baseStyles, "import-btn")}
-          onClick={() => {
-            return run(api.importMediaDialog());
-          }}
-        >
-          <Icon
-            name="plus"
-            size={14}
-          />{" "}
-          {t("importFiles")}
-        </button>
-        <Menu
-          label={
-            <Icon
-              name="more"
-              size={16}
-            />
-          }
-          ariaLabel={t("moreSources")}
-        >
-          <TtsButton />
-          <SoundLibraryButton />
-          <YoutubeDownloadButton />
-        </Menu>
       </div>
-      <div className={cx(styles, baseStyles, "search-row")}>
-        <label className={cx(styles, baseStyles, "search")}>
-          <Icon
-            name="search"
-            size={14}
-          />
-          <input
-            type="search"
-            value={query}
-            placeholder={t("searchMedia")}
-            aria-label={t("searchMedia")}
-            onChange={(e) => {
-              return setQuery(e.target.value);
-            }}
-          />
-        </label>
-        <button
-          className={cx(styles, baseStyles, `icon ${view === "grid" ? "active" : ""}`)}
-          aria-label={t("viewGrid")}
-          title={t("viewGrid")}
-          aria-pressed={view === "grid"}
-          onClick={() => {
-            return setView("grid");
-          }}
-        >
-          <Icon
-            name="grid"
-            size={16}
-          />
-        </button>
-        <button
-          className={cx(styles, baseStyles, `icon ${view === "list" ? "active" : ""}`)}
-          aria-label={t("viewList")}
-          title={t("viewList")}
-          aria-pressed={view === "list"}
-          onClick={() => {
-            return setView("list");
-          }}
-        >
-          <Icon
-            name="list"
-            size={16}
-          />
-        </button>
-      </div>
-      <div className={cx(styles, baseStyles, "media-head")}>
-        <span>{t("projectMedia")}</span>
-        <span className={cx(styles, baseStyles, "count")}>
-          {assets.length} {t("items")}
-        </span>
-      </div>
-      <div className={cx(styles, baseStyles, `asset-list ${view}`)}>
-        {assets.length === 0 ? (
-          <div className={cx(styles, baseStyles, "empty-state")}>
-            {all.length === 0 ? t("libraryEmpty") : t("libraryNoMatches")}
-          </div>
-        ) : (
-          assets.map((asset) => {
-            return (
-              <AssetRow
-                key={asset.id}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setMenu({ x: e.clientX, y: e.clientY, asset });
-                }}
-                asset={asset}
+      {tab === "effects" ? (
+        <EffectsBrowser session={session} />
+      ) : (
+        <>
+          <div className={cx(styles, baseStyles, "search-row")}>
+            <label className={cx(styles, baseStyles, "search")}>
+              <Icon
+                name="search"
+                size={14}
               />
-            );
-          })
-        )}
-      </div>
+              <input
+                type="search"
+                value={query}
+                placeholder={t("searchMedia")}
+                aria-label={t("searchMedia")}
+                onChange={(e) => {
+                  return setQuery(e.target.value);
+                }}
+              />
+            </label>
+            <button
+              className={cx(styles, baseStyles, `icon ${view === "grid" ? "active" : ""}`)}
+              aria-label={t("viewGrid")}
+              title={t("viewGrid")}
+              aria-pressed={view === "grid"}
+              onClick={() => {
+                return setView("grid");
+              }}
+            >
+              <Icon
+                name="grid"
+                size={16}
+              />
+            </button>
+            <button
+              className={cx(styles, baseStyles, `icon ${view === "list" ? "active" : ""}`)}
+              aria-label={t("viewList")}
+              title={t("viewList")}
+              aria-pressed={view === "list"}
+              onClick={() => {
+                return setView("list");
+              }}
+            >
+              <Icon
+                name="list"
+                size={16}
+              />
+            </button>
+          </div>
+          <div className={cx(styles, baseStyles, "media-head")}>
+            <span>{t("projectMedia")}</span>
+            <span className={cx(styles, baseStyles, "count")}>
+              {assets.length} {t("items")}
+            </span>
+            <button
+              className={cx(styles, baseStyles, "import-btn")}
+              onClick={() => {
+                return run(api.importMediaDialog());
+              }}
+            >
+              <Icon
+                name="plus"
+                size={14}
+              />{" "}
+              {t("importFiles")}
+            </button>
+            <Menu
+              label={
+                <Icon
+                  name="more"
+                  size={16}
+                />
+              }
+              ariaLabel={t("moreSources")}
+            >
+              <TtsButton />
+              <SoundLibraryButton />
+              <YoutubeDownloadButton />
+            </Menu>
+          </div>
+          <div className={cx(styles, baseStyles, `asset-list ${view}`)}>
+            {assets.length === 0 ? (
+              <div className={cx(styles, baseStyles, "empty-state")}>
+                {all.length === 0 ? t("libraryEmpty") : t("libraryNoMatches")}
+              </div>
+            ) : (
+              assets.map((asset) => {
+                return (
+                  <AssetRow
+                    key={asset.id}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setMenu({ x: e.clientX, y: e.clientY, asset });
+                    }}
+                    asset={asset}
+                  />
+                );
+              })
+            )}
+          </div>
+        </>
+      )}
       {menu && (
         <ContextMenu
           x={menu.x}
