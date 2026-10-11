@@ -17,7 +17,8 @@ vi.mock("../../../src/ipc", () => {
   };
 });
 
-const { ColorField, SelectField, TextField, useOverlayCatalog } = await import("../../../src/editor/inspector/OverlayFields");
+const { ColorField, SelectField, TextField, useOverlayCatalog } =
+  await import("../../../src/editor/inspector/OverlayFields");
 const { api } = await import("../../../src/ipc");
 
 beforeEach(() => {

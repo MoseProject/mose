@@ -116,7 +116,9 @@ export function WatchFolder({ open = true, onClose }: { open?: boolean; onClose?
         data-testid="screen-watch"
       >
         <label>
-          <span className={cx(styles, baseStyles, watchPath ? "" : "muted")}>{watchPath ?? t("watchFolderNone")}</span>
+          <span className={cx(styles, baseStyles, watchPath ? "" : "muted")}>
+            {watchPath ?? t("watchFolderNone")}
+          </span>
           <button
             onClick={choose}
             disabled={running}

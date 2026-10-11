@@ -80,7 +80,9 @@ export function ProjectActions({
           name="queue"
           size={16}
         />
-        {activeExports > 0 && <span className={cx(styles, baseStyles, "badge")}>{activeExports}</span>}
+        {activeExports > 0 && (
+          <span className={cx(styles, baseStyles, "badge")}>{activeExports}</span>
+        )}
       </button>
       <button
         data-testid="export"

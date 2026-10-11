@@ -103,7 +103,11 @@ export function AudioMeter() {
           return (
             <div
               key={mark}
-              className={cx(styles, baseStyles, "meter-target" + (mark === target ? " active" : ""))}
+              className={cx(
+                styles,
+                baseStyles,
+                "meter-target" + (mark === target ? " active" : ""),
+              )}
               style={{ bottom: scaleFill(mark) * 100 + "%" }}
               data-testid="meter-target"
             />
@@ -122,7 +126,11 @@ export function AudioMeter() {
               />
               {held > 0 && (
                 <div
-                  className={cx(styles, baseStyles, "meter-hold" + (heldFill >= CLIP_FILL ? " clip" : ""))}
+                  className={cx(
+                    styles,
+                    baseStyles,
+                    "meter-hold" + (heldFill >= CLIP_FILL ? " clip" : ""),
+                  )}
                   style={{ bottom: heldFill * 100 + "%" }}
                 />
               )}
@@ -131,7 +139,11 @@ export function AudioMeter() {
         })}
       </div>
       <div
-        className={cx(styles, baseStyles, "meter-lufs " + (lufs === null ? "idle" : loudnessState(lufs, target)))}
+        className={cx(
+          styles,
+          baseStyles,
+          "meter-lufs " + (lufs === null ? "idle" : loudnessState(lufs, target)),
+        )}
         title={t("meterLoudness") + " (" + t("meterTarget") + " " + target + " LUFS)"}
         data-testid="meter-lufs"
       >

@@ -17,8 +17,12 @@ export function Readout({ session }: { session: SessionView }) {
       className={cx(styles, baseStyles, "readout")}
       aria-label={t("timecode")}
     >
-      <span className={cx(styles, baseStyles, "timecode mono")}>{formatTimecode(tick.playheadSecs, source?.fps ?? 30)}</span>
-      {source?.fps != null && <span className={cx(styles, baseStyles, "muted mono")}>{Math.round(source.fps)} FPS</span>}
+      <span className={cx(styles, baseStyles, "timecode mono")}>
+        {formatTimecode(tick.playheadSecs, source?.fps ?? 30)}
+      </span>
+      {source?.fps != null && (
+        <span className={cx(styles, baseStyles, "muted mono")}>{Math.round(source.fps)} FPS</span>
+      )}
       {source?.resolution && (
         <span className={cx(styles, baseStyles, "muted mono")}>
           {source.resolution[0]} × {source.resolution[1]}

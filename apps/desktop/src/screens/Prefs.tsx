@@ -75,8 +75,12 @@ function PathField({
       >
         {t("browse")}
       </button>
-      {status === "missing" && <span className={cx(styles, baseStyles, "path-status bad")}>{t("pathMissing")}</span>}
-      {wrongKind && <span className={cx(styles, baseStyles, "path-status bad")}>{t("pathWrongKind")}</span>}
+      {status === "missing" && (
+        <span className={cx(styles, baseStyles, "path-status bad")}>{t("pathMissing")}</span>
+      )}
+      {wrongKind && (
+        <span className={cx(styles, baseStyles, "path-status bad")}>{t("pathWrongKind")}</span>
+      )}
       {(status === "file" || status === "folder") && !wrongKind && (
         <span className={cx(styles, baseStyles, "path-status ok")}>{t("pathOk")}</span>
       )}

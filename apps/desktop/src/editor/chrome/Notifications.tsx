@@ -50,7 +50,11 @@ export function ConfirmHost() {
             </button>
           )}
           <button
-            className={cx(styles, baseStyles, request.danger && !request.extraLabel ? "danger" : "primary")}
+            className={cx(
+              styles,
+              baseStyles,
+              request.danger && !request.extraLabel ? "danger" : "primary",
+            )}
             onClick={() => {
               answerConfirm(true);
             }}

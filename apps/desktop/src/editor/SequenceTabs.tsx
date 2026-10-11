@@ -39,7 +39,11 @@ export function SequenceTabs({ session }: { session: SessionView }) {
           return (
             <div
               key={sequence.id}
-              className={cx(styles, baseStyles, `sequence-tab ${index === project.active_sequence ? "active" : ""}`)}
+              className={cx(
+                styles,
+                baseStyles,
+                `sequence-tab ${index === project.active_sequence ? "active" : ""}`,
+              )}
             >
               {renaming === sequence.id ? (
                 <input

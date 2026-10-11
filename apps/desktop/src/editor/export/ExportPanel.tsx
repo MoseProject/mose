@@ -67,7 +67,9 @@ export function ExportPanel() {
           </div>
         )}
         {jobs.length === 0 ? (
-          <div className={cx(styles, baseStyles, libraryStyles, "empty-state")}>{t("noExports")}</div>
+          <div className={cx(styles, baseStyles, libraryStyles, "empty-state")}>
+            {t("noExports")}
+          </div>
         ) : (
           jobs.map((job) => {
             return (

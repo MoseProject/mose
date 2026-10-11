@@ -2,7 +2,14 @@
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { previewStore } from "../../src/store";
-import { AudioMeter, holdStore, loudnessState, nextHold, peakFill, scaleFill } from "../../src/editor/chrome/AudioMeter";
+import {
+  AudioMeter,
+  holdStore,
+  loudnessState,
+  nextHold,
+  peakFill,
+  scaleFill,
+} from "../../src/editor/chrome/AudioMeter";
 
 afterEach(() => {
   return cleanup();

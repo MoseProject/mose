@@ -886,7 +886,16 @@ export function Timeline({ session }: { session: SessionView }) {
 
   const selected = ui.selectedClipIds;
   return (
-    <section className={cx(styles, baseStyles, chromeStyles, libraryStyles, editorStyles, "panel timeline")}>
+    <section
+      className={cx(
+        styles,
+        baseStyles,
+        chromeStyles,
+        libraryStyles,
+        editorStyles,
+        "panel timeline",
+      )}
+    >
       <TimelineToolbar
         session={session}
         selected={selected}

@@ -134,7 +134,7 @@ typedef struct {
 static int consume_waveform_frame(AVFrame *frame, void *user_data) {
     WaveformFrameContext *context = user_data;
     return drain_waveform_frame(context->chain, frame, context->filtered_frame,
-                                 context->accumulator);
+                                context->accumulator);
 }
 
 WaveformStatus avbridge_generate_waveform(const char *in_path, int bucket_count, float *out_min,
@@ -227,8 +227,8 @@ WaveformStatus avbridge_generate_waveform(const char *in_path, int bucket_count,
     acc.sample_index = 0;
 
     WaveformFrameContext waveform_context = {&chain, filt_frame, &acc};
-    if (decode_audio_stream(in_ctx, dec_ctx, audio_in_index, pkt, dec_frame,
-                            consume_waveform_frame, &waveform_context) < 0) {
+    if (decode_audio_stream(in_ctx, dec_ctx, audio_in_index, pkt, dec_frame, consume_waveform_frame,
+                            &waveform_context) < 0) {
         status = WAVEFORM_ERR_PIPELINE;
         goto cleanup;
     }

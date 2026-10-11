@@ -218,8 +218,8 @@ LoudnessStatus avbridge_measure_loudness(const char *in_path, char *out_json, si
     log_installed = 1;
 
     MeasureFrameContext measure_context = {&chain, filt_frame};
-    if (decode_audio_stream(in_ctx, dec_ctx, audio_in_index, pkt, dec_frame,
-                            consume_measure_frame, &measure_context) < 0) {
+    if (decode_audio_stream(in_ctx, dec_ctx, audio_in_index, pkt, dec_frame, consume_measure_frame,
+                            &measure_context) < 0) {
         status = LOUDNESS_ERR_PIPELINE;
         goto cleanup;
     }

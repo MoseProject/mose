@@ -16,12 +16,7 @@ const audioClip = {
   speed_factor: 1,
 } as ClipInstance;
 
-const makeTrack = (
-  id: number,
-  name: string,
-  kind: Track["kind"],
-  clips: ClipInstance[],
-): Track => {
+const makeTrack = (id: number, name: string, kind: Track["kind"], clips: ClipInstance[]): Track => {
   return {
     id,
     name,

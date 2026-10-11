@@ -51,7 +51,9 @@ export function LayerTemplates({ session }: { session: SessionView }) {
             setListOpen(false);
           }}
         >
-          {templates.length === 0 && <p className={cx(styles, baseStyles, "muted")}>{t("noSavedTemplates")}</p>}
+          {templates.length === 0 && (
+            <p className={cx(styles, baseStyles, "muted")}>{t("noSavedTemplates")}</p>
+          )}
           {templates.map((template, index) => {
             return (
               <div

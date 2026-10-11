@@ -195,7 +195,9 @@ export function ShortcutsDialog() {
         </div>
       )}
       <div className={cx(styles, baseStyles, "shortcut-groups")}>
-        {groups.length === 0 && <p className={cx(styles, baseStyles, "muted")}>{t("shortcutsNone")}</p>}
+        {groups.length === 0 && (
+          <p className={cx(styles, baseStyles, "muted")}>{t("shortcutsNone")}</p>
+        )}
         {groups.map(({ group, rows }) => {
           return (
             <section key={group}>
@@ -207,13 +209,19 @@ export function ShortcutsDialog() {
                   return (
                     <div
                       key={command.id}
-                      className={cx(styles, baseStyles, "shortcut-row" + (customized ? " customized" : ""))}
+                      className={cx(
+                        styles,
+                        baseStyles,
+                        "shortcut-row" + (customized ? " customized" : ""),
+                      )}
                       data-command={command.id}
                     >
                       <dt>{t(command.label)}</dt>
                       <dd>
                         {keys.length === 0 && recording !== command.id && (
-                          <span className={cx(styles, baseStyles, "muted")}>{t("keymapUnbound")}</span>
+                          <span className={cx(styles, baseStyles, "muted")}>
+                            {t("keymapUnbound")}
+                          </span>
                         )}
                         {keys.map((spec, index) => {
                           return (
@@ -240,7 +248,9 @@ export function ShortcutsDialog() {
                           );
                         })}
                         {recording === command.id ? (
-                          <span className={cx(styles, baseStyles, "recording")}>{t("keymapPress")}</span>
+                          <span className={cx(styles, baseStyles, "recording")}>
+                            {t("keymapPress")}
+                          </span>
                         ) : (
                           <button
                             className={cx(styles, baseStyles, "icon")}

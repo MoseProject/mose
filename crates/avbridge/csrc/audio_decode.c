@@ -9,8 +9,8 @@
 
 #include <libavutil/error.h>
 
-static int receive_audio_frames(AVCodecContext *decoder, AVFrame *frame,
-                               AudioFrameConsumer consume, void *user_data) {
+static int receive_audio_frames(AVCodecContext *decoder, AVFrame *frame, AudioFrameConsumer consume,
+                                void *user_data) {
     while (1) {
         int ret = avcodec_receive_frame(decoder, frame);
         if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {

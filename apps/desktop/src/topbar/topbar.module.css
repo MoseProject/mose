@@ -103,7 +103,6 @@
   color: var(--accent);
 }
 
-
 /* ---- narrow windows (the app's minimum is 960 px wide) ---- */
 @media (max-width: 1400px) {
   /* The source's frame rate and size are the first things to go. */

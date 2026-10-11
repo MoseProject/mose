@@ -72,7 +72,9 @@ export function CommandPalette() {
         role="listbox"
         aria-label={t("cmdPalette")}
       >
-        {results.length === 0 && <li className={cx(styles, baseStyles, "muted")}>{t("paletteNone")}</li>}
+        {results.length === 0 && (
+          <li className={cx(styles, baseStyles, "muted")}>{t("paletteNone")}</li>
+        )}
         {results.map((command, index) => {
           const disabled = Boolean(command.enabled && !command.enabled());
           return (
