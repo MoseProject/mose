@@ -7,7 +7,7 @@ export const splitCommand: Command = {
   id: "split",
   label: "cmdSplit",
   group: "edit",
-  keys: [{ key: "s", anyShift: true }, { key: "c" }],
+  keys: [{ key: "s", anyShift: true }, { key: "c" }, { key: "b", ctrl: true }],
   run: () => {
     return run(api.splitAtPlayhead(selected()));
   },
