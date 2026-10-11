@@ -1,4 +1,3 @@
-import timelineStyles from "../../../src/editor/timeline/timeline.module.css";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { TimelineMinimap } from "../../../src/editor/timeline/TimelineMinimap";
 import type { ClipInstance, Track } from "../../../src/types";

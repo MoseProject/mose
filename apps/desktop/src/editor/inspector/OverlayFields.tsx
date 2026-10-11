@@ -4,11 +4,9 @@ import styles from "./inspector.module.css";
 // Inspector field widgets and catalog access shared by the text and shape inspectors. Every
 // widget previews locally and commits once per user-visible change (one undo step).
 
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 import { useDraft } from "../../hooks/useDraft";
 import { hexToRgb, rgbToHex } from "../../overlays";
-import { useOverlayCatalog } from "./hooks/useOverlayCatalog";
-
 export { useOverlayCatalog } from "./hooks/useOverlayCatalog";
 
 const FULL_ROW = { gridColumn: "1 / 3" } as const;
