@@ -56,7 +56,7 @@ pub use model::{
 use platform::update_install;
 pub use platform::{entitlement, error_reporting, telemetry, update_check};
 pub use project_io::{
-    app_paths, bundle, collab_bundle, export, export_queue, interchange, persistence,
+    app_paths, bundle, collab_bundle, export, export_queue, interchange, persistence, recovery,
     watched_folder,
 };
 

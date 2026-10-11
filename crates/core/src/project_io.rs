@@ -21,4 +21,5 @@ pub mod export;
 pub mod export_queue;
 pub mod interchange;
 pub mod persistence;
+pub mod recovery;
 pub mod watched_folder;
