@@ -339,6 +339,11 @@ export const ptBR = {
   loudnessCustom: "Personalizado",
   loudnessRange: "Use um valor entre -40 e -5 LUFS.",
   loudnessMeasured: "Medido no primeiro clipe",
+  normalizeAudio: "Normalizar o áudio ao exportar",
+  normalizeAudioHint:
+    "Desligado mantém o som como está na mixagem; só um limitador de pico é aplicado.",
+  normalizeClipNow: "Normalizar este clipe agora",
+  normalizeClipNowHint: "Ajusta o ganho para o clipe chegar à loudness alvo da exportação.",
   exportKeepsBitrate: "O vídeo é exportado com o bitrate da fonte.",
   groupPlayback: "Reprodução",
   groupEdit: "Edição",

@@ -2,6 +2,7 @@ import { t } from "../../i18n";
 import { hasKeyframeAt, toggleKeyframe, valueAt } from "../../keyframeAt";
 import { type ClipInstance, type ClipPatch } from "../../types";
 import { Section, Slider, type SectionKeyframe } from "./controls";
+import { normalizeGainDb } from "./normalizeGain";
 
 type Commit = (patch: ClipPatch) => Promise<unknown>;
 
@@ -9,11 +10,17 @@ export function GainSection({
   clip,
   commit,
   fraction,
+  measuredLufs,
+  targetLufs,
 }: {
   clip: ClipInstance;
   commit: Commit;
   fraction: number | null;
+  /** Integrated loudness of the clip's source; null until it has been measured. */
+  measuredLufs: number | null;
+  targetLufs: number;
 }) {
+  const normalizeTo = measuredLufs === null ? null : normalizeGainDb(measuredLufs, targetLufs);
   const gainDiamond: SectionKeyframe = {
     active: fraction !== null && hasKeyframeAt(clip.gain_keyframes, fraction),
     disabled: fraction === null,
@@ -54,6 +61,18 @@ export function GainSection({
             return commit({ gainDb: v });
           }}
         />
+        <button
+          disabled={normalizeTo === null || normalizeTo === clip.gain_db}
+          title={t("normalizeClipNowHint")}
+          data-testid="normalize-clip-now"
+          onClick={() => {
+            if (normalizeTo !== null) {
+              void commit({ gainDb: normalizeTo });
+            }
+          }}
+        >
+          {t("normalizeClipNow")}
+        </button>
       </Section>
     </>
   );

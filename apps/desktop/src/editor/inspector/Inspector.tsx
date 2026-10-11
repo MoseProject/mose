@@ -51,6 +51,7 @@ export function Inspector({ session }: { session: SessionView }) {
     session.project.media_library.find((a) => {
       return a.id === clip.asset_id;
     });
+  const measuredLufs = asset?.loudness?.integrated_lufs ?? null;
   const textClip =
     selectedClipIds.length === 1
       ? timeline.tracks
@@ -132,6 +133,8 @@ export function Inspector({ session }: { session: SessionView }) {
             <ClipControls
               key={clip.id}
               clip={clip}
+              measuredLufs={measuredLufs}
+              targetLufs={timelineSequence.export_settings.target_lufs}
               canvas={aspectRatioDims(
                 timelineSequence.export_settings.aspect_ratio,
                 asset?.resolution ?? [1920, 1080],
@@ -163,8 +166,12 @@ export function Inspector({ session }: { session: SessionView }) {
 function ClipControls({
   clip,
   canvas,
+  measuredLufs,
+  targetLufs,
 }: {
   clip: ClipInstance;
+  measuredLufs: number | null;
+  targetLufs: number;
   /** Output canvas size in pixels, for the transform's pixel fields. */
   canvas: [number, number];
 }) {
@@ -185,6 +192,8 @@ function ClipControls({
         clip={clip}
         commit={commit}
         fraction={fraction}
+        measuredLufs={measuredLufs}
+        targetLufs={targetLufs}
       />
       <SpeedSection
         clip={clip}
