@@ -42,21 +42,24 @@ pub enum SmartCutError {
     Unknown(i32),
 }
 
-/// Writes the video of `source` between `in_secs` and `out_secs` to `out_path` (no audio), frame
-/// accurate, without encoding what lies between the keyframes next to the cut points: that part is
-/// copied packet for packet, and only the pictures at the two ends are decoded and encoded again.
+/// Writes the video of `source` for `ranges` (source `(in, out)` seconds, played one after the
+/// other) to `out_path` (no audio), frame accurate, without encoding what lies between the
+/// keyframes next to the cut points: that part is copied packet for packet, and only the pictures
+/// at the ends are decoded and encoded again. A range too short to hold a copy is encoded whole,
+/// but at least one range must hold a copy.
 /// The source must be H.264 4:2:0 at the canvas's size with a constant frame rate equal to the
 /// canvas's, and both neighbouring keyframes must be IDR pictures; otherwise this returns
 /// [`SmartCutOutcome::NotApplicable`] without writing anything.
 pub fn smart_cut_video<F: FnMut(f64)>(
     source: &Path,
-    in_secs: f64,
-    out_secs: f64,
+    ranges: &[(f64, f64)],
     canvas: Canvas,
     out_path: &Path,
     cancel: &AtomicBool,
     mut on_progress: F,
 ) -> Result<SmartCutOutcome, SmartCutError> {
+    let ins: Vec<f64> = ranges.iter().map(|r| r.0).collect();
+    let outs: Vec<f64> = ranges.iter().map(|r| r.1).collect();
     let c_in =
         CString::new(source.to_string_lossy().as_bytes()).map_err(SmartCutError::InvalidPath)?;
     let c_out =
@@ -66,8 +69,9 @@ pub fn smart_cut_video<F: FnMut(f64)>(
     let status = unsafe {
         avbridge_smart_cut_video(
             c_in.as_ptr(),
-            in_secs,
-            out_secs,
+            ins.as_ptr(),
+            outs.as_ptr(),
+            ranges.len() as i32,
             canvas.width as i32,
             canvas.height as i32,
             canvas.fps_num as i32,

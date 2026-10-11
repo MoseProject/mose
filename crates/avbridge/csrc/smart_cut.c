@@ -263,21 +263,89 @@ done:
     return result < 0 ? -1 : written;
 }
 
-SmartCutStatus avbridge_smart_cut_video(const char *in_path, double in_secs, double out_secs,
-                                        int canvas_width, int canvas_height, int canvas_fps_num,
-                                        int canvas_fps_den, int64_t canvas_bit_rate_bps,
-                                        const char *out_path, ProgressCallback progress_cb,
-                                        void *progress_user_data, const uint8_t *cancel) {
+/* What the cut of one range will do, worked out before anything is written. */
+typedef struct {
+    int64_t in_ts, out_ts;
+    int64_t seek_pts;  /* keyframe the head (or the whole range) is decoded from */
+    int64_t first_pts; /* source pts of the range's first picture */
+    int64_t key_in;    /* copy starts here (when `copy`) */
+    int64_t key_out;   /* copy ends here (when `copy`) */
+    int64_t frames;    /* pictures the range holds */
+    int copy;
+} RangePlan;
+
+/* Plans one range. Returns 0 (planned), 1 (not applicable) or -1 (unreadable timestamps). */
+static int plan_range(AVFormatContext *ctx, int vidx, int nal_length_size, AVPacket *pkt,
+                      int64_t fdur, int64_t in_ts, int64_t out_ts, RangePlan *plan) {
+    KeyScan at_in, at_out;
+    memset(plan, 0, sizeof(*plan));
+    plan->in_ts = in_ts;
+    plan->out_ts = out_ts;
+    if (scan_keyframes(ctx, vidx, in_ts, nal_length_size, pkt, &at_in) < 0 ||
+        scan_keyframes(ctx, vidx, out_ts, nal_length_size, pkt, &at_out) < 0) {
+        return -1;
+    }
+    /* The copy starts at the first keyframe at or after the cut-in and ends at the last one at or
+       before the cut-out; both must be IDR pictures so that nothing before them is needed. */
+    int64_t key_in = at_in.last_le_pts == in_ts ? at_in.last_le_pts : at_in.first_gt_pts;
+    int key_in_idr = at_in.last_le_pts == in_ts ? at_in.last_le_idr : at_in.first_gt_idr;
+    int64_t key_out = at_out.last_le_pts;
+    plan->copy = key_in != AV_NOPTS_VALUE && key_in_idr && at_out.last_le_idr && key_in < key_out;
+    if (plan->copy) {
+        plan->key_in = key_in;
+        plan->key_out = key_out;
+        /* Pictures sit at whole frames from the keyframe. */
+        plan->first_pts = key_in - ((key_in - in_ts) / fdur) * fdur;
+        plan->seek_pts = in_ts;
+        /* A head decodes from the keyframe at or before the cut-in. */
+        if (key_in > plan->first_pts && !at_in.last_le_idr) return 1;
+        plan->frames = (out_ts - plan->first_pts + fdur - 1) / fdur;
+    } else {
+        /* Too short to copy anything: the whole range is decoded and encoded. */
+        if (!at_in.last_le_idr) return 1;
+        plan->first_pts =
+            at_in.last_le_pts + ((in_ts - at_in.last_le_pts + fdur - 1) / fdur) * fdur;
+        plan->seek_pts = in_ts;
+        plan->frames = (out_ts - plan->first_pts + fdur - 1) / fdur;
+    }
+    return plan->frames > 0 ? 0 : 1;
+}
+
+/* pts - dts of the keyframe at `key`: the source's reorder delay. -1 when it can't be read. */
+static int64_t keyframe_delay(AVFormatContext *ctx, int vidx, AVPacket *pkt, int64_t key) {
+    if (av_seek_frame(ctx, vidx, key, AVSEEK_FLAG_BACKWARD) < 0) return -1;
+    int64_t delay = -1;
+    while (av_read_frame(ctx, pkt) >= 0) {
+        if (pkt->stream_index == vidx) {
+            if ((pkt->flags & AV_PKT_FLAG_KEY) && pkt->pts == key) delay = pkt->pts - pkt->dts;
+            av_packet_unref(pkt);
+            break;
+        }
+        av_packet_unref(pkt);
+    }
+    return delay;
+}
+
+SmartCutStatus avbridge_smart_cut_video(const char *in_path, const double *in_secs,
+                                        const double *out_secs, int range_count, int canvas_width,
+                                        int canvas_height, int canvas_fps_num, int canvas_fps_den,
+                                        int64_t canvas_bit_rate_bps, const char *out_path,
+                                        ProgressCallback progress_cb, void *progress_user_data,
+                                        const uint8_t *cancel) {
     SmartCutStatus status = SMART_CUT_NOT_APPLICABLE;
     AVFormatContext *in_ctx = NULL;
     AVFormatContext *out_ctx = NULL;
     AVPacket *pkt = NULL;
     Writer w = {0};
     FrameSink head = {0}, tail = {0};
+    RangePlan *plans = NULL;
     int opened_output = 0;
     int cancelled = 0;
 
-    if (!(out_secs > in_secs) || in_secs < 0.0) return status;
+    if (range_count < 1) return status;
+    for (int i = 0; i < range_count; i++) {
+        if (!(out_secs[i] > in_secs[i]) || in_secs[i] < 0.0) return status;
+    }
     if (open_input(in_path, &in_ctx) != 0) return status;
     int vidx = -1;
     for (unsigned i = 0; i < in_ctx->nb_streams; i++) {
@@ -306,31 +374,33 @@ SmartCutStatus avbridge_smart_cut_video(const char *in_path, double in_secs, dou
         goto done;
     }
     int nal_length_size = (par->extradata[4] & 3) + 1;
-    int64_t in_ts = av_rescale_q((int64_t)(in_secs * AV_TIME_BASE), AV_TIME_BASE_Q, tb);
-    int64_t out_ts = av_rescale_q((int64_t)(out_secs * AV_TIME_BASE), AV_TIME_BASE_Q, tb);
 
     pkt = av_packet_alloc();
-    if (!pkt) goto done;
-    KeyScan at_in, at_out;
-    if (scan_keyframes(in_ctx, vidx, in_ts, nal_length_size, pkt, &at_in) < 0 ||
-        scan_keyframes(in_ctx, vidx, out_ts, nal_length_size, pkt, &at_out) < 0) {
-        goto done;
+    plans = av_calloc((size_t)range_count, sizeof(*plans));
+    if (!pkt || !plans) goto done;
+    int64_t delay = -1;
+    int copies = 0;
+    for (int i = 0; i < range_count; i++) {
+        int64_t in_ts = av_rescale_q((int64_t)(in_secs[i] * AV_TIME_BASE), AV_TIME_BASE_Q, tb);
+        int64_t out_ts = av_rescale_q((int64_t)(out_secs[i] * AV_TIME_BASE), AV_TIME_BASE_Q, tb);
+        if (plan_range(in_ctx, vidx, nal_length_size, pkt, fdur, in_ts, out_ts, &plans[i]) != 0) {
+            goto done;
+        }
+        if (plans[i].copy) {
+            int64_t d = keyframe_delay(in_ctx, vidx, pkt, plans[i].key_in);
+            /* One reorder delay for the whole output. */
+            if (d < 0 || (delay >= 0 && d != delay)) goto done;
+            delay = d;
+            copies++;
+        }
     }
-    /* The copy starts at the first keyframe at or after the cut-in and ends at the last one at or
-       before the cut-out; both must be IDR pictures so that nothing before them is needed. */
-    int64_t key_in = at_in.last_le_pts == in_ts ? at_in.last_le_pts : at_in.first_gt_pts;
-    int key_in_idr = at_in.last_le_pts == in_ts ? at_in.last_le_idr : at_in.first_gt_idr;
-    int64_t key_out = at_out.last_le_pts;
-    if (key_in == AV_NOPTS_VALUE || !key_in_idr || !at_out.last_le_idr || key_in >= key_out) {
-        goto done;
-    }
+    /* Nothing to copy means nothing saved. */
+    if (copies == 0) goto done;
+    w.delay = delay;
+
     /* From here on something is written: a failure is an error, not a reason to fall back
        silently with a half-written file. */
     status = SMART_CUT_ERROR;
-
-    /* The picture that becomes the output's first frame: the first one at or after the cut-in.
-       Pictures sit at whole frames from the keyframe, so it is that many frames before it. */
-    int64_t first_pts = key_in - ((key_in - in_ts) / fdur) * fdur;
 
     /* Output container: the source's parameters as Annex B, so packets of both origins agree. */
     w.annexb = NULL;
@@ -357,91 +427,96 @@ SmartCutStatus avbridge_smart_cut_video(const char *in_path, double in_secs, dou
     if (avformat_write_header(out_ctx, NULL) < 0) goto done;
     w.out_ctx = out_ctx;
     w.out_stream = os;
-    w.first_pts = first_pts;
 
-    /* The first copied packet tells the source's reorder delay (pts - dts of its keyframe). */
-    if (av_seek_frame(in_ctx, vidx, key_in, AVSEEK_FLAG_BACKWARD) < 0) goto done;
-    int have_first = 0;
-    while (av_read_frame(in_ctx, pkt) >= 0) {
-        if (pkt->stream_index != vidx) {
-            av_packet_unref(pkt);
-            continue;
-        }
-        if (!have_first) {
-            if (!(pkt->flags & AV_PKT_FLAG_KEY) || pkt->pts != key_in) {
-                av_packet_unref(pkt);
+    int64_t offset = 0; /* output ticks written so far */
+    for (int r = 0; r < range_count; r++) {
+        const RangePlan *p = &plans[r];
+        /* A source pts becomes (pts - first_pts) here, so this range starts at `offset`. */
+        w.first_pts = p->first_pts - offset;
+
+        if (!p->copy) {
+            if (sink_open(&head, canvas_width, canvas_height, fps, canvas_bit_rate_bps, fdur,
+                          p->first_pts, w.delay) < 0) {
                 goto done;
             }
-            w.delay = pkt->pts - pkt->dts;
-            have_first = 1;
-            break;
-        }
-    }
-    av_packet_unref(pkt);
-    if (!have_first || w.delay < 0) goto done;
+            if (reencode_range(in_ctx, vidx, vs, p->seek_pts, p->first_pts, p->out_ts,
+                               AV_NOPTS_VALUE, &head, &w, fdur, cancel, &cancelled) < 0) {
+                goto done;
+            }
+            sink_close(&head);
+            memset(&head, 0, sizeof(head));
+        } else {
+            /* Head: from the cut-in to the keyframe the copy starts at. */
+            if (p->key_in > p->first_pts) {
+                if (sink_open(&head, canvas_width, canvas_height, fps, canvas_bit_rate_bps, fdur,
+                              p->first_pts, w.delay) < 0) {
+                    goto done;
+                }
+                if (reencode_range(in_ctx, vidx, vs, p->in_ts, p->first_pts, p->key_in, p->key_in,
+                                   &head, &w, fdur, cancel, &cancelled) < 0) {
+                    goto done;
+                }
+                sink_close(&head);
+                memset(&head, 0, sizeof(head));
+            }
+            if (cancelled) {
+                status = SMART_CUT_CANCELLED;
+                goto done;
+            }
 
-    /* Head: from the cut-in to the keyframe the copy starts at. */
-    if (key_in > first_pts) {
-        if (sink_open(&head, canvas_width, canvas_height, fps, canvas_bit_rate_bps, fdur, first_pts,
-                      w.delay) < 0) {
-            goto done;
-        }
-        if (reencode_range(in_ctx, vidx, vs, in_ts, first_pts, key_in, key_in, &head, &w, fdur,
-                           cancel, &cancelled) < 0) {
-            goto done;
+            /* Middle: copied. */
+            if (av_seek_frame(in_ctx, vidx, p->key_in, AVSEEK_FLAG_BACKWARD) < 0) goto done;
+            while (av_read_frame(in_ctx, pkt) >= 0) {
+                if (pkt->stream_index != vidx) {
+                    av_packet_unref(pkt);
+                    continue;
+                }
+                if ((pkt->flags & AV_PKT_FLAG_KEY) && pkt->pts == p->key_out) {
+                    av_packet_unref(pkt);
+                    break;
+                }
+                if (cancel && *cancel) {
+                    av_packet_unref(pkt);
+                    status = SMART_CUT_CANCELLED;
+                    goto done;
+                }
+                if (progress_cb && pkt->pts != AV_NOPTS_VALUE) {
+                    progress_cb(progress_user_data, (double)(pkt->pts - w.first_pts) * av_q2d(tb));
+                }
+                if (copy_packet(&w, pkt) < 0) {
+                    av_packet_unref(pkt);
+                    goto done;
+                }
+                av_packet_unref(pkt);
+            }
+            /* Flush the filter so nothing it holds is lost, and make it usable for the next range.
+             */
+            av_bsf_send_packet(w.annexb, NULL);
+            while (av_bsf_receive_packet(w.annexb, w.scratch) >= 0) {
+                write_annexb(&w, w.scratch);
+                av_packet_unref(w.scratch);
+            }
+            av_bsf_flush(w.annexb);
+
+            /* Tail: from the last keyframe to the cut-out. */
+            if (p->out_ts > p->key_out) {
+                if (sink_open(&tail, canvas_width, canvas_height, fps, canvas_bit_rate_bps, fdur,
+                              p->first_pts, w.delay) < 0) {
+                    goto done;
+                }
+                if (reencode_range(in_ctx, vidx, vs, p->key_out, p->key_out, p->out_ts,
+                                   AV_NOPTS_VALUE, &tail, &w, fdur, cancel, &cancelled) < 0) {
+                    goto done;
+                }
+                sink_close(&tail);
+                memset(&tail, 0, sizeof(tail));
+            }
         }
         if (cancelled) {
             status = SMART_CUT_CANCELLED;
             goto done;
         }
-    }
-
-    /* Middle: copied. */
-    if (av_seek_frame(in_ctx, vidx, key_in, AVSEEK_FLAG_BACKWARD) < 0) goto done;
-    while (av_read_frame(in_ctx, pkt) >= 0) {
-        if (pkt->stream_index != vidx) {
-            av_packet_unref(pkt);
-            continue;
-        }
-        if ((pkt->flags & AV_PKT_FLAG_KEY) && pkt->pts == key_out) {
-            av_packet_unref(pkt);
-            break;
-        }
-        if (cancel && *cancel) {
-            av_packet_unref(pkt);
-            status = SMART_CUT_CANCELLED;
-            goto done;
-        }
-        if (progress_cb && pkt->pts != AV_NOPTS_VALUE) {
-            progress_cb(progress_user_data, (double)(pkt->pts - first_pts) * av_q2d(tb));
-        }
-        if (copy_packet(&w, pkt) < 0) {
-            av_packet_unref(pkt);
-            goto done;
-        }
-        av_packet_unref(pkt);
-    }
-    /* Flush the filter so nothing it holds is lost. */
-    av_bsf_send_packet(w.annexb, NULL);
-    while (av_bsf_receive_packet(w.annexb, w.scratch) >= 0) {
-        write_annexb(&w, w.scratch);
-        av_packet_unref(w.scratch);
-    }
-
-    /* Tail: from the last keyframe to the cut-out. */
-    if (out_ts > key_out) {
-        if (sink_open(&tail, canvas_width, canvas_height, fps, canvas_bit_rate_bps, fdur, first_pts,
-                      w.delay) < 0) {
-            goto done;
-        }
-        if (reencode_range(in_ctx, vidx, vs, key_out, key_out, out_ts, AV_NOPTS_VALUE, &tail, &w,
-                           fdur, cancel, &cancelled) < 0) {
-            goto done;
-        }
-        if (cancelled) {
-            status = SMART_CUT_CANCELLED;
-            goto done;
-        }
+        offset += p->frames * fdur;
     }
     if (av_write_trailer(out_ctx) < 0) goto done;
     record_video_encoder_name("copy");
@@ -450,6 +525,7 @@ SmartCutStatus avbridge_smart_cut_video(const char *in_path, double in_secs, dou
 done:
     sink_close(&head);
     sink_close(&tail);
+    av_free(plans);
     av_packet_free(&pkt);
     av_packet_free(&w.scratch);
     av_bsf_free(&w.annexb);
