@@ -88,8 +88,17 @@ impl ClipInstance {
             fps_den,
             timeline_duration_secs,
         ) {
+            // The ramp does not depend on X or Y, so it is evaluated on a single pixel of a copy
+            // of the stream (same frame numbers `N`), stretched back to the frame's size and
+            // merged in as the alpha plane. A per-pixel `geq` over the whole frame is the same
+            // result at about a fifteenth of the speed. Labels carry the clip id so two clips
+            // in one graph do not collide.
+            let id = self.id;
             stages.push(format!(
-                "format=yuva420p,geq=lum='p(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='alpha(X,Y)*({alpha_expr})'"
+                "split=3[ko{id}a][ko{id}b][ko{id}c];\
+                 [ko{id}b]scale=1:1:flags=neighbor,format=gray,geq=lum='255*({alpha_expr})'[ko{id}m];\
+                 [ko{id}m][ko{id}c]scale=w=rw:h=rh:flags=neighbor[ko{id}s];\
+                 [ko{id}a][ko{id}s]alphamerge"
             ));
         }
         if stages.is_empty() {
@@ -212,9 +221,26 @@ impl ClipInstance {
                     }
                     MaskShape::None => unreachable!("outer match already excludes None"),
                 };
-                stages.push(format!(
-                    "format=yuva420p,geq=lum='p(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='{alpha_expr}'"
-                ));
+                if self.is_chroma_keyed() || !self.opacity_keyframes.is_empty() {
+                    // The shape has to multiply an alpha the frame already carries.
+                    stages.push(format!(
+                        "format=yuva420p,geq=lum='p(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='{alpha_expr}'"
+                    ));
+                } else {
+                    // A shape depends only on the frame's size, so it is drawn once, on the first
+                    // frame, and merged in as the alpha plane of every frame (`alphamerge` repeats
+                    // the last frame of its second input). Identical to the per-pixel `geq` over
+                    // every frame, which is more than ten times slower. The plane is taken with
+                    // `extractplanes`, not `format=gray`: a gray constraint on this branch would
+                    // travel back through `split` and turn the picture itself gray.
+                    let id = self.id;
+                    let mask_expr = alpha_expr.replace("alpha(X,Y)*", "255*");
+                    stages.push(format!(
+                        "split[km{id}a][km{id}b];\
+                         [km{id}b]trim=end_frame=1,geq=lum='{mask_expr}',extractplanes=y[km{id}m];\
+                         [km{id}a][km{id}m]alphamerge"
+                    ));
+                }
             }
         }
         if self.blur_intensity > 0.0 {
