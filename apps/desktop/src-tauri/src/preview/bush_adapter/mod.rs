@@ -17,6 +17,8 @@
 mod audio;
 mod backend;
 mod mapper;
+#[cfg(test)]
+mod stress_test;
 
 #[cfg(test)]
 pub(crate) use audio::AudioOutput;
