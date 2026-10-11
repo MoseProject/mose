@@ -11,6 +11,7 @@ What they cover, against the live app (real webview, real backend, real files):
 | --- | --- |
 | `test_control_channel.py` | the token, the command table the window really holds, running and undoing commands, disabled and unknown commands, the connection limit |
 | `test_crash_recovery.py` | the journal for a never-saved project is written, survives `kill -9`, is not consumed by the next launch, and abandoned directories are cleaned |
+| `test_layout.py` | the built frontend in headless Chromium at 960x600 (the window's minimum), 1100x700, 1280x800 (its default) and 1920x1080: no page wider or taller than the window, and Export, the queue, the Inspector and the timeline stay on screen. No app process; needs `pip install playwright`, a Chromium (`OCA_CHROMIUM`) and `cd apps/desktop && npx vite build` |
 | `test_mcp.py` | `oca-mcp` speaking JSON-RPC over stdio to the live app: tools, edits, errors, the app going away |
 
 Each test gets a fresh app in a private home directory (`HOME`, `APPDATA`, `XDG_*` are pointed at
