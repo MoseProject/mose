@@ -2814,6 +2814,16 @@ and `matrix/competitor-parity.md`'s "deliberately not adopted" section.
 
 23. `[ ]` Voice-clone TTS beyond the single bundled Piper voice — still deferred until CF-01 and
     CF-03 ship, and must require explicit consent plus deletion of derived voice artifacts.
+24. `[ ]` Content-hash render cache (FilmCraft-style render bar: per-segment hashed ProRes
+    previews that survive edits and undo). Considered on 2026-10-11 and deferred, because the
+    workloads it would help are already covered or already measured: 4K sequential playback is
+    covered by editing proxies (`avcore::proxy`), and the only recorded case that cannot run in
+    real time is 4K with 6 layers and effects (594 ms CPU, 65 ms GPU in
+    `architecture/bush-performance-plan.md`), which the existing Criterion suites
+    (`crates/bush/benches/editor_workloads.rs`, `engine_workloads.rs`) already track. Revisit
+    when playback telemetry shows deadline misses on proxy-backed footage with typical gameplay
+    edits; the design would hash resolved segments, write previews beside the project, and swap
+    them in as a Bush source.
 Motion-graphics templates and real-time AI object masking moved from this section to CF-07 and
 CF-09 respectively. The competitive refresh found concrete gameplay/channel use cases for both,
 but they remain behind the higher-impact CF-01-CF-06 workflow items.
