@@ -93,4 +93,6 @@ def test_the_server_reports_when_the_app_is_gone(mcp, app):
     app.kill()
     result = mcp.call_tool("get_session")
     assert result["isError"] is True
-    assert "not listening" in result["content"][0]["text"]
+    # Right after the kill the port either refuses the connection or resets it.
+    message = result["content"][0]["text"]
+    assert "not listening" in message or "no answer from the app" in message, message
