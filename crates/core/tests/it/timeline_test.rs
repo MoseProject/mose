@@ -219,10 +219,13 @@ fn split_clip_at_keeps_lut_on_both_halves() {
 fn video_filter_chain_includes_a_circle_mask_when_masked() {
     let mut c = clip(1, 0.0, 0.0, 10.0);
     c.mask_shape = MaskShape::Circle;
+    // The shape is drawn once on the first frame and merged in as every frame's alpha plane.
     assert_eq!(
         c.video_filter_chain(),
-        "format=yuva420p,geq=lum='p(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='alpha(X,Y)*lte(pow(X-W/\
-         2,2)+pow(Y-H/2,2),pow(min(W,H)/2,2))'"
+        "split[km1a][km1b];\
+         [km1b]trim=end_frame=1,geq=lum='255*lte(pow(X-W/2,2)+pow(Y-H/2,2),pow(min(W,H)/2,2))',\
+         extractplanes=y[km1m];\
+         [km1a][km1m]alphamerge"
     );
 }
 
@@ -231,12 +234,68 @@ fn video_filter_chain_includes_a_rounded_rect_mask_when_masked() {
     let mut c = clip(1, 0.0, 0.0, 10.0);
     c.mask_shape = MaskShape::RoundedRect;
     c.mask_corner_radius = 0.3;
-    assert_eq!(
-        c.video_filter_chain(),
-        "format=yuva420p,geq=lum='p(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='alpha(X,Y)*lte(sqrt(pow(\
-         max(abs(X-W/2)-(W/2-min(0.3000*min(W,H),min(W,H)/2)),0),2)+pow(max(abs(Y-H/2)-(H/2-min(\
-         0.3000*min(W,H),min(W,H)/2)),0),2))-min(0.3000*min(W,H),min(W,H)/2),0)'"
+    let chain = c.video_filter_chain();
+    assert!(
+        chain.starts_with("split[km1a][km1b];[km1b]trim=end_frame=1,geq=lum='255*lte(sqrt(pow(")
     );
+    assert!(chain.contains("min(0.3000*min(W,H),min(W,H)/2)"));
+    assert!(chain.ends_with("[km1a][km1m]alphamerge"));
+}
+
+#[test]
+fn mask_labels_are_unique_per_clip() {
+    let mut a = clip(7, 0.0, 0.0, 10.0);
+    a.mask_shape = MaskShape::Circle;
+    let mut b = clip(8, 0.0, 0.0, 10.0);
+    b.mask_shape = MaskShape::Circle;
+    assert!(a.video_filter_chain().contains("[km7m]"));
+    assert!(b.video_filter_chain().contains("[km8m]"));
+    assert!(!b.video_filter_chain().contains("km7"));
+}
+
+#[test]
+fn a_mask_over_chroma_key_or_animated_opacity_still_multiplies_the_existing_alpha() {
+    let mut keyed = clip(1, 0.0, 0.0, 10.0);
+    keyed.mask_shape = MaskShape::Circle;
+    keyed.chroma_key_enabled = true;
+    assert!(keyed
+        .video_filter_chain()
+        .contains("geq=lum='p(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='alpha(X,Y)*lte("));
+
+    let mut faded = clip(1, 0.0, 0.0, 10.0);
+    faded.mask_shape = MaskShape::Circle;
+    faded.opacity_keyframes = vec![
+        Keyframe {
+            time_fraction: 0.0,
+            value: 0.0,
+        },
+        Keyframe {
+            time_fraction: 1.0,
+            value: 1.0,
+        },
+    ];
+    assert!(faded.video_filter_chain().contains("alpha(X,Y)*lte("));
+}
+
+#[test]
+fn animated_opacity_is_evaluated_on_one_pixel_not_the_whole_frame() {
+    let mut c = clip(3, 0.0, 0.0, 10.0);
+    c.opacity_keyframes = vec![
+        Keyframe {
+            time_fraction: 0.0,
+            value: 0.0,
+        },
+        Keyframe {
+            time_fraction: 1.0,
+            value: 1.0,
+        },
+    ];
+    let chain = c.keyframe_video_filter_chain(30, 1, 10.0).unwrap();
+    assert!(chain.starts_with(
+        "split=3[ko3a][ko3b][ko3c];[ko3b]scale=1:1:flags=neighbor,format=gray,geq=lum='255*("
+    ));
+    assert!(chain.ends_with("[ko3a][ko3s]alphamerge"));
+    assert!(!chain.contains("alpha(X,Y)"));
 }
 
 #[test]

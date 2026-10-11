@@ -397,3 +397,163 @@ fn audio_and_video_start_and_end_together_whatever_the_in_point() {
         );
     }
 }
+
+/// A one-second solid-colour clip with a quiet tone.
+fn solid(ffmpeg: &Path, name: &str, colour: &str) -> PathBuf {
+    let output = scratch(name);
+    let status = Command::new(ffmpeg)
+        .args(["-v", "error", "-y", "-f", "lavfi", "-i"])
+        .arg(format!("color=c={colour}:s=320x180:r=30:d=1"))
+        .args([
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:sample_rate=48000:d=1",
+        ])
+        .args([
+            "-c:v",
+            "mpeg4",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-shortest",
+        ])
+        .arg(&output)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    output
+}
+
+/// The RGB of the pixel at (`x`, `y`) in frame `frame` of `file`, as `ffmpeg` decodes it.
+fn pixel(ffmpeg: &Path, file: &Path, frame: u32, x: u32, y: u32) -> [u8; 3] {
+    let output = Command::new(ffmpeg)
+        .args(["-v", "error", "-i"])
+        .arg(file)
+        .arg("-vf")
+        .arg(format!(
+            "select=eq(n\\,{frame}),format=rgb24,crop=1:1:{x}:{y}"
+        ))
+        .args(["-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"])
+        .output()
+        .unwrap();
+    assert_eq!(
+        output.stdout.len(),
+        3,
+        "no frame {frame} in the export: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    [output.stdout[0], output.stdout[1], output.stdout[2]]
+}
+
+/// A red clip underneath, a green one above with `shape` applied to it.
+fn red_under_green(
+    ffmpeg: &Path,
+    label: &str,
+    tweak: impl FnOnce(&mut avcore::timeline::ClipInstance),
+) -> PathBuf {
+    let red = solid(ffmpeg, &format!("{label}_red.mp4"), "red");
+    let green = solid(ffmpeg, &format!("{label}_green.mp4"), "green");
+    let mut top = clip(2, 2, 0.0, 0.0, 1.0);
+    tweak(&mut top);
+    let track = |id: u64, clips| Track {
+        id,
+        name: format!("V{id}"),
+        kind: TrackKind::Video,
+        clips,
+        text_clips: vec![],
+        shape_clips: vec![],
+        visible: true,
+        audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
+        locked: false,
+        color_label: None,
+    };
+    let sequence = sequence_with(vec![
+        track(1, vec![clip(1, 1, 0.0, 0.0, 1.0)]),
+        track(2, vec![top]),
+    ]);
+    let output = scratch(&format!("{label}_out.mp4"));
+    let outcome = render_timeline_export(
+        &sequence,
+        &[media(&red, 1), media(&green, 2)],
+        &output,
+        -14.0,
+        avcore::GpuEncoderPreference::Cpu,
+        &AtomicBool::new(false),
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, RenderOutcome::Completed);
+    output
+}
+
+fn is_close(got: [u8; 3], want: [u8; 3], tolerance: i32) -> bool {
+    got.iter()
+        .zip(want)
+        .all(|(g, w)| (i32::from(*g) - i32::from(w)).abs() <= tolerance)
+}
+
+#[test]
+fn a_circle_mask_shows_what_is_underneath_outside_the_circle() {
+    let Some((ffmpeg, _)) = oracles() else {
+        return;
+    };
+    let out = red_under_green(&ffmpeg, "circle", |c| {
+        c.mask_shape = avcore::timeline::MaskShape::Circle;
+    });
+    let centre = pixel(&ffmpeg, &out, 15, 160, 90);
+    let corner = pixel(&ffmpeg, &out, 15, 4, 4);
+    // Green (0,128,0) at the centre, red underneath in the corner.
+    assert!(is_close(centre, [0, 128, 0], 40), "centre {centre:?}");
+    assert!(is_close(corner, [255, 0, 0], 40), "corner {corner:?}");
+}
+
+#[test]
+fn a_rounded_rectangle_mask_cuts_the_corners_only() {
+    let Some((ffmpeg, _)) = oracles() else {
+        return;
+    };
+    let out = red_under_green(&ffmpeg, "rounded", |c| {
+        c.mask_shape = avcore::timeline::MaskShape::RoundedRect;
+        c.mask_corner_radius = 0.5;
+    });
+    let edge_middle = pixel(&ffmpeg, &out, 15, 160, 4);
+    let corner = pixel(&ffmpeg, &out, 15, 3, 3);
+    assert!(
+        is_close(edge_middle, [0, 128, 0], 40),
+        "edge {edge_middle:?}"
+    );
+    assert!(is_close(corner, [255, 0, 0], 40), "corner {corner:?}");
+}
+
+#[test]
+fn animated_opacity_blends_the_layer_into_what_is_underneath() {
+    let Some((ffmpeg, _)) = oracles() else {
+        return;
+    };
+    let out = red_under_green(&ffmpeg, "opacity", |c| {
+        c.opacity_keyframes = vec![
+            avcore::Keyframe {
+                time_fraction: 0.0,
+                value: 0.0,
+            },
+            avcore::Keyframe {
+                time_fraction: 1.0,
+                value: 1.0,
+            },
+        ];
+    });
+    let early = pixel(&ffmpeg, &out, 1, 160, 90);
+    let late = pixel(&ffmpeg, &out, 28, 160, 90);
+    assert!(
+        early[0] > 200 && early[1] < 60,
+        "start is still the red layer: {early:?}"
+    );
+    assert!(
+        late[1] > 100 && late[0] < 60,
+        "end is the green layer: {late:?}"
+    );
+}
