@@ -872,3 +872,74 @@ fn a_request_superseded_mid_render_is_cancelled() {
     }
     panic!("no render was ever cancelled: {:?}", engine.stats());
 }
+
+// ---- more clips on screen than open decoder sessions -----------------------------------------
+
+fn stacked(paths: &[PathBuf]) -> SceneSnapshot {
+    scene(
+        paths
+            .iter()
+            .enumerate()
+            .map(|(index, path)| {
+                clip(
+                    index as u64 + 1,
+                    index as i32,
+                    path.clone(),
+                    Placement::default(),
+                )
+            })
+            .collect(),
+    )
+}
+
+fn play_frames(engine: &Engine, scene: &SceneSnapshot, playheads: &[f64]) {
+    for &playhead in playheads {
+        engine.submit(request(scene.clone(), playhead)).unwrap();
+        expect_frame(engine);
+    }
+}
+
+#[test]
+fn a_frame_with_more_clips_than_open_sessions_keeps_them_all_open() {
+    let paths = copies(3, "crowded");
+    let engine = Engine::new(config(2)).unwrap();
+    let scene = stacked(&paths);
+    play_frames(&engine, &scene, &[0.0, 0.1, 0.2, 0.3, 0.4]);
+    // Before, the third clip evicted the first on every frame and all three were reopened each
+    // time: 15 sessions for 5 frames.
+    assert_eq!(engine.stats().sessions_opened, 3);
+}
+
+#[test]
+fn sessions_go_back_to_the_usual_number_after_a_crowded_frame() {
+    let paths = copies(3, "shrink");
+    let engine = Engine::new(config(2)).unwrap();
+    play_frames(&engine, &stacked(&paths), &[0.0]);
+    assert_eq!(engine.stats().sessions_opened, 3);
+    // One clip on screen: only the usual two sessions stay open (this clip and the one used
+    // before it), so the clip that was dropped has to be reopened when the crowd returns.
+    play_frames(&engine, &stacked(&paths[..1]), &[0.1]);
+    assert_eq!(engine.stats().sessions_opened, 3, "the clip was still open");
+    play_frames(&engine, &stacked(&paths), &[0.2]);
+    assert_eq!(
+        engine.stats().sessions_opened,
+        4,
+        "one session had been closed"
+    );
+}
+
+#[test]
+fn past_the_limit_clips_are_decoded_one_at_a_time_and_still_render() {
+    let count = bush::MAX_SESSIONS_FOR_ONE_FRAME + 1;
+    let paths = copies(count, "over");
+    let engine = Engine::new(config(2)).unwrap();
+    let scene = stacked(&paths);
+    play_frames(&engine, &scene, &[0.0, 0.1]);
+    let stats = engine.stats();
+    assert_eq!(stats.failures, 0);
+    assert!(
+        stats.sessions_opened > count as u64,
+        "over the limit sessions are reopened: {}",
+        stats.sessions_opened
+    );
+}
