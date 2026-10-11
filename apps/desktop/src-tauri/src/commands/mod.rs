@@ -64,7 +64,8 @@ pub(crate) fn undoable<R: Runtime>(
 ) -> Result<(), String> {
     let state = app.state::<AppState>();
     let mut session = state.session();
-    session.project.timeline_mut().playhead_secs = state.preview.playhead();
+    let playhead = session.project.snap_secs(state.preview.playhead());
+    session.project.timeline_mut().playhead_secs = playhead;
     let before = session.project.active_sequence().clone();
     if edit(&mut session.project) {
         session.undo.push(before);
@@ -315,6 +316,25 @@ pub fn set_export_settings<R: Runtime>(
         settings.target_lufs = target_lufs.clamp(-40.0, -5.0);
         settings.aspect_ratio = aspect_ratio;
         session.dirty = true;
+        Ok(())
+    })
+}
+
+/// Sets the timeline's frame rate, or clears it with `None`. While set, edits made from the
+/// editor land on whole frame boundaries. A rate with a zero part is refused.
+#[tauri::command]
+pub fn set_project_frame_rate<R: Runtime>(
+    app: AppHandle<R>,
+    frame_rate: Option<avcore::FrameRate>,
+) -> Result<(), String> {
+    if frame_rate.is_some_and(|rate| !rate.is_valid()) {
+        return Err("invalid frame rate".to_string());
+    }
+    with_session(&app, |session| {
+        if session.project.frame_rate != frame_rate {
+            session.project.frame_rate = frame_rate;
+            session.dirty = true;
+        }
         Ok(())
     })
 }
