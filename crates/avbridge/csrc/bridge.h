@@ -747,7 +747,15 @@ typedef struct {
     int height;
     int stride_bytes;
     double timestamp_secs;
+    /* Nonzero when `pixels` is the buffer the caller handed in (see below) rather than a new
+       allocation: avbridge_decode_free_frame then leaves it alone. */
+    int borrowed;
 } DecodedRgbaFrame;
+
+/* avbridge_decode_next_rgba and avbridge_decode_take_rgba convert into a caller-owned buffer when
+   `out_frame->pixels` / `pixel_len` hold one on entry and it is large enough for the frame (the
+   frame is then returned with `borrowed` set); otherwise they allocate as before, so a caller
+   that only guesses the size loses nothing. This saves the allocation and the copy out of it. */
 
 /* Opens the first video stream. `out_session` is set only on DECODE_OK and must be released by
    avbridge_decode_close. `out_info` is initialized only on DECODE_OK. */

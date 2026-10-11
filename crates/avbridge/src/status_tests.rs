@@ -677,6 +677,7 @@ fn a_native_frame_without_pixels_or_a_valid_size_is_rejected() {
         height: 2,
         stride_bytes: 8,
         timestamp_secs: 0.0,
+        borrowed: 0,
     };
     assert!(matches!(
         copy_out_frame(&mut empty),

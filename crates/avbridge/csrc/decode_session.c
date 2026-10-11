@@ -266,7 +266,7 @@ DecodeStatus avbridge_decode_seek(AvbridgeDecodeSession *session, double timesta
 }
 
 static DecodeStatus copy_rgba(AvbridgeDecodeSession *session, AVFrame *frame,
-                              DecodedRgbaFrame *out_frame) {
+                              DecodedRgbaFrame *out_frame, uint8_t *given, size_t given_cap) {
     int width = frame->width;
     int height = frame->height;
     if (width <= 0 || height <= 0) return DECODE_ERR_FRAME_SIZE;
@@ -274,13 +274,14 @@ static DecodeStatus copy_rgba(AvbridgeDecodeSession *session, AVFrame *frame,
     int bytes = av_image_get_buffer_size(AV_PIX_FMT_RGBA, width, height, 1);
     if (stride <= 0 || bytes <= 0 || bytes > MAX_RGBA_FRAME_BYTES) return DECODE_ERR_FRAME_SIZE;
 
-    uint8_t *pixels = av_malloc((size_t)bytes);
+    int borrowed = given && given_cap >= (size_t)bytes;
+    uint8_t *pixels = borrowed ? given : av_malloc((size_t)bytes);
     if (!pixels) return DECODE_ERR_FRAME_SIZE;
     uint8_t *dst_data[4] = {0};
     int dst_linesize[4] = {0};
     if (av_image_fill_arrays(dst_data, dst_linesize, pixels, AV_PIX_FMT_RGBA, width, height, 1) <
         0) {
-        av_free(pixels);
+        if (!borrowed) av_free(pixels);
         return DECODE_ERR_FRAME_SIZE;
     }
     if (!session->sws || session->sws_width != width || session->sws_height != height ||
@@ -292,12 +293,12 @@ static DecodeStatus copy_rgba(AvbridgeDecodeSession *session, AVFrame *frame,
         session->sws_format = frame->format;
     }
     if (!session->sws) {
-        av_free(pixels);
+        if (!borrowed) av_free(pixels);
         return DECODE_ERR_PIPELINE;
     }
     if (sws_scale(session->sws, (const uint8_t *const *)frame->data, frame->linesize, 0, height,
                   dst_data, dst_linesize) != height) {
-        av_free(pixels);
+        if (!borrowed) av_free(pixels);
         return DECODE_ERR_PIPELINE;
     }
     AVStream *stream = session->format->streams[session->stream_index];
@@ -310,12 +311,13 @@ static DecodeStatus copy_rgba(AvbridgeDecodeSession *session, AVFrame *frame,
     out_frame->height = height;
     out_frame->stride_bytes = stride;
     out_frame->timestamp_secs = pts == AV_NOPTS_VALUE ? 0.0 : pts * av_q2d(stream->time_base);
+    out_frame->borrowed = borrowed;
     return DECODE_OK;
 }
 
 /* Presents `frame` (hardware surfaces are copied to system memory first) as packed RGBA. */
 static DecodeStatus convert_frame(AvbridgeDecodeSession *session, AVFrame *frame,
-                                  DecodedRgbaFrame *out_frame) {
+                                  DecodedRgbaFrame *out_frame, uint8_t *given, size_t given_cap) {
     AVFrame *source = frame;
     if (session->hw_pix_fmt != AV_PIX_FMT_NONE && source->format == session->hw_pix_fmt) {
         av_frame_unref(session->transfer);
@@ -323,7 +325,7 @@ static DecodeStatus convert_frame(AvbridgeDecodeSession *session, AVFrame *frame
         av_frame_copy_props(session->transfer, source);
         source = session->transfer;
     }
-    DecodeStatus status = copy_rgba(session, source, out_frame);
+    DecodeStatus status = copy_rgba(session, source, out_frame, given, given_cap);
     av_frame_unref(session->transfer);
     return status;
 }
@@ -365,19 +367,21 @@ static double frame_seconds(AvbridgeDecodeSession *session, const AVFrame *frame
 DecodeStatus avbridge_decode_next_rgba(AvbridgeDecodeSession *session, const uint8_t *cancel,
                                        DecodedRgbaFrame *out_frame) {
     if (!session || !out_frame) return DECODE_ERR_PIPELINE;
+    uint8_t *given = out_frame->pixels;
+    size_t given_cap = out_frame->pixel_len;
     memset(out_frame, 0, sizeof(*out_frame));
     /* A frame decoded ahead by avbridge_decode_advance is next in stream order. */
     session->has_held = 0;
     av_frame_unref(session->held);
     if (session->has_latest) {
-        DecodeStatus status = convert_frame(session, session->latest, out_frame);
+        DecodeStatus status = convert_frame(session, session->latest, out_frame, given, given_cap);
         av_frame_unref(session->latest);
         session->has_latest = 0;
         return status;
     }
     DecodeStatus status = receive_decoded(session, cancel);
     if (status != DECODE_OK) return status;
-    status = convert_frame(session, session->decoded, out_frame);
+    status = convert_frame(session, session->decoded, out_frame, given, given_cap);
     av_frame_unref(session->decoded);
     return status;
 }
@@ -405,11 +409,13 @@ int avbridge_decode_has_held(AvbridgeDecodeSession *session) {
 DecodeStatus avbridge_decode_take_rgba(AvbridgeDecodeSession *session, int newest,
                                        DecodedRgbaFrame *out_frame) {
     if (!session || !out_frame) return DECODE_ERR_PIPELINE;
+    uint8_t *given = out_frame->pixels;
+    size_t given_cap = out_frame->pixel_len;
     memset(out_frame, 0, sizeof(*out_frame));
     AVFrame *frame = newest ? session->latest : session->held;
     int *present = newest ? &session->has_latest : &session->has_held;
     if (!*present) return DECODE_EOF;
-    DecodeStatus status = convert_frame(session, frame, out_frame);
+    DecodeStatus status = convert_frame(session, frame, out_frame, given, given_cap);
     av_frame_unref(frame);
     *present = 0;
     return status;
@@ -417,7 +423,7 @@ DecodeStatus avbridge_decode_take_rgba(AvbridgeDecodeSession *session, int newes
 
 void avbridge_decode_free_frame(DecodedRgbaFrame *frame) {
     if (!frame) return;
-    av_freep(&frame->pixels);
+    if (!frame->borrowed) av_freep(&frame->pixels);
     memset(frame, 0, sizeof(*frame));
 }
 

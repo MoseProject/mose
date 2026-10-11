@@ -131,6 +131,7 @@ pub(crate) struct RawDecodedRgbaFrame {
     pub(crate) height: c_int,
     pub(crate) stride_bytes: c_int,
     pub(crate) timestamp_secs: f64,
+    pub(crate) borrowed: c_int,
 }
 
 #[repr(C)]
