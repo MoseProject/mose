@@ -225,8 +225,8 @@ PcmStatus avbridge_extract_pcm_16k_mono(const char *in_path, float **out_samples
     }
 
     PcmFrameContext pcm_context = {&chain, filt_frame, &buf};
-    if (decode_audio_stream(in_ctx, dec_ctx, audio_in_index, pkt, dec_frame,
-                            consume_pcm_frame, &pcm_context) < 0) {
+    if (decode_audio_stream(in_ctx, dec_ctx, audio_in_index, pkt, dec_frame, consume_pcm_frame,
+                            &pcm_context) < 0) {
         status = PCM_ERR_PIPELINE;
         goto cleanup;
     }
