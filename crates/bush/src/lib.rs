@@ -58,7 +58,7 @@ pub use deflicker::Deflicker;
 pub use device_sink::{DeviceSink, DeviceSinkError};
 pub use engine::{
     Engine, EngineConfig, EngineError, EngineEvent, EngineRequest, EngineStats, LatencySummary,
-    RendererChoice, MAX_CANVAS_PIXELS,
+    RendererChoice, MAX_CANVAS_PIXELS, MAX_SESSIONS_FOR_ONE_FRAME,
 };
 pub use frame_mailbox::{FrameMailbox, PublishedFrame};
 pub use glitch::{glitch, shake_offset};

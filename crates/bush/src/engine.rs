@@ -23,7 +23,9 @@ use crate::{
 pub struct EngineConfig {
     pub canvas_width: u32,
     pub canvas_height: u32,
-    /// Maximum simultaneously open decoder sessions; the least recently used one is closed.
+    /// Decoder sessions kept open between frames; the least recently used one is closed to make
+    /// room. A single frame that shows more distinct clips than this still keeps all of them open
+    /// (up to [`MAX_SESSIONS_FOR_ONE_FRAME`]), otherwise every frame would reopen them.
     pub max_open_sources: usize,
     /// Byte budget for decoded source frames retained between requests.
     pub frame_cache_bytes: usize,
@@ -48,6 +50,13 @@ pub enum RendererChoice {
 /// Largest canvas the engine accepts, in pixels (8K UHD is 33.2 M). Bounds the compositor's
 /// per-frame allocation regardless of what a caller asks for.
 pub const MAX_CANVAS_PIXELS: usize = 8192 * 4608;
+
+/// The most decoder sessions one frame may hold open when it shows more distinct clips than
+/// [`EngineConfig::max_open_sources`]. Measured at 1080p60 H.264 on a 1280x720 canvas
+/// (`examples/memory_probe.rs`), each extra session costs about 100 MiB (12 layers: 1.4 GiB
+/// resident), so this bounds the extra memory (under 2 GiB at the limit); past it, sources are
+/// decoded one at a time and reopened, which is slow but bounded.
+pub const MAX_SESSIONS_FOR_ONE_FRAME: usize = 16;
 
 /// Number of most recent request latencies retained for percentile reporting.
 const LATENCY_WINDOW: usize = 1024;
@@ -133,6 +142,9 @@ pub struct EngineStats {
     pub cancelled: u64,
     /// Times a GPU failure switched the compositor to the CPU renderer mid-session.
     pub gpu_fallbacks: u64,
+    /// Decoder sessions opened so far. While the clips on screen fit in the open sessions this
+    /// stops growing; a value that grows with every frame means sessions are being reopened.
+    pub sessions_opened: u64,
 }
 
 #[derive(Debug, Default)]
@@ -145,6 +157,7 @@ struct Counters {
     cache_misses: AtomicU64,
     cancelled: AtomicU64,
     gpu_fallbacks: AtomicU64,
+    sessions_opened: AtomicU64,
 }
 
 struct Pending {
@@ -328,6 +341,7 @@ impl Engine {
             cache_misses: counters.cache_misses.load(Ordering::Relaxed),
             cancelled: counters.cancelled.load(Ordering::Relaxed),
             gpu_fallbacks: counters.gpu_fallbacks.load(Ordering::Relaxed),
+            sessions_opened: counters.sessions_opened.load(Ordering::Relaxed),
         }
     }
 
@@ -777,18 +791,31 @@ impl EngineThread {
                 distinct.push(key);
             }
         }
-        // More distinct sources than session slots: decode one at a time, reopening as needed.
-        if distinct.len() > self.config.max_open_sources {
+        // A frame that shows more clips than the usual number of open sessions keeps them all
+        // open, up to a limit, so the next frame finds them instead of reopening every decoder.
+        let slots = distinct.len().max(self.config.max_open_sources);
+        if distinct.len() > MAX_SESSIONS_FOR_ONE_FRAME.max(self.config.max_open_sources) {
+            // Too many even for that: decode one at a time, reopening as needed.
             let mut results = Vec::with_capacity(misses.len());
             for &index in misses {
                 let need = &needs[index];
-                let slot = self.open_source(need.path, need.version)?;
+                let slot =
+                    self.open_source(need.path, need.version, self.config.max_open_sources)?;
                 results.push((index, self.sources[slot].1.frame_at(need.time, cancel)));
             }
             return Ok(results);
         }
+        // Sessions this frame needs go to the recently used end first, so making room for a new
+        // one never closes a clip that is on screen.
         for (path, version) in &distinct {
-            self.open_source(path, *version)?;
+            self.touch_source(path, *version);
+        }
+        // Back down to the usual size once a crowded frame is over.
+        while self.sources.len() > slots {
+            self.sources.remove(0);
+        }
+        for (path, version) in &distinct {
+            self.open_source(path, *version, slots)?;
         }
 
         let mut jobs: Vec<(usize, Vec<usize>)> = Vec::new();
@@ -843,9 +870,24 @@ impl EngineThread {
         Ok(results)
     }
 
-    /// Index of the open session for `(path, version)`, opening and evicting as needed. The
-    /// returned session is moved to the most-recently-used end.
-    fn open_source(&mut self, path: &Path, version: u64) -> Result<usize, String> {
+    /// Moves the open session for `(path, version)`, if any, to the most-recently-used end.
+    fn touch_source(&mut self, path: &Path, version: u64) {
+        if let Some(index) = self
+            .sources
+            .iter()
+            .position(|((candidate, candidate_version), _)| {
+                candidate == path && *candidate_version == version
+            })
+        {
+            let entry = self.sources.remove(index);
+            self.sources.push(entry);
+        }
+    }
+
+    /// Index of the open session for `(path, version)`, opening it if needed and closing the
+    /// least recently used ones so that at most `slots` stay open. The returned session is
+    /// moved to the most-recently-used end.
+    fn open_source(&mut self, path: &Path, version: u64, slots: usize) -> Result<usize, String> {
         if let Some(index) = self
             .sources
             .iter()
@@ -859,7 +901,11 @@ impl EngineThread {
         }
         let source = DecodeSource::open_with_policy(path, self.config.decode_policy)
             .map_err(|error| format!("{}: {error:?}", display_name(path)))?;
-        while self.sources.len() >= self.config.max_open_sources {
+        self.shared
+            .counters
+            .sessions_opened
+            .fetch_add(1, Ordering::Relaxed);
+        while self.sources.len() >= slots {
             self.sources.remove(0);
         }
         self.sources.push(((path.to_path_buf(), version), source));
