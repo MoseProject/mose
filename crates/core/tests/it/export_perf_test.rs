@@ -243,7 +243,7 @@ fn export_perf() {
         "crop keyframes",
         &asset,
         one(&|c| {
-            c.crop_w_keyframes = vec![
+            let zoom = vec![
                 Keyframe {
                     time_fraction: 0.0,
                     value: 1.0,
@@ -252,7 +252,9 @@ fn export_perf() {
                     time_fraction: 1.0,
                     value: 0.6,
                 },
-            ]
+            ];
+            c.crop_w_keyframes = zoom.clone();
+            c.crop_h_keyframes = zoom;
         }),
     );
     time_export(
