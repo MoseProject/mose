@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 
 use crate::ffi::{
     avbridge_apply_privacy_blur, avbridge_apply_shape_overlays, avbridge_apply_text_overlays,
+    avbridge_free_string, avbridge_shape_overlay_filter, avbridge_text_overlay_filter,
     RawShapeSegment, RawTextSegment,
 };
 
@@ -114,69 +115,10 @@ pub fn apply_text_overlays(
     let c_out = CString::new(out_path.to_string_lossy().as_bytes())
         .map_err(TextOverlayError::InvalidPath)?;
 
-    let mut c_paths: Vec<CString> = Vec::with_capacity(segments.len());
-    for seg in segments {
-        c_paths.push(
-            CString::new(seg.overlay_path.to_string_lossy().as_bytes())
-                .map_err(TextOverlayError::InvalidPath)?,
-        );
-    }
-    // One CString each for opacity/position-x/position-y/scale-x/scale-y/rotation-x/rotation-y
-    // per segment, held in one Vec of tuples (rather than seven parallel Vecs zipped together)
-    // so building raw_segments below stays readable as the field count grows.
-    let exprs: Vec<(
-        CString,
-        CString,
-        CString,
-        CString,
-        CString,
-        CString,
-        CString,
-    )> = segments
-        .iter()
-        .map(|seg| {
-            Ok::<_, TextOverlayError>((
-                CString::new(seg.opacity_keyframe_expr.as_bytes())
-                    .map_err(TextOverlayError::InvalidPath)?,
-                CString::new(seg.position_keyframe_expr_x.as_bytes())
-                    .map_err(TextOverlayError::InvalidPath)?,
-                CString::new(seg.position_keyframe_expr_y.as_bytes())
-                    .map_err(TextOverlayError::InvalidPath)?,
-                CString::new(seg.scale_keyframe_expr_x.as_bytes())
-                    .map_err(TextOverlayError::InvalidPath)?,
-                CString::new(seg.scale_keyframe_expr_y.as_bytes())
-                    .map_err(TextOverlayError::InvalidPath)?,
-                CString::new(seg.rotation_keyframe_expr_x.as_bytes())
-                    .map_err(TextOverlayError::InvalidPath)?,
-                CString::new(seg.rotation_keyframe_expr_y.as_bytes())
-                    .map_err(TextOverlayError::InvalidPath)?,
-            ))
-        })
-        .collect::<Result<_, _>>()?;
+    let raw = RawTextSegments::new(segments)?;
+    let raw_segments = &raw.raw;
 
-    let raw_segments: Vec<RawTextSegment> = segments
-        .iter()
-        .zip(c_paths.iter())
-        .zip(exprs.iter())
-        .map(
-            |((seg, path), (opacity_expr, pos_x, pos_y, scale_x, scale_y, rot_x, rot_y))| {
-                RawTextSegment {
-                    start_secs: seg.start_secs,
-                    duration_secs: seg.duration_secs,
-                    overlay_path: path.as_ptr(),
-                    opacity_keyframe_expr: opacity_expr.as_ptr(),
-                    position_keyframe_expr_x: pos_x.as_ptr(),
-                    position_keyframe_expr_y: pos_y.as_ptr(),
-                    scale_keyframe_expr_x: scale_x.as_ptr(),
-                    scale_keyframe_expr_y: scale_y.as_ptr(),
-                    rotation_keyframe_expr_x: rot_x.as_ptr(),
-                    rotation_keyframe_expr_y: rot_y.as_ptr(),
-                }
-            },
-        )
-        .collect();
-
-    // SAFETY: all pointers (c_in, c_out, raw_segments' path/expr pointers from c_paths/exprs)
+    // SAFETY: all pointers (c_in, c_out, raw_segments' path/expr pointers, owned by `raw`)
     // are valid NUL-terminated C strings held alive for the full duration of this call.
     // raw_segments is a contiguous Vec<RawTextSegment> with segment_count entries, never
     // mutated during the call.
@@ -194,6 +136,93 @@ pub fn apply_text_overlays(
     };
 
     apply_text_overlays_status(status)
+}
+
+/// The C view of some [`TextOverlaySegment`]s, with the strings it points into kept alive beside
+/// it.
+struct RawTextSegments {
+    raw: Vec<RawTextSegment>,
+    _paths: Vec<CString>,
+    _exprs: Vec<(
+        CString,
+        CString,
+        CString,
+        CString,
+        CString,
+        CString,
+        CString,
+    )>,
+}
+
+impl RawTextSegments {
+    fn new(segments: &[TextOverlaySegment]) -> Result<Self, TextOverlayError> {
+        let mut c_paths: Vec<CString> = Vec::with_capacity(segments.len());
+        for seg in segments {
+            c_paths.push(
+                CString::new(seg.overlay_path.to_string_lossy().as_bytes())
+                    .map_err(TextOverlayError::InvalidPath)?,
+            );
+        }
+        // One CString each for opacity/position-x/position-y/scale-x/scale-y/rotation-x/rotation-y
+        // per segment, held in one Vec of tuples (rather than seven parallel Vecs zipped together)
+        // so building raw_segments below stays readable as the field count grows.
+        let exprs: Vec<(
+            CString,
+            CString,
+            CString,
+            CString,
+            CString,
+            CString,
+            CString,
+        )> = segments
+            .iter()
+            .map(|seg| {
+                Ok::<_, TextOverlayError>((
+                    CString::new(seg.opacity_keyframe_expr.as_bytes())
+                        .map_err(TextOverlayError::InvalidPath)?,
+                    CString::new(seg.position_keyframe_expr_x.as_bytes())
+                        .map_err(TextOverlayError::InvalidPath)?,
+                    CString::new(seg.position_keyframe_expr_y.as_bytes())
+                        .map_err(TextOverlayError::InvalidPath)?,
+                    CString::new(seg.scale_keyframe_expr_x.as_bytes())
+                        .map_err(TextOverlayError::InvalidPath)?,
+                    CString::new(seg.scale_keyframe_expr_y.as_bytes())
+                        .map_err(TextOverlayError::InvalidPath)?,
+                    CString::new(seg.rotation_keyframe_expr_x.as_bytes())
+                        .map_err(TextOverlayError::InvalidPath)?,
+                    CString::new(seg.rotation_keyframe_expr_y.as_bytes())
+                        .map_err(TextOverlayError::InvalidPath)?,
+                ))
+            })
+            .collect::<Result<_, _>>()?;
+
+        let raw: Vec<RawTextSegment> = segments
+            .iter()
+            .zip(c_paths.iter())
+            .zip(exprs.iter())
+            .map(
+                |((seg, path), (opacity_expr, pos_x, pos_y, scale_x, scale_y, rot_x, rot_y))| {
+                    RawTextSegment {
+                        start_secs: seg.start_secs,
+                        duration_secs: seg.duration_secs,
+                        overlay_path: path.as_ptr(),
+                        opacity_keyframe_expr: opacity_expr.as_ptr(),
+                        position_keyframe_expr_x: pos_x.as_ptr(),
+                        position_keyframe_expr_y: pos_y.as_ptr(),
+                        scale_keyframe_expr_x: scale_x.as_ptr(),
+                        scale_keyframe_expr_y: scale_y.as_ptr(),
+                        rotation_keyframe_expr_x: rot_x.as_ptr(),
+                        rotation_keyframe_expr_y: rot_y.as_ptr(),
+                    }
+                },
+            )
+            .collect();
+        Ok(Self {
+            raw,
+            _paths: c_paths,
+            _exprs: exprs,
+        })
+    }
 }
 
 /// One geometric shape to composite over an exported video via `avbridge_apply_shape_overlays`.
@@ -369,4 +398,55 @@ pub(crate) fn apply_privacy_blur_status(status: c_int) -> Result<(), PrivacyBlur
         4 => Err(PrivacyBlurError::Pipeline),
         other => Err(PrivacyBlurError::Unknown(other)),
     }
+}
+
+/// Copies out and frees a string `avbridge` returned, or `None` for NULL.
+fn take_c_string(ptr: *mut std::os::raw::c_char) -> Option<String> {
+    if ptr.is_null() {
+        return None;
+    }
+    // SAFETY: `ptr` is a NUL-terminated string `avbridge` allocated and has not freed; it is read
+    // once here and then released with the function that matches its allocator.
+    let text = unsafe { std::ffi::CStr::from_ptr(ptr) }
+        .to_string_lossy()
+        .into_owned();
+    unsafe { avbridge_free_string(ptr) };
+    Some(text)
+}
+
+/// The avfilter graph description (input `in`, output `out`) that composites `segments` over a
+/// video: what [`apply_text_overlays`] runs as a pass over a finished file, for
+/// [`crate::encode_timeline_export_with_post`] to run inside the export instead. `None` when
+/// there is nothing to composite or the description does not build.
+pub fn text_overlay_filter(
+    segments: &[TextOverlaySegment],
+) -> Result<Option<String>, TextOverlayError> {
+    if segments.is_empty() {
+        return Ok(None);
+    }
+    let raw = RawTextSegments::new(segments)?;
+    // SAFETY: `raw` and the strings it points into outlive the call; the C side only reads them.
+    let ptr = unsafe { avbridge_text_overlay_filter(raw.raw.as_ptr(), raw.raw.len() as c_int) };
+    Ok(take_c_string(ptr))
+}
+
+/// The shape counterpart of [`text_overlay_filter`].
+pub fn shape_overlay_filter(segments: &[ShapeSegment]) -> Result<Option<String>, TextOverlayError> {
+    if segments.is_empty() {
+        return Ok(None);
+    }
+    let mut c_descs: Vec<CString> = Vec::with_capacity(segments.len());
+    for seg in segments {
+        c_descs
+            .push(CString::new(seg.filter_desc.as_bytes()).map_err(TextOverlayError::InvalidPath)?);
+    }
+    let raw: Vec<RawShapeSegment> = c_descs
+        .iter()
+        .map(|desc| RawShapeSegment {
+            filter_desc: desc.as_ptr(),
+        })
+        .collect();
+    // SAFETY: as in `text_overlay_filter`.
+    let ptr = unsafe { avbridge_shape_overlay_filter(raw.as_ptr(), raw.len() as c_int) };
+    Ok(take_c_string(ptr))
 }

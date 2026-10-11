@@ -14,14 +14,14 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use std::ffi::{c_void, CString};
-use std::os::raw::{c_int, c_longlong};
+use std::os::raw::{c_char, c_int, c_longlong};
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 
 use crate::export::{EncodeError, EncodeOutcome};
 use crate::ffi::{
-    avbridge_encode_timeline_export, avbridge_encode_timeline_export_multi, progress_trampoline,
-    RawClipSegment,
+    avbridge_encode_timeline_export_multi, avbridge_encode_timeline_export_with_post,
+    progress_trampoline, RawClipSegment,
 };
 
 /// One trimmed clip in an [`encode_timeline_export`] timeline: a source file, the range of it
@@ -206,11 +206,46 @@ pub fn encode_timeline_export<F: FnMut(f64)>(
     target_lufs: f32,
     gpu_encoder: GpuEncoderPreference,
     cancel: &AtomicBool,
+    on_progress: F,
+) -> Result<EncodeOutcome, EncodeError> {
+    encode_timeline_export_with_post(
+        segments,
+        canvas,
+        out_path,
+        target_lufs,
+        gpu_encoder,
+        cancel,
+        &[],
+        on_progress,
+    )
+}
+
+/// [`encode_timeline_export`] with avfilter graphs that run over the finished frames before the
+/// encoder, in order: `post_filters` are descriptions such as [`crate::text_overlay_filter`] and
+/// [`crate::shape_overlay_filter`] return (input `in`, output `out`, `t` the timeline's time).
+/// They do inside the export what [`crate::apply_text_overlays`] and
+/// [`crate::apply_shape_overlays`] do as a second pass over the whole file, without a second
+/// encode. At most four. A description that does not build fails the call with
+/// [`EncodeError::FilterGraph`] before any frame is written.
+#[allow(clippy::too_many_arguments)]
+pub fn encode_timeline_export_with_post<F: FnMut(f64)>(
+    segments: &[ClipSegment],
+    canvas: Canvas,
+    out_path: &Path,
+    target_lufs: f32,
+    gpu_encoder: GpuEncoderPreference,
+    cancel: &AtomicBool,
+    post_filters: &[String],
     mut on_progress: F,
 ) -> Result<EncodeOutcome, EncodeError> {
     if segments.is_empty() {
         return Err(EncodeError::EmptyTimeline);
     }
+    let c_post: Vec<CString> = post_filters
+        .iter()
+        .map(|desc| CString::new(desc.as_bytes()).map_err(EncodeError::InvalidPath))
+        .collect::<Result<_, _>>()?;
+    let c_post_ptrs: Vec<*const c_char> = c_post.iter().map(|desc| desc.as_ptr()).collect();
 
     let c_out =
         CString::new(out_path.to_string_lossy().as_bytes()).map_err(EncodeError::InvalidPath)?;
@@ -276,7 +311,7 @@ pub fn encode_timeline_export<F: FnMut(f64)>(
     // progress_trampoline::<F>, and cancel.as_ptr() carry the same safety argument as
     // encode_export's identical call.
     let status = unsafe {
-        avbridge_encode_timeline_export(
+        avbridge_encode_timeline_export_with_post(
             raw_segments.as_ptr(),
             raw_segments.len() as c_int,
             canvas.width as c_int,
@@ -290,6 +325,8 @@ pub fn encode_timeline_export<F: FnMut(f64)>(
             Some(progress_trampoline::<F>),
             &mut on_progress as *mut _ as *mut c_void,
             cancel.as_ptr() as *const u8,
+            c_post_ptrs.as_ptr(),
+            c_post_ptrs.len() as c_int,
         )
     };
 

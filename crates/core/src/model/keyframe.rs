@@ -557,6 +557,7 @@ fn color_axis_expr(
 ///   [`MAX_COLOR_SAMPLES`] moments, because `lutyuv` evaluates its expression once (a per-pixel
 ///   `geq` here ran at under 10 fps at 1080p). `clip_id` names the instance so two clips in one
 ///   graph do not receive each other's commands; `fps` sets how many moments a short clip has.
+#[allow(clippy::too_many_arguments)]
 pub fn color_balance_filter_expr(
     brightness_keyframes: &[Keyframe<f32>],
     contrast_keyframes: &[Keyframe<f32>],

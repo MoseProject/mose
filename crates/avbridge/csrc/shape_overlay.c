@@ -33,15 +33,12 @@
    150-250 bytes, repeated per color channel) without being a true "unbounded" allocation. */
 #define SHAPE_OVERLAY_SEG_MAX ((size_t)256 * 1024)
 
-/* Opens `in_path`, chains each segment's pre-built geq filter node, and writes the result to
-   `out_path` — structurally identical to avbridge_apply_text_overlays (see that function's
-   comments for the decode/filter/encode pipeline details); only the filter-string-building
-   step differs. */
-TextOverlayStatus avbridge_apply_shape_overlays(const char *in_path, const char *out_path,
-                                                const ShapeSegment *segments, int segment_count,
-                                                int canvas_width, int canvas_height,
-                                                int canvas_fps_num, int canvas_fps_den) {
-
+/* Chains each segment's pre-built geq filter node into one chain description (wrapped in
+   yuv444p, see below). On success `*out_filter` is an av_malloc'd string for the caller to free, or
+   NULL when there are no segments. */
+static TextOverlayStatus build_shape_overlay_filter(const ShapeSegment *segments, int segment_count,
+                                                    char **out_filter) {
+    *out_filter = NULL;
     if (segment_count <= 0) return TEXT_OVERLAY_OK;
 
     TextOverlayStatus status = TEXT_OVERLAY_OK;
@@ -91,11 +88,35 @@ TextOverlayStatus avbridge_apply_shape_overlays(const char *in_path, const char 
         filter_str[pos] = '\0';
     }
 
-    status = (TextOverlayStatus)avbridge_reencode_with_filter(in_path, out_path, filter_str,
-                                                              canvas_width, canvas_height,
-                                                              canvas_fps_num, canvas_fps_den, 0);
+    *out_filter = filter_str;
+    filter_str = NULL;
 
 cleanup:
     av_free(filter_str);
     return status;
+}
+
+/* Opens `in_path`, composites the shapes and writes the result to `out_path`: the same
+   decode/filter/encode pass as avbridge_apply_text_overlays, with a different filter. */
+TextOverlayStatus avbridge_apply_shape_overlays(const char *in_path, const char *out_path,
+                                                const ShapeSegment *segments, int segment_count,
+                                                int canvas_width, int canvas_height,
+                                                int canvas_fps_num, int canvas_fps_den) {
+    if (segment_count <= 0) return TEXT_OVERLAY_OK;
+    char *filter_str = NULL;
+    TextOverlayStatus status = build_shape_overlay_filter(segments, segment_count, &filter_str);
+    if (status != TEXT_OVERLAY_OK) return status;
+    status = (TextOverlayStatus)avbridge_reencode_with_filter(in_path, out_path, filter_str,
+                                                              canvas_width, canvas_height,
+                                                              canvas_fps_num, canvas_fps_den, 0);
+    av_free(filter_str);
+    return status;
+}
+
+char *avbridge_shape_overlay_filter(const ShapeSegment *segments, int segment_count) {
+    char *filter_str = NULL;
+    if (build_shape_overlay_filter(segments, segment_count, &filter_str) != TEXT_OVERLAY_OK) {
+        return NULL;
+    }
+    return filter_str;
 }

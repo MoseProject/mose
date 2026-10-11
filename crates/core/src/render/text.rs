@@ -96,36 +96,48 @@ pub struct TextSegment {
     pub text_align: crate::timeline::TextAlign,
 }
 
-/// Applies text overlays to an already-written export file in place. Writes to a temp path
-/// beside `output`, then renames over `output`. Logs and silently skips on any error so an
-/// overlay-raster or filter failure doesn't destroy the already-completed video file.
-pub(crate) fn apply_text_overlay_pass(
+/// The text overlays of an export rasterized to PNG files in a temporary directory beside the
+/// output, which is removed when this is dropped.
+pub(crate) struct TextOverlayRasters {
+    dir: std::path::PathBuf,
+    pub(crate) overlays: Vec<avbridge::TextOverlaySegment>,
+}
+
+impl Drop for TextOverlayRasters {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
+static TEMP_ID: AtomicU64 = AtomicU64::new(0);
+
+fn temp_suffix() -> String {
+    let temp_id = TEMP_ID.fetch_add(1, Ordering::Relaxed);
+    format!("{}-{temp_id}", std::process::id())
+}
+
+/// Rasterizes `text_segments` to full-canvas RGBA PNGs beside `output`. Logs and returns `None`
+/// on any error, so an overlay-raster failure never destroys a completed video.
+pub(crate) fn rasterize_text_overlays(
     output: &Path,
     canvas: Canvas,
     text_segments: &[TextSegment],
-) {
-    static TEMP_ID: AtomicU64 = AtomicU64::new(0);
-
-    let Some(parent) = output.parent() else {
-        return;
-    };
-    let Some(stem) = output.file_stem().and_then(|s| s.to_str()) else {
-        return;
-    };
-    let temp_id = TEMP_ID.fetch_add(1, Ordering::Relaxed);
-    let suffix = format!("{}-{temp_id}", std::process::id());
-    let tmp = parent.join(format!("{stem}.oca-text-{suffix}.mp4"));
-    let overlay_dir = parent.join(format!(".{stem}.oca-text-{suffix}"));
+) -> Option<TextOverlayRasters> {
+    let parent = output.parent()?;
+    let stem = output.file_stem().and_then(|s| s.to_str())?;
+    let overlay_dir = parent.join(format!(".{stem}.oca-text-{}", temp_suffix()));
     if let Err(error) = std::fs::create_dir(&overlay_dir) {
         tracing::error!(error = %error, output = %output.display(), "text overlay temp directory failed");
-        return;
+        return None;
     }
-
-    let mut overlays = Vec::with_capacity(text_segments.len());
+    let mut rasters = TextOverlayRasters {
+        dir: overlay_dir,
+        overlays: Vec::with_capacity(text_segments.len()),
+    };
     for (index, segment) in text_segments.iter().enumerate() {
         let rgba =
             crate::overlay_render::render_text_segment_rgba(segment, canvas.width, canvas.height);
-        let overlay_path = overlay_dir.join(format!("overlay-{index}.png"));
+        let overlay_path = rasters.dir.join(format!("overlay-{index}.png"));
         if let Err(error) = image::save_buffer_with_format(
             &overlay_path,
             &rgba,
@@ -135,10 +147,9 @@ pub(crate) fn apply_text_overlay_pass(
             image::ImageFormat::Png,
         ) {
             tracing::error!(error = %error, output = %output.display(), "text overlay raster write failed");
-            let _ = std::fs::remove_dir_all(&overlay_dir);
-            return;
+            return None;
         }
-        overlays.push(avbridge::TextOverlaySegment {
+        rasters.overlays.push(avbridge::TextOverlaySegment {
             start_secs: segment.start_secs,
             duration_secs: segment.duration_secs,
             overlay_path,
@@ -151,11 +162,34 @@ pub(crate) fn apply_text_overlay_pass(
             rotation_keyframe_expr_y: segment.rotation_keyframe_expr_y.clone(),
         });
     }
+    Some(rasters)
+}
+
+/// Applies text overlays to an already-written export file in place. Writes to a temp path
+/// beside `output`, then renames over `output`. Logs and silently skips on any error so an
+/// overlay-raster or filter failure doesn't destroy the already-completed video file. This is
+/// the second pass over the whole file; [`render_export_job`](super::render_export_job) runs the
+/// overlays inside the export itself and falls back to this only when that does not build.
+pub(crate) fn apply_text_overlay_pass(
+    output: &Path,
+    canvas: Canvas,
+    text_segments: &[TextSegment],
+) {
+    let Some(parent) = output.parent() else {
+        return;
+    };
+    let Some(stem) = output.file_stem().and_then(|s| s.to_str()) else {
+        return;
+    };
+    let Some(rasters) = rasterize_text_overlays(output, canvas, text_segments) else {
+        return;
+    };
+    let tmp = parent.join(format!("{stem}.oca-text-{}.mp4", temp_suffix()));
 
     match avbridge::apply_text_overlays(
         output,
         &tmp,
-        &overlays,
+        &rasters.overlays,
         canvas.width,
         canvas.height,
         canvas.fps_num,
@@ -172,7 +206,6 @@ pub(crate) fn apply_text_overlay_pass(
             let _ = std::fs::remove_file(&tmp);
         }
     }
-    let _ = std::fs::remove_dir_all(&overlay_dir);
 }
 
 /// Collects all [`TextClip`]s from `sequence`'s text tracks into [`TextSegment`]s,

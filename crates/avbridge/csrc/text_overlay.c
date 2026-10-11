@@ -79,18 +79,13 @@ static int escape_filter_expr(char *out, size_t out_size, const char *in) {
     return (int)pos;
 }
 
-/* Opens `in_path` (an already-rendered H.264/AAC mp4 produced by
-   avbridge_encode_timeline_export), composites pre-rasterized RGBA PNG overlays, and
-   writes the result to `out_path`. Video is decoded, filtered, and re-encoded via
-   libopenh264; audio is stream-copied unchanged to avoid a lossy second AAC encode.
-   canvas_width/height and canvas_fps_num/den must match the rendered video so the output
-   encoder is configured correctly.
-   Returns TEXT_OVERLAY_OK immediately without touching any files when segment_count <= 0. */
-TextOverlayStatus avbridge_apply_text_overlays(const char *in_path, const char *out_path,
-                                               const TextSegment *segments, int segment_count,
-                                               int canvas_width, int canvas_height,
-                                               int canvas_fps_num, int canvas_fps_den) {
-
+/* Builds the avfilter graph description (labels `in` and `out`) that composites the pre-rasterized
+   RGBA PNG overlays over the exported video, one timeline-enabled overlay node per PNG. On success
+   `*out_filter` is an av_malloc'd string for the caller to free, or NULL when there are no
+   segments. */
+static TextOverlayStatus build_text_overlay_filter(const TextSegment *segments, int segment_count,
+                                                   char **out_filter) {
+    *out_filter = NULL;
     if (segment_count <= 0) return TEXT_OVERLAY_OK;
 
     TextOverlayStatus status = TEXT_OVERLAY_OK;
@@ -260,11 +255,42 @@ TextOverlayStatus avbridge_apply_text_overlays(const char *in_path, const char *
         filter_str[pos] = '\0';
     }
 
-    status = (TextOverlayStatus)avbridge_reencode_with_filter(in_path, out_path, filter_str,
-                                                              canvas_width, canvas_height,
-                                                              canvas_fps_num, canvas_fps_den, 0);
+    *out_filter = filter_str;
+    filter_str = NULL;
 
 cleanup:
     av_free(filter_str);
     return status;
+}
+
+/* Opens `in_path` (an already-rendered H.264/AAC mp4 produced by
+   avbridge_encode_timeline_export), composites the overlays and writes the result to `out_path`.
+   Video is decoded, filtered, and re-encoded; audio is stream-copied unchanged to avoid a lossy
+   second AAC encode. canvas_width/height and canvas_fps_num/den must match the rendered video.
+   Returns TEXT_OVERLAY_OK immediately without touching any files when segment_count <= 0. */
+TextOverlayStatus avbridge_apply_text_overlays(const char *in_path, const char *out_path,
+                                               const TextSegment *segments, int segment_count,
+                                               int canvas_width, int canvas_height,
+                                               int canvas_fps_num, int canvas_fps_den) {
+    if (segment_count <= 0) return TEXT_OVERLAY_OK;
+    char *filter_str = NULL;
+    TextOverlayStatus status = build_text_overlay_filter(segments, segment_count, &filter_str);
+    if (status != TEXT_OVERLAY_OK) return status;
+    status = (TextOverlayStatus)avbridge_reencode_with_filter(in_path, out_path, filter_str,
+                                                              canvas_width, canvas_height,
+                                                              canvas_fps_num, canvas_fps_den, 0);
+    av_free(filter_str);
+    return status;
+}
+
+char *avbridge_text_overlay_filter(const TextSegment *segments, int segment_count) {
+    char *filter_str = NULL;
+    if (build_text_overlay_filter(segments, segment_count, &filter_str) != TEXT_OVERLAY_OK) {
+        return NULL;
+    }
+    return filter_str;
+}
+
+void avbridge_free_string(char *s) {
+    av_free(s);
 }

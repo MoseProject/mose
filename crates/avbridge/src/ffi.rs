@@ -150,21 +150,6 @@ unsafe extern "C" {
         progress_user_data: *mut c_void,
         cancel: *const u8,
     ) -> c_int;
-    pub(crate) fn avbridge_encode_timeline_export(
-        segments: *const RawClipSegment,
-        segment_count: c_int,
-        canvas_width: c_int,
-        canvas_height: c_int,
-        canvas_fps_num: c_int,
-        canvas_fps_den: c_int,
-        canvas_bit_rate_bps: c_longlong,
-        out_path: *const c_char,
-        target_lufs: f32,
-        gpu_encoder_preference: c_int,
-        progress_cb: Option<unsafe extern "C" fn(user_data: *mut c_void, seconds: f64)>,
-        progress_user_data: *mut c_void,
-        cancel: *const u8,
-    ) -> c_int;
     pub(crate) fn avbridge_encode_timeline_export_multi(
         track_segs: *const *const RawClipSegment,
         track_n_segs: *const c_int,
@@ -209,6 +194,32 @@ unsafe extern "C" {
         bucket_count: c_int,
         out_min: *mut f32,
         out_max: *mut f32,
+    ) -> c_int;
+    pub(crate) fn avbridge_text_overlay_filter(
+        segments: *const RawTextSegment,
+        segment_count: c_int,
+    ) -> *mut c_char;
+    pub(crate) fn avbridge_shape_overlay_filter(
+        segments: *const RawShapeSegment,
+        segment_count: c_int,
+    ) -> *mut c_char;
+    pub(crate) fn avbridge_free_string(s: *mut c_char);
+    pub(crate) fn avbridge_encode_timeline_export_with_post(
+        segments: *const RawClipSegment,
+        segment_count: c_int,
+        canvas_width: c_int,
+        canvas_height: c_int,
+        canvas_fps_num: c_int,
+        canvas_fps_den: c_int,
+        canvas_bit_rate_bps: c_longlong,
+        out_path: *const c_char,
+        target_lufs: f32,
+        gpu_encoder_preference: c_int,
+        progress_cb: Option<unsafe extern "C" fn(user_data: *mut c_void, seconds: f64)>,
+        progress_user_data: *mut c_void,
+        cancel: *const u8,
+        post_filters: *const *const c_char,
+        post_filter_count: c_int,
     ) -> c_int;
     pub(crate) fn avbridge_apply_text_overlays(
         in_path: *const c_char,

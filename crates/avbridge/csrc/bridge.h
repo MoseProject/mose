@@ -280,6 +280,20 @@ EncodeStatus avbridge_encode_timeline_export(const ClipSegment *segments, int se
                                              ProgressCallback progress_cb, void *progress_user_data,
                                              const uint8_t *cancel);
 
+/* avbridge_encode_timeline_export, with graphs that run over the finished frames before the
+   encoder: `post_filters` holds `post_filter_count` (at most 4) filter descriptions, applied in
+   order, each taking its input as `in` and its output as `out` (the descriptions
+   avbridge_text_overlay_filter and avbridge_shape_overlay_filter return). They replace the
+   second decode, filter and encode of the whole file that avbridge_apply_text_overlays and
+   avbridge_apply_shape_overlays need, and `t` inside them is the timeline's own time. Returns
+   ENCODE_ERR_FILTER_GRAPH, before writing any frame, when one of them does not build. */
+EncodeStatus avbridge_encode_timeline_export_with_post(
+    const ClipSegment *segments, int segment_count, int canvas_width, int canvas_height,
+    int canvas_fps_num, int canvas_fps_den, int64_t canvas_bit_rate_bps, const char *out_path,
+    float target_lufs, int gpu_encoder_preference, ProgressCallback progress_cb,
+    void *progress_user_data, const uint8_t *cancel, const char *const *post_filters,
+    int post_filter_count);
+
 /* Multi-track overlay compositor: composites n_tracks video tracks into a single output.
    track_segs[k] points to an array of track_n_segs[k] ClipSegment entries for track k.
    Track 0 is the background (drives the output duration and audio); tracks 1..n_tracks-1 are
@@ -570,6 +584,13 @@ TextOverlayStatus avbridge_apply_shape_overlays(const char *in_path, const char 
                                                 const ShapeSegment *segments, int segment_count,
                                                 int canvas_width, int canvas_height,
                                                 int canvas_fps_num, int canvas_fps_den);
+
+/* The graph descriptions avbridge_apply_text_overlays / avbridge_apply_shape_overlays build, for
+   avbridge_encode_timeline_export_with_post. Each returns a string to release with
+   avbridge_free_string, or NULL when it does not build or there are no segments. */
+char *avbridge_text_overlay_filter(const TextSegment *segments, int segment_count);
+char *avbridge_shape_overlay_filter(const ShapeSegment *segments, int segment_count);
+void avbridge_free_string(char *s);
 
 typedef enum {
     MATTE_OK = 0,
