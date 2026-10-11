@@ -317,6 +317,7 @@ export const en = {
   "effectsBlendModes": "Blend modes",
   "effectsNeedClip": "Select a video clip on the timeline, then pick an effect to apply it.",
   "effectsNoMatches": "No effects match.",
+  "effectsDragHint": "Click an effect to apply it, or drag it onto a clip.",
   "searchMedia": "Search media…",
   "viewGrid": "Grid view",
   "viewList": "List view",

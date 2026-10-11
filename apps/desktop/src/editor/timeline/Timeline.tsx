@@ -14,6 +14,7 @@ import { TimelineMinimap } from "./TimelineMinimap";
 import { MEDIA_EVENT, syncAssets } from "./timelineMedia";
 import {
   assetDragStore,
+  effectDragStore,
   MAX_PX_PER_SEC,
   MIN_PX_PER_SEC,
   patchUi,
@@ -24,6 +25,7 @@ import {
   type EditorTool,
 } from "../../store";
 import {
+  effectTarget,
   HEADER_WIDTH,
   RULER_HEIGHT,
   SNAP_PX,
@@ -207,6 +209,27 @@ export function Timeline({ session }: { session: SessionView }) {
         ctx.globalAlpha = 1;
       }
     }
+    const effectDrag = effectDragStore.get();
+    if (effectDrag) {
+      const rect = canvas.getBoundingClientRect();
+      const x = effectDrag.clientX - rect.left;
+      const y = effectDrag.clientY - rect.top + scrollY;
+      const target = effectTarget(tracks, x, y, px, scrollSecs);
+      if (target) {
+        const { span, trackIndex } = target;
+        const left = timeToX(span.start_secs, px, scrollSecs);
+        const right = timeToX(span.start_secs + span.duration_secs, px, scrollSecs);
+        ctx.strokeStyle = palette.accent;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(
+          left + 1,
+          RULER_HEIGHT + trackIndex * TRACK_HEIGHT + 3,
+          right - left - 2,
+          TRACK_HEIGHT - 7,
+        );
+        ctx.lineWidth = 1;
+      }
+    }
     ctx.restore();
 
     // Ruler.
@@ -317,9 +340,11 @@ export function Timeline({ session }: { session: SessionView }) {
   useEffect(() => {
     const stopPreview = previewStore.subscribe(scheduleDraw);
     const stopAssetDrag = assetDragStore.subscribe(scheduleDraw);
+    const stopEffectDrag = effectDragStore.subscribe(scheduleDraw);
     return () => {
       stopPreview();
       stopAssetDrag();
+      stopEffectDrag();
       cancelAnimationFrame(frameRef.current);
       frameRef.current = 0;
     };
@@ -347,6 +372,34 @@ export function Timeline({ session }: { session: SessionView }) {
       const index = trackIndexAtY(y + scrollY, tracks.length);
       const start = Math.max(0, xToTime(x, ui.pxPerSec, scrollSecs));
       void run(api.addAssetToTimeline(drag.assetId, tracks[index]?.id, start));
+    };
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      return window.removeEventListener("pointerup", onUp);
+    };
+  }, []);
+
+  // Effect drops from the Effects tab: applied to the video clip under the pointer.
+  useEffect(() => {
+    const onUp = (e: PointerEvent) => {
+      const drag = effectDragStore.get();
+      const canvas = canvasRef.current;
+      if (!drag || !canvas) {
+        return;
+      }
+      const rect = canvas.getBoundingClientRect();
+      const { tracks, ui, scrollSecs, scrollY } = stateRef.current;
+      const target = effectTarget(
+        tracks,
+        e.clientX - rect.left,
+        e.clientY - rect.top + scrollY,
+        ui.pxPerSec,
+        scrollSecs,
+      );
+      if (target) {
+        patchUi({ selectedClipIds: [target.span.id] });
+        void run(api.updateClip(target.span.id, drag.patch));
+      }
     };
     window.addEventListener("pointerup", onUp);
     return () => {

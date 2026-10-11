@@ -322,3 +322,15 @@
     display: none;
   }
 }
+
+.effect-ghost {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  padding: 3px 8px;
+  font-size: 12px;
+  background: var(--accent);
+  color: var(--bg);
+  border-radius: var(--radius);
+  white-space: nowrap;
+}

@@ -317,6 +317,7 @@ export const ptBR = {
   "effectsBlendModes": "Modos de mesclagem",
   "effectsNeedClip": "Selecione um clipe de vídeo na timeline e escolha um efeito para aplicá-lo.",
   "effectsNoMatches": "Nenhum efeito encontrado.",
+  "effectsDragHint": "Clique em um efeito para aplicá-lo ou arraste-o sobre um clipe.",
   "searchMedia": "Buscar mídia…",
   "viewGrid": "Exibir em grade",
   "viewList": "Exibir em lista",
