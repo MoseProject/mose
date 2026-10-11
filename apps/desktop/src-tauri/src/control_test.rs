@@ -14,6 +14,7 @@
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
 use tauri::Listener;
@@ -158,6 +159,7 @@ fn the_session_is_answered_without_the_window() {
 fn other_methods_are_forwarded_to_the_window_and_answered_through_the_hub() {
     let h = harness();
     let app = h.handle();
+    app.state::<AppState>().control.set_window_ready();
     let listener_app = app.clone();
     app.listen(CONTROL_REQUEST_EVENT, move |event| {
         let request: Value = serde_json::from_str(event.payload()).unwrap();
@@ -178,6 +180,7 @@ fn other_methods_are_forwarded_to_the_window_and_answered_through_the_hub() {
 fn a_window_error_comes_back_as_the_error() {
     let h = harness();
     let app = h.handle();
+    app.state::<AppState>().control.set_window_ready();
     let listener_app = app.clone();
     app.listen(CONTROL_REQUEST_EVENT, move |event| {
         let request: Value = serde_json::from_str(event.payload()).unwrap();
@@ -211,16 +214,18 @@ fn a_client_over_the_connection_limit_is_turned_away_and_a_freed_slot_is_reused(
     let port = listener.local_addr().unwrap().port();
     serve(listener, token.clone(), Arc::new(echo()), 1);
 
-    let ask = |stream: &TcpStream, id: u32| -> Value {
-        let mut writer = stream.try_clone().unwrap();
+    // `None` when the server turned the connection away and closed it under the write or read.
+    let try_ask = |stream: &TcpStream, id: u32| -> Option<Value> {
+        let mut writer = stream.try_clone().ok()?;
         let request = json!({ "id": id, "token": token, "method": "echo", "params": [id] });
-        writeln!(writer, "{request}").unwrap();
+        writeln!(writer, "{request}").ok()?;
         let mut line = String::new();
-        BufReader::new(stream.try_clone().unwrap())
+        BufReader::new(stream.try_clone().ok()?)
             .read_line(&mut line)
-            .unwrap();
-        serde_json::from_str(&line).unwrap()
+            .ok()?;
+        serde_json::from_str(&line).ok()
     };
+    let ask = |stream: &TcpStream, id: u32| -> Value { try_ask(stream, id).expect("an answer") };
 
     let first = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).unwrap();
     assert_eq!(ask(&first, 1)["result"], json!([1]));
@@ -234,8 +239,7 @@ fn a_client_over_the_connection_limit_is_turned_away_and_a_freed_slot_is_reused(
     let started = std::time::Instant::now();
     loop {
         let third = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).unwrap();
-        let answer = ask(&third, 3);
-        if answer["result"] == json!([3]) {
+        if try_ask(&third, 3).is_some_and(|answer| answer["result"] == json!([3])) {
             break;
         }
         assert!(
@@ -255,4 +259,40 @@ fn only_the_documented_methods_reach_the_window() {
             Err(format!("unknown method: {method}")),
         );
     }
+}
+
+#[test]
+fn a_request_before_the_window_listens_is_refused_at_once_without_an_event() {
+    let h = harness();
+    let app = h.handle();
+    let sent = Arc::new(AtomicUsize::new(0));
+    let counter = Arc::clone(&sent);
+    app.listen(CONTROL_REQUEST_EVENT, move |_| {
+        counter.fetch_add(1, Ordering::SeqCst);
+    });
+    let backend = AppBackend { app };
+    let started = std::time::Instant::now();
+    assert_eq!(
+        backend.call("commands.list", Value::Null),
+        Err("the window is not ready yet".to_string())
+    );
+    assert!(
+        started.elapsed() < Duration::from_secs(1),
+        "it must not wait out the reply timeout"
+    );
+    assert_eq!(sent.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn the_session_is_answered_even_before_the_window_is_ready() {
+    let h = harness();
+    let backend = AppBackend { app: h.handle() };
+    assert!(backend.call("session.get", Value::Null).is_ok());
+}
+
+#[test]
+fn once_the_window_says_it_listens_requests_are_forwarded() {
+    let h = harness();
+    h.ipc("control_ready", json!({})).unwrap();
+    assert!(h.state().control.window_ready.load(Ordering::SeqCst));
 }

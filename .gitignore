@@ -20,3 +20,7 @@ e2e/__pycache__
 /mockup/
 /.token-optimizer/
 /.claude/plans/
+
+# Python bytecode from the e2e suites
+__pycache__/
+*.pyc
