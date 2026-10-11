@@ -5,6 +5,7 @@ members = [
     "crates/core",
     "crates/avbridge",
     "crates/ytbridge",
+    "crates/mcp",
     "apps/desktop/src-tauri",
 ]
 
