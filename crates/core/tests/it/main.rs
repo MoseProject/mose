@@ -20,6 +20,7 @@ mod frame_sampler_test;
 mod loudness_test;
 mod lut_test;
 mod media_test;
+mod oracle_test;
 mod persistence_test;
 mod probe_test;
 mod project_test;

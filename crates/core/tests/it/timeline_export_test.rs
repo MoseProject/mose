@@ -31,7 +31,7 @@ fn fixture(name: &str) -> PathBuf {
         .join(name)
 }
 
-fn clip(
+pub(crate) fn clip(
     id: u64,
     asset_id: u64,
     start_secs: f64,
@@ -119,7 +119,7 @@ fn video_asset(id: u64) -> MediaAsset {
         .into_media_asset(id, "video.mp4".to_string(), path)
 }
 
-fn sequence_with(tracks: Vec<Track>) -> Sequence {
+pub(crate) fn sequence_with(tracks: Vec<Track>) -> Sequence {
     Sequence {
         id: 1,
         name: "Sequence 1".to_string(),
