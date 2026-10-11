@@ -50,7 +50,7 @@ pub use graphics::{
     text_layout, text_metrics,
 };
 pub use model::{
-    keyframe, media, multicam_sync, nested_sequence, project, smart_bins, timeline,
+    frame_rate, keyframe, media, multicam_sync, nested_sequence, project, smart_bins, timeline,
     timeline_window, undo,
 };
 use platform::update_install;
@@ -94,6 +94,7 @@ pub use export_queue::{
     normalize_loaded_export_queue, persisted_export_queue_snapshot, save_export_queue_to_path,
     RenderControl,
 };
+pub use frame_rate::FrameRate;
 pub use frame_sampler::{FrameSampler, SampledFrame, SamplerError};
 pub use highlight_detection::{
     clip_amplitude_samples, detect_highlight_candidates, HighlightCandidate,

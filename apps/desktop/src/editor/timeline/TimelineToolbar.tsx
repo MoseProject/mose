@@ -5,6 +5,13 @@ import styles from "./timeline.module.css";
 import { t } from "../../i18n";
 import { addShapeOverlay, addTextOverlay, seekToMarker } from "../../editing";
 import { api } from "../../ipc";
+import {
+  COMMON_FRAME_RATES,
+  FREE_KEY,
+  frameRateFromKey,
+  frameRateKey,
+  frameRateText,
+} from "../../frameRate";
 import { Icon } from "../chrome/Icon";
 import { SequenceTabs } from "../SequenceTabs";
 import { Menu } from "../chrome/Menu";
@@ -177,6 +184,28 @@ export function TimelineToolbar({
       >
         <Icon name="chevronRight" />
       </button>
+      <select
+        className={cx(styles, baseStyles, "role-select")}
+        aria-label={t("frameRateLabel")}
+        title={t("frameRateLabel")}
+        data-testid="frame-rate-select"
+        value={frameRateKey(session.project.frame_rate)}
+        onChange={(e) => {
+          return run(api.setProjectFrameRate(frameRateFromKey(e.target.value)));
+        }}
+      >
+        <option value={FREE_KEY}>{t("frameRateFree")}</option>
+        {COMMON_FRAME_RATES.map((rate) => {
+          return (
+            <option
+              key={frameRateKey(rate)}
+              value={frameRateKey(rate)}
+            >
+              {frameRateText(rate)}
+            </option>
+          );
+        })}
+      </select>
       <span style={{ flex: 1 }} />
       <div className={cx(styles, baseStyles, "zoom-group")}>
         <button

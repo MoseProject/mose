@@ -361,5 +361,6 @@ pub fn blank_project(name: String, sequence_name: String) -> Project {
         panel_layout: None,
         smart_bins: Vec::new(),
         recent_asset_ids: Vec::new(),
+        frame_rate: None,
     }
 }

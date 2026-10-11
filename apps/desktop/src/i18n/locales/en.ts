@@ -488,6 +488,8 @@ export const en = {
   "close": "Close",
   "menuAdd": "Add",
   "menuClip": "Clip",
+  "frameRateLabel": "Frame rate",
+  "frameRateFree": "Free (no snap)",
   "menuAnalyze": "Analyze",
   "sequenceActions": "Sequence actions",
   "gpuEncoderHint": "Used for every export. Auto picks the best available.",

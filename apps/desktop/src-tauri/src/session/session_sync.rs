@@ -252,6 +252,7 @@ pub fn diff(prev: &Project, next: &Project) -> Vec<Op> {
         panel_layout,
         smart_bins,
         recent_asset_ids,
+        frame_rate,
     } = next;
     let mut ops = Vec::new();
     let root: [Value; 0] = [];
@@ -303,6 +304,7 @@ pub fn diff(prev: &Project, next: &Project) -> Vec<Op> {
         &prev.recent_asset_ids,
         recent_asset_ids,
     );
+    field(&mut ops, &root, "frame_rate", &prev.frame_rate, frame_rate);
     ops
 }
 

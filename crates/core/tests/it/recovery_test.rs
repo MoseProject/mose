@@ -34,6 +34,7 @@ fn project(name: &str) -> Project {
         panel_layout: None,
         smart_bins: Vec::new(),
         recent_asset_ids: Vec::new(),
+        frame_rate: None,
     }
 }
 

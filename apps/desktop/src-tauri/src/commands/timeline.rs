@@ -101,6 +101,7 @@ pub fn move_clip<R: Runtime>(
     start_secs: f64,
 ) -> Result<(), String> {
     undoable(&app, |project| {
+        let start_secs = project.snap_secs(start_secs);
         move_clip_in(project.timeline_mut(), clip_id, track_id, start_secs)
     })
 }
@@ -112,7 +113,10 @@ pub fn trim_clip<R: Runtime>(
     edge: TrimEdge,
     position_secs: f64,
 ) -> Result<(), String> {
-    undoable(&app, |project| trim(project, clip_id, edge, position_secs))
+    undoable(&app, |project| {
+        let position_secs = project.snap_secs(position_secs);
+        trim(project, clip_id, edge, position_secs)
+    })
 }
 
 /// Rolls the shared boundary between `clip_id` (must be the *earlier* clip of the pair) and its
@@ -123,7 +127,10 @@ pub fn roll_edit_clip<R: Runtime>(
     clip_id: u64,
     boundary_secs: f64,
 ) -> Result<(), String> {
-    undoable(&app, |project| roll_edit(project, clip_id, boundary_secs))
+    undoable(&app, |project| {
+        let boundary_secs = project.snap_secs(boundary_secs);
+        roll_edit(project, clip_id, boundary_secs)
+    })
 }
 
 /// [`roll_edit_clip`], but for a drag that grabbed `edited_clip_id`'s *start* edge instead of
@@ -136,6 +143,7 @@ pub fn roll_edit_from_start_edge<R: Runtime>(
     boundary_secs: f64,
 ) -> Result<(), String> {
     undoable(&app, |project| {
+        let boundary_secs = project.snap_secs(boundary_secs);
         let Some(index) = track_of(project.timeline(), edited_clip_id) else {
             return false;
         };
@@ -176,6 +184,7 @@ pub fn slide_clip<R: Runtime>(
     start_secs: f64,
 ) -> Result<(), String> {
     undoable(&app, |project| {
+        let start_secs = project.snap_secs(start_secs);
         let Some(index) = track_of(project.timeline(), clip_id) else {
             return false;
         };
@@ -201,6 +210,7 @@ pub fn move_clip_group<R: Runtime>(
     start_secs: f64,
 ) -> Result<(), String> {
     undoable(&app, |project| {
+        let start_secs = project.snap_secs(start_secs);
         project
             .timeline_mut()
             .move_clip_with_group(clip_id, start_secs.max(0.0))
@@ -554,6 +564,7 @@ pub fn ripple_delete_range<R: Runtime>(
     end_secs: f64,
 ) -> Result<(), String> {
     undoable(&app, |project| {
+        let (start_secs, end_secs) = (project.snap_secs(start_secs), project.snap_secs(end_secs));
         delete_range(project.timeline_mut(), start_secs, end_secs)
     })
 }
@@ -567,6 +578,7 @@ pub fn lift_range<R: Runtime>(
     end_secs: f64,
 ) -> Result<(), String> {
     undoable(&app, |project| {
+        let (start_secs, end_secs) = (project.snap_secs(start_secs), project.snap_secs(end_secs));
         lift_range_in(project.timeline_mut(), start_secs, end_secs)
     })
 }

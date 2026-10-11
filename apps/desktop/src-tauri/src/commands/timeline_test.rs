@@ -654,6 +654,80 @@ mod commands {
         ripple_delete_range(h.handle(), 3.0, 3.0).unwrap();
         assert_eq!(events.load(Ordering::SeqCst), 1);
     }
+
+    fn set_rate(h: &Harness, rate: Option<avcore::FrameRate>) {
+        crate::commands::set_project_frame_rate(h.handle(), rate).unwrap();
+    }
+
+    fn start_of(h: &Harness, id: u64) -> f64 {
+        clip(&timeline(h), id).start_secs
+    }
+
+    #[test]
+    fn a_move_lands_on_a_frame_boundary_once_the_project_has_a_frame_rate() {
+        let h = setup();
+        let (first, _) = two_clips(&h);
+        add_track(h.handle(), TrackKind::Video).unwrap();
+        let target = timeline(&h).tracks[1].id;
+        set_rate(&h, Some(avcore::FrameRate::FPS_25));
+        move_clip(h.handle(), first, target, 2.013).unwrap();
+        assert!(
+            (start_of(&h, first) - 2.0).abs() < 1e-9,
+            "{}",
+            start_of(&h, first)
+        );
+    }
+
+    #[test]
+    fn without_a_frame_rate_a_move_keeps_the_time_it_was_given() {
+        let h = setup();
+        let (first, _) = two_clips(&h);
+        add_track(h.handle(), TrackKind::Video).unwrap();
+        let target = timeline(&h).tracks[1].id;
+        move_clip(h.handle(), first, target, 2.013).unwrap();
+        assert_eq!(start_of(&h, first), 2.013);
+    }
+
+    #[test]
+    fn a_trim_lands_on_a_frame_boundary() {
+        let h = setup();
+        let (first, _) = two_clips(&h);
+        set_rate(&h, Some(avcore::FrameRate::FPS_29_97));
+        trim_clip(h.handle(), first, TrimEdge::End, 5.01).unwrap();
+        let rate = avcore::FrameRate::FPS_29_97;
+        let trimmed = clip(&timeline(&h), first).clone();
+        let end = trimmed.start_secs + trimmed.duration_secs();
+        assert!(
+            (rate.snap_secs(end) - end).abs() < 1e-9,
+            "{end} is not on a frame"
+        );
+        assert!((end - 5.01).abs() <= rate.frame_secs() / 2.0 + 1e-9);
+    }
+
+    #[test]
+    fn setting_the_frame_rate_marks_the_project_changed_only_when_it_changes() {
+        let h = setup();
+        h.session().dirty = false;
+        set_rate(&h, None);
+        assert!(!h.session().dirty, "clearing an unset rate is not a change");
+        set_rate(&h, Some(avcore::FrameRate::FPS_24));
+        assert!(h.session().dirty);
+        assert_eq!(
+            h.session().project.frame_rate,
+            Some(avcore::FrameRate::FPS_24)
+        );
+    }
+
+    #[test]
+    fn an_invalid_frame_rate_is_refused() {
+        let h = setup();
+        let result = crate::commands::set_project_frame_rate(
+            h.handle(),
+            Some(avcore::FrameRate::new(30, 0)),
+        );
+        assert_eq!(result, Err("invalid frame rate".to_string()));
+        assert_eq!(h.session().project.frame_rate, None);
+    }
 }
 
 mod edge_cases {

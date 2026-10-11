@@ -156,6 +156,7 @@ fn same_preview_content(a: &avcore::Project, b: &avcore::Project) -> bool {
         panel_layout: _,
         smart_bins: _,
         recent_asset_ids: _,
+        frame_rate: _,
     } = a;
     if *id != b.id
         || *active_sequence != b.active_sequence

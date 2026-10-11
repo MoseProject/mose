@@ -18,6 +18,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::export::ExportAspectRatio;
+use crate::frame_rate::FrameRate;
 use crate::media::MediaAsset;
 use crate::smart_bins::SmartBin;
 use crate::timeline::{ClipInstance, Timeline, TrackKind};
@@ -112,6 +113,12 @@ pub struct Project {
     /// existed loads with an empty recent list rather than failing to deserialize.
     #[serde(default)]
     pub recent_asset_ids: Vec<u64>,
+    /// The timeline's frame rate. When set, edits made from the editor land on whole frame
+    /// boundaries ([`Project::snap_secs`]); `None` leaves times as given. **Keep this the last
+    /// field**: the project file is positional, and a version-3 file is upgraded by appending
+    /// the encoding of `None` (see `persistence::upgrade_v3`).
+    #[serde(default)]
+    pub frame_rate: Option<FrameRate>,
 }
 
 /// Cap on [`Project::recent_asset_ids`] — same order of magnitude as `ui::PrefsState::
@@ -130,6 +137,15 @@ pub struct PanelLayout {
 }
 
 impl Project {
+    /// `secs` moved to the nearest frame boundary of [`Project::frame_rate`], or unchanged when
+    /// the project has none.
+    pub fn snap_secs(&self, secs: f64) -> f64 {
+        match self.frame_rate {
+            Some(rate) if rate.is_valid() => rate.snap_secs(secs),
+            _ => secs,
+        }
+    }
+
     /// The active tab's timeline — what the Editor screen and every clip-editing `ui::App`
     /// method actually read. Panics if `active_sequence` is out of bounds, which shouldn't
     /// happen given `sequences` is never empty and every mutation keeps the index in range —
