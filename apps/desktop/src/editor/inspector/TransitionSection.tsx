@@ -65,6 +65,14 @@ export function TransitionSection({ clip, commit }: { clip: ClipInstance; commit
           clip.transition_in !== "None" || clip.fade_in_secs > 0 || clip.fade_out_secs > 0
         }
         group="effects"
+        onReset={() => {
+          void commit({
+            transitionIn: "None",
+            transitionDurationSecs: 0.5,
+            fadeInSecs: 0,
+            fadeOutSecs: 0,
+          });
+        }}
       >
         <div className={cx(styles, baseStyles, "field")}>
           <label>{t("transition")}</label>

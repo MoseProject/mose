@@ -34,7 +34,10 @@ export function MaskSection({ clip, commit }: { clip: ClipInstance; commit: Comm
       <Section
         label={t("mask")}
         defaultOpen={clip.mask_shape !== "None"}
-        group="effects"
+        testId="section-mask"
+        onReset={() => {
+          void commit({ maskShape: "None", maskCornerRadius: 0 });
+        }}
       >
         <div className={cx(styles, baseStyles, "field")}>
           <label>{t("mask")}</label>

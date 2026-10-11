@@ -18,6 +18,7 @@ import {
   type SessionView,
 } from "../../types";
 import { Section, Slider, type InspectorGroup } from "./controls";
+import { loadTab, saveTab } from "./memory";
 
 // Kept here for the importers that read these from the inspector module.
 export { Section, Slider };
@@ -71,7 +72,11 @@ export function Inspector({ session }: { session: SessionView }) {
           })
       : undefined;
 
-  const [tab, setTab] = useState<InspectorGroup>("inspector");
+  const [tab, setTabState] = useState<InspectorGroup>(loadTab);
+  const setTab = (next: InspectorGroup) => {
+    setTabState(next);
+    saveTab(next);
+  };
   return (
     <section className={cx(styles, baseStyles, libraryStyles, editorStyles, "panel inspector")}>
       <div
@@ -146,7 +151,9 @@ export function Inspector({ session }: { session: SessionView }) {
         ) : selectedClipIds.length > 1 ? (
           <MultiSelection ids={selectedClipIds} />
         ) : (
-          <div className={cx(styles, baseStyles, libraryStyles, "empty-state")}>{t("noClipSelected")}</div>
+          <div className={cx(styles, baseStyles, libraryStyles, "empty-state")}>
+            {t("noClipSelected")}
+          </div>
         )}
       </div>
     </section>
