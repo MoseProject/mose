@@ -203,6 +203,12 @@ unsafe extern "C" {
         segments: *const RawShapeSegment,
         segment_count: c_int,
     ) -> *mut c_char;
+    pub(crate) fn avbridge_privacy_blur_filter(
+        matte_path: *const c_char,
+        blur_sigma: f64,
+        canvas_width: c_int,
+        canvas_height: c_int,
+    ) -> *mut c_char;
     pub(crate) fn avbridge_free_string(s: *mut c_char);
     pub(crate) fn avbridge_smart_cut_video(
         in_path: *const c_char,

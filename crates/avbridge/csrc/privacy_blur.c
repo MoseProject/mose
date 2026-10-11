@@ -49,6 +49,36 @@ static int escape_filter_path(char *out, size_t out_size, const char *in) {
     return (int)pos;
 }
 
+/* The graph for one privacy-blur segment, [in] to [out], in a newly allocated string (free it with
+   av_free). NULL when the path or sigma are unusable. See avbridge_apply_privacy_blur for what
+   each stage is for. */
+static char *build_privacy_blur_filter(const char *matte_path, double blur_sigma, int canvas_width,
+                                       int canvas_height) {
+    if (blur_sigma <= 0.0) return NULL;
+    char escaped_matte[1024];
+    if (escape_filter_path(escaped_matte, sizeof(escaped_matte), matte_path) < 0) return NULL;
+    size_t size = sizeof(escaped_matte) + 512;
+    char *filter_str = av_malloc(size);
+    if (!filter_str) return NULL;
+    int written = snprintf(filter_str, size,
+                           "movie=filename='%s':loop=1,format=yuv420p,scale=%d:%d[mask];"
+                           "[in]format=yuv420p,split=2[base][to_blur];"
+                           "[to_blur]gblur=sigma=%f[blurred];"
+                           "[base][blurred][mask]maskedmerge[out]",
+                           escaped_matte, canvas_width, canvas_height, blur_sigma);
+    if (written < 0 || (size_t)written >= size) {
+        av_free(filter_str);
+        return NULL;
+    }
+    return filter_str;
+}
+
+char *avbridge_privacy_blur_filter(const char *matte_path, double blur_sigma, int canvas_width,
+                                   int canvas_height) {
+    /* Released with avbridge_free_string, like the overlay filters. */
+    return build_privacy_blur_filter(matte_path, blur_sigma, canvas_width, canvas_height);
+}
+
 PrivacyBlurStatus avbridge_apply_privacy_blur(const char *in_path, const char *out_path,
                                               const char *matte_path, double blur_sigma,
                                               int canvas_width, int canvas_height,
@@ -65,7 +95,7 @@ PrivacyBlurStatus avbridge_apply_privacy_blur(const char *in_path, const char *o
     char *filter_str = NULL;
 
     /* Builds:
-         movie=filename='<matte>':loop=0,format=yuv420p,scale=W:H[mask];
+         movie=filename='<matte>':loop=1,format=yuv420p,scale=W:H[mask];
          [in]format=yuv420p,split=2[base][to_blur];
          [to_blur]gblur=sigma=<sigma>[blurred];
          [base][blurred][mask]maskedmerge[out]
@@ -76,33 +106,16 @@ PrivacyBlurStatus avbridge_apply_privacy_blur(const char *in_path, const char *o
        avbridge_encode_matte_video, but a caller-supplied matte of a different format is
        normalized here rather than trusted. `scale=W:H` on the matte guards against a matte
        encoded at a different resolution than the main video (e.g. built from downscaled sample
-       frames) silently failing maskedmerge's own equal-dimensions requirement. `loop=0` repeats
-       the matte's last frame if it runs shorter than the main video, rather than the movie
-       source hitting EOF and stalling the graph early — a caller building the matte from fewer
-       sample points than the export's own frame count (a coarser sampling cadence, not every
-       frame) is expected and shouldn't truncate the output. */
-    {
-        char escaped_matte[1024];
-        if (escape_filter_path(escaped_matte, sizeof(escaped_matte), matte_path) < 0) {
-            status = PRIVACY_BLUR_ERR_FILTER_GRAPH;
-            goto cleanup;
-        }
-        size_t filter_buf_size = sizeof(escaped_matte) + 512;
-        filter_str = av_malloc(filter_buf_size);
-        if (!filter_str) {
-            status = PRIVACY_BLUR_ERR_FILTER_GRAPH;
-            goto cleanup;
-        }
-        int written = snprintf(filter_str, filter_buf_size,
-                               "movie=filename='%s':loop=0,format=yuv420p,scale=%d:%d[mask];"
-                               "[in]format=yuv420p,split=2[base][to_blur];"
-                               "[to_blur]gblur=sigma=%f[blurred];"
-                               "[base][blurred][mask]maskedmerge[out]",
-                               escaped_matte, canvas_width, canvas_height, blur_sigma);
-        if (written < 0 || (size_t)written >= filter_buf_size) {
-            status = PRIVACY_BLUR_ERR_FILTER_GRAPH;
-            goto cleanup;
-        }
+       frames) silently failing maskedmerge's own equal-dimensions requirement. `loop=1` plays it
+       once and `maskedmerge` holds its last frame if it runs shorter than the main video, rather
+       than the movie source hitting EOF and stalling the graph early (a looping source never ends,
+       so the graph could not finish when the video does) -- a caller building the matte from fewer
+       sample points than the export's own frame count (a coarser sampling cadence, not every frame)
+       is expected and shouldn't truncate the output. */
+    filter_str = build_privacy_blur_filter(matte_path, blur_sigma, canvas_width, canvas_height);
+    if (!filter_str) {
+        status = PRIVACY_BLUR_ERR_FILTER_GRAPH;
+        goto cleanup;
     }
 
     status = (PrivacyBlurStatus)avbridge_reencode_with_filter(in_path, out_path, filter_str,
