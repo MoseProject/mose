@@ -135,10 +135,10 @@ fn nested_sequence_and_anchor_flags_follow_their_fields() {
 #[test]
 fn keyframed_crop_and_colour_become_filter_stages() {
     let mut clip = clip();
-    assert_eq!(clip.keyframe_video_filter_chain(30, 1, 4.0), None);
+    assert_eq!(clip.keyframe_video_filter_chain(30, 1, 4.0, false), None);
     clip.crop_x_keyframes = vec![key(0.0, 0.0), key(1.0, 0.25)];
     clip.brightness_keyframes = vec![key(0.0, 0.0), key(1.0, 0.2)];
-    let chain = clip.keyframe_video_filter_chain(30, 1, 4.0).unwrap();
+    let chain = clip.keyframe_video_filter_chain(30, 1, 4.0, false).unwrap();
     // A keyframed crop is a per-pixel `geq` window; keyframed brightness is a lookup table that
     // `sendcmd` rewrites over time.
     assert!(chain.contains("geq="), "{chain}");

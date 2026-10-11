@@ -290,7 +290,7 @@ fn animated_opacity_is_evaluated_on_one_pixel_not_the_whole_frame() {
             value: 1.0,
         },
     ];
-    let chain = c.keyframe_video_filter_chain(30, 1, 10.0).unwrap();
+    let chain = c.keyframe_video_filter_chain(30, 1, 10.0, false).unwrap();
     assert!(chain.starts_with(
         "split=3[ko3a][ko3b][ko3c];[ko3b]scale=1:1:flags=neighbor,format=gray,geq=lum='255*("
     ));
