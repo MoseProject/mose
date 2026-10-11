@@ -63,3 +63,25 @@ def test_the_next_launch_removes_abandoned_empty_sessions(launch, home, app_exe)
     launch(home)
     # The home screen asks for the leftovers on mount, which clears directories with no snapshot.
     assert poll_until(lambda: not stale.exists(), timeout_secs=30)
+
+
+def test_edits_that_never_pause_are_still_written_within_a_few_seconds(app):
+    import time
+
+    # One edit every 0.4 s never leaves the 1 s quiet period the writer waits for, so the
+    # snapshot only follows because of the ceiling (3 s).
+    app.call("commands.run", {"id": "addMarker"})
+    assert poll_until(lambda: snapshots(app), timeout_secs=30)
+    path = snapshots(app)[0]
+    seen = path.stat().st_mtime_ns
+    deadline = time.monotonic() + 12
+    rewritten_at = None
+    started = time.monotonic()
+    while time.monotonic() < deadline:
+        app.call("commands.run", {"id": "addMarker"})
+        if path.stat().st_mtime_ns != seen:
+            rewritten_at = time.monotonic() - started
+            break
+        time.sleep(0.4)
+    assert rewritten_at is not None, "the snapshot was not rewritten while edits kept coming"
+    assert rewritten_at <= 6, f"took {rewritten_at:.1f}s, the ceiling is 3 s"

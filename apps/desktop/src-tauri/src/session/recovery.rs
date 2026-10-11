@@ -27,8 +27,10 @@ use crate::state::{lock_or_recover, AppState};
 
 /// How long the project must stay untouched before the snapshot is written.
 pub const JOURNAL_DEBOUNCE: Duration = Duration::from_secs(1);
-/// The longest a snapshot lags behind while edits keep coming.
-pub const JOURNAL_CEILING: Duration = Duration::from_secs(10);
+/// The longest a snapshot lags behind while edits keep coming. Writing one costs a clone and a
+/// few milliseconds of encoding (outside the session lock), so a short bound is cheap, and it is
+/// the most work a crash can take from a project that was never saved.
+pub const JOURNAL_CEILING: Duration = Duration::from_secs(3);
 /// How often the writer looks for changes.
 const JOURNAL_TICK: Duration = Duration::from_millis(500);
 

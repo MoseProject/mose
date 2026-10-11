@@ -189,3 +189,12 @@ fn an_unknown_recovery_is_refused() {
     started(&h);
     assert!(recover(&h.handle(), "../escape").is_err());
 }
+
+#[test]
+fn what_a_crash_can_cost_is_bounded_by_a_few_seconds() {
+    assert!(JOURNAL_DEBOUNCE < JOURNAL_CEILING);
+    assert!(
+        JOURNAL_CEILING <= Duration::from_secs(3),
+        "the journal is the only copy of a project that was never saved"
+    );
+}
