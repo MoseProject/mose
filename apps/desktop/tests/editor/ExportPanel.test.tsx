@@ -20,7 +20,8 @@ vi.mock("../../src/ipc", () => {
 });
 
 // Imported after the mock so ExportPanel picks up the mocked `../ipc`.
-const { ExportPanel, remainingSecs } = await import("../../src/editor/export/ExportPanel");
+const { ExportPanel, exportSummary, remainingSecs } =
+  await import("../../src/editor/export/ExportPanel");
 const { api } = await import("../../src/ipc");
 
 function job(overrides: Partial<ExportJobView>): ExportJobView {
@@ -179,5 +180,46 @@ describe("export ETA and folder", () => {
     exportsStore.set([job({ status: "Queued" })]);
     render(<ExportPanel />);
     expect(screen.queryByText(t("openExportFolder"))).toBeNull();
+  });
+});
+
+describe("export summary", () => {
+  const done = (report: ExportJobView["report"]) => {
+    return job({ status: "Done", percent: 100, report });
+  };
+
+  it("says which encoder ran, whether it is a GPU or the CPU, and how fast", () => {
+    expect(exportSummary(done({ encoder: "h264_nvenc", tookSecs: 30, videoSecs: 90 }))).toBe(
+      `h264_nvenc (${t("encoderGpu")}) · 00:30.00 · 3.0x`,
+    );
+    expect(exportSummary(done({ encoder: "libopenh264", tookSecs: 120, videoSecs: 60 }))).toBe(
+      `libopenh264 (${t("encoderCpu")}) · 02:00.00 · 0.5x`,
+    );
+  });
+
+  it("copes with no encoder and with a video of no length", () => {
+    expect(exportSummary(done({ encoder: null, tookSecs: 5, videoSecs: 0 }))).toBe(
+      `${t("encoderUnknown")} · 00:05.00`,
+    );
+  });
+
+  it("is null before a job has a report", () => {
+    expect(exportSummary(job({ status: "Done" }))).toBeNull();
+  });
+
+  it("shows on a finished job only", () => {
+    exportsStore.set([done({ encoder: "libopenh264", tookSecs: 10, videoSecs: 20 })]);
+    render(<ExportPanel />);
+    expect(screen.getByTestId("export-summary").textContent).toContain("libopenh264");
+    cleanup();
+    exportsStore.set([
+      job({
+        status: { Rendering: { percent: 10 } },
+        percent: 10,
+        report: { encoder: "libopenh264", tookSecs: 1, videoSecs: 1 },
+      }),
+    ]);
+    render(<ExportPanel />);
+    expect(screen.queryByTestId("export-summary")).toBeNull();
   });
 });
