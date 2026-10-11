@@ -262,6 +262,20 @@ pub fn render_export_job_multi_with_audio(
     validate_timeline_segments(track_segments, canvas, target_lufs)?;
     validate_text_segments(text_segments, canvas)?;
     validate_audio_segments(audio_segments)?;
+    if let Some(done) = try_lossless_cut(
+        track_segments,
+        audio_segments,
+        canvas,
+        output,
+        target_lufs,
+        text_segments,
+        shape_segments,
+        privacy_blur_segments,
+        cancel,
+        &mut on_progress,
+    ) {
+        return done;
+    }
     if track_segments.len() == 1 {
         let outcome = render_export_job(
             &track_segments[0],
@@ -392,4 +406,135 @@ pub(crate) fn apply_audio_mix_pass(
     }
     let _ = std::fs::remove_file(&backup);
     Ok(RenderOutcome::Completed)
+}
+
+/// One clip of an H.264 file at the canvas's size and frame rate, with no effect on it, cut
+/// somewhere in the middle: the picture between the keyframes next to the cut is copied as it is
+/// and only the two ends are encoded again ([`avbridge::smart_cut_video`]), then the audio is
+/// mixed in. That is a frame-accurate cut in the time it takes to read the file, with the source's
+/// own bits for most of the picture. Returns `None`, having changed nothing, whenever the export
+/// does not suit that (or anything in it fails), and the usual re-encode takes over.
+#[allow(clippy::too_many_arguments)]
+fn try_lossless_cut(
+    track_segments: &[Vec<avbridge::ClipSegment>],
+    audio_segments: &[avbridge::AudioSegment],
+    canvas: Canvas,
+    output: &Path,
+    target_lufs: f32,
+    text_segments: &[TextSegment],
+    shape_segments: &[avbridge::ShapeSegment],
+    privacy_blur_segments: &[PrivacyBlurSegment],
+    cancel: &AtomicBool,
+    on_progress: &mut impl FnMut(u8),
+) -> Option<Result<RenderOutcome, RenderError>> {
+    static TEMP_ID: AtomicU64 = AtomicU64::new(0);
+
+    if track_segments.len() != 1
+        || track_segments[0].len() != 1
+        || !text_segments.is_empty()
+        || !shape_segments.is_empty()
+        || !privacy_blur_segments.is_empty()
+    {
+        return None;
+    }
+    let segment = &track_segments[0][0];
+    let untouched = segment.video_filter.is_empty()
+        && !segment.frozen
+        && segment.speed_factor == 1.0
+        && segment.smooth_speed_ramp_end_factor <= 0.0
+        && segment.transition_in == 0
+        && segment.fade_in_secs == 0.0
+        && segment.fade_out_secs == 0.0
+        && segment.blend_mode.is_empty()
+        && segment.mask_video_path.is_empty()
+        && segment.position_x_expr.is_empty()
+        && segment.position_y_expr.is_empty();
+    if !untouched {
+        return None;
+    }
+    // The same size and frame rate as the export's canvas, so nothing has to be scaled or
+    // resampled, and a sound to carry along.
+    let info = avbridge::probe(&segment.source_path).ok()?;
+    let same_picture = info.codec_name == "h264"
+        && info.has_audio
+        && info.resolution == Some((canvas.width, canvas.height))
+        && info.fps.is_some_and(|fps| {
+            (f64::from(fps) - f64::from(canvas.fps_num) / f64::from(canvas.fps_den.max(1))).abs()
+                < 0.01
+        });
+    if !same_picture {
+        return None;
+    }
+
+    let parent = output.parent().unwrap_or_else(|| Path::new("."));
+    let stem = output
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("oca_export");
+    let suffix = format!(
+        "{}-{}",
+        std::process::id(),
+        TEMP_ID.fetch_add(1, Ordering::Relaxed)
+    );
+    let video = parent.join(format!("{stem}.oca-cut-{suffix}.mp4"));
+    let length = segment.source_out_secs - segment.source_in_secs;
+
+    match avbridge::smart_cut_video(
+        &segment.source_path,
+        segment.source_in_secs,
+        segment.source_out_secs,
+        canvas,
+        &video,
+        cancel,
+        |secs| {
+            if length > 0.0 {
+                // The copy is most of the work; the audio is the rest.
+                on_progress(((secs / length) * 90.0).clamp(0.0, 90.0) as u8);
+            }
+        },
+    ) {
+        Ok(avbridge::SmartCutOutcome::Done) => {}
+        Ok(avbridge::SmartCutOutcome::NotApplicable) => return None,
+        Ok(avbridge::SmartCutOutcome::Cancelled) => {
+            let _ = std::fs::remove_file(&video);
+            return Some(Ok(RenderOutcome::Cancelled));
+        }
+        Err(error) => {
+            tracing::warn!(%error, output = %output.display(), "lossless cut failed; exporting the usual way");
+            let _ = std::fs::remove_file(&video);
+            return None;
+        }
+    }
+
+    let plain_audio;
+    let audio = if audio_segments.is_empty() {
+        plain_audio = [avbridge::AudioSegment::plain(
+            segment.source_path.clone(),
+            segment.source_in_secs,
+            segment.source_out_secs,
+            segment.gain_db,
+        )];
+        &plain_audio[..]
+    } else {
+        audio_segments
+    };
+    match apply_audio_mix_pass(&video, audio, length, target_lufs, cancel) {
+        Ok(RenderOutcome::Completed) => {}
+        Ok(RenderOutcome::Cancelled) => {
+            let _ = std::fs::remove_file(&video);
+            return Some(Ok(RenderOutcome::Cancelled));
+        }
+        Err(error) => {
+            tracing::warn!(%error, output = %output.display(), "audio for the lossless cut failed; exporting the usual way");
+            let _ = std::fs::remove_file(&video);
+            return None;
+        }
+    }
+    if let Err(error) = std::fs::rename(&video, output) {
+        tracing::warn!(%error, output = %output.display(), "could not place the lossless cut; exporting the usual way");
+        let _ = std::fs::remove_file(&video);
+        return None;
+    }
+    on_progress(100);
+    Some(Ok(RenderOutcome::Completed))
 }
