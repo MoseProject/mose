@@ -16,9 +16,10 @@ use super::errors::RenderError;
 use super::text::TextSegment;
 use avbridge::Canvas;
 
+/// `NaN` is the "do not normalize" sentinel (see [`NO_NORMALIZATION`]); any other value must be
+/// finite.
 pub(crate) fn validate_target_lufs(target_lufs: f32) -> Result<(), RenderError> {
-    target_lufs
-        .is_finite()
+    (target_lufs.is_nan() || target_lufs.is_finite())
         .then_some(())
         .ok_or(RenderError::InvalidTargetLufs)
 }

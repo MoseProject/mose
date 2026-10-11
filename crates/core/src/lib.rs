@@ -126,7 +126,7 @@ pub use render::{
     render_export_job_multi_with_audio, render_timeline_export, resolve_audio_segments,
     resolve_privacy_blur_segments, resolve_shape_segments, resolve_text_segments,
     resolve_timeline_segments, resolve_timeline_segments_multi, PrivacyBlurSegment, RenderError,
-    RenderOutcome, TextSegment,
+    RenderOutcome, TextSegment, NO_NORMALIZATION,
 };
 pub use scene_detection::{detect_scene_cuts, SceneCut, DEFAULT_SCENE_CUT_THRESHOLD};
 pub use scopes::{luma_waveform_rgba, render_scopes_rgba, vectorscope_rgba};
