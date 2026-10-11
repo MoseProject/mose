@@ -89,6 +89,7 @@ fn project_at(project_path: &Path, assets: Vec<MediaAsset>) -> Project {
         panel_layout: None,
         smart_bins: Vec::new(),
         recent_asset_ids: Vec::new(),
+        frame_rate: None,
     }
 }
 

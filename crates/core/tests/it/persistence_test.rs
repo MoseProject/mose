@@ -183,6 +183,7 @@ fn fixture_project() -> Project {
         panel_layout: None,
         smart_bins: Vec::new(),
         recent_asset_ids: Vec::new(),
+        frame_rate: None,
     }
 }
 
@@ -209,6 +210,7 @@ fn empty_project() -> Project {
         panel_layout: None,
         smart_bins: Vec::new(),
         recent_asset_ids: Vec::new(),
+        frame_rate: None,
     }
 }
 
@@ -840,4 +842,60 @@ fn the_project_layout_refuses_other_versions_and_damaged_input() {
     wrong_size[5..9].copy_from_slice(&10u32.to_le_bytes());
     assert!(from_project_bytes(&wrong_size).is_err());
     assert!(from_project_bytes(&good[..good.len() / 2]).is_err());
+}
+
+/// A project file the way version 3 wrote it: the current encoding without the trailing
+/// `frame_rate: None`, under the old version byte.
+fn version_3_bytes(project: &Project) -> Vec<u8> {
+    use avcore::persistence::to_project_bytes;
+    let current = to_project_bytes(project).unwrap();
+    let size = u32::from_le_bytes(current[5..9].try_into().unwrap()) as usize;
+    let payload = lz4_flex::block::decompress(&current[9..], size).unwrap();
+    assert_eq!(
+        payload.last(),
+        Some(&0),
+        "a project without a frame rate ends in None"
+    );
+    let old = &payload[..payload.len() - 1];
+    let mut bytes = current[..4].to_vec();
+    bytes.push(3);
+    bytes.extend_from_slice(&(old.len() as u32).to_le_bytes());
+    bytes.extend_from_slice(&lz4_flex::block::compress(old));
+    bytes
+}
+
+#[test]
+fn a_version_3_project_file_still_opens_with_no_frame_rate() {
+    let project = fixture_project();
+    let opened = avcore::persistence::from_project_bytes(&version_3_bytes(&project)).unwrap();
+    assert_eq!(opened, project);
+    assert_eq!(opened.frame_rate, None);
+}
+
+#[test]
+fn a_frame_rate_survives_a_save_and_load() {
+    let mut project = fixture_project();
+    project.frame_rate = Some(avcore::FrameRate::FPS_29_97);
+    let bytes = avcore::persistence::to_project_bytes(&project).unwrap();
+    let opened = avcore::persistence::from_project_bytes(&bytes).unwrap();
+    assert_eq!(
+        opened.frame_rate,
+        Some(avcore::FrameRate::new(30_000, 1_001))
+    );
+    assert_eq!(opened, project);
+}
+
+#[test]
+fn other_project_format_versions_are_still_refused() {
+    let mut bytes = avcore::persistence::to_project_bytes(&fixture_project()).unwrap();
+    for version in [0u8, 2, 5, 255] {
+        bytes[4] = version;
+        assert!(
+            matches!(
+                avcore::persistence::from_project_bytes(&bytes),
+                Err(PersistError::Corrupt("unsupported format version"))
+            ),
+            "version {version}"
+        );
+    }
 }

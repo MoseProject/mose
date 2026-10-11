@@ -137,6 +137,7 @@ fn test_project() -> Project {
         panel_layout: None,
         smart_bins: Vec::new(),
         recent_asset_ids: Vec::new(),
+        frame_rate: None,
     }
 }
 
@@ -608,4 +609,23 @@ fn record_recent_asset_caps_the_list_at_recent_asset_capacity() {
     );
     let expected_most_recent = avcore::project::RECENT_ASSET_CAPACITY as u64 + 4;
     assert_eq!(project.recent_asset_ids[0], expected_most_recent);
+}
+
+#[test]
+fn snapping_follows_the_project_frame_rate_and_is_off_without_one() {
+    let mut project = test_project();
+    assert_eq!(
+        project.snap_secs(1.0123),
+        1.0123,
+        "no frame rate leaves times alone"
+    );
+    project.frame_rate = Some(avcore::FrameRate::FPS_25);
+    assert!((project.snap_secs(1.0123) - 1.00).abs() < 1e-12);
+    assert!((project.snap_secs(1.03) - 1.04).abs() < 1e-12);
+    project.frame_rate = Some(avcore::FrameRate::new(0, 1));
+    assert_eq!(
+        project.snap_secs(1.0123),
+        1.0123,
+        "an invalid rate is ignored"
+    );
 }
