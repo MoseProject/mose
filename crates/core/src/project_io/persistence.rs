@@ -107,14 +107,14 @@ impl std::fmt::Display for PersistError {
 impl std::error::Error for PersistError {}
 
 /// Shared encoder behind the project/prefs and queue framings.
-fn to_framed_bytes<T: Serialize>(value: &T, magic: &[u8; 4]) -> Result<Vec<u8>, PersistError> {
+fn to_framed_bytes<T: Serialize>(value: &T, magic: [u8; 4]) -> Result<Vec<u8>, PersistError> {
     let mut msgpack = Vec::new();
     value
         .serialize(&mut rmp_serde::Serializer::new(&mut msgpack).with_struct_map())
         .map_err(PersistError::Encode)?;
 
     let mut out = Vec::with_capacity(msgpack.len() / 2 + 5);
-    out.extend_from_slice(magic);
+    out.extend_from_slice(&magic);
     out.push(FORMAT_VERSION);
     let mut encoder = GzEncoder::new(&mut out, Compression::fast());
     encoder.write_all(&msgpack).map_err(PersistError::Io)?;
@@ -125,9 +125,9 @@ fn to_framed_bytes<T: Serialize>(value: &T, magic: &[u8; 4]) -> Result<Vec<u8>, 
 /// Shared decoder behind the project/prefs and queue framings.
 fn from_framed_bytes<T: DeserializeOwned>(
     bytes: &[u8],
-    expected_magic: &[u8; 4],
+    expected_magic: [u8; 4],
 ) -> Result<T, PersistError> {
-    if bytes.len() < expected_magic.len() + 1 || &bytes[..expected_magic.len()] != expected_magic {
+    if bytes.len() < expected_magic.len() + 1 || bytes[..expected_magic.len()] != expected_magic {
         return Err(PersistError::Corrupt("bad magic bytes"));
     }
     let version = bytes[expected_magic.len()];
@@ -151,34 +151,34 @@ fn from_framed_bytes<T: DeserializeOwned>(
 /// Serializes `value` to the `.ocproj`/`prefs.oc` framing (`OCPJ` + version + compressed
 /// MessagePack).
 pub fn to_ocproj_bytes<T: Serialize>(value: &T) -> Result<Vec<u8>, PersistError> {
-    to_framed_bytes(value, PROJECT_MAGIC)
+    to_framed_bytes(value, *PROJECT_MAGIC)
 }
 
 /// Parses a value previously produced by [`to_ocproj_bytes`].
 pub fn from_ocproj_bytes<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, PersistError> {
-    from_framed_bytes(bytes, PROJECT_MAGIC)
+    from_framed_bytes(bytes, *PROJECT_MAGIC)
 }
 
 /// Serializes `value` to the `.ocqueue` framing (`OCQU` + version + compressed MessagePack).
 pub fn to_ocqueue_bytes<T: Serialize>(value: &T) -> Result<Vec<u8>, PersistError> {
-    to_framed_bytes(value, QUEUE_MAGIC)
+    to_framed_bytes(value, *QUEUE_MAGIC)
 }
 
 /// Parses a value previously produced by [`to_ocqueue_bytes`]. Project/prefs files are rejected
 /// by their different magic bytes before MessagePack decoding begins.
 pub fn from_ocqueue_bytes<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, PersistError> {
-    from_framed_bytes(bytes, QUEUE_MAGIC)
+    from_framed_bytes(bytes, *QUEUE_MAGIC)
 }
 
 /// Same framing (`OCTR` + version + compressed MessagePack) for a transcript-document sidecar
 /// (`crate::transcript::TranscriptDocument`, CF-01) — a wrong-file/corrupt-file error is
 /// deterministic before deserialization even starts, same as project/queue files.
 pub fn to_octr_bytes<T: Serialize>(value: &T) -> Result<Vec<u8>, PersistError> {
-    to_framed_bytes(value, TRANSCRIPT_MAGIC)
+    to_framed_bytes(value, *TRANSCRIPT_MAGIC)
 }
 
 pub fn from_octr_bytes<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, PersistError> {
-    from_framed_bytes(bytes, TRANSCRIPT_MAGIC)
+    from_framed_bytes(bytes, *TRANSCRIPT_MAGIC)
 }
 
 /// Same framing (`OCSI` + version + compressed MessagePack) for a semantic-search index sidecar
@@ -187,11 +187,11 @@ pub fn from_octr_bytes<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, PersistEr
 /// than `motion_template`'s plain-JSON choice (that format is deliberately shareable/inspectable
 /// data; this one is internal cache state, closer in spirit to `.ocqueue`/`.octr`).
 pub fn to_ocsi_bytes<T: Serialize>(value: &T) -> Result<Vec<u8>, PersistError> {
-    to_framed_bytes(value, SEMANTIC_INDEX_MAGIC)
+    to_framed_bytes(value, *SEMANTIC_INDEX_MAGIC)
 }
 
 pub fn from_ocsi_bytes<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, PersistError> {
-    from_framed_bytes(bytes, SEMANTIC_INDEX_MAGIC)
+    from_framed_bytes(bytes, *SEMANTIC_INDEX_MAGIC)
 }
 
 /// Writes `bytes` to `path` so a crash or a full disk cannot leave a half-written file: the data

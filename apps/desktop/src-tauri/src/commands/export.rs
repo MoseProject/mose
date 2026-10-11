@@ -76,7 +76,7 @@ pub fn start_export<R: Runtime>(
     }
     let exports = app.state::<AppState>().exports.clone();
     check_output_is_free(&app, &exports, &output)?;
-    Ok(exports.enqueue(app.clone(), title, output, prepared))
+    Ok(exports.enqueue(app, title, output, prepared))
 }
 
 /// Whether two paths name the same file: by identity when both exist, otherwise by their text

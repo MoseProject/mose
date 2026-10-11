@@ -4,7 +4,7 @@ import editorStyles from "../../screens/editor.module.css";
 import { cx } from "../../cx";
 import baseStyles from "../../styles/base.module.css";
 import styles from "./timeline.module.css";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { formatTime, t } from "../../i18n";
 import { findCommand, shortcutLabel } from "../../commands";
 import { TIMELINE_ACTION_EVENT, type TimelineAction } from "../../editing";
@@ -57,6 +57,15 @@ export function Timeline({ session }: { session: SessionView }) {
   const tracks = activeTimeline(session.project).tracks;
   const markers = activeTimeline(session.project).markers;
   const media = session.project.media_library;
+  // By id, so the per-frame draw looks an asset up in constant time instead of scanning the library
+  // for every clip on screen.
+  const assetsById = useMemo(() => {
+    return new Map(
+      media.map((asset) => {
+        return [asset.id, asset] as const;
+      }),
+    );
+  }, [media]);
   const [scrollSecs, setScrollSecs] = useState(0);
   const [scrollY, setScrollY] = useState(0);
   const [cursor, setCursor] = useState("default");
@@ -76,9 +85,9 @@ export function Timeline({ session }: { session: SessionView }) {
   useLayoutEffect(() => {
     syncAssets(media);
   }, [media]);
-  const stateRef = useRef({ tracks, markers, media, ui, scrollSecs, scrollY });
+  const stateRef = useRef({ tracks, markers, media, assetsById, ui, scrollSecs, scrollY });
   useLayoutEffect(() => {
-    stateRef.current = { tracks, markers, media, ui, scrollSecs, scrollY };
+    stateRef.current = { tracks, markers, media, assetsById, ui, scrollSecs, scrollY };
   });
 
   const draw = () => {
@@ -90,7 +99,7 @@ export function Timeline({ session }: { session: SessionView }) {
     paletteRef.current ??= readPalette();
     const palette = paletteRef.current;
     const { width, height } = sizeRef.current;
-    const { tracks, markers, media, ui, scrollSecs, scrollY } = stateRef.current;
+    const { tracks, markers, assetsById, ui, scrollSecs, scrollY } = stateRef.current;
     const px = ui.pxPerSec;
     const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -132,9 +141,7 @@ export function Timeline({ session }: { session: SessionView }) {
         if (right < 0 || left > width) {
           continue;
         } // horizontal culling before any per-clip work
-        const asset = media.find((a) => {
-          return a.id === clip.asset_id;
-        });
+        const asset = assetsById.get(clip.asset_id);
         drawClip(ctx, palette, track, clip, asset, left, right, y, width, ui.selectedClipIds, 1);
       }
       for (const clip of [...track.text_clips, ...track.shape_clips]) {
@@ -185,9 +192,7 @@ export function Timeline({ session }: { session: SessionView }) {
               return c.id === drag.clipId;
             });
       if (clip && track) {
-        const asset = media.find((a) => {
-          return a.id === clip.asset_id;
-        });
+        const asset = assetsById.get(clip.asset_id);
         drawClip(ctx, palette, track, clip, asset, left, right, y, width, [clip.id], 0.75);
       } else if (overlay && track) {
         drawOverlayClip(ctx, palette, overlay, left, right, y, [overlay.id], 0.75);
@@ -198,9 +203,7 @@ export function Timeline({ session }: { session: SessionView }) {
       const rect = canvas.getBoundingClientRect();
       const x = assetDrag.clientX - rect.left;
       const y = assetDrag.clientY - rect.top + scrollY;
-      const asset = media.find((a) => {
-        return a.id === assetDrag.assetId;
-      });
+      const asset = assetsById.get(assetDrag.assetId);
       if (asset && x >= 0 && x <= width && y >= RULER_HEIGHT) {
         const rowY = RULER_HEIGHT + Math.floor((y - RULER_HEIGHT) / TRACK_HEIGHT) * TRACK_HEIGHT;
         ctx.globalAlpha = 0.35;
