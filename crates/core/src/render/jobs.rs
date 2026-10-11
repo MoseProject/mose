@@ -19,7 +19,9 @@ use super::segments::{
     timeline_duration,
 };
 use super::shape::{apply_shape_overlay_pass, resolve_shape_segments};
-use super::text::{apply_text_overlay_pass, resolve_text_segments, TextSegment};
+use super::text::{
+    apply_text_overlay_pass, rasterize_text_overlays, resolve_text_segments, TextSegment,
+};
 use super::validation::{
     validate_audio_segments, validate_segment_list, validate_target_lufs, validate_text_segments,
     validate_timeline_segments,
@@ -89,34 +91,76 @@ pub fn render_export_job(
     validate_text_segments(text_segments, canvas)?;
     let total_duration_secs: f64 = segments.iter().map(clip_segment_duration_secs).sum();
 
-    let outcome = avbridge::encode_timeline_export(
-        segments,
-        canvas,
-        output,
-        target_lufs,
-        gpu_encoder,
-        cancel,
-        |secs| {
-            if total_duration_secs > 0.0 {
-                let percent = ((secs / total_duration_secs) * 100.0).clamp(0.0, 100.0) as u8;
-                on_progress(percent);
-            }
-        },
-    )?;
+    // Text and shape overlays run inside the export, over each frame before it is encoded, rather
+    // than as a second decode, filter and encode of the whole finished file (which doubled the
+    // time and re-encoded the picture). If those graphs do not build, the passes below still do
+    // the job the old way.
+    let text_rasters = if text_segments.is_empty() {
+        None
+    } else {
+        rasterize_text_overlays(output, canvas, text_segments)
+    };
+    let mut post_filters = Vec::new();
+    if let Some(rasters) = &text_rasters {
+        if let Ok(Some(filter)) = avbridge::text_overlay_filter(&rasters.overlays) {
+            post_filters.push(filter);
+        }
+    }
+    if let Ok(Some(filter)) = avbridge::shape_overlay_filter(shape_segments) {
+        post_filters.push(filter);
+    }
+    // Both must have built, or the passes below take over for whichever did not.
+    let expected_filters =
+        usize::from(!text_segments.is_empty()) + usize::from(!shape_segments.is_empty());
+    let mut overlays_inline = !post_filters.is_empty() && post_filters.len() == expected_filters;
+    if !overlays_inline {
+        post_filters.clear();
+    }
+
+    let mut progress = |secs: f64| {
+        if total_duration_secs > 0.0 {
+            let percent = ((secs / total_duration_secs) * 100.0).clamp(0.0, 100.0) as u8;
+            on_progress(percent);
+        }
+    };
+    let mut encode = |post: &[String]| {
+        avbridge::encode_timeline_export_with_post(
+            segments,
+            canvas,
+            output,
+            target_lufs,
+            gpu_encoder,
+            cancel,
+            post,
+            &mut progress,
+        )
+    };
+    let outcome = match encode(&post_filters) {
+        Err(avbridge::EncodeError::FilterGraph) if overlays_inline => {
+            tracing::warn!(output = %output.display(), "overlay graphs did not build inside the export; using separate passes");
+            overlays_inline = false;
+            encode(&[])?
+        }
+        other => other?,
+    };
+    drop(text_rasters);
 
     Ok(match outcome {
         avbridge::EncodeOutcome::Completed => {
             on_progress(100);
-            // Apply text/shape overlays as post-processing passes if any were placed. Shapes
-            // after text so a highlight box can sit visually above a caption if the user
-            // stacks them at the same position — an arbitrary but consistent choice, same as
-            // any other z-order tie-break. Privacy blur last: it should blur whatever text/
-            // shapes already ended up inside the tracked region too, not sit underneath them.
-            if !text_segments.is_empty() {
-                apply_text_overlay_pass(output, canvas, text_segments);
-            }
-            if !shape_segments.is_empty() {
-                apply_shape_overlay_pass(output, canvas, shape_segments);
+            // Overlays that did not run inside the export go over the finished file as
+            // post-processing passes. Shapes after text so a highlight box can sit visually above
+            // a caption if the user stacks them at the same position — an arbitrary but
+            // consistent choice, same as any other z-order tie-break. Privacy blur last: it
+            // should blur whatever text/shapes already ended up inside the tracked region too,
+            // not sit underneath them.
+            if !overlays_inline {
+                if !text_segments.is_empty() {
+                    apply_text_overlay_pass(output, canvas, text_segments);
+                }
+                if !shape_segments.is_empty() {
+                    apply_shape_overlay_pass(output, canvas, shape_segments);
+                }
             }
             if !privacy_blur_segments.is_empty() {
                 apply_privacy_blur_pass(output, canvas, total_duration_secs, privacy_blur_segments);
