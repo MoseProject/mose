@@ -129,9 +129,9 @@ class App:
     def _wait_ready(self) -> None:
         """Waits for the control port, then for the window to answer a forwarded request.
 
-        The window can take a while to load. A request it has not answered yet is held by the
-        server for up to REPLY_WINDOW_SECS, so the probe waits longer than that instead of giving
-        up early and leaving requests (and connection slots) behind.
+        The window takes a few seconds to load and tell the backend it is listening; until then a
+        forwarded request is refused at once ("the window is not ready yet"), so the probe simply
+        retries.
         """
         deadline = time.monotonic() + READY_TIMEOUT_SECS
         last_error = "the control file never appeared"
@@ -144,7 +144,7 @@ class App:
                     if not port_up:
                         self.call("session.get", timeout=10)  # answered by the backend itself
                         port_up = True
-                    self.call("commands.list", timeout=REPLY_WINDOW_SECS + 15)
+                    self.call("commands.list", timeout=20)
                     return
                 except (OSError, ControlError, ValueError) as error:
                     last_error = str(error)

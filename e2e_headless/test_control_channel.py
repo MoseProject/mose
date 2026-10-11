@@ -105,3 +105,11 @@ def test_at_most_eight_clients_are_served_at_once(app):
 def test_the_window_stays_responsive_over_many_requests(app):
     for _ in range(40):
         assert len(app.call("commands.list")) >= 50
+
+
+def test_the_window_reports_ready_so_forwarded_requests_never_wait_out_the_timeout(app):
+    import time
+
+    started = time.monotonic()
+    app.call("commands.list")
+    assert time.monotonic() - started < 10

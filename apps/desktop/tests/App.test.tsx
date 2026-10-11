@@ -59,6 +59,7 @@ vi.mock("../src/ipc", () => {
       redo: vi.fn().mockResolvedValue(undefined),
       saveProject: vi.fn().mockResolvedValue(undefined),
       quitApp: vi.fn().mockResolvedValue(undefined),
+      controlReady: vi.fn().mockResolvedValue(undefined),
     },
     onCloseRequested: vi.fn(
       (handler: (request: { dirty: boolean; exporting: boolean }) => void) => {

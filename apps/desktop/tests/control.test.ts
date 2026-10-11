@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const splitAtPlayhead = vi.fn().mockResolvedValue(undefined);
 const controlReply = vi.fn().mockResolvedValue(undefined);
+const controlReady = vi.fn().mockResolvedValue(undefined);
 let requestHandler: ((request: unknown) => void) | undefined;
 
 vi.mock("../src/ipc", () => {
@@ -10,6 +11,9 @@ vi.mock("../src/ipc", () => {
     api: {
       splitAtPlayhead: (...args: unknown[]) => {
         return splitAtPlayhead(...args);
+      },
+      controlReady: () => {
+        return controlReady();
       },
       controlReply: (...args: unknown[]) => {
         return controlReply(...args);
@@ -80,6 +84,12 @@ describe("control channel, window side", () => {
         handleControlRequest(method, { command: "start_export", args: {} }),
       ).rejects.toThrow("unknown method: " + method);
     }
+  });
+
+  it("tells the backend it is listening only once the listener is registered", async () => {
+    await listenForControlRequests();
+    expect(requestHandler).toBeDefined();
+    expect(controlReady).toHaveBeenCalledTimes(1);
   });
 
   it("answers a forwarded request with its result, or with the error as text", async () => {
