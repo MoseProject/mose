@@ -161,7 +161,6 @@ fn probing_agrees_with_ffprobe() {
     let ours = probe_media(&file).unwrap();
     let theirs = ffprobe(&ffprobe_bin, &file);
     let video = stream(&theirs, "video");
-    let audio = stream(&theirs, "audio");
 
     assert!((ours.duration_secs - number(&theirs["format"]["duration"])).abs() < 0.05);
     assert_eq!(
@@ -702,4 +701,90 @@ fn an_animated_zoom_in_magnifies_the_picture_about_its_centre() {
         "middle right {middle_green:?}"
     );
     assert!(is_close(end, [255, 0, 0], 50), "end {end:?}");
+}
+
+#[test]
+fn a_text_caption_is_burned_into_the_export_in_its_window_only() {
+    let Some((ffmpeg, _)) = oracles() else {
+        return;
+    };
+    let green = solid(&ffmpeg, "caption_green.mp4", "green");
+    let video = Track {
+        id: 1,
+        name: "V1".to_string(),
+        kind: TrackKind::Video,
+        clips: vec![clip(1, 1, 0.0, 0.0, 1.0)],
+        text_clips: vec![],
+        shape_clips: vec![],
+        visible: true,
+        audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
+        locked: false,
+        color_label: None,
+    };
+    let captions = Track {
+        id: 2,
+        name: "Legendas".to_string(),
+        kind: TrackKind::Text,
+        clips: vec![],
+        // A caption on a solid red box over the first half second only.
+        text_clips: vec![avcore::timeline::TextClip {
+            id: 1,
+            start_secs: 0.0,
+            duration_secs: 0.5,
+            text: "WWWWWWWW".to_string(),
+            font_size: 40.0,
+            font_family: Default::default(),
+            font_style: Default::default(),
+            font_weight: None,
+            color_rgba: [255, 255, 255, 255],
+            background_rgba: [255, 0, 0, 255],
+            background_padding: 6.0,
+            background_corner_radius: 0.0,
+            pos_x: 0.1,
+            pos_y: 0.5,
+            words: vec![],
+            highlight_enabled: false,
+            highlight_color_rgba: [255, 220, 0, 255],
+            opacity_keyframes: vec![],
+            pos_x_keyframes: vec![],
+            pos_y_keyframes: vec![],
+            scale_keyframes: vec![],
+            rotation_keyframes: vec![],
+            direction: Default::default(),
+            language: None,
+            text_align: Default::default(),
+        }],
+        shape_clips: vec![],
+        visible: true,
+        audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
+        locked: false,
+        color_label: None,
+    };
+    let output = scratch("caption_out.mp4");
+    let outcome = render_timeline_export(
+        &sequence_with(vec![video, captions]),
+        &[media(&green, 1)],
+        &output,
+        -14.0,
+        avcore::GpuEncoderPreference::Cpu,
+        &AtomicBool::new(false),
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, RenderOutcome::Completed);
+    // Somewhere along the caption's row there is something that is not the green picture while
+    // the caption is up, and nothing once it is gone.
+    let row = |frame: u32| -> usize {
+        (30..260)
+            .step_by(6)
+            .filter(|x| !is_close(pixel(&ffmpeg, &output, frame, *x, 95), [0, 128, 0], 60))
+            .count()
+    };
+    assert!(row(5) > 3, "no caption in the first half second");
+    // A pixel or two at the box edge can keep a trace of it: encoder bleed, not the caption.
+    assert!(row(25) <= 2, "the caption is still there after it ended");
 }
