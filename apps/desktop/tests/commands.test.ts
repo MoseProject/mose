@@ -93,6 +93,7 @@ describe("key lookup", () => {
     );
     expect(commands.commandForEvent(press({ key: " ", code: "Space" }))?.id).toBe("playPause");
     expect(commands.commandForEvent(press({ key: "S", shiftKey: true }))?.id).toBe("split");
+    expect(commands.commandForEvent(press({ key: "b", ctrlKey: true }))?.id).toBe("split");
     expect(commands.commandForEvent(press({ key: "q" }))).toBeUndefined();
   });
 
