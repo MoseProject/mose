@@ -5,12 +5,6 @@
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-//! On-disk locations every oca frontend must agree on, so the egui and Tauri shells read the
-//! same preferences and recover each other's autosaves.
-
-use std::path::{Path, PathBuf};
-
-/// The preferences file -- `.oc`, the same gzip-compressed MessagePack framing as a `.ocproj`
 use std::fs;
 
 use avcore::recovery::{recovery_root, scan_candidates, RecoveryJournal};
