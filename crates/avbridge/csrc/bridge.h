@@ -747,7 +747,15 @@ typedef struct {
     int height;
     int stride_bytes;
     double timestamp_secs;
+    /* Nonzero when `pixels` is the buffer the caller handed in (see below) rather than a new
+       allocation: avbridge_decode_free_frame then leaves it alone. */
+    int borrowed;
 } DecodedRgbaFrame;
+
+/* avbridge_decode_next_rgba and avbridge_decode_take_rgba convert into a caller-owned buffer when
+   `out_frame->pixels` / `pixel_len` hold one on entry and it is large enough for the frame (the
+   frame is then returned with `borrowed` set); otherwise they allocate as before, so a caller
+   that only guesses the size loses nothing. This saves the allocation and the copy out of it. */
 
 /* Opens the first video stream. `out_session` is set only on DECODE_OK and must be released by
    avbridge_decode_close. `out_info` is initialized only on DECODE_OK. */
@@ -777,6 +785,10 @@ DecodeStatus avbridge_decode_advance(AvbridgeDecodeSession *session, const uint8
 int avbridge_decode_has_held(AvbridgeDecodeSession *session);
 DecodeStatus avbridge_decode_take_rgba(AvbridgeDecodeSession *session, int newest,
                                        DecodedRgbaFrame *out_frame);
+/* Converts later frames to `width` x `height` instead of the decoded size (the picture is scaled,
+   not cropped, so pass the stream's aspect ratio). A size larger than the decoded one, or 0, goes
+   back to the decoded size. Frames already decoded but not yet converted use the new size. */
+void avbridge_decode_set_output_size(AvbridgeDecodeSession *session, int width, int height);
 void avbridge_decode_free_frame(DecodedRgbaFrame *frame);
 void avbridge_decode_close(AvbridgeDecodeSession *session);
 

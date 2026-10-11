@@ -21,8 +21,8 @@ use std::sync::atomic::AtomicBool;
 use crate::ffi::{
     avbridge_decode_advance, avbridge_decode_close, avbridge_decode_free_frame,
     avbridge_decode_has_held, avbridge_decode_next_rgba, avbridge_decode_open_ex,
-    avbridge_decode_seek, avbridge_decode_take_rgba, avbridge_hw_device_cache_clear, RawDecodeInfo,
-    RawDecodeSession, RawDecodedRgbaFrame,
+    avbridge_decode_seek, avbridge_decode_set_output_size, avbridge_decode_take_rgba,
+    avbridge_hw_device_cache_clear, RawDecodeInfo, RawDecodeSession, RawDecodedRgbaFrame,
 };
 
 /// Stream metadata for one opened video decode session.
@@ -75,6 +75,11 @@ pub struct DecodedRgbaFrame {
 #[derive(Debug)]
 pub struct DecodeSession {
     raw: *mut RawDecodeSession,
+    /// Size of one RGBA frame of this stream (`0` when too large to guess): the buffer frames are
+    /// converted into directly, instead of into a native allocation that is then copied out.
+    frame_bytes: usize,
+    /// The stream's decoded size, so the output size can be checked and `frame_bytes` kept right.
+    native: (u32, u32),
 }
 
 // SAFETY: the native session has no thread affinity; it may move between threads as long as one
@@ -136,8 +141,14 @@ impl DecodeSession {
         decode_open_status(status)?;
         debug_assert!(!raw.is_null());
         // From here the session owns `raw`, so every early return below closes it via `Drop`.
-        let session = Self { raw };
+        let mut session = Self {
+            raw,
+            frame_bytes: 0,
+            native: (0, 0),
+        };
         let (width, height) = decode_dimensions(info.width, info.height)?;
+        session.native = (width, height);
+        session.frame_bytes = frame_bytes(width, height);
         Ok((
             session,
             DecodeInfo {
@@ -161,27 +172,54 @@ impl DecodeSession {
         decode_seek_status(unsafe { avbridge_decode_seek(self.raw, timestamp_secs) })
     }
 
+    /// Converts the frames from here on to `size` (the picture scaled, so give it the stream's
+    /// aspect ratio) instead of the decoded size; `None`, or a size that is not smaller than the
+    /// decoded one in both directions, goes back to the decoded size. Returns the size in force.
+    pub fn set_output_size(&mut self, size: Option<(u32, u32)>) -> (u32, u32) {
+        let (width, height) = size
+            .filter(|&(w, h)| w > 0 && h > 0 && w <= self.native.0 && h <= self.native.1)
+            .unwrap_or(self.native);
+        let reduced = (width, height) != self.native;
+        // SAFETY: self.raw is a live session; the sizes are plain integers.
+        unsafe {
+            avbridge_decode_set_output_size(
+                self.raw,
+                if reduced { width as c_int } else { 0 },
+                if reduced { height as c_int } else { 0 },
+            )
+        };
+        self.frame_bytes = frame_bytes(width, height);
+        (width, height)
+    }
+
     /// Decodes the next packed RGBA frame, or `None` at end of stream.
     pub fn next_rgba(
         &mut self,
         cancel: &AtomicBool,
     ) -> Result<Option<DecodedRgbaFrame>, DecodeError> {
+        let mut buffer = vec![0u8; self.frame_bytes];
         let mut raw_frame = RawDecodedRgbaFrame {
-            pixels: std::ptr::null_mut(),
-            pixel_len: 0,
+            pixels: if buffer.is_empty() {
+                std::ptr::null_mut()
+            } else {
+                buffer.as_mut_ptr()
+            },
+            pixel_len: buffer.len(),
             width: 0,
             height: 0,
             stride_bytes: 0,
             timestamp_secs: 0.0,
+            borrowed: 0,
         };
         // SAFETY: self.raw is live, `cancel.as_ptr()` is documented to have bool-compatible
-        // size/alignment/bit validity, and raw_frame is writable for this call. Successful
-        // frames are copied and released with the paired C allocator below.
+        // size/alignment/bit validity, and raw_frame is writable for this call; `buffer` outlives
+        // it and is only written by the C side. A frame in a native allocation is copied and
+        // released with the paired C allocator below.
         let status = unsafe {
             avbridge_decode_next_rgba(self.raw, cancel.as_ptr() as *const u8, &mut raw_frame)
         };
         if next_frame_status(status)? {
-            copy_out_frame(&mut raw_frame).map(Some)
+            finish_frame(&mut raw_frame, buffer).map(Some)
         } else {
             Ok(None)
         }
@@ -212,16 +250,23 @@ impl DecodeSession {
     /// Converts and removes an advanced-to frame: the newest one, or the one held before it.
     /// `Ok(None)` if that slot is empty.
     pub fn take_rgba(&mut self, slot: FrameSlot) -> Result<Option<DecodedRgbaFrame>, DecodeError> {
+        let mut buffer = vec![0u8; self.frame_bytes];
         let mut raw_frame = RawDecodedRgbaFrame {
-            pixels: std::ptr::null_mut(),
-            pixel_len: 0,
+            pixels: if buffer.is_empty() {
+                std::ptr::null_mut()
+            } else {
+                buffer.as_mut_ptr()
+            },
+            pixel_len: buffer.len(),
             width: 0,
             height: 0,
             stride_bytes: 0,
             timestamp_secs: 0.0,
+            borrowed: 0,
         };
-        // SAFETY: self.raw is live and raw_frame is writable; a successful frame is copied and
-        // released with the paired C allocator in `copy_out_frame`.
+        // SAFETY: self.raw is live and raw_frame is writable; `buffer` outlives the call; a frame
+        // in a native allocation is copied and released with the paired C allocator in
+        // `copy_out_frame`.
         let status = unsafe {
             avbridge_decode_take_rgba(
                 self.raw,
@@ -230,7 +275,7 @@ impl DecodeSession {
             )
         };
         if take_frame_status(status)? {
-            copy_out_frame(&mut raw_frame).map(Some)
+            finish_frame(&mut raw_frame, buffer).map(Some)
         } else {
             Ok(None)
         }
@@ -253,6 +298,49 @@ pub enum FrameSlot {
     Newest,
     /// The frame advanced to before the newest one.
     Held,
+}
+
+fn frame_bytes(width: u32, height: u32) -> usize {
+    (width as usize)
+        .checked_mul(height as usize)
+        .and_then(|pixels| pixels.checked_mul(4))
+        .filter(|&bytes| bytes <= MAX_BORROWED_FRAME_BYTES)
+        .unwrap_or(0)
+}
+
+/// The largest frame decoded straight into a Rust buffer (a 8K RGBA frame is 132 MB).
+const MAX_BORROWED_FRAME_BYTES: usize = 256 * 1024 * 1024;
+
+/// Turns a successful native frame into an owned one: the caller's `buffer` when the C side
+/// converted into it, otherwise a copy of its own allocation.
+fn finish_frame(
+    raw_frame: &mut RawDecodedRgbaFrame,
+    mut buffer: Vec<u8>,
+) -> Result<DecodedRgbaFrame, DecodeError> {
+    if raw_frame.borrowed == 0 {
+        return copy_out_frame(raw_frame);
+    }
+    let width = u32::try_from(raw_frame.width).map_err(|_| DecodeError::FrameSize)?;
+    let height = u32::try_from(raw_frame.height).map_err(|_| DecodeError::FrameSize)?;
+    let stride_bytes =
+        usize::try_from(raw_frame.stride_bytes).map_err(|_| DecodeError::FrameSize)?;
+    if raw_frame.pixels != buffer.as_mut_ptr()
+        || raw_frame.pixel_len > buffer.len()
+        || width == 0
+        || height == 0
+        || stride_bytes == 0
+        || !raw_frame.timestamp_secs.is_finite()
+    {
+        return Err(DecodeError::FrameSize);
+    }
+    buffer.truncate(raw_frame.pixel_len);
+    Ok(DecodedRgbaFrame {
+        width,
+        height,
+        stride_bytes,
+        timestamp_secs: raw_frame.timestamp_secs,
+        pixels: buffer,
+    })
 }
 
 /// Copies a successful native frame into owned memory and releases the native allocation.

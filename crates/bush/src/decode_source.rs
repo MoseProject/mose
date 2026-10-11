@@ -40,6 +40,8 @@ pub struct DecodeSource {
     /// Timestamp of a frame the native session decoded past `current` but has not converted
     /// yet; it is converted only if a later request presents it.
     pending_timestamp: Option<f64>,
+    /// The size frames are converted to when the layer needs fewer pixels than the source has.
+    output: Option<(u32, u32)>,
 }
 
 /// Decode failure or invalid native frame data rejected at Bush's boundary.
@@ -85,7 +87,32 @@ impl DecodeSource {
             },
             current: None,
             pending_timestamp: None,
+            output: None,
         })
+    }
+
+    /// Converts the frames from here on to just enough pixels to cover `needed` (a width and a
+    /// height in pixels), keeping the source's aspect ratio; `None`, or a box the source does not
+    /// exceed, keeps the decoded size. A layer drawn smaller than its source then skips the work
+    /// of converting and scaling pixels it would only throw away. Changing the size drops the
+    /// frame held for repeated targets, which has the old one.
+    pub fn set_output_limit(&mut self, needed: Option<(u32, u32)>) {
+        let (width, height) = (self.info.width, self.info.height);
+        let size = needed
+            .filter(|&(w, h)| w > 0 && h > 0 && width > 0 && height > 0)
+            .and_then(|(w, h)| {
+                let scale = (f64::from(w) / f64::from(width)).max(f64::from(h) / f64::from(height));
+                (scale < 1.0).then(|| {
+                    let reduce =
+                        |side: u32| ((f64::from(side) * scale).ceil() as u32).clamp(1, side);
+                    (reduce(width), reduce(height))
+                })
+            });
+        if size != self.output {
+            self.output = size;
+            self.session.set_output_size(size);
+            self.current = None;
+        }
     }
 
     pub const fn info(&self) -> SourceInfo {
