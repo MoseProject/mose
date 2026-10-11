@@ -52,6 +52,8 @@ struct AudioWorker {
     int closed;
     int flush;
     int error;
+    /* Output position in samples of the next frame, see run(). */
+    int64_t next_pts;
 };
 
 static void free_item(Item *item) {
@@ -89,6 +91,13 @@ static void run(void *param) {
         if (!failed) {
             int ret = 0;
             if (item.kind == ITEM_FRAME) {
+                /* The graph's source runs in 1/sample_rate, and the frames arrive stamped with
+                   their position in the source file. Left alone, a clip cut from second 1 of its
+                   file would start its audio one second into the export, and a second clip
+                   would go backwards. Restamp them as one continuous run of the samples that
+                   were kept; the tempo filter then accounts for any speed change. */
+                item.frame->pts = w->next_pts;
+                w->next_pts += item.frame->nb_samples;
                 ret = filter_encode_write_frame(w->out_ctx, w->chain, w->encoder, w->stream,
                                                 item.frame, w->filtered, w->packet);
             } else {
