@@ -286,3 +286,23 @@ input[type="range"] {
   opacity: 0.4;
 }
 
+/* ---- keyframe diamond on a single property row ---- */
+.field.slider-field.keyframed {
+  grid-template-columns: 71px 1fr 72px 20px;
+}
+.row-keyframe {
+  padding: 2px;
+  flex: none;
+}
+.row-keyframe svg {
+  width: 12px;
+  height: 12px;
+}
+.row-keyframe.active svg {
+  fill: var(--accent);
+  color: var(--accent);
+}
+.row-keyframe:disabled {
+  opacity: 0.4;
+}
+

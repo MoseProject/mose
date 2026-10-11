@@ -5,6 +5,7 @@ import { t } from "../../i18n";
 import { hasKeyframeAt, valueAt, withKeyframe, withoutKeyframe } from "../../keyframeAt";
 import { type ClipInstance, type ClipPatch } from "../../types";
 import { Section, Slider, type SectionKeyframe } from "./controls";
+import { animatedRow } from "./keyframeRow";
 
 type Commit = (patch: ClipPatch) => Promise<unknown>;
 
@@ -45,6 +46,39 @@ export function ColorSection({
       void commit(patch);
     },
   };
+  const brightness = animatedRow(
+    clip.brightness_keyframes,
+    fraction,
+    clip.brightness,
+    (next) => {
+      return commit({ brightnessKeyframes: next });
+    },
+    (value) => {
+      return commit({ brightness: value });
+    },
+  );
+  const contrast = animatedRow(
+    clip.contrast_keyframes,
+    fraction,
+    clip.contrast,
+    (next) => {
+      return commit({ contrastKeyframes: next });
+    },
+    (value) => {
+      return commit({ contrast: value });
+    },
+  );
+  const saturation = animatedRow(
+    clip.saturation_keyframes,
+    fraction,
+    clip.saturation,
+    (next) => {
+      return commit({ saturationKeyframes: next });
+    },
+    (value) => {
+      return commit({ saturation: value });
+    },
+  );
   return (
     <>
       <Section
@@ -53,12 +87,20 @@ export function ColorSection({
         keyframe={colorDiamond}
         defaultOpen={clip.brightness !== 0 || clip.contrast !== 1 || clip.saturation !== 1}
         onReset={() => {
-          void commit({ brightness: 0, contrast: 1, saturation: 1 });
+          void commit({
+            brightness: 0,
+            contrast: 1,
+            saturation: 1,
+            brightnessKeyframes: [],
+            contrastKeyframes: [],
+            saturationKeyframes: [],
+          });
         }}
       >
         <Slider
           label={t("brightness")}
-          value={clip.brightness}
+          value={brightness.shown}
+          keyframe={brightness.diamond}
           min={-1}
           max={1}
           step={0.01}
@@ -66,12 +108,13 @@ export function ColorSection({
             return v.toFixed(2);
           }}
           onCommit={(v) => {
-            return commit({ brightness: v });
+            return brightness.edit(v);
           }}
         />
         <Slider
           label={t("contrast")}
-          value={clip.contrast}
+          value={contrast.shown}
+          keyframe={contrast.diamond}
           min={0}
           max={2}
           step={0.01}
@@ -79,12 +122,13 @@ export function ColorSection({
             return v.toFixed(2);
           }}
           onCommit={(v) => {
-            return commit({ contrast: v });
+            return contrast.edit(v);
           }}
         />
         <Slider
           label={t("saturation")}
-          value={clip.saturation}
+          value={saturation.shown}
+          keyframe={saturation.diamond}
           min={0}
           max={2}
           step={0.01}
@@ -92,7 +136,7 @@ export function ColorSection({
             return v.toFixed(2);
           }}
           onCommit={(v) => {
-            return commit({ saturation: v });
+            return saturation.edit(v);
           }}
         />
       </Section>

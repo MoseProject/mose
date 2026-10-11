@@ -24,6 +24,34 @@ export interface SectionKeyframe {
   onToggle: () => void;
 }
 
+/** The diamond that adds or removes a keyframe at the playhead, for a section header or a row. */
+export function KeyframeDiamond({
+  keyframe,
+  label,
+  className = "row-keyframe",
+}: {
+  keyframe: SectionKeyframe;
+  label: string;
+  className?: string;
+}) {
+  return (
+    <button
+      className={cx(styles, baseStyles, "icon " + className + (keyframe.active ? " active" : ""))}
+      aria-label={t("keyframeToggle") + ": " + label}
+      aria-pressed={keyframe.active}
+      title={keyframe.disabled ? t("keyframeOutside") : t("keyframeToggle")}
+      disabled={keyframe.disabled}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        keyframe.onToggle();
+      }}
+    >
+      <Icon name="keyframe" />
+    </button>
+  );
+}
+
 export function Section({
   label,
   defaultOpen,
@@ -67,24 +95,11 @@ export function Section({
       <summary>
         <span>{label}</span>
         {keyframe && (
-          <button
-            className={cx(
-              styles,
-              baseStyles,
-              "icon section-keyframe" + (keyframe.active ? " active" : ""),
-            )}
-            aria-label={t("keyframeToggle") + ": " + label}
-            aria-pressed={keyframe.active}
-            title={keyframe.disabled ? t("keyframeOutside") : t("keyframeToggle")}
-            disabled={keyframe.disabled}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              keyframe.onToggle();
-            }}
-          >
-            <Icon name="keyframe" />
-          </button>
+          <KeyframeDiamond
+            keyframe={keyframe}
+            label={label}
+            className="section-keyframe"
+          />
         )}
         {onReset && (
           <button
@@ -115,6 +130,8 @@ export function Slider(props: {
   step: number;
   format: (value: number) => string;
   onCommit: (value: number) => void;
+  /** Adds a diamond that keyframes this property at the playhead. */
+  keyframe?: SectionKeyframe;
 }) {
   const [draft, setDraft] = useDraft(props.value);
   const commit = () => {
@@ -123,7 +140,13 @@ export function Slider(props: {
     }
   };
   return (
-    <div className={cx(styles, baseStyles, "field slider-field")}>
+    <div
+      className={cx(
+        styles,
+        baseStyles,
+        "field slider-field" + (props.keyframe ? " keyframed" : ""),
+      )}
+    >
       <label>{props.label}</label>
       <input
         type="range"
@@ -139,6 +162,12 @@ export function Slider(props: {
         onBlur={commit}
       />
       <span className={cx(styles, baseStyles, "mono")}>{props.format(draft)}</span>
+      {props.keyframe && (
+        <KeyframeDiamond
+          keyframe={props.keyframe}
+          label={props.label}
+        />
+      )}
     </div>
   );
 }
@@ -151,6 +180,7 @@ export function NumberField({
   disabled,
   suffix,
   onCommit,
+  keyframe,
 }: {
   label: string;
   value: number;
@@ -158,6 +188,8 @@ export function NumberField({
   disabled?: boolean;
   suffix?: string;
   onCommit: (value: number) => void;
+  /** Adds a diamond that keyframes this property at the playhead. */
+  keyframe?: SectionKeyframe;
 }) {
   const shown = String(Number(value.toFixed(2)));
   const [draft, setDraft] = useDraft(shown);
@@ -189,6 +221,12 @@ export function NumberField({
         }}
       />
       {suffix && <span className={cx(styles, baseStyles, "muted")}>{suffix}</span>}
+      {keyframe && (
+        <KeyframeDiamond
+          keyframe={keyframe}
+          label={label}
+        />
+      )}
     </label>
   );
 }

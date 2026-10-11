@@ -198,6 +198,7 @@ function ClipControls({
       <CropSection
         clip={clip}
         commit={commit}
+        fraction={fraction}
       />
       <MaskSection
         clip={clip}
