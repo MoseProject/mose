@@ -74,6 +74,36 @@ pub struct AudioSegment {
     pub fade_out_secs: f32,
 }
 
+impl AudioSegment {
+    /// The audio of `source_path` between `source_in_secs` and `source_out_secs`, played from the
+    /// start of the timeline at `speed_factor` 1 with the plain mastering of every export: only a
+    /// gain, no ducking, cleanup or fades.
+    pub fn plain(
+        source_path: std::path::PathBuf,
+        source_in_secs: f64,
+        source_out_secs: f64,
+        gain_db: f32,
+    ) -> Self {
+        Self {
+            source_path,
+            source_in_secs,
+            source_out_secs,
+            timeline_start_secs: 0.0,
+            gain_db,
+            speed_factor: 1.0,
+            gain_keyframe_expr: String::new(),
+            duck_role: 0,
+            voice_cleanup_enabled: false,
+            voice_cleanup_noise_floor_db: default_voice_cleanup_noise_floor_db(),
+            voice_cleanup_compressor_threshold_db: default_voice_cleanup_compressor_threshold_db(),
+            voice_cleanup_compressor_ratio: default_voice_cleanup_compressor_ratio(),
+            voice_cleanup_ceiling_linear: default_voice_cleanup_ceiling_linear(),
+            fade_in_secs: 0.0,
+            fade_out_secs: 0.0,
+        }
+    }
+}
+
 pub(crate) fn default_voice_cleanup_noise_floor_db() -> f32 {
     -30.0
 }

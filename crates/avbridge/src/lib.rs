@@ -33,6 +33,7 @@ mod pcm;
 mod probe;
 mod proxy;
 mod remux;
+mod smart_cut;
 #[cfg(test)]
 mod status_tests;
 mod timeline_export;
@@ -50,6 +51,7 @@ pub use pcm::*;
 pub use probe::*;
 pub use proxy::*;
 pub use remux::*;
+pub use smart_cut::*;
 pub use timeline_export::*;
 pub use waveform::*;
 
