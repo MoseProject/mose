@@ -208,6 +208,7 @@ describe("app shell", () => {
 
     it("shows the project name and the unsaved marker only when dirty", () => {
       sessionStore.set(session({ dirty: false }));
+      uiStore.set({ ...uiStore.get(), screen: "editor" });
       render(<App />);
       expect(screen.getByText(/My project/)).toBeTruthy();
       expect(screen.queryByLabelText(t("unsaved"))).toBeNull();
@@ -219,6 +220,7 @@ describe("app shell", () => {
 
     it("enables undo and redo only when there is something to undo or redo", () => {
       sessionStore.set(session({ canUndo: false, canRedo: false }));
+      uiStore.set({ ...uiStore.get(), screen: "editor" });
       render(<App />);
       expect((screen.getByTestId("undo") as HTMLButtonElement).disabled).toBe(true);
       expect((screen.getByTestId("redo") as HTMLButtonElement).disabled).toBe(true);
@@ -231,6 +233,7 @@ describe("app shell", () => {
 
     it("undoes, redoes and saves", () => {
       sessionStore.set(session({ canUndo: true, canRedo: true }));
+      uiStore.set({ ...uiStore.get(), screen: "editor" });
       render(<App />);
       fireEvent.click(screen.getByTestId("undo"));
       fireEvent.click(screen.getByTestId("redo"));
@@ -242,6 +245,7 @@ describe("app shell", () => {
 
     it("opens the export options dialog instead of exporting at once", async () => {
       sessionStore.set(session());
+      uiStore.set({ ...uiStore.get(), screen: "editor" });
       render(<App />);
       fireEvent.click(screen.getByTestId("export"));
       expect(uiStore.get().exportDialogOpen).toBe(true);
@@ -282,6 +286,7 @@ describe("app shell", () => {
 describe("export queue popover", () => {
   it("stays closed until toggled, and shows the active job count", async () => {
     sessionStore.set(session());
+    uiStore.set({ ...uiStore.get(), screen: "editor" });
     exportsStore.set([
       {
         id: 1,
