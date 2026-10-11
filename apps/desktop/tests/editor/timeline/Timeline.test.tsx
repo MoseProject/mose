@@ -51,6 +51,7 @@ vi.mock("../../../src/ipc", () => {
     "addTrack",
     "addMarker",
     "setTrackFlags",
+    "setProjectFrameRate",
   ];
   const api: Record<string, unknown> = Object.fromEntries(
     names.map((n) => {
@@ -1277,5 +1278,51 @@ describe("overview", () => {
     fireEvent.pointerDown(bar, { clientX: 400, pointerId: 1 });
     ptr("pointerdown", 0, 10);
     expect(calls.seek.mock.calls.at(-1)![0]).toBeGreaterThan(5);
+  });
+});
+
+describe("frame rate picker", () => {
+  beforeEach(() => {
+    resetUi();
+    vi.clearAllMocks();
+  });
+  afterEach(cleanup);
+
+  it("starts free and offers the common rates", () => {
+    mount();
+    const picker = screen.getByTestId("frame-rate-select") as HTMLSelectElement;
+    expect(picker.value).toBe("free");
+    expect(
+      Array.from(picker.options).map((option) => {
+        return option.value;
+      }),
+    ).toEqual([
+      "free",
+      "24000/1001",
+      "24/1",
+      "25/1",
+      "30000/1001",
+      "30/1",
+      "50/1",
+      "60000/1001",
+      "60/1",
+    ]);
+  });
+
+  it("sends the chosen rate, and null for free", async () => {
+    const { api } = await import("../../../src/ipc");
+    mount();
+    const picker = screen.getByTestId("frame-rate-select") as HTMLSelectElement;
+    fireEvent.change(picker, { target: { value: "30000/1001" } });
+    expect(api.setProjectFrameRate).toHaveBeenCalledWith({ num: 30000, den: 1001 });
+    fireEvent.change(picker, { target: { value: "free" } });
+    expect(api.setProjectFrameRate).toHaveBeenLastCalledWith(null);
+  });
+
+  it("shows the project's current rate", () => {
+    const session = world();
+    (session.project as unknown as { frame_rate: unknown }).frame_rate = { num: 25, den: 1 };
+    mount(session);
+    expect((screen.getByTestId("frame-rate-select") as HTMLSelectElement).value).toBe("25/1");
   });
 });
