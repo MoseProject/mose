@@ -92,13 +92,18 @@ pub(crate) fn resolve_clip_filters(
     fps_den: u32,
     duration_secs: f64,
     is_overlay: bool,
+    // The export is one segment per graph, with the encoder numbering its own frames: a filter
+    // that restarts timestamps (`zoompan`) is safe there, and not in an overlay graph that pairs
+    // layers by timestamp.
+    single_graph: bool,
 ) -> (String, String, String) {
     let base_filter = clip.video_filter_chain();
-    let mut video_filter = match clip.keyframe_video_filter_chain(fps_num, fps_den, duration_secs) {
-        Some(kf) if base_filter.is_empty() => kf,
-        Some(kf) => format!("{kf},{base_filter}"),
-        None => base_filter,
-    };
+    let mut video_filter =
+        match clip.keyframe_video_filter_chain(fps_num, fps_den, duration_secs, single_graph) {
+            Some(kf) if base_filter.is_empty() => kf,
+            Some(kf) => format!("{kf},{base_filter}"),
+            None => base_filter,
+        };
     if is_overlay && clip.has_layer_scale() {
         let resize = format!(
             "scale=iw*{:.4}:ih*{:.4}",
@@ -151,7 +156,7 @@ pub fn resolve_timeline_segments(
         let (_, _, fps) = dimensions_fps.expect("just set above if it was None");
         let (fps_num, fps_den) = fps_to_rational(fps);
         let (video_filter, position_x_expr, position_y_expr) =
-            resolve_clip_filters(clip, fps_num, fps_den, duration_secs, false);
+            resolve_clip_filters(clip, fps_num, fps_den, duration_secs, false, true);
         segments.push(avbridge::ClipSegment {
             source_path: asset.source_path.clone(),
             source_in_secs: clip.source_in_secs,
@@ -239,6 +244,9 @@ pub fn resolve_timeline_segments_multi(
             // rely on: `all_track_segments.len()` is this lane's index since it fills in order. A
             // lane above 0 holds the clips that overlap an earlier one (cross-dissolves).
             let is_overlay = !all_track_segments.is_empty();
+            // One visible track on one lane is rendered by the single-track path, which builds a
+            // graph per segment; anything more composites layers in one overlay graph.
+            let single_graph = visible_video_tracks.len() == 1 && lane_count == 1;
             let mut clips: Vec<_> = pieces
                 .iter()
                 .filter(|(_, piece_lane)| *piece_lane == lane)
@@ -266,8 +274,14 @@ pub fn resolve_timeline_segments_multi(
                     asset.source_bitrate_mbps as f64 * 1_000_000.0 * duration_secs;
                 let (_, _, fps) = dimensions_fps.expect("just set above if it was None");
                 let (fps_num, fps_den) = fps_to_rational(fps);
-                let (video_filter, position_x_expr, position_y_expr) =
-                    resolve_clip_filters(clip, fps_num, fps_den, duration_secs, is_overlay);
+                let (video_filter, position_x_expr, position_y_expr) = resolve_clip_filters(
+                    clip,
+                    fps_num,
+                    fps_den,
+                    duration_secs,
+                    is_overlay,
+                    single_graph,
+                );
                 // Same overlay-only gate resolve_clip_filters' resize stage above uses (see its
                 // doc comment) — a track-0/background clip's alpha has no compositing stage to
                 // survive into (build_vfilter_descr's immediate format=yuv420p conform discards
