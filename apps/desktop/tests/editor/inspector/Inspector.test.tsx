@@ -348,7 +348,16 @@ describe("clip controls", () => {
     fireEvent.click(screen.getByText(t("speedRampFastToSlow")));
     expect(api.applySpeedRampToClip).toHaveBeenLastCalledWith(7, 2.0, 0.5, 4);
     fireEvent.click(screen.getByText(t("cropReset")));
-    expect(lastPatch()).toEqual({ cropX: 0, cropY: 0, cropW: 1, cropH: 1 });
+    expect(lastPatch()).toEqual({
+      cropX: 0,
+      cropY: 0,
+      cropW: 1,
+      cropH: 1,
+      cropXKeyframes: [],
+      cropYKeyframes: [],
+      cropWKeyframes: [],
+      cropHKeyframes: [],
+    });
   });
 
   it("toggles freeze, flip and voice cleanup", () => {
@@ -573,8 +582,30 @@ describe("section resets", () => {
   it.each([
     ["gain", { gainDb: 0 }],
     ["speed", { speedFactor: 1 }],
-    ["colorAdjust", { brightness: 0, contrast: 1, saturation: 1 }],
-    ["crop", { cropX: 0, cropY: 0, cropW: 1, cropH: 1 }],
+    [
+      "colorAdjust",
+      {
+        brightness: 0,
+        contrast: 1,
+        saturation: 1,
+        brightnessKeyframes: [],
+        contrastKeyframes: [],
+        saturationKeyframes: [],
+      },
+    ],
+    [
+      "crop",
+      {
+        cropX: 0,
+        cropY: 0,
+        cropW: 1,
+        cropH: 1,
+        cropXKeyframes: [],
+        cropYKeyframes: [],
+        cropWKeyframes: [],
+        cropHKeyframes: [],
+      },
+    ],
     ["mask", { maskShape: "None", maskCornerRadius: 0 }],
     [
       "transition",
@@ -682,6 +713,100 @@ describe("keyframe diamond", () => {
       contrastKeyframes: [{ time_fraction: 1, value: 1.2 }],
       saturationKeyframes: [{ time_fraction: 1, value: 1 }],
     });
+  });
+});
+
+describe("keyframe diamond on a single property", () => {
+  const placed = { start_secs: 0, source_in_secs: 0, source_out_secs: 10 };
+  const atSecs = (playheadSecs: number) => {
+    previewStore.set({ ...previewStore.get(), playheadSecs });
+  };
+  const rowDiamond = (label: string) => {
+    return screen.getByLabelText(t("keyframeToggle") + ": " + label) as HTMLButtonElement;
+  };
+
+  it("keys only the property whose diamond is pressed", () => {
+    atSecs(5);
+    render(<Inspector session={sessionFor({ ...placed, contrast: 1.2 })} />);
+    fireEvent.click(rowDiamond(t("contrast")));
+    expect(lastPatch()).toEqual({ contrastKeyframes: [{ time_fraction: 0.5, value: 1.2 }] });
+  });
+
+  it("keys one crop edge on its own", () => {
+    atSecs(10);
+    render(<Inspector session={sessionFor({ ...placed, crop_w: 0.8 })} />);
+    fireEvent.click(rowDiamond("w"));
+    expect(lastPatch()).toEqual({ cropWKeyframes: [{ time_fraction: 1, value: 0.8 }] });
+  });
+
+  it("keys position and rotation from their own rows", () => {
+    atSecs(2.5);
+    render(<Inspector session={sessionFor(placed)} />);
+    fireEvent.click(rowDiamond(t("position")));
+    expect(lastPatch()).toEqual({
+      positionKeyframes: [{ time_fraction: 0.25, value: { x: 0, y: 0 } }],
+    });
+    fireEvent.click(rowDiamond(t("rotation")));
+    expect(lastPatch()).toEqual({ rotationKeyframes: [{ time_fraction: 0.25, value: 0 }] });
+  });
+
+  it("removes the keyframe under the playhead and shows it pressed", () => {
+    atSecs(5);
+    render(
+      <Inspector
+        session={sessionFor({
+          ...placed,
+          saturation_keyframes: [
+            { time_fraction: 0.5, value: 1.5 },
+            { time_fraction: 1, value: 0.5 },
+          ],
+        })}
+      />,
+    );
+    expect(rowDiamond(t("saturation")).getAttribute("aria-pressed")).toBe("true");
+    expect(rowDiamond(t("contrast")).getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(rowDiamond(t("saturation")));
+    expect(lastPatch()).toEqual({ saturationKeyframes: [{ time_fraction: 1, value: 0.5 }] });
+  });
+
+  it("shows the value at the playhead and edits a keyframe there while the property is animated", () => {
+    atSecs(5);
+    render(
+      <Inspector
+        session={sessionFor({
+          ...placed,
+          brightness_keyframes: [
+            { time_fraction: 0, value: 0 },
+            { time_fraction: 1, value: 0.5 },
+          ],
+        })}
+      />,
+    );
+    expect(range(t("brightness")).value).toBe("0.25");
+    fireEvent.change(range(t("brightness")), { target: { value: "0.4" } });
+    fireEvent.pointerUp(range(t("brightness")));
+    expect(lastPatch()).toEqual({
+      brightnessKeyframes: [
+        { time_fraction: 0, value: 0 },
+        { time_fraction: 0.5, value: 0.4 },
+        { time_fraction: 1, value: 0.5 },
+      ],
+    });
+  });
+
+  it("edits the plain value while the property has no keyframes", () => {
+    atSecs(5);
+    render(<Inspector session={sessionFor(placed)} />);
+    fireEvent.change(range(t("brightness")), { target: { value: "0.3" } });
+    fireEvent.pointerUp(range(t("brightness")));
+    expect(lastPatch()).toEqual({ brightness: 0.3 });
+  });
+
+  it("disables the row diamonds while the playhead is outside the clip", () => {
+    atSecs(20);
+    render(<Inspector session={sessionFor(placed)} />);
+    expect(rowDiamond(t("brightness")).disabled).toBe(true);
+    expect(rowDiamond("x").disabled).toBe(true);
   });
 });
 
