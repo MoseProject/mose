@@ -400,7 +400,7 @@ fn canvas_budget(config: &EngineConfig) -> Option<usize> {
         .checked_mul(4)
 }
 
-type CacheKey = (PathBuf, u64, i64);
+type CacheKey = (PathBuf, u64, i64, Option<(u32, u32)>);
 
 type DecodeResult = Result<Option<Arc<VideoFrame>>, crate::DecodeSourceError>;
 
@@ -409,6 +409,8 @@ struct MediaNeed<'a> {
     path: &'a Path,
     version: u64,
     time: f64,
+    /// Pixels the layer needs at most, when it is drawn smaller than the source frame.
+    limit: Option<(u32, u32)>,
 }
 
 impl MediaNeed<'_> {
@@ -417,6 +419,7 @@ impl MediaNeed<'_> {
             self.path.to_path_buf(),
             self.version,
             (self.time * 1e6).round() as i64,
+            self.limit,
         )
     }
 }
@@ -523,6 +526,9 @@ impl EngineThread {
                         path: &source.path,
                         version: source.version.0,
                         time,
+                        limit: contributor
+                            .placement
+                            .decode_limit(self.config.canvas_width, self.config.canvas_height),
                     })
                 }
                 ContributorContent::RasterOverlay(_) => None,
@@ -547,6 +553,7 @@ impl EngineThread {
                         path: &matte.path,
                         version: matte.version.0,
                         time,
+                        limit: None,
                     })
             })
             .collect();
@@ -701,6 +708,7 @@ impl EngineThread {
                         path: &blur.matte.path,
                         version: blur.matte.version.0,
                         time,
+                        limit: None,
                     };
                     match self.fetch_media(std::slice::from_ref(&need), cancel) {
                         Ok(Some(matte)) => {
@@ -801,6 +809,7 @@ impl EngineThread {
                 let need = &needs[index];
                 let slot =
                     self.open_source(need.path, need.version, self.config.max_open_sources)?;
+                self.sources[slot].1.set_output_limit(need.limit);
                 results.push((index, self.sources[slot].1.frame_at(need.time, cancel)));
             }
             return Ok(results);
@@ -840,7 +849,10 @@ impl EngineThread {
             let source = &mut self.sources[*position].1;
             return Ok(indices
                 .iter()
-                .map(|&index| (index, source.frame_at(needs[index].time, cancel)))
+                .map(|&index| {
+                    source.set_output_limit(needs[index].limit);
+                    (index, source.frame_at(needs[index].time, cancel))
+                })
                 .collect());
         }
 
@@ -858,7 +870,10 @@ impl EngineThread {
                     scope.spawn(move || {
                         indices
                             .iter()
-                            .map(|&index| (index, source.frame_at(needs[index].time, cancel)))
+                            .map(|&index| {
+                                source.set_output_limit(needs[index].limit);
+                                (index, source.frame_at(needs[index].time, cancel))
+                            })
                             .collect::<Vec<_>>()
                     })
                 })

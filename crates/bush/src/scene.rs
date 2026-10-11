@@ -187,6 +187,43 @@ impl Placement {
         (x, y, transform)
     }
 
+    /// The most pixels (width, height) the decoded frame is worth on a canvas of this size, when
+    /// that is fewer than the source has: a layer stretched to the canvas, with nothing that
+    /// reads source pixels one by one (blur, sharpen, mosaic, glitch, shake, stabilization, a
+    /// matte or animated size or crop). `None` keeps the decoded size.
+    pub fn decode_limit(&self, canvas_width: u32, canvas_height: u32) -> Option<(u32, u32)> {
+        let animation = &self.animation;
+        let plain = self.fit_canvas
+            && self.blur_sigma == 0.0
+            && self.sharpen == 0.0
+            && self.glitch == 0.0
+            && self.shake == 0.0
+            && self.stabilize.is_none()
+            && self.alpha_matte.is_none()
+            && self.privacy_blur.is_none()
+            && self.effects.blur_sigma == 0.0
+            && self.effects.sharpen == 0.0
+            && self.effects.pixelize_block <= 1
+            && animation.scale_x.is_none()
+            && animation.scale_y.is_none()
+            && animation.crop_x.is_none()
+            && animation.crop_y.is_none()
+            && animation.crop_width.is_none()
+            && animation.crop_height.is_none()
+            && self.transform.crop.width > 0.0
+            && self.transform.crop.height > 0.0;
+        if !plain {
+            return None;
+        }
+        // The cropped part fills the canvas times the scale, so the whole frame is that much
+        // larger than the crop's share of it.
+        let width = canvas_width as f32 * self.transform.scale_x.abs() / self.transform.crop.width;
+        let height =
+            canvas_height as f32 * self.transform.scale_y.abs() / self.transform.crop.height;
+        (width.is_finite() && height.is_finite())
+            .then(|| (width.ceil().max(1.0) as u32, height.ceil().max(1.0) as u32))
+    }
+
     fn validate(&self) -> Result<(), SceneError> {
         let finite = self.timeline_start_secs.is_finite() && self.speed.is_finite();
         let window_ok = self
