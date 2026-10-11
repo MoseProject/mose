@@ -1,5 +1,5 @@
 //! How long an export takes. Ignored by default: it needs a real clip and prints timings instead of
-//! asserting them. Run with
+//! asserting them. Make the clip with `scripts/make-bench-video.sh`, then run with
 //! `OCA_BENCH_VIDEO=/path/clip.mp4 cargo test --release -p core --test it export_perf -- --ignored --nocapture --test-threads=1`
 //! (the clip should have audio; `OCA_BENCH_ENCODER` picks cpu, auto, nvenc, ...;
 //! `OCA_BENCH_ONLY` keeps the cases whose name contains it; `OCA_BENCH_KEEP` leaves the last
