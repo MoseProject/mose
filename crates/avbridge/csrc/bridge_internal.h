@@ -236,7 +236,20 @@ typedef struct VideoFilterChain {
        or NULL. Owned by the export, not by this chain: it outlives every segment's chain. */
     struct VideoFilterChain *post;
     AVFrame *scratch; /* only set on a post chain: where its output frames land */
+    /* The thread that encodes this graph's output, or NULL to encode on the calling thread. Owned
+       by the export. */
+    struct VideoEncodeWorker *worker;
 } VideoFilterChain;
+
+/* Runs a video encoder on its own thread, fed one finished frame at a time (video_worker.c).
+   video_worker_push takes its own reference to the frame and blocks while the queue is full; it
+   fails once the encoder did. video_worker_finish joins the thread, after encoding what is still
+   queued when `flush` is set, and fails if encoding failed. */
+typedef struct VideoEncodeWorker VideoEncodeWorker;
+VideoEncodeWorker *video_worker_start(AVFormatContext *out_ctx, AVCodecContext *encoder,
+                                      AVStream *stream);
+int video_worker_push(VideoEncodeWorker *worker, const AVFrame *frame);
+int video_worker_finish(VideoEncodeWorker **worker, int flush);
 
 /* All defined in filters.c. */
 void free_video_filter_chain(VideoFilterChain *chain);
@@ -248,13 +261,15 @@ int init_video_filter_chain(AVCodecContext *dec_ctx, const char *filter_descr,
 int init_post_filter_chain(int width, int height, enum AVPixelFormat pix_fmt, AVRational time_base,
                            const char *filter_descr, VideoFilterChain *chain);
 void free_post_filter_chain(VideoFilterChain *chain);
-/* Encodes `frame`, or first runs it through the `post` chains when there are any. */
-int encode_video_frame_through(VideoFilterChain *post, AVFormatContext *out_ctx,
-                               AVCodecContext *enc_ctx, AVStream *out_stream, AVFrame *frame,
-                               AVPacket *enc_pkt);
+/* Encodes `frame` (on `worker`'s thread when there is one), or first runs it through the `post`
+   chains when there are any. */
+int encode_video_frame_through(VideoFilterChain *post, VideoEncodeWorker *worker,
+                               AVFormatContext *out_ctx, AVCodecContext *enc_ctx,
+                               AVStream *out_stream, AVFrame *frame, AVPacket *enc_pkt);
 /* Tells the `post` chains their input has ended and encodes what they still hold. */
-int flush_post_filter_chains(VideoFilterChain *post, AVFormatContext *out_ctx,
-                             AVCodecContext *enc_ctx, AVStream *out_stream, AVPacket *enc_pkt);
+int flush_post_filter_chains(VideoFilterChain *post, VideoEncodeWorker *worker,
+                             AVFormatContext *out_ctx, AVCodecContext *enc_ctx,
+                             AVStream *out_stream, AVPacket *enc_pkt);
 int filter_encode_write_video_frame(AVFormatContext *out_ctx, VideoFilterChain *chain,
                                     AVCodecContext *enc_ctx, AVStream *out_stream, AVFrame *frame,
                                     AVFrame *filt_frame, int64_t *next_pts, AVPacket *enc_pkt);

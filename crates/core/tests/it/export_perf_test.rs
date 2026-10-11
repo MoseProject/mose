@@ -2,7 +2,8 @@
 //! asserting them. Run with
 //! `OCA_BENCH_VIDEO=/path/clip.mp4 cargo test --release -p core --test it export_perf -- --ignored --nocapture --test-threads=1`
 //! (the clip should have audio; `OCA_BENCH_ENCODER` picks cpu, auto, nvenc, ...;
-//! `OCA_BENCH_ONLY` keeps the cases whose name contains it).
+//! `OCA_BENCH_ONLY` keeps the cases whose name contains it; `OCA_BENCH_KEEP` leaves the last
+//! export in the temp directory).
 
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
@@ -82,7 +83,11 @@ fn time_tracks(label: &str, asset: &MediaAsset, tracks: Vec<Track>, secs: f64) {
         secs / took,
         secs * fps / took
     );
-    let _ = std::fs::remove_file(output);
+    if std::env::var_os("OCA_BENCH_KEEP").is_some() {
+        eprintln!("kept {}", output.display());
+    } else {
+        let _ = std::fs::remove_file(output);
+    }
 }
 
 fn caption(length: f64) -> Track {

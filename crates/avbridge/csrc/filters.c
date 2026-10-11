@@ -320,8 +320,8 @@ int filter_encode_write_video_frame(AVFormatContext *out_ctx, VideoFilterChain *
             return ret;
         }
         filt_frame->pts = (*next_pts)++;
-        ret = encode_video_frame_through(chain->post, out_ctx, enc_ctx, out_stream, filt_frame,
-                                         enc_pkt);
+        ret = encode_video_frame_through(chain->post, chain->worker, out_ctx, enc_ctx, out_stream,
+                                         filt_frame, enc_pkt);
         av_frame_unref(filt_frame);
         if (ret < 0) return ret;
     }
@@ -394,11 +394,12 @@ end:
     return ret;
 }
 
-int encode_video_frame_through(VideoFilterChain *post, AVFormatContext *out_ctx,
-                               AVCodecContext *enc_ctx, AVStream *out_stream, AVFrame *frame,
-                               AVPacket *enc_pkt) {
+int encode_video_frame_through(VideoFilterChain *post, VideoEncodeWorker *worker,
+                               AVFormatContext *out_ctx, AVCodecContext *enc_ctx,
+                               AVStream *out_stream, AVFrame *frame, AVPacket *enc_pkt) {
     if (!post) {
-        return encode_write_packet(out_ctx, enc_ctx, out_stream, frame, enc_pkt);
+        return worker ? video_worker_push(worker, frame)
+                      : encode_write_packet(out_ctx, enc_ctx, out_stream, frame, enc_pkt);
     }
     int ret = av_buffersrc_add_frame_flags(post->buffersrc_ctx, frame, 0);
     if (ret < 0) return ret;
@@ -407,15 +408,16 @@ int encode_video_frame_through(VideoFilterChain *post, AVFormatContext *out_ctx,
         if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) return 0;
         if (ret < 0) return ret;
         post->scratch->pict_type = AV_PICTURE_TYPE_NONE;
-        ret = encode_video_frame_through(post->post, out_ctx, enc_ctx, out_stream, post->scratch,
-                                         enc_pkt);
+        ret = encode_video_frame_through(post->post, worker, out_ctx, enc_ctx, out_stream,
+                                         post->scratch, enc_pkt);
         av_frame_unref(post->scratch);
         if (ret < 0) return ret;
     }
 }
 
-int flush_post_filter_chains(VideoFilterChain *post, AVFormatContext *out_ctx,
-                             AVCodecContext *enc_ctx, AVStream *out_stream, AVPacket *enc_pkt) {
+int flush_post_filter_chains(VideoFilterChain *post, VideoEncodeWorker *worker,
+                             AVFormatContext *out_ctx, AVCodecContext *enc_ctx,
+                             AVStream *out_stream, AVPacket *enc_pkt) {
     for (; post; post = post->post) {
         int ret = av_buffersrc_add_frame_flags(post->buffersrc_ctx, NULL, 0);
         if (ret < 0) return ret;
@@ -424,7 +426,7 @@ int flush_post_filter_chains(VideoFilterChain *post, AVFormatContext *out_ctx,
             if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) break;
             if (ret < 0) return ret;
             post->scratch->pict_type = AV_PICTURE_TYPE_NONE;
-            ret = encode_video_frame_through(post->post, out_ctx, enc_ctx, out_stream,
+            ret = encode_video_frame_through(post->post, worker, out_ctx, enc_ctx, out_stream,
                                              post->scratch, enc_pkt);
             av_frame_unref(post->scratch);
             if (ret < 0) return ret;

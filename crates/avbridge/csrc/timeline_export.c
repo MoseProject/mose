@@ -55,6 +55,7 @@ EncodeStatus avbridge_encode_timeline_export_with_post(
     }
     VideoFilterChain post_chains[MAX_POST_FILTERS] = {{0}};
     int post_built = 0;
+    VideoEncodeWorker *video_worker = NULL;
 
     AVFormatContext *out_ctx = NULL;
     AVCodecContext *venc_ctx = NULL;
@@ -130,6 +131,9 @@ EncodeStatus avbridge_encode_timeline_export_with_post(
         status = ENCODE_ERR_PIPELINE;
         goto cleanup;
     }
+    /* The encoder runs beside the decoder and the filters (see video_worker.c); if the thread
+       cannot start the export just encodes on this one. */
+    video_worker = video_worker_start(out_ctx, venc_ctx, video_out_stream);
 
     for (int seg_i = 0; seg_i < segment_count && status == ENCODE_OK; seg_i++) {
         const ClipSegment *seg = &segments[seg_i];
@@ -256,6 +260,7 @@ EncodeStatus avbridge_encode_timeline_export_with_post(
                 goto segment_cleanup;
             }
             vchain.post = post_built > 0 ? &post_chains[0] : NULL;
+            vchain.worker = video_worker;
         }
 
         /* Seek to source_in_secs (container-wide — av_seek_frame with stream_index=-1 seeks
@@ -472,8 +477,12 @@ EncodeStatus avbridge_encode_timeline_export_with_post(
         }
     }
     if (status == ENCODE_OK && post_built > 0 &&
-        flush_post_filter_chains(&post_chains[0], out_ctx, venc_ctx, video_out_stream, enc_pkt) <
-            0) {
+        flush_post_filter_chains(&post_chains[0], video_worker, out_ctx, venc_ctx, video_out_stream,
+                                 enc_pkt) < 0) {
+        status = ENCODE_ERR_PIPELINE;
+    }
+    /* Every frame has to be through the encoder thread before the encoder itself is flushed. */
+    if (video_worker_finish(&video_worker, status == ENCODE_OK) < 0 && status == ENCODE_OK) {
         status = ENCODE_ERR_PIPELINE;
     }
     if (status == ENCODE_OK &&
@@ -486,6 +495,7 @@ EncodeStatus avbridge_encode_timeline_export_with_post(
     }
 
 cleanup:
+    video_worker_finish(&video_worker, 0);
     for (int i = 0; i < post_built; i++) {
         free_post_filter_chain(&post_chains[i]);
     }
