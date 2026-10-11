@@ -10,7 +10,7 @@ import { api } from "../ipc";
 import { uniqueFunnyName } from "../projectNames";
 import { askConfirm } from "../notifications";
 import { patchUi, run, sessionStore, useStore } from "../store";
-import type { RecentProject } from "../types";
+import type { RecentProject, RecoverySession } from "../types";
 
 type Sort = "recent" | "modified" | "name";
 
@@ -50,6 +50,7 @@ export function Home() {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>("recent");
   const [creating, setCreating] = useState(false);
+  const [recoveries, setRecoveries] = useState<RecoverySession[]>([]);
 
   const loadProjects = () => {
     return run(api.getRecentProjects()).then((items) => {
@@ -59,8 +60,17 @@ export function Home() {
     });
   };
 
+  const loadRecoveries = () => {
+    return run(api.listRecoveries()).then((items) => {
+      if (items) {
+        setRecoveries(items);
+      }
+    });
+  };
+
   useEffect(() => {
     void loadProjects();
+    void loadRecoveries();
   }, []);
 
   const confirmDiscard = () => {
@@ -217,6 +227,70 @@ export function Home() {
             {shown.length} {t("projectCount")}
           </span>
         </div>
+      )}
+
+      {recoveries.length > 0 && (
+        <section
+          className={cx(styles, baseStyles, "recovery-list")}
+          aria-label={t("unsavedWorkFound")}
+          data-testid="unsaved-work"
+        >
+          <p>{t("unsavedWorkFound")}</p>
+          {recoveries.map((recovery) => {
+            return (
+              <div
+                key={recovery.id}
+                className={cx(styles, baseStyles, "project-recovery")}
+              >
+                <strong>{recovery.projectName}</strong>
+                <span className={cx(styles, baseStyles, "muted")}>
+                  {t("unsavedWorkSavedAt")}{" "}
+                  {new Date(recovery.savedUnixSecs * 1000).toLocaleString()}
+                </span>
+                <button
+                  onClick={() => {
+                    void (async () => {
+                      if (!(await confirmDiscard())) {
+                        return;
+                      }
+                      const ok = await run(
+                        api.recoverSession(recovery.id).then(() => {
+                          return true;
+                        }),
+                      );
+                      if (ok) {
+                        enterEditor();
+                      } else {
+                        void loadRecoveries();
+                      }
+                    })();
+                  }}
+                >
+                  {t("recoverUnsavedWork")}
+                </button>
+                <button
+                  onClick={() => {
+                    void (async () => {
+                      const confirmed = await askConfirm({
+                        title: t("discardUnsavedWork"),
+                        message: t("discardUnsavedWorkConfirm"),
+                        confirmLabel: t("discardUnsavedWork"),
+                        cancelLabel: t("cancel"),
+                        danger: true,
+                      });
+                      if (confirmed) {
+                        await run(api.discardRecovery(recovery.id));
+                        void loadRecoveries();
+                      }
+                    })();
+                  }}
+                >
+                  {t("discardUnsavedWork")}
+                </button>
+              </div>
+            );
+          })}
+        </section>
       )}
 
       {projects !== null && !hasProjects && (
