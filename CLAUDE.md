@@ -102,7 +102,7 @@ Single test: `cargo test -p core --test it probe_test::measure_loudness` or
 `cd apps/desktop && npx vitest run`.
 
 **Git hooks**: `npm install` (Node, one-time) sets up a husky pre-commit hook that runs
-`rustfmt`/`clang-format` on staged `.rs`/`.c`/`.h` files via `lint-staged` — see `package.json`
+`rustfmt`/`clang-format` on staged `.rs`/`.c`/`.h` files and `prettier` on staged `apps/desktop` `.ts`/`.tsx`/`.css` files via `lint-staged` — see `package.json`
 and `.clang-format`. Skipping `npm install` just means no hook runs; `make fmt`/`cargo fmt`
 still work standalone.
 

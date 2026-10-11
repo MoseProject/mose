@@ -2,13 +2,14 @@
   "name": "oca",
   "private": true,
   "version": "0.0.0",
-  "description": "Git hooks for oca (formatting only -- the project itself is Rust/C, not Node).",
+  "description": "Git hooks for oca (formatting only -- the project itself is Rust/C and a TypeScript frontend, not a Node package).",
   "scripts": {
     "prepare": "husky"
   },
   "lint-staged": {
     "*.rs": "rustfmt --edition 2021",
-    "*.{c,h}": "clang-format -i"
+    "*.{c,h}": "clang-format -i",
+    "apps/desktop/**/*.{ts,tsx,css}": "npm exec --prefix apps/desktop -- prettier --write"
   },
   "devDependencies": {
     "husky": "^9.1.7",
