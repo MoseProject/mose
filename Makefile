@@ -51,7 +51,7 @@ ifneq ($(shell sccache --version 2>/dev/null),)
   export RUSTC_WRAPPER ?= sccache
 endif
 
-.PHONY: coverage coverage-web build release test test-core test-bush test-xtask test-e2e bench bench-bush fmt fmt-check lint lint-c fmt-c graph docs check clean desktop-install lint-desktop lint-desktop-fix desktop-run desktop-dev desktop-build test-desktop
+.PHONY: coverage coverage-web build release test test-core test-bush test-xtask test-e2e test-e2e-headless bench bench-bush fmt fmt-check lint lint-c fmt-c graph docs check clean desktop-install lint-desktop lint-desktop-fix desktop-run desktop-dev desktop-build test-desktop
 
 # Debug build of the whole workspace (core, avbridge, ytbridge, desktop, xtask).
 build:
@@ -134,6 +134,11 @@ test-desktop:
 # `python -m pip install -r e2e/requirements.txt`.
 test-e2e:
 	cd e2e && python -m pytest
+
+# Headless end-to-end tests against the real app through its control channel (no WebDriver); see
+# e2e_headless/README.md. Needs the app built through the Tauri CLI and `cargo build -p oca-mcp`.
+test-e2e-headless:
+	cd e2e_headless && python -m pytest
 
 # Runs the criterion benchmarks (parsing ffprobe/loudnorm output, project (de)serialization,
 # timeline duration math) and writes an HTML report to target/criterion/report/index.html.

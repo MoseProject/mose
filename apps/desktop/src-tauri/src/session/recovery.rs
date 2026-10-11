@@ -44,6 +44,13 @@ pub struct Recovery {
 }
 
 impl Recovery {
+    /// What a crash does to the journal: it is released without the clean-exit cleanup, so its
+    /// snapshot stays for the next launch. Tests only.
+    #[cfg(test)]
+    pub(crate) fn simulate_crash(&mut self) {
+        self.journal = None;
+    }
+
     /// Where the leftovers of earlier launches are looked for, and this launch's own directory.
     fn locations(&self) -> Option<(&Path, &Path)> {
         Some((self.root.as_deref()?, self.journal.as_ref()?.dir()))
