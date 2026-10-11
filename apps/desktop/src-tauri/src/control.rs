@@ -33,7 +33,7 @@ use std::collections::HashMap;
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -65,11 +65,19 @@ pub trait Backend: Send + Sync {
 /// Matches forwarded requests to the webview's replies.
 #[derive(Default)]
 pub struct ControlHub {
+    /// Set once the window is listening for forwarded requests. An event sent before that is
+    /// lost, so until then a forwarded request is refused at once instead of waiting out the
+    /// reply timeout.
+    window_ready: AtomicBool,
     next_id: AtomicU64,
     pending: Mutex<HashMap<u64, Sender<Result<Value, String>>>>,
 }
 
 impl ControlHub {
+    pub fn set_window_ready(&self) {
+        self.window_ready.store(true, Ordering::SeqCst);
+    }
+
     fn register(&self) -> (u64, Receiver<Result<Value, String>>) {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst) + 1;
         let (sender, receiver) = mpsc::channel();
@@ -106,6 +114,9 @@ impl<R: Runtime> Backend for AppBackend<R> {
         if !FORWARDED_METHODS.contains(&method) {
             return Err(format!("unknown method: {method}"));
         }
+        if !state.control.window_ready.load(Ordering::SeqCst) {
+            return Err("the window is not ready yet".to_string());
+        }
         let (id, receiver) = state.control.register();
         let request = json!({ "requestId": id, "method": method, "params": params });
         if let Err(error) = self.app.emit(CONTROL_REQUEST_EVENT, request) {
@@ -120,6 +131,12 @@ impl<R: Runtime> Backend for AppBackend<R> {
             }
         }
     }
+}
+
+/// The window has started listening for forwarded requests.
+#[tauri::command]
+pub fn control_ready(state: State<'_, AppState>) {
+    state.control.set_window_ready();
 }
 
 /// The webview's answer to a forwarded request.
