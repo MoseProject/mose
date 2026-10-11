@@ -315,6 +315,11 @@ unsafe extern "C" {
         newest: c_int,
         out_frame: *mut RawDecodedRgbaFrame,
     ) -> c_int;
+    pub(crate) fn avbridge_decode_set_output_size(
+        session: *mut RawDecodeSession,
+        width: c_int,
+        height: c_int,
+    );
     pub(crate) fn avbridge_decode_free_frame(frame: *mut RawDecodedRgbaFrame);
     pub(crate) fn avbridge_decode_close(session: *mut RawDecodeSession);
     pub(crate) fn avbridge_hw_device_cache_clear();

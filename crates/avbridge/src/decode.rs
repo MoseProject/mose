@@ -21,8 +21,8 @@ use std::sync::atomic::AtomicBool;
 use crate::ffi::{
     avbridge_decode_advance, avbridge_decode_close, avbridge_decode_free_frame,
     avbridge_decode_has_held, avbridge_decode_next_rgba, avbridge_decode_open_ex,
-    avbridge_decode_seek, avbridge_decode_take_rgba, avbridge_hw_device_cache_clear, RawDecodeInfo,
-    RawDecodeSession, RawDecodedRgbaFrame,
+    avbridge_decode_seek, avbridge_decode_set_output_size, avbridge_decode_take_rgba,
+    avbridge_hw_device_cache_clear, RawDecodeInfo, RawDecodeSession, RawDecodedRgbaFrame,
 };
 
 /// Stream metadata for one opened video decode session.
@@ -78,6 +78,8 @@ pub struct DecodeSession {
     /// Size of one RGBA frame of this stream (`0` when too large to guess): the buffer frames are
     /// converted into directly, instead of into a native allocation that is then copied out.
     frame_bytes: usize,
+    /// The stream's decoded size, so the output size can be checked and `frame_bytes` kept right.
+    native: (u32, u32),
 }
 
 // SAFETY: the native session has no thread affinity; it may move between threads as long as one
@@ -142,13 +144,11 @@ impl DecodeSession {
         let mut session = Self {
             raw,
             frame_bytes: 0,
+            native: (0, 0),
         };
         let (width, height) = decode_dimensions(info.width, info.height)?;
-        session.frame_bytes = (width as usize)
-            .checked_mul(height as usize)
-            .and_then(|pixels| pixels.checked_mul(4))
-            .filter(|&bytes| bytes <= MAX_BORROWED_FRAME_BYTES)
-            .unwrap_or(0);
+        session.native = (width, height);
+        session.frame_bytes = frame_bytes(width, height);
         Ok((
             session,
             DecodeInfo {
@@ -170,6 +170,26 @@ impl DecodeSession {
         }
         // SAFETY: self.raw is owned by this live session and C does not retain the call inputs.
         decode_seek_status(unsafe { avbridge_decode_seek(self.raw, timestamp_secs) })
+    }
+
+    /// Converts the frames from here on to `size` (the picture scaled, so give it the stream's
+    /// aspect ratio) instead of the decoded size; `None`, or a size that is not smaller than the
+    /// decoded one in both directions, goes back to the decoded size. Returns the size in force.
+    pub fn set_output_size(&mut self, size: Option<(u32, u32)>) -> (u32, u32) {
+        let (width, height) = size
+            .filter(|&(w, h)| w > 0 && h > 0 && w <= self.native.0 && h <= self.native.1)
+            .unwrap_or(self.native);
+        let reduced = (width, height) != self.native;
+        // SAFETY: self.raw is a live session; the sizes are plain integers.
+        unsafe {
+            avbridge_decode_set_output_size(
+                self.raw,
+                if reduced { width as c_int } else { 0 },
+                if reduced { height as c_int } else { 0 },
+            )
+        };
+        self.frame_bytes = frame_bytes(width, height);
+        (width, height)
     }
 
     /// Decodes the next packed RGBA frame, or `None` at end of stream.
@@ -278,6 +298,14 @@ pub enum FrameSlot {
     Newest,
     /// The frame advanced to before the newest one.
     Held,
+}
+
+fn frame_bytes(width: u32, height: u32) -> usize {
+    (width as usize)
+        .checked_mul(height as usize)
+        .and_then(|pixels| pixels.checked_mul(4))
+        .filter(|&bytes| bytes <= MAX_BORROWED_FRAME_BYTES)
+        .unwrap_or(0)
 }
 
 /// The largest frame decoded straight into a Rust buffer (a 8K RGBA frame is 132 MB).

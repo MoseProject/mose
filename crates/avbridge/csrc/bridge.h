@@ -785,6 +785,10 @@ DecodeStatus avbridge_decode_advance(AvbridgeDecodeSession *session, const uint8
 int avbridge_decode_has_held(AvbridgeDecodeSession *session);
 DecodeStatus avbridge_decode_take_rgba(AvbridgeDecodeSession *session, int newest,
                                        DecodedRgbaFrame *out_frame);
+/* Converts later frames to `width` x `height` instead of the decoded size (the picture is scaled,
+   not cropped, so pass the stream's aspect ratio). A size larger than the decoded one, or 0, goes
+   back to the decoded size. Frames already decoded but not yet converted use the new size. */
+void avbridge_decode_set_output_size(AvbridgeDecodeSession *session, int width, int height);
 void avbridge_decode_free_frame(DecodedRgbaFrame *frame);
 void avbridge_decode_close(AvbridgeDecodeSession *session);
 
