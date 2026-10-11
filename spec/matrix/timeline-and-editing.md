@@ -120,3 +120,10 @@ sequence-management/copy-paste entries.
 ---
 
 [← back to spec/INDEX.md](../INDEX.md)
+- [x] Frame-accurate edits: `Project.frame_rate` (an exact fraction, 23.976 to 60) is picked in the
+      timeline toolbar. While set, moves, trims, rolls, slides, range delete/lift and the
+      playhead used by split all land on whole frame boundaries (`Project::snap_secs`). Unset
+      keeps the old free behaviour. Time is still `f64` seconds on purpose: converting the
+      ~2,000 `*_secs` uses to integer ticks was judged not worth breaking the file format.
+      The project format is now version 4; version 3 files still open (the new field is the
+      last one, so the upgrade appends `None`).
