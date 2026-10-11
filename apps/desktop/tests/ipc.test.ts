@@ -30,7 +30,7 @@ const ipc = await import("../src/ipc");
 
 /** Every command name registered with `generate_handler!` in the Rust shell. */
 function registeredCommands(): Set<string> {
-  const main = readFileSync(resolve(__dirname, "../src-tauri/src/handler"), "utf8");
+  const main = readFileSync(resolve(__dirname, "../src-tauri/src/handler.rs"), "utf8");
   const block = main.slice(main.indexOf("generate_handler!["));
   const body = block.slice(0, block.indexOf("])"));
   const names = [...body.matchAll(/\$crate::(?:\w+::)*(\w+)/g)].map((match) => {

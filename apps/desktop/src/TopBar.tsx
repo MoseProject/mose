@@ -2,7 +2,7 @@ import shellStyles from "./App.module.css";
 import { cx } from "./cx";
 import baseStyles from "./styles/base.module.css";
 import styles from "./topbar/topbar.module.css";
-import logo from "./assets/logo";
+import logo from "./assets/logo.png";
 import { withShortcut } from "./commands";
 import { Icon } from "./editor/chrome/Icon";
 import { t } from "./i18n";

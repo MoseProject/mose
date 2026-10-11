@@ -85,6 +85,7 @@ export const Gallery = {
   render: () => {
     return <IconGallery />;
   },
+  args: { name: "play" },
   parameters: { layout: "padded" },
 } satisfies Story;
 

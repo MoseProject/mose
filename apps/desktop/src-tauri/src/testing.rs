@@ -243,7 +243,16 @@ impl Harness {
             cmd: command.into(),
             callback: tauri::ipc::CallbackFn(0),
             error: tauri::ipc::CallbackFn(1),
-            url: "http://tauri.localhost".parse().unwrap(),
+            // The webview's own origin: Tauri serves the app from `http://tauri.localhost` on
+            // Windows and Android and from `tauri://localhost` elsewhere, and a request from any
+            // other origin is refused as remote.
+            url: if cfg!(any(windows, target_os = "android")) {
+                "http://tauri.localhost"
+            } else {
+                "tauri://localhost"
+            }
+            .parse()
+            .unwrap(),
             body: tauri::ipc::InvokeBody::Json(arguments),
             headers: Default::default(),
             invoke_key: tauri::test::INVOKE_KEY.to_string(),

@@ -66,6 +66,8 @@ vi.mock("../src/ipc", () => {
         return Promise.resolve(stopListeningToClose);
       },
     ),
+    // The control channel's listener; nothing is sent to it in these tests.
+    onControlRequest: vi.fn().mockResolvedValue(() => {}),
     exportActiveSequence: vi.fn().mockResolvedValue(undefined),
   };
 });
@@ -147,29 +149,29 @@ describe("app shell", () => {
       expect(screen.getByTestId("screen-home")).toBeTruthy();
     });
 
-    it("shows the editor and home for an open session", () => {
+    it("shows the editor and home for an open session", async () => {
       sessionStore.set(session());
       render(<App />);
       goTo("editor");
-      expect(screen.getByTestId("screen-editor")).toBeTruthy();
+      expect(await screen.findByTestId("screen-editor")).toBeTruthy();
       goTo("home");
       expect(screen.getByTestId("screen-home")).toBeTruthy();
     });
 
-    it("opens settings as a dialog over whatever screen is showing", () => {
+    it("opens settings as a dialog over whatever screen is showing", async () => {
       render(<App />);
       expect(screen.queryByTestId("screen-prefs")).toBeNull();
       act(() => {
         return uiStore.set({ ...uiStore.get(), settingsOpen: true });
       });
-      expect(screen.getByRole("dialog", { name: t("preferences") })).toBeTruthy();
-      expect(screen.getByTestId("screen-prefs")).toBeTruthy();
+      expect(await screen.findByRole("dialog", { name: t("preferences") })).toBeTruthy();
+      expect(await screen.findByTestId("screen-prefs")).toBeTruthy();
     });
 
-    it("shows the watch-folder dialog without a session", () => {
+    it("shows the watch-folder dialog without a session", async () => {
       uiStore.set({ ...uiStore.get(), watchOpen: true });
       render(<App />);
-      expect(screen.getByTestId("screen-watch")).toBeTruthy();
+      expect(await screen.findByTestId("screen-watch")).toBeTruthy();
     });
 
     it("navigates from the View menu", () => {
@@ -184,15 +186,15 @@ describe("app shell", () => {
       expect(screen.getByTestId("nav-home").getAttribute("aria-current")).toBe("page");
     });
 
-    it("opens the shortcut sheet and the command palette from the View menu", () => {
+    it("opens the shortcut sheet and the command palette from the View menu", async () => {
       sessionStore.set(session());
       render(<App />);
       fireEvent.click(screen.getByText(t("cmdShortcuts"), { selector: "button" }));
-      expect(screen.getByRole("dialog", { name: t("cmdShortcuts") })).toBeTruthy();
+      expect(await screen.findByRole("dialog", { name: t("cmdShortcuts") })).toBeTruthy();
       cleanup();
       uiStore.set({ ...uiStore.get(), shortcutsOpen: false, paletteOpen: true });
       render(<App />);
-      expect(screen.getByRole("dialog", { name: t("cmdPalette") })).toBeTruthy();
+      expect(await screen.findByRole("dialog", { name: t("cmdPalette") })).toBeTruthy();
     });
   });
 
@@ -237,12 +239,12 @@ describe("app shell", () => {
       expect(api.saveProject).toHaveBeenCalledWith(false);
     });
 
-    it("opens the export options dialog instead of exporting at once", () => {
+    it("opens the export options dialog instead of exporting at once", async () => {
       sessionStore.set(session());
       render(<App />);
       fireEvent.click(screen.getByTestId("export"));
       expect(uiStore.get().exportDialogOpen).toBe(true);
-      expect(screen.getByTestId("export-dialog")).toBeTruthy();
+      expect(await screen.findByTestId("export-dialog")).toBeTruthy();
       expect(exportActiveSequence).not.toHaveBeenCalled();
     });
   });
@@ -277,7 +279,7 @@ describe("app shell", () => {
 });
 
 describe("export queue popover", () => {
-  it("stays closed until toggled, and shows the active job count", () => {
+  it("stays closed until toggled, and shows the active job count", async () => {
     sessionStore.set(session());
     exportsStore.set([
       {
@@ -295,7 +297,7 @@ describe("export queue popover", () => {
     expect(toggle.textContent).toContain("1");
     fireEvent.click(toggle);
     expect(uiStore.get().exportQueueOpen).toBe(true);
-    expect(screen.getByRole("dialog", { name: t("exportQueue") })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: t("exportQueue") })).toBeTruthy();
     exportsStore.set([]);
   });
 });
