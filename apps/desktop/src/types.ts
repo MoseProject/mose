@@ -301,6 +301,13 @@ export interface Project {
   active_sequence: number;
   panel_layout: PanelLayout | null;
   recent_asset_ids: number[];
+  frame_rate: FrameRate | null;
+}
+
+/** Frames per second as `num / den`, so 29.97 is 30000/1001. */
+export interface FrameRate {
+  num: number;
+  den: number;
 }
 
 export interface PanelLayout {

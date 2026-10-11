@@ -488,6 +488,8 @@ export const ptBR = {
   "close": "Fechar",
   "menuAdd": "Adicionar",
   "menuClip": "Clipe",
+  "frameRateLabel": "Taxa de quadros",
+  "frameRateFree": "Livre (sem ajuste)",
   "menuAnalyze": "Analisar",
   "sequenceActions": "Ações da sequência",
   "gpuEncoderHint": "Usado em todas as exportações. Auto escolhe o melhor disponível.",

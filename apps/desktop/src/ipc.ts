@@ -10,6 +10,7 @@ import type {
   ClipPatch,
   ExportAspectRatio,
   ExportJobView,
+  FrameRate,
   LayerTemplate,
   LibraryTrack,
   MarkerKind,
@@ -242,6 +243,9 @@ export const api = {
   },
   discardAutosave: (path: string) => {
     return invoke<void>("discard_autosave", { path });
+  },
+  setProjectFrameRate: (frameRate: FrameRate | null) => {
+    return invoke<void>("set_project_frame_rate", { frameRate });
   },
   controlReply: (requestId: number, ok: boolean, value: unknown) => {
     return invoke<void>("control_reply", { requestId, ok, value });
