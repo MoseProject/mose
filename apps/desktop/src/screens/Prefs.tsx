@@ -1,4 +1,5 @@
 import chromeStyles from "../editor/chrome/chrome.module.css";
+import homeStyles from "./home.module.css";
 import { cx } from "../cx";
 import baseStyles from "../styles/base.module.css";
 import styles from "./settings.module.css";
@@ -151,7 +152,7 @@ export function Prefs() {
   }
   return (
     <div
-      className={cx(styles, baseStyles, "prefs")}
+      className={cx(styles, baseStyles, homeStyles, "prefs")}
       data-testid="screen-prefs"
     >
       <Group title={t("settingsGeneral")}>
@@ -273,7 +274,7 @@ export function Prefs() {
         />
       </Group>
       <Group title={t("settingsPrivacy")}>
-        <label className={cx(styles, baseStyles, "check")}>
+        <label className={cx(styles, baseStyles, chromeStyles, "check")}>
           <input
             type="checkbox"
             checked={prefs.telemetryEnabled}
@@ -283,7 +284,7 @@ export function Prefs() {
           />{" "}
           {t("telemetryEnabled")}
         </label>
-        <label className={cx(styles, baseStyles, "check")}>
+        <label className={cx(styles, baseStyles, chromeStyles, "check")}>
           <input
             type="checkbox"
             checked={prefs.errorReportingConsent === "always_send"}

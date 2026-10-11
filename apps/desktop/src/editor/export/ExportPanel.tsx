@@ -47,11 +47,11 @@ export function ExportPanel() {
           <Icon name="close" />
         </button>
       </div>
-      <div className={cx(styles, baseStyles, "export-body")}>
+      <div className={cx(styles, baseStyles, inspectorStyles, "export-body")}>
         {jobs.filter((job) => {
           return label(job) === "Queued";
         }).length >= 2 && (
-          <div className={cx(styles, baseStyles, "export-actions")}>
+          <div className={cx(styles, baseStyles, inspectorStyles, "export-actions")}>
             {LOUDNESS.map((target) => {
               return (
                 <button
@@ -67,7 +67,7 @@ export function ExportPanel() {
           </div>
         )}
         {jobs.length === 0 ? (
-          <div className={cx(styles, baseStyles, "empty-state")}>{t("noExports")}</div>
+          <div className={cx(styles, baseStyles, libraryStyles, "empty-state")}>{t("noExports")}</div>
         ) : (
           jobs.map((job) => {
             return (
@@ -78,7 +78,7 @@ export function ExportPanel() {
             );
           })
         )}
-        <div className={cx(styles, baseStyles, "export-actions")}>
+        <div className={cx(styles, baseStyles, inspectorStyles, "export-actions")}>
           <button
             onClick={() => {
               return run(api.exportActiveSequenceSrt());
@@ -105,7 +105,7 @@ function Job({ job }: { job: ExportJobView }) {
   const remaining = current === "Rendering" ? remainingSecs(job) : null;
   return (
     <div
-      className={cx(styles, baseStyles, "job")}
+      className={cx(styles, baseStyles, inspectorStyles, "job")}
       title={job.outputPath}
     >
       <span>{job.title}</span>
@@ -124,7 +124,7 @@ function Job({ job }: { job: ExportJobView }) {
           </span>
         </>
       )}
-      <div className={cx(styles, baseStyles, "export-actions")}>
+      <div className={cx(styles, baseStyles, inspectorStyles, "export-actions")}>
         {current === "Rendering" && (
           <>
             <button

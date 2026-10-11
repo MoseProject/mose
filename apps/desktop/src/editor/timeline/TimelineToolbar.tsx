@@ -207,7 +207,7 @@ export function TimelineToolbar({
         })}
       </select>
       <span style={{ flex: 1 }} />
-      <div className={cx(styles, baseStyles, "zoom-group")}>
+      <div className={cx(styles, baseStyles, editorStyles, "zoom-group")}>
         <button
           className={cx(styles, baseStyles, "icon")}
           title={t("zoomOut")}

@@ -459,7 +459,7 @@ function NewProjectDialog({
       }
     >
       <div className={cx(styles, baseStyles, "name-row")}>
-        <label className={cx(styles, baseStyles, "dialog-field")}>
+        <label className={cx(styles, baseStyles, exportStyles, "dialog-field")}>
           <span>{t("projectName")}</span>
           <input
             type="text"
@@ -492,7 +492,7 @@ function NewProjectDialog({
       </div>
       {!valid && (
         <p
-          className={cx(styles, baseStyles, "dialog-error")}
+          className={cx(styles, baseStyles, exportStyles, "dialog-error")}
           role="alert"
         >
           {t("projectNameEmpty")}

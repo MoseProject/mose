@@ -43,7 +43,7 @@ export function TopBar({ session }: { session: SessionView | null }) {
         screen={ui.screen}
         selected={selected}
       />
-      <span className={cx(styles, baseStyles, "spacer")} />
+      <span className={cx(styles, baseStyles, shellStyles, "spacer")} />
       {session && (
         <ProjectActions
           session={session}
