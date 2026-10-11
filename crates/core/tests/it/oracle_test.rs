@@ -1457,3 +1457,86 @@ fn cut_export(target: f32, out_name: &str, ranges: &[(f64, f64)]) -> Option<(f64
     let (source_lufs, _) = ebur128(&ffmpeg, &source);
     Some((lufs, peak, source_lufs))
 }
+
+#[test]
+fn privacy_blur_inside_the_export_blurs_only_what_the_matte_marks() {
+    let Some((ffmpeg, _)) = oracles() else {
+        return;
+    };
+    // Stripes 4 px wide: sharp edges everywhere until something blurs them.
+    let stripes = scratch("blur_stripes.mp4");
+    let status = Command::new(&ffmpeg)
+        .args(["-v", "error", "-y", "-f", "lavfi", "-i"])
+        .arg("color=c=black:s=320x240:r=30:d=1,format=gray,geq=lum='if(lt(mod(X,8),4),20,235)',format=yuv420p")
+        .args(["-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:d=1"])
+        .args(["-c:v", "mpeg4", "-q:v", "2", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest"])
+        .arg(&stripes)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    // White (blur) on the left half of the matte.
+    let matte = scratch("blur_matte.mp4");
+    let frame: Vec<u8> = (0..320 * 240)
+        .map(|index| if index % 320 < 160 { 255 } else { 0 })
+        .collect();
+    avcore::encode_matte_video(&vec![frame; 30], 320, 240, 30, 1, &matte).unwrap();
+
+    let mut blurred = clip(1, 1, 0.0, 0.0, 1.0);
+    blurred.privacy_blur_enabled = true;
+    blurred.privacy_blur_mask_path = matte.display().to_string();
+    blurred.privacy_blur_sigma = 6.0;
+    let track = Track {
+        id: 1,
+        name: "V1".to_string(),
+        kind: TrackKind::Video,
+        clips: vec![blurred],
+        text_clips: vec![],
+        shape_clips: vec![],
+        visible: true,
+        audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
+        locked: false,
+        color_label: None,
+    };
+    let output = scratch("blur_out.mp4");
+    let outcome = render_timeline_export(
+        &sequence_with(vec![track]),
+        &[media(&stripes, 1)],
+        &output,
+        -14.0,
+        avcore::GpuEncoderPreference::Cpu,
+        &AtomicBool::new(false),
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, RenderOutcome::Completed);
+    // No pass leaves its temporary files behind.
+    let leftovers: Vec<_> = std::fs::read_dir(output.parent().unwrap())
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|e| {
+            e.file_name()
+                .to_string_lossy()
+                .contains(".oca-privacy-blur")
+        })
+        .collect();
+    assert!(leftovers.is_empty(), "left behind: {leftovers:?}");
+
+    let spread = |x: u32| {
+        // Stripe 0..4 is dark and 4..8 light in the source.
+        let dark = pixel(&ffmpeg, &output, 10, x, 120);
+        let light = pixel(&ffmpeg, &output, 10, x + 4, 120);
+        i32::from(light[0]) - i32::from(dark[0])
+    };
+    assert!(
+        spread(48) < 40,
+        "the marked half is still sharp: {}",
+        spread(48)
+    );
+    assert!(
+        spread(248) > 120,
+        "the other half was blurred: {}",
+        spread(248)
+    );
+}
