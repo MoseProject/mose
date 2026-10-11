@@ -51,6 +51,7 @@ impl ClipInstance {
                 fps_num,
                 fps_den,
                 timeline_duration_secs,
+                zoompan_ok,
             ) {
                 stages.push(crop);
             }
