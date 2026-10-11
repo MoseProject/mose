@@ -204,6 +204,7 @@ unsafe extern "C" {
         segment_count: c_int,
     ) -> *mut c_char;
     pub(crate) fn avbridge_free_string(s: *mut c_char);
+    pub(crate) fn avbridge_last_video_encoder() -> *const c_char;
     pub(crate) fn avbridge_encode_timeline_export_with_post(
         segments: *const RawClipSegment,
         segment_count: c_int,

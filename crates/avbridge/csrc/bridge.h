@@ -588,6 +588,10 @@ TextOverlayStatus avbridge_apply_shape_overlays(const char *in_path, const char 
 /* The graph descriptions avbridge_apply_text_overlays / avbridge_apply_shape_overlays build, for
    avbridge_encode_timeline_export_with_post. Each returns a string to release with
    avbridge_free_string, or NULL when it does not build or there are no segments. */
+/* Name of the video encoder the calling thread opened last ("h264_nvenc", "libopenh264", ...),
+   or "" if it opened none. The pointer is valid until that thread opens another. */
+const char *avbridge_last_video_encoder(void);
+
 char *avbridge_text_overlay_filter(const TextSegment *segments, int segment_count);
 char *avbridge_shape_overlay_filter(const ShapeSegment *segments, int segment_count);
 void avbridge_free_string(char *s);

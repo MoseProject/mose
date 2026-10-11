@@ -40,6 +40,19 @@ static enum AVPixelFormat pix_fmt_for_encoder_name(const char *encoder_name) {
     return AV_PIX_FMT_YUV420P;
 }
 
+/* The name of the video encoder this thread opened last, for the app to show where an export
+   ran (a hardware encoder, or the CPU one a machine fell back to). */
+#if defined(_MSC_VER)
+#define BRIDGE_THREAD_LOCAL __declspec(thread)
+#else
+#define BRIDGE_THREAD_LOCAL _Thread_local
+#endif
+static BRIDGE_THREAD_LOCAL char last_encoder_name[32];
+
+const char *avbridge_last_video_encoder(void) {
+    return last_encoder_name;
+}
+
 const AVCodec *find_cpu_h264_encoder(void) {
     static const char *const candidates[] = {"libopenh264", "libx264"};
     for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++) {
@@ -96,6 +109,7 @@ static AVCodecContext *try_open_encoder(const char *encoder_name, int canvas_wid
         avcodec_free_context(&ctx);
         return NULL;
     }
+    snprintf(last_encoder_name, sizeof(last_encoder_name), "%s", encoder_name);
     if (out_pix_fmt) {
         *out_pix_fmt = ctx->pix_fmt;
     }
