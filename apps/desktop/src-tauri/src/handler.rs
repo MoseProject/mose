@@ -37,6 +37,7 @@ macro_rules! all_commands {
             $crate::commands::prefs::remove_recent_project,
             $crate::commands::prefs::restore_autosave,
             $crate::commands::prefs::discard_autosave,
+            $crate::control::control_reply,
             $crate::commands::recovery::list_recoveries,
             $crate::commands::recovery::recover_session,
             $crate::commands::recovery::discard_recovery,

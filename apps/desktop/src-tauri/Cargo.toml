@@ -30,6 +30,8 @@ image = { version = "0.25.10", default-features = false, features = ["jpeg"] }
 # path, several times faster than `image`'s 4:4:4 JPEG encoder on a 1280x720 frame.
 jpeg-encoder = { version = "0.7", features = ["simd"] }
 tracing = "0.1"
+# The control channel's access token.
+getrandom = "0.3"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 # ER-01B error-report delivery transport, same crate/major version the egui shell already uses.

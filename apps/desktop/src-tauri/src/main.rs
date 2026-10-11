@@ -20,6 +20,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod control;
 mod dialogs;
 mod error_reporting;
 mod export;
@@ -92,6 +93,14 @@ fn main() {
                 telemetry_enabled,
                 Arc::new(services::SystemServices::new(handle.clone())),
             ));
+            if let Some(port) = control::requested_port(
+                std::env::var("OCA_CONTROL_PORT").ok(),
+                &std::env::args().collect::<Vec<_>>(),
+            ) {
+                if let Err(error) = control::start(&handle, &app.path().app_config_dir()?, port) {
+                    tracing::warn!(%error, "the control channel could not start");
+                }
+            }
             recovery::install(&handle, &app.path().app_config_dir()?);
             recovery::spawn(handle.clone());
             autosave::spawn(handle.clone());
