@@ -48,6 +48,7 @@ beforeEach(() => {
   previewStore.set({ ...previewStore.get(), playheadSecs: 0 });
   uiStore.set({
     ...uiStore.get(),
+    screen: "editor",
     selectedClipIds: [],
     exportDialogOpen: false,
     settingsOpen: false,
@@ -65,6 +66,35 @@ describe("TopBar without a project", () => {
     expect(screen.queryByText(t("menuFile"))).toBeNull();
     expect(screen.queryByTestId("export")).toBeNull();
     expect(screen.getByLabelText(t("preferences"))).toBeTruthy();
+  });
+});
+
+describe("TopBar on the Home screen with a project open", () => {
+  it("hides the editor menus, the project readout and the export controls", () => {
+    uiStore.set({ ...uiStore.get(), screen: "home" });
+    render(<TopBar session={session()} />);
+    for (const label of [
+      "menuFile",
+      "menuEdit",
+      "menuSequence",
+      "menuClip",
+      "markers",
+      "menuGraphics",
+    ]) {
+      expect(screen.queryByText(t(label as never))).toBeNull();
+    }
+    expect(screen.queryByTestId("export")).toBeNull();
+    expect(screen.queryByTestId("export-queue-toggle")).toBeNull();
+    expect(screen.queryByTestId("undo")).toBeNull();
+    expect(screen.queryByText(new RegExp(t("projectLabel") + ": Doc"))).toBeNull();
+    expect(screen.getByText(t("menuView"))).toBeTruthy();
+    expect(screen.getByLabelText(t("preferences"))).toBeTruthy();
+  });
+
+  it("brings them back on the editor screen", () => {
+    render(<TopBar session={session()} />);
+    expect(screen.getByText(t("menuFile"))).toBeTruthy();
+    expect(screen.getByTestId("export")).toBeTruthy();
   });
 });
 

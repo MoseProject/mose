@@ -25,6 +25,7 @@ export function TopBar({ session }: { session: SessionView | null }) {
     );
   }).length;
   const selected = ui.selectedClipIds;
+  const editing = session !== null && ui.screen === "editor";
 
   return (
     <header className={cx(styles, baseStyles, shellStyles, "topbar")}>
@@ -37,14 +38,14 @@ export function TopBar({ session }: { session: SessionView | null }) {
           height={24}
         />
       </div>
-      {session && <ProjectCrumbs session={session} />}
+      {session && editing && <ProjectCrumbs session={session} />}
       <MenuBar
         session={session}
         screen={ui.screen}
         selected={selected}
       />
       <span className={cx(styles, baseStyles, shellStyles, "spacer")} />
-      {session && (
+      {session && editing && (
         <ProjectActions
           session={session}
           exportQueueOpen={ui.exportQueueOpen}
