@@ -78,6 +78,8 @@ impl ClipInstance {
                 self.contrast,
                 self.saturation,
                 timeline_duration_secs,
+                self.id,
+                fps_num as f64 / fps_den.max(1) as f64,
             ) {
                 stages.push(color_stage);
             }
@@ -160,6 +162,8 @@ impl ClipInstance {
                 self.brightness,
                 self.contrast,
                 self.saturation,
+                0.0,
+                self.id,
                 0.0,
             ));
         }
