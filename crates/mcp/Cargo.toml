@@ -1,0 +1,20 @@
+[package]
+name = "oca-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+# A Model Context Protocol server over stdio that lets an agent drive the running app through
+# its control channel (spec/architecture/control-channel.md). Deliberately standalone, like
+# `ytbridge`: it only needs JSON and a TCP socket, and stays out of `core`/`desktop`'s
+# dependency graph.
+[lib]
+name = "oca_mcp"
+
+[[bin]]
+name = "oca-mcp"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = "1.0.151"
