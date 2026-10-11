@@ -20,6 +20,7 @@ import type {
   PrefsView,
   PrivacyBlurEvent,
   RecentProject,
+  RecoverySession,
   SessionPatch,
   SessionView,
   ShapeClipPatch,
@@ -227,6 +228,15 @@ export const api = {
   },
   discardAutosave: (path: string) => {
     return invoke<void>("discard_autosave", { path });
+  },
+  listRecoveries: () => {
+    return invoke<RecoverySession[]>("list_recoveries");
+  },
+  recoverSession: (id: string) => {
+    return invoke<void>("recover_session", { id });
+  },
+  discardRecovery: (id: string) => {
+    return invoke<void>("discard_recovery", { id });
   },
   saveLayerTemplate: (name: string, clipIds: number[]) => {
     return invoke<LayerTemplate[]>("save_layer_template", { name, clipIds });

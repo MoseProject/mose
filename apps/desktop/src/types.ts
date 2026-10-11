@@ -452,6 +452,13 @@ export interface LayerTemplate {
   layers: [TrackKind, Record<string, unknown>][];
 }
 
+/** Unsaved work an earlier launch left behind: a project that was never saved when it ended. */
+export interface RecoverySession {
+  id: string;
+  projectName: string;
+  savedUnixSecs: number;
+}
+
 export interface RecentProject {
   path: string;
   name: string;

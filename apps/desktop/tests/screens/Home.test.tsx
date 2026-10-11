@@ -14,6 +14,9 @@ vi.mock("../../src/ipc", () => {
       openProjectPath: vi.fn().mockResolvedValue(undefined),
       restoreAutosave: vi.fn().mockResolvedValue(undefined),
       discardAutosave: vi.fn().mockResolvedValue(undefined),
+      listRecoveries: vi.fn(),
+      recoverSession: vi.fn().mockResolvedValue(undefined),
+      discardRecovery: vi.fn().mockResolvedValue(undefined),
       removeRecentProject: vi.fn().mockResolvedValue(undefined),
       revealInFolder: vi.fn().mockResolvedValue(undefined),
     },
@@ -40,6 +43,9 @@ const recent = (autosavePath: string | null = null) => {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(api.getRecentProjects).mockResolvedValue([]);
+  vi.mocked(api.listRecoveries).mockResolvedValue([]);
+  vi.mocked(api.recoverSession).mockResolvedValue(undefined);
+  vi.mocked(api.discardRecovery).mockResolvedValue(undefined);
   vi.mocked(api.createProject).mockResolvedValue(true);
   vi.mocked(api.openProjectPath).mockResolvedValue(undefined);
   sessionStore.set(null);
@@ -298,6 +304,49 @@ describe("home screen", () => {
     render(<Home />);
     await screen.findByText("One");
     expect(screen.queryByText(t("recoverAutosave"))).toBeNull();
+  });
+
+  it("offers the unsaved work a crashed session left behind and recovers it", async () => {
+    vi.mocked(api.listRecoveries).mockResolvedValue([
+      { id: "1-2", projectName: "Gameplay cut", savedUnixSecs: 1_700_000_000 },
+    ]);
+    render(<Home />);
+    expect(await screen.findByText("Gameplay cut")).toBeTruthy();
+    fireEvent.click(screen.getByText(t("recoverUnsavedWork")));
+    await waitFor(() => {
+      return expect(api.recoverSession).toHaveBeenCalledWith("1-2");
+    });
+    await waitFor(() => {
+      return expect(uiStore.get().screen).toBe("editor");
+    });
+  });
+
+  it("deletes the unsaved work only after the user confirms", async () => {
+    vi.mocked(api.listRecoveries).mockResolvedValue([
+      { id: "1-2", projectName: "Gameplay cut", savedUnixSecs: 1_700_000_000 },
+    ]);
+    render(
+      <>
+        <Home />
+        <ConfirmHost />
+      </>,
+    );
+    await screen.findByText("Gameplay cut");
+    fireEvent.click(screen.getByText(t("discardUnsavedWork")));
+    expect(api.discardRecovery).not.toHaveBeenCalled();
+    const buttons = await screen.findAllByText(t("discardUnsavedWork"));
+    fireEvent.click(buttons[buttons.length - 1]);
+    await waitFor(() => {
+      return expect(api.discardRecovery).toHaveBeenCalledWith("1-2");
+    });
+  });
+
+  it("shows no recovery section when nothing was left behind", async () => {
+    render(<Home />);
+    await waitFor(() => {
+      return expect(api.listRecoveries).toHaveBeenCalled();
+    });
+    expect(screen.queryByTestId("unsaved-work")).toBeNull();
   });
 });
 

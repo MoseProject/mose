@@ -213,8 +213,28 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     let replaced = written.and_then(|()| fs::rename(&temporary, path));
     if replaced.is_err() {
         let _ = fs::remove_file(&temporary);
+    } else {
+        sync_parent_dir(path);
     }
     replaced
+}
+
+/// Best-effort `fsync` of the directory holding `path`, so the rename itself survives a power
+/// cut. Not possible on Windows, where the replace is already durable enough.
+fn sync_parent_dir(path: &Path) {
+    #[cfg(unix)]
+    if let Some(dir) = path.parent() {
+        let dir = if dir.as_os_str().is_empty() {
+            Path::new(".")
+        } else {
+            dir
+        };
+        if let Ok(dir) = fs::File::open(dir) {
+            let _ = dir.sync_all();
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = path;
 }
 
 /// Writes `project` to `path` as `.ocproj`, overwriting any existing file. The write is atomic

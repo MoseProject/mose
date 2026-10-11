@@ -34,7 +34,7 @@ mod testing;
 
 // The modules keep their flat paths (`crate::state`, `crate::preview_engine`) through these.
 use preview::{bush_adapter, frames, preview_engine, protocol, tile_workers};
-use session::{autosave, close_guard, session_sync, state};
+use session::{autosave, close_guard, recovery, session_sync, state};
 
 use std::sync::Arc;
 
@@ -92,6 +92,8 @@ fn main() {
                 telemetry_enabled,
                 Arc::new(services::SystemServices::new(handle.clone())),
             ));
+            recovery::install(&handle, &app.path().app_config_dir()?);
+            recovery::spawn(handle.clone());
             autosave::spawn(handle.clone());
             autosave::register_emergency_save(handle.clone());
             autosave::spawn_saver(handle);

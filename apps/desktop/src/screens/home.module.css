@@ -234,6 +234,16 @@
   display: flex;
   gap: 2px;
 }
+.recovery-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-subtle);
+  margin-bottom: 12px;
+}
+.recovery-list > p {
+  margin: 0;
+  padding: 6px 10px 0;
+}
 .project-recovery {
   grid-column: 1 / -1;
   display: flex;
