@@ -58,7 +58,21 @@ export const events = {
   previewRecovery: "preview-recovery",
   youtubeDownload: "youtube-download-event",
   updateCheck: "update-check-event",
+  controlRequest: "control-request",
 } as const;
+
+/** A request from the control channel (see src-tauri/src/control.rs) that the window answers. */
+export interface ControlRequest {
+  requestId: number;
+  method: string;
+  params: unknown;
+}
+
+export function onControlRequest(handler: (request: ControlRequest) => void): Promise<UnlistenFn> {
+  return listen<ControlRequest>(events.controlRequest, (e) => {
+    return handler(e.payload);
+  });
+}
 
 export function onSession(handler: (view: SessionView) => void): Promise<UnlistenFn> {
   return listen<SessionView>(events.session, (e) => {
@@ -228,6 +242,9 @@ export const api = {
   },
   discardAutosave: (path: string) => {
     return invoke<void>("discard_autosave", { path });
+  },
+  controlReply: (requestId: number, ok: boolean, value: unknown) => {
+    return invoke<void>("control_reply", { requestId, ok, value });
   },
   listRecoveries: () => {
     return invoke<RecoverySession[]>("list_recoveries");

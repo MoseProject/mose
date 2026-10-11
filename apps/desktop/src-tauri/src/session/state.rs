@@ -226,6 +226,8 @@ pub struct AppState {
     pub sync: Mutex<crate::session_sync::SyncState>,
     /// The snapshot kept for a project with no file yet (see [`crate::recovery`]).
     pub recovery: Mutex<crate::recovery::Recovery>,
+    /// Requests the control channel forwarded to the webview and is waiting on.
+    pub control: crate::control::ControlHub,
 }
 
 impl AppState {
@@ -267,6 +269,7 @@ impl AppState {
             edits: EditClock::default(),
             sync: Mutex::new(crate::session_sync::SyncState::default()),
             recovery: Mutex::new(crate::recovery::Recovery::default()),
+            control: crate::control::ControlHub::default(),
         }
     }
 
