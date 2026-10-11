@@ -224,6 +224,38 @@ fn export_perf() {
         }),
     );
     time_export(
+        "zoom out keyframes",
+        &asset,
+        one(&|c| {
+            c.scale_keyframes = vec![
+                Keyframe {
+                    time_fraction: 0.0,
+                    value: 1.0,
+                },
+                Keyframe {
+                    time_fraction: 1.0,
+                    value: 0.7,
+                },
+            ]
+        }),
+    );
+    time_export(
+        "crop keyframes",
+        &asset,
+        one(&|c| {
+            c.crop_w_keyframes = vec![
+                Keyframe {
+                    time_fraction: 0.0,
+                    value: 1.0,
+                },
+                Keyframe {
+                    time_fraction: 1.0,
+                    value: 0.6,
+                },
+            ]
+        }),
+    );
+    time_export(
         "color keyframes",
         &asset,
         one(&|c| {
