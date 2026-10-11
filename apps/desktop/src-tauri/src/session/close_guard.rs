@@ -65,6 +65,8 @@ pub fn guard_close<R: Runtime>(app: &AppHandle<R>) -> bool {
 /// Closes the app for good, after the user confirmed.
 #[tauri::command]
 pub fn quit_app<R: Runtime>(app: AppHandle<R>) {
+    // The user agreed to leave any unsaved, file-less work behind.
+    crate::recovery::discard_snapshot(&app);
     app.exit(0);
 }
 

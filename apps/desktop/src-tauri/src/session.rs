@@ -16,5 +16,6 @@
 
 pub(crate) mod autosave;
 pub(crate) mod close_guard;
+pub(crate) mod recovery;
 pub(crate) mod session_sync;
 pub(crate) mod state;

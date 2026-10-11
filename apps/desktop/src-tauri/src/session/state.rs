@@ -224,6 +224,8 @@ pub struct AppState {
     pub edits: EditClock,
     /// What the webview has been sent, so the next update can be only the difference.
     pub sync: Mutex<crate::session_sync::SyncState>,
+    /// The snapshot kept for a project with no file yet (see [`crate::recovery`]).
+    pub recovery: Mutex<crate::recovery::Recovery>,
 }
 
 impl AppState {
@@ -264,6 +266,7 @@ impl AppState {
             services,
             edits: EditClock::default(),
             sync: Mutex::new(crate::session_sync::SyncState::default()),
+            recovery: Mutex::new(crate::recovery::Recovery::default()),
         }
     }
 
