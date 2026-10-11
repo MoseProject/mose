@@ -349,9 +349,12 @@ static int build_mix_graph(const AudioSegment *segments, const uint8_t *valid, i
     branch_ctx = NULL;
     branch_duck_role = NULL;
 
-    if ((ret = create_filter(graph, &noise, "afftdn", "noise", NULL)) < 0) goto fail;
-    snprintf(args, sizeof(args), MASTERING_LOUDNORM_ARGS_FORMAT, (double)target_lufs);
-    if ((ret = create_filter(graph, &loudnorm, "loudnorm", "loudnorm", args)) < 0) goto fail;
+    const int normalize = !isnan(target_lufs);
+    if (normalize) {
+        if ((ret = create_filter(graph, &noise, "afftdn", "noise", NULL)) < 0) goto fail;
+        snprintf(args, sizeof(args), MASTERING_LOUDNORM_ARGS_FORMAT, (double)target_lufs);
+        if ((ret = create_filter(graph, &loudnorm, "loudnorm", "loudnorm", args)) < 0) goto fail;
+    }
     if ((ret = create_filter(graph, &limiter, "alimiter", "limiter", MASTERING_LIMITER_ARGS)) < 0)
         goto fail;
     snprintf(args, sizeof(args), "end=%.9f", timeline_duration_secs);
@@ -361,10 +364,15 @@ static int build_mix_graph(const AudioSegment *segments, const uint8_t *valid, i
         goto fail;
     if ((ret = create_filter(graph, &sink, "abuffersink", "out", NULL)) < 0) goto fail;
 
-    if ((ret = avfilter_link(mix_source, 0, noise, 0)) < 0 ||
-        (ret = avfilter_link(noise, 0, loudnorm, 0)) < 0 ||
-        (ret = avfilter_link(loudnorm, 0, limiter, 0)) < 0 ||
-        (ret = avfilter_link(limiter, 0, final_trim, 0)) < 0 ||
+    if (normalize) {
+        if ((ret = avfilter_link(mix_source, 0, noise, 0)) < 0 ||
+            (ret = avfilter_link(noise, 0, loudnorm, 0)) < 0 ||
+            (ret = avfilter_link(loudnorm, 0, limiter, 0)) < 0)
+            goto fail;
+    } else if ((ret = avfilter_link(mix_source, 0, limiter, 0)) < 0) {
+        goto fail;
+    }
+    if ((ret = avfilter_link(limiter, 0, final_trim, 0)) < 0 ||
         (ret = avfilter_link(final_trim, 0, format, 0)) < 0 ||
         (ret = avfilter_link(format, 0, sink, 0)) < 0 ||
         (ret = avfilter_graph_config(graph, NULL)) < 0)

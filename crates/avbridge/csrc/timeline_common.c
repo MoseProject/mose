@@ -22,6 +22,8 @@
 #define EXPORT_AUDIO_FILTER_FORMAT                                                                 \
     "atempo@tempo=1.0,volume@vol=0dB,afftdn,loudnorm=I=%.1f:TP=-1.0:LRA=11,"                       \
     "alimiter=limit=0.95:attack=5:release=50"
+#define EXPORT_AUDIO_FILTER_NO_NORMALIZE                                                           \
+    "atempo@tempo=1.0,volume@vol=0dB,alimiter=limit=0.95:attack=5:release=50"
 
 /* Audio's atempo filter takes one fixed parameter, not a `t`-keyed expression, so a smooth
    per-sample speed ramp isn't achievable on the audio side in this FFmpeg build — the ramp's
@@ -366,7 +368,12 @@ EncodeStatus timeline_open_audio_output(AVFormatContext *out_ctx, AVCodecContext
     }
 
     char afilter_descr[256];
-    snprintf(afilter_descr, sizeof(afilter_descr), EXPORT_AUDIO_FILTER_FORMAT, (double)target_lufs);
+    if (isnan(target_lufs)) {
+        snprintf(afilter_descr, sizeof(afilter_descr), "%s", EXPORT_AUDIO_FILTER_NO_NORMALIZE);
+    } else {
+        snprintf(afilter_descr, sizeof(afilter_descr), EXPORT_AUDIO_FILTER_FORMAT,
+                 (double)target_lufs);
+    }
     if (init_audio_filter_chain(adec_ctx, aencoder, afilter_descr, achain) < 0) {
         return ENCODE_ERR_FILTER_GRAPH;
     }

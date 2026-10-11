@@ -14,6 +14,8 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "bridge.h"
+#include <math.h>
+
 #include "bridge_internal.h"
 
 #include <libavcodec/avcodec.h>
@@ -95,7 +97,12 @@ EncodeStatus avbridge_encode_export(const char *in_path, const char *out_path, f
 
     {
         char filter_descr[256];
-        snprintf(filter_descr, sizeof(filter_descr), MASTERING_FILTER_FORMAT, (double)target_lufs);
+        if (isnan(target_lufs)) {
+            snprintf(filter_descr, sizeof(filter_descr), "%s", MASTERING_FILTER_NO_NORMALIZE);
+        } else {
+            snprintf(filter_descr, sizeof(filter_descr), MASTERING_FILTER_FORMAT,
+                     (double)target_lufs);
+        }
         if (init_audio_filter_chain(dec_ctx, encoder, filter_descr, &chain) < 0) {
             status = ENCODE_ERR_FILTER_GRAPH;
             goto cleanup;
