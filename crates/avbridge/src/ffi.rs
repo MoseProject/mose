@@ -206,8 +206,9 @@ unsafe extern "C" {
     pub(crate) fn avbridge_free_string(s: *mut c_char);
     pub(crate) fn avbridge_smart_cut_video(
         in_path: *const c_char,
-        in_secs: f64,
-        out_secs: f64,
+        in_secs: *const f64,
+        out_secs: *const f64,
+        range_count: c_int,
         canvas_width: c_int,
         canvas_height: c_int,
         canvas_fps_num: c_int,

@@ -926,6 +926,11 @@ fn check_lossless_cut(
     in_secs: f64,
     out_secs: f64,
 ) {
+    check_lossless_cuts(ffmpeg, ffprobe_bin, source, &[(in_secs, out_secs)]);
+}
+
+/// The same for several ranges played one after the other.
+fn check_lossless_cuts(ffmpeg: &Path, ffprobe_bin: &Path, source: &Path, ranges: &[(f64, f64)]) {
     static CUTS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     let number = CUTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let output = scratch(&format!("lossless_cut_{number}.mp4"));
@@ -938,8 +943,7 @@ fn check_lossless_cut(
     };
     let outcome = avbridge::smart_cut_video(
         source,
-        in_secs,
-        out_secs,
+        ranges,
         canvas,
         &output,
         &AtomicBool::new(false),
@@ -961,9 +965,14 @@ fn check_lossless_cut(
         String::from_utf8_lossy(&decode.stderr)
     );
 
-    let first = (in_secs * 30.0).ceil() as u32;
-    let last = (out_secs * 30.0).ceil() as u32; // exclusive
-    let expected = u64::from(last - first);
+    // The source frame each output frame must show.
+    let mut wanted: Vec<u32> = Vec::new();
+    for &(in_secs, out_secs) in ranges {
+        let first = (in_secs * 30.0).ceil() as u32;
+        let last = (out_secs * 30.0).ceil() as u32; // exclusive
+        wanted.extend(first..last);
+    }
+    let expected = wanted.len() as u64;
     assert_eq!(frame_count(ffprobe_bin, &output), expected, "frame count");
     assert_eq!(
         ffprobe_counting(ffprobe_bin, &output)["streams"][0]["codec_name"],
@@ -975,26 +984,29 @@ fn check_lossless_cut(
     let step = 7.max(expected as u32 / 40);
     let mut checked = 0;
     let mut frame = 0;
+    let mut probes: Vec<u32> = vec![];
     while u64::from(frame) < expected {
-        let want = luma(ffmpeg, source, first + frame);
-        let got = luma(ffmpeg, &output, frame);
-        assert!(
-            (i32::from(want) - i32::from(got)).abs() <= 8,
-            "output frame {frame} is source frame {} (luma {want}) but has luma {got}",
-            first + frame
-        );
+        probes.push(frame);
         frame += step;
         checked += 1;
     }
-    for frame in [0, 1, (expected - 2) as u32, (expected - 1) as u32] {
-        let want = luma(ffmpeg, source, first + frame);
+    // Both sides of every join, and the edges.
+    let mut at = 0u32;
+    for &(in_secs, out_secs) in ranges {
+        let count = (out_secs * 30.0).ceil() as u32 - (in_secs * 30.0).ceil() as u32;
+        probes.extend([at, at + 1, at + count - 2, at + count - 1]);
+        at += count;
+    }
+    for frame in probes {
+        let source_frame = wanted[frame as usize];
+        let want = luma(ffmpeg, source, source_frame);
         let got = luma(ffmpeg, &output, frame);
         assert!(
             (i32::from(want) - i32::from(got)).abs() <= 8,
-            "edge frame {frame}: want luma {want}, got {got}"
+            "output frame {frame} is source frame {source_frame} (luma {want}) but has luma {got}"
         );
     }
-    assert!(checked > 10);
+    assert!(checked > 10 || ranges.len() > 1);
 }
 
 #[test]
@@ -1010,6 +1022,28 @@ fn a_lossless_cut_is_frame_accurate_on_a_stream_without_b_frames() {
     );
     // Neither end on a keyframe (every 60 frames): both ends are encoded again.
     check_lossless_cut(&ffmpeg, &ffprobe_bin, &source, 3.5, 9.4);
+}
+
+#[test]
+fn several_lossless_cuts_in_a_row_join_without_a_glitch() {
+    let Some((ffmpeg, ffprobe_bin)) = oracles() else {
+        return;
+    };
+    let source = numbered_frames(
+        &ffmpeg,
+        "numbered_ranges.mp4",
+        14,
+        &["-c:v", "libopenh264", "-b:v", "4M", "-g", "60"],
+    );
+    // The middle range (1.0 s to 1.6 s) is inside one GOP, so it is encoded whole.
+    check_lossless_cuts(
+        &ffmpeg,
+        &ffprobe_bin,
+        &source,
+        &[(3.5, 9.4), (1.0, 1.6), (10.2, 13.9)],
+    );
+    // Ranges out of source order and on keyframes.
+    check_lossless_cuts(&ffmpeg, &ffprobe_bin, &source, &[(8.0, 12.0), (2.0, 6.0)]);
 }
 
 /// An `ffmpeg` with libx264, for sources with B-frames (the pinned LGPL build has none): set
@@ -1052,6 +1086,13 @@ fn a_lossless_cut_is_frame_accurate_on_a_stream_with_b_frames() {
     check_lossless_cut(&ffmpeg, &ffprobe_bin, &source, 4.0, 8.0);
     // Starts on a keyframe, ends inside a GOP.
     check_lossless_cut(&ffmpeg, &ffprobe_bin, &source, 2.0, 7.3);
+    // Several ranges in a row, one of them too short to copy.
+    check_lossless_cuts(
+        &ffmpeg,
+        &ffprobe_bin,
+        &source,
+        &[(3.5, 9.4), (1.0, 1.6), (10.2, 11.9)],
+    );
 }
 
 #[test]
@@ -1076,8 +1117,7 @@ fn a_cut_without_a_whole_gop_between_its_points_is_left_to_the_normal_export() {
     // 4.2 s to 5.4 s lies inside one GOP (4 s to 6 s).
     let outcome = avbridge::smart_cut_video(
         &source,
-        4.2,
-        5.4,
+        &[(4.2, 5.4)],
         canvas,
         &output,
         &AtomicBool::new(false),
@@ -1093,8 +1133,7 @@ fn a_cut_without_a_whole_gop_between_its_points_is_left_to_the_normal_export() {
     };
     let outcome = avbridge::smart_cut_video(
         &source,
-        1.0,
-        9.0,
+        &[(1.0, 9.0)],
         wrong,
         &output,
         &AtomicBool::new(false),
@@ -1135,6 +1174,23 @@ fn an_export_without_normalisation_keeps_the_source_loudness() {
 /// Cuts 3.5 s..9.4 s of a numbered, quiet clip and checks the picture; returns the export's
 /// loudness, peak and the source's loudness.
 fn single_cut_export(target: f32, out_name: &str) -> Option<(f64, f64, f64)> {
+    cut_export(target, out_name, &[(3.5, 9.4)])
+}
+
+#[test]
+fn two_cuts_of_one_source_are_copied_and_keep_their_sound_in_step() {
+    let Some((lufs, _, source_lufs)) = cut_export(
+        avcore::NO_NORMALIZATION,
+        "two_cuts.mp4",
+        &[(3.5, 9.4), (0.5, 4.5)],
+    ) else {
+        return;
+    };
+    assert!((lufs - source_lufs).abs() <= 1.5, "{source_lufs} vs {lufs}");
+}
+
+/// Exports clips of a numbered, quiet source laid end to end and checks the picture of each.
+fn cut_export(target: f32, out_name: &str, ranges: &[(f64, f64)]) -> Option<(f64, f64, f64)> {
     let (ffmpeg, ffprobe_bin) = oracles()?;
     // Numbered frames with a tone, keyframe every 2 s.
     let source = scratch("numbered_sound.mp4");
@@ -1168,7 +1224,18 @@ fn single_cut_export(target: f32, out_name: &str) -> Option<(f64, f64, f64)> {
         id: 1,
         name: "V1".to_string(),
         kind: TrackKind::Video,
-        clips: vec![clip(1, 1, 0.0, 3.5, 9.4)],
+        clips: {
+            let mut at = 0.0;
+            ranges
+                .iter()
+                .enumerate()
+                .map(|(i, &(from, to))| {
+                    let placed = clip(i as u64 + 1, 1, at, from, to);
+                    at += to - from;
+                    placed
+                })
+                .collect()
+        },
         text_clips: vec![],
         shape_clips: vec![],
         visible: true,
@@ -1199,15 +1266,23 @@ fn single_cut_export(target: f32, out_name: &str) -> Option<(f64, f64, f64)> {
     assert_eq!(stream(&report, "video")["codec_name"], "h264");
     assert_eq!(stream(&report, "audio")["codec_name"], "aac");
     let length = number(&report["format"]["duration"]);
-    assert!((length - 5.9).abs() < 0.15, "length {length}");
-    // Frame accurate against the source (the first is 3.5 s = frame 105).
-    for frame in [0u32, 20, 90, 150, 176] {
-        let want = luma(&ffmpeg, &source, 105 + frame);
-        let got = luma(&ffmpeg, &output, frame);
-        assert!(
-            (i32::from(want) - i32::from(got)).abs() <= 8,
-            "frame {frame}: {want} vs {got}"
-        );
+    let total: f64 = ranges.iter().map(|(a, b)| b - a).sum();
+    assert!((length - total).abs() < 0.15, "length {length}");
+    // Frame accurate against the source: probe the start, middle and end of every clip.
+    let mut at = 0u32;
+    for &(from, to) in ranges {
+        let first = (from * 30.0).ceil() as u32;
+        let count = (to * 30.0).ceil() as u32 - first;
+        for offset in [0, 1, count / 3, count / 2, count - 2, count - 1] {
+            let want = luma(&ffmpeg, &source, first + offset);
+            let got = luma(&ffmpeg, &output, at + offset);
+            assert!(
+                (i32::from(want) - i32::from(got)).abs() <= 8,
+                "frame {} of the clip from {from}: {want} vs {got}",
+                offset
+            );
+        }
+        at += count;
     }
     let (lufs, peak) = ebur128(&ffmpeg, &output);
     let (source_lufs, _) = ebur128(&ffmpeg, &source);

@@ -822,16 +822,19 @@ typedef enum {
     SMART_CUT_ERROR = 3
 } SmartCutStatus;
 
-/* Writes the video of `in_path` between `in_secs` and `out_secs` to `out_path` (video only, no
-   audio), frame accurate, without encoding what lies between the keyframes next to the cut
-   points: that part is copied packet for packet, and only the pictures at the two ends are
-   decoded and encoded again. Needs an H.264 4:2:0 stream of the canvas's size and a constant
-   frame rate equal to the canvas's; `canvas_bit_rate_bps` is for the re-encoded ends. Times are
-   source timestamps, as in ClipSegment. progress_cb may be NULL; `cancel` may be NULL. */
-SmartCutStatus avbridge_smart_cut_video(const char *in_path, double in_secs, double out_secs,
-                                        int canvas_width, int canvas_height, int canvas_fps_num,
-                                        int canvas_fps_den, int64_t canvas_bit_rate_bps,
-                                        const char *out_path, ProgressCallback progress_cb,
-                                        void *progress_user_data, const uint8_t *cancel);
+/* Writes the video of `in_path` for the `range_count` ranges [in_secs[i], out_secs[i]) played one
+   after the other to `out_path` (video only, no audio), frame accurate, without encoding what lies
+   between the keyframes next to the cut points: that part is copied packet for packet, and only
+   the pictures at the ends are decoded and encoded again. A range too short to hold a copy is
+   encoded whole; at least one range must hold a copy. Needs an H.264 4:2:0 stream of the canvas's
+   size and a constant frame rate equal to the canvas's; `canvas_bit_rate_bps` is for the
+   re-encoded pictures. Times are source timestamps, as in ClipSegment. progress_cb may be NULL;
+   `cancel` may be NULL. */
+SmartCutStatus avbridge_smart_cut_video(const char *in_path, const double *in_secs,
+                                        const double *out_secs, int range_count, int canvas_width,
+                                        int canvas_height, int canvas_fps_num, int canvas_fps_den,
+                                        int64_t canvas_bit_rate_bps, const char *out_path,
+                                        ProgressCallback progress_cb, void *progress_user_data,
+                                        const uint8_t *cancel);
 
 #endif

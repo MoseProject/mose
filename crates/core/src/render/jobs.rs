@@ -434,26 +434,30 @@ fn try_lossless_cut(
     static TEMP_ID: AtomicU64 = AtomicU64::new(0);
 
     if track_segments.len() != 1
-        || track_segments[0].len() != 1
+        || track_segments[0].is_empty()
         || !text_segments.is_empty()
         || !shape_segments.is_empty()
         || !privacy_blur_segments.is_empty()
     {
         return None;
     }
-    let segment = &track_segments[0][0];
-    let untouched = segment.video_filter.is_empty()
-        && !segment.frozen
-        && segment.speed_factor == 1.0
-        && segment.smooth_speed_ramp_end_factor <= 0.0
-        && segment.transition_in == 0
-        && segment.fade_in_secs == 0.0
-        && segment.fade_out_secs == 0.0
-        && segment.blend_mode.is_empty()
-        && segment.mask_video_path.is_empty()
-        && segment.position_x_expr.is_empty()
-        && segment.position_y_expr.is_empty();
-    if !untouched {
+    let segments = &track_segments[0];
+    let segment = &segments[0];
+    let untouched = |segment: &avbridge::ClipSegment| {
+        segment.source_path == segments[0].source_path
+            && segment.video_filter.is_empty()
+            && !segment.frozen
+            && segment.speed_factor == 1.0
+            && segment.smooth_speed_ramp_end_factor <= 0.0
+            && segment.transition_in == 0
+            && segment.fade_in_secs == 0.0
+            && segment.fade_out_secs == 0.0
+            && segment.blend_mode.is_empty()
+            && segment.mask_video_path.is_empty()
+            && segment.position_x_expr.is_empty()
+            && segment.position_y_expr.is_empty()
+    };
+    if !segments.iter().all(untouched) {
         return None;
     }
     // The same size and frame rate as the export's canvas, so nothing has to be scaled or
@@ -481,12 +485,15 @@ fn try_lossless_cut(
         TEMP_ID.fetch_add(1, Ordering::Relaxed)
     );
     let video = parent.join(format!("{stem}.oca-cut-{suffix}.mp4"));
-    let length = segment.source_out_secs - segment.source_in_secs;
+    let ranges: Vec<(f64, f64)> = segments
+        .iter()
+        .map(|s| (s.source_in_secs, s.source_out_secs))
+        .collect();
+    let length: f64 = ranges.iter().map(|(a, b)| b - a).sum();
 
     match avbridge::smart_cut_video(
         &segment.source_path,
-        segment.source_in_secs,
-        segment.source_out_secs,
+        &ranges,
         canvas,
         &video,
         cancel,
@@ -510,14 +517,24 @@ fn try_lossless_cut(
         }
     }
 
-    let plain_audio;
+    // Without a mix of its own, the sound is the clips' own, one after the other.
+    let plain_audio: Vec<avbridge::AudioSegment>;
     let audio = if audio_segments.is_empty() {
-        plain_audio = [avbridge::AudioSegment::plain(
-            segment.source_path.clone(),
-            segment.source_in_secs,
-            segment.source_out_secs,
-            segment.gain_db,
-        )];
+        let mut start = 0.0;
+        plain_audio = segments
+            .iter()
+            .map(|s| {
+                let mut piece = avbridge::AudioSegment::plain(
+                    s.source_path.clone(),
+                    s.source_in_secs,
+                    s.source_out_secs,
+                    s.gain_db,
+                );
+                piece.timeline_start_secs = start;
+                start += s.source_out_secs - s.source_in_secs;
+                piece
+            })
+            .collect();
         &plain_audio[..]
     } else {
         audio_segments

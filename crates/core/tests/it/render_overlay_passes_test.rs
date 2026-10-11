@@ -179,7 +179,7 @@ fn a_job_is_validated_before_the_encoder_runs() {
     };
     assert!(matches!(run(&[], -14.0), Err(RenderError::EmptyTimeline)));
     assert!(matches!(
-        run(&[segment()], f32::NAN),
+        run(&[segment()], f32::INFINITY),
         Err(RenderError::InvalidTargetLufs)
     ));
     assert!(!out.exists());
