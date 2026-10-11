@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   hasKeyframeAt,
   playheadFraction,
+  setKeyframeValue,
   toggleKeyframe,
   valueAt,
   withKeyframe,
@@ -80,5 +81,23 @@ describe("keyframe toggling", () => {
   it("toggles: removes when present, adds when absent", () => {
     expect(toggleKeyframe(list, 0.5, 3)).toEqual([]);
     expect(toggleKeyframe(list, 0.8, 3)).toHaveLength(2);
+  });
+});
+
+describe("setKeyframeValue", () => {
+  it("replaces the keyframe at the moment, or adds one in time order", () => {
+    const list = [
+      { time_fraction: 0, value: 1 },
+      { time_fraction: 1, value: 3 },
+    ];
+    expect(setKeyframeValue(list, 1, 9)).toEqual([
+      { time_fraction: 0, value: 1 },
+      { time_fraction: 1, value: 9 },
+    ]);
+    expect(setKeyframeValue(list, 0.5, 2)).toEqual([
+      { time_fraction: 0, value: 1 },
+      { time_fraction: 0.5, value: 2 },
+      { time_fraction: 1, value: 3 },
+    ]);
   });
 });

@@ -4,7 +4,8 @@ import styles from "./inspector.module.css";
 import { t } from "../../i18n";
 import { hasKeyframeAt, valueAt, withKeyframe, withoutKeyframe } from "../../keyframeAt";
 import { type ClipInstance, type ClipPatch } from "../../types";
-import { NumberField, Section, type SectionKeyframe } from "./controls";
+import { KeyframeDiamond, NumberField, Section, type SectionKeyframe } from "./controls";
+import { animatedRow } from "./keyframeRow";
 
 /** Position, scale and rotation as plain numbers. Position is the layer's top-left corner in
  *  pixels of the output canvas, stored as a fraction of it as the on-canvas handle moves it; an animated value (several keyframes)
@@ -62,6 +63,38 @@ export function TransformSection({
       });
     },
   };
+  const positionDiamond: SectionKeyframe = {
+    active: fraction !== null && hasKeyframeAt(clip.position_keyframes, fraction),
+    disabled: fraction === null,
+    onToggle: () => {
+      if (fraction === null) {
+        return;
+      }
+      const xs = clip.position_keyframes.map((keyframe) => {
+        return { time_fraction: keyframe.time_fraction, value: keyframe.value.x };
+      });
+      const ys = clip.position_keyframes.map((keyframe) => {
+        return { time_fraction: keyframe.time_fraction, value: keyframe.value.y };
+      });
+      const here = { x: valueAt(xs, fraction, position.x), y: valueAt(ys, fraction, position.y) };
+      void commit({
+        positionKeyframes: hasKeyframeAt(clip.position_keyframes, fraction)
+          ? withoutKeyframe(clip.position_keyframes, fraction)
+          : withKeyframe(clip.position_keyframes, fraction, here),
+      });
+    },
+  };
+  const rotationRow = animatedRow(
+    clip.rotation_keyframes,
+    fraction,
+    rotation,
+    (next) => {
+      return commit({ rotationKeyframes: next });
+    },
+    (value) => {
+      return commit({ rotationKeyframes: [{ time_fraction: 0, value }] });
+    },
+  );
   const setPosition = (x: number, y: number) => {
     // The monitor drag keeps a layer within one canvas of the frame; typed values get the same
     // bound so a stray digit cannot throw the layer out of reach.
@@ -106,6 +139,10 @@ export function TransformSection({
             setPosition(position.x, value / canvasH);
           }}
         />
+        <KeyframeDiamond
+          keyframe={positionDiamond}
+          label={t("position")}
+        />
       </div>
       <NumberField
         label={t("scale")}
@@ -123,6 +160,7 @@ export function TransformSection({
         step={1}
         suffix="°"
         disabled={rotationAnimated}
+        keyframe={rotationRow.diamond}
         onCommit={(value) => {
           void commit({ rotationKeyframes: [{ time_fraction: 0, value }] });
         }}

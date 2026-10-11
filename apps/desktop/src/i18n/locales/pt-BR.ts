@@ -256,6 +256,7 @@ export const ptBR = {
   "alignRight": "Direita",
   "alignStart": "Início",
   "alignEnd": "Fim",
+  "position": "Posição",
   "positionX": "Posição X",
   "positionY": "Posição Y",
   "wordHighlight": "Destacar palavra falada",

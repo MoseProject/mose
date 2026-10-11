@@ -256,6 +256,7 @@ export const en = {
   "alignRight": "Right",
   "alignStart": "Start",
   "alignEnd": "End",
+  "position": "Position",
   "positionX": "Position X",
   "positionY": "Position Y",
   "wordHighlight": "Highlight spoken word",

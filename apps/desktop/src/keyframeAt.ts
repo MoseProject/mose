@@ -78,3 +78,12 @@ export function toggleKeyframe<T>(
     ? withoutKeyframe(keyframes, fraction)
     : withKeyframe(keyframes, fraction, value);
 }
+
+/** The list with a keyframe carrying `value` at `fraction`, replacing the one already there. */
+export function setKeyframeValue<T>(
+  keyframes: Keyframe<T>[],
+  fraction: number,
+  value: T,
+): Keyframe<T>[] {
+  return withKeyframe(withoutKeyframe(keyframes, fraction), fraction, value);
+}

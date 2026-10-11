@@ -30,6 +30,14 @@ def _clip(clip_id, start, duration):
     return dict(
         id=clip_id, asset_id=1, start_secs=start, source_in_secs=0, source_out_secs=duration,
         speed_factor=1, gain_db=0, color_label=None, frozen=False, nested_sequence_id=None,
+        brightness=0, contrast=1, saturation=1, crop_x=0, crop_y=0, crop_w=1, crop_h=1,
+        mask_shape="None", mask_corner_radius=0, transition_in="None", transition_duration_secs=0.5,
+        fade_in_secs=0, fade_out_secs=0, blend_mode="Normal", layer_scale_x=1, layer_scale_y=1,
+        flipped_h=False, voice_cleanup_enabled=False, speed_ramp_end_factor=None,
+        **{name + "_keyframes": [] for name in (
+            "position", "scale", "rotation", "opacity", "gain", "brightness", "contrast",
+            "saturation", "crop_x", "crop_y", "crop_w", "crop_h",
+        )},
     )
 
 
