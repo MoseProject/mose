@@ -456,3 +456,35 @@ mod decode_limit {
         }
     }
 }
+
+mod covers_canvas {
+    use bush::{
+        Contributor, ContributorContent, ContributorId, MediaSource, Placement, SourceRange,
+        Version,
+    };
+    use std::path::PathBuf;
+
+    fn layer(placement: Placement) -> Contributor {
+        Contributor {
+            id: ContributorId(1),
+            layer: 0,
+            visible: true,
+            audible: false,
+            content: ContributorContent::Media(MediaSource {
+                path: PathBuf::from("a.mp4"),
+                range: SourceRange::new(0.0, 5.0).unwrap(),
+                version: Version(1),
+            }),
+            placement,
+        }
+    }
+
+    #[test]
+    fn a_plain_stretched_layer_covers_the_canvas() {
+        let p = Placement {
+            fit_canvas: true,
+            ..Placement::default()
+        };
+        assert!(layer(p).covers_canvas_at(1.0, 1280, 720));
+    }
+}

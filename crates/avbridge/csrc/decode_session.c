@@ -322,6 +322,16 @@ static DecodeStatus copy_rgba(AvbridgeDecodeSession *session, AVFrame *frame,
         if (!borrowed) av_free(pixels);
         return DECODE_ERR_PIPELINE;
     }
+    /* swscale leaves the alpha of the last few pixels of a row unwritten when the width is not a
+       multiple of 8 (a 854 pixel wide 480p proxy lost its right edge to transparency). Decoded
+       video has no alpha, so the tail is set to opaque. */
+    {
+        int tail = width < 16 ? width : 16;
+        for (int row = 0; row < height; row++) {
+            uint8_t *end = pixels + (size_t)row * (size_t)stride + (size_t)(width - tail) * 4;
+            for (int i = 0; i < tail; i++) end[i * 4 + 3] = 255;
+        }
+    }
     AVStream *stream = session->format->streams[session->stream_index];
     int64_t pts = frame->best_effort_timestamp;
     if (pts == AV_NOPTS_VALUE) pts = frame->pts;

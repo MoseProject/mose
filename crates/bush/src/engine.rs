@@ -13,9 +13,9 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use crate::{
-    ByteCache, ContributorContent, ContributorId, CpuRenderer, DecodePolicy, DecodeSource,
-    Generation, LatestIntent, LayerEffects, LayerFrame, Placement, Renderer, SceneSnapshot,
-    VideoFrame,
+    ByteCache, Contributor, ContributorContent, ContributorId, CpuRenderer, DecodePolicy,
+    DecodeSource, Generation, LatestIntent, LayerEffects, LayerFrame, Placement, Renderer,
+    SceneSnapshot, VideoFrame,
 };
 
 /// Fixed engine limits. Every field is validated by [`Engine::new`].
@@ -515,11 +515,23 @@ impl EngineThread {
 
     fn render(&mut self, request: &EngineRequest, cancel: &AtomicBool) -> RenderOutcome {
         let playhead = request.playhead_secs;
-        // Decode every needed source frame up front so independent sources run in parallel.
-        let needs: Vec<MediaNeed<'_>> = request
+        let active: Vec<&Contributor> = request
             .scene
             .visible_contributors()
             .filter(|contributor| contributor.is_active_at(playhead))
+            .collect();
+        // Layers an opaque, canvas-covering layer above hides are neither decoded nor composited:
+        // the cost of a frame follows what is visible, not how many tracks overlap.
+        let first = match self.first_visible(&active, playhead, cancel) {
+            Ok(Some(first)) => first,
+            Ok(None) => return RenderOutcome::Cancelled,
+            Err(message) => return RenderOutcome::Failed(message),
+        };
+        let active = &active[first..];
+        // Decode every needed source frame up front so independent sources run in parallel.
+        let needs: Vec<MediaNeed<'_>> = active
+            .iter()
+            .copied()
             .filter_map(|contributor| match &contributor.content {
                 ContributorContent::Media(source) => {
                     contributor.source_time_at(playhead).map(|time| MediaNeed {
@@ -541,10 +553,9 @@ impl EngineThread {
         };
         // Alpha mattes (background removal) in layer order. A missing or unreadable matte
         // degrades to the unmasked layer, like the exporter.
-        let alpha_needs: Vec<MediaNeed<'_>> = request
-            .scene
-            .visible_contributors()
-            .filter(|contributor| contributor.is_active_at(playhead))
+        let alpha_needs: Vec<MediaNeed<'_>> = active
+            .iter()
+            .copied()
             .filter_map(|contributor| {
                 let matte = contributor.placement.alpha_matte.as_ref()?;
                 contributor
@@ -563,10 +574,7 @@ impl EngineThread {
             Err(_) => Vec::new().into_iter(),
         };
         let mut layers: Vec<(Arc<VideoFrame>, Placement)> = Vec::new();
-        for contributor in request.scene.visible_contributors() {
-            if !contributor.is_active_at(playhead) {
-                continue;
-            }
+        for contributor in active.iter().copied() {
             let frame = match &contributor.content {
                 // An active media contributor always has a source time, so the plan built above
                 // holds exactly one fetched frame for it, in the same order.
@@ -729,6 +737,46 @@ impl EngineThread {
         self.deflickers.entry(id).or_insert_with(|| {
             crate::Deflicker::new(smoothing).expect("validated smoothing weight")
         })
+    }
+
+    /// Index of the lowest active layer that can still be seen: the topmost one that is
+    /// guaranteed to cover the whole canvas (see [`Contributor::covers_canvas_at`]) and whose
+    /// decoded frame really is opaque, or 0. Its frame is fetched here, into the cache, so the
+    /// regular fetch finds it. `Ok(None)` means cancelled.
+    fn first_visible(
+        &mut self,
+        active: &[&Contributor],
+        playhead: f64,
+        cancel: &AtomicBool,
+    ) -> Result<Option<usize>, String> {
+        let (width, height) = (self.config.canvas_width, self.config.canvas_height);
+        let Some(top) = active
+            .iter()
+            .rposition(|contributor| contributor.covers_canvas_at(playhead, width, height))
+        else {
+            return Ok(Some(0));
+        };
+        if top == 0 {
+            return Ok(Some(0));
+        }
+        let contributor = active[top];
+        let ContributorContent::Media(source) = &contributor.content else {
+            return Ok(Some(0));
+        };
+        let Some(time) = contributor.source_time_at(playhead) else {
+            return Ok(Some(0));
+        };
+        let need = MediaNeed {
+            path: &source.path,
+            version: source.version.0,
+            time,
+            limit: contributor.placement.decode_limit(width, height),
+        };
+        match self.fetch_media(std::slice::from_ref(&need), cancel)? {
+            Some(frames) if frames[0].is_opaque() => Ok(Some(top)),
+            Some(_) => Ok(Some(0)),
+            None => Ok(None),
+        }
     }
 
     /// Source frames for every need, in order: from the cache where possible, otherwise decoded
