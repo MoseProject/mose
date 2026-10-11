@@ -19,9 +19,12 @@ export function MenuBar({
   screen: string;
   selected: number[];
 }) {
+  // These menus act on the open sequence, so they belong to the editor screen. The Home screen
+  // keeps only what works without one.
+  const editing = session !== null && screen === "editor";
   return (
     <nav className={cx(styles, baseStyles, "menubar")}>
-      {session && (
+      {editing && (
         <Menu
           variant="bar"
           label={t("menuFile")}
@@ -32,7 +35,7 @@ export function MenuBar({
           <CommandItem id="export" />
         </Menu>
       )}
-      {session && (
+      {editing && (
         <Menu
           variant="bar"
           label={t("menuEdit")}
@@ -77,11 +80,11 @@ export function MenuBar({
         >
           {t("watchFolder")}
         </button>
-        <CommandItem id="toggleGuides" />
+        {editing && <CommandItem id="toggleGuides" />}
         <CommandItem id="shortcuts" />
         <CommandItem id="palette" />
       </Menu>
-      {session && (
+      {editing && (
         <Menu
           variant="bar"
           label={t("menuSequence")}
@@ -126,7 +129,7 @@ export function MenuBar({
           </button>
         </Menu>
       )}
-      {session && (
+      {editing && (
         <Menu
           variant="bar"
           label={t("menuClip")}
@@ -153,7 +156,7 @@ export function MenuBar({
           <CommandItem id="pasteFormat" />
         </Menu>
       )}
-      {session && (
+      {editing && (
         <Menu
           variant="bar"
           label={t("markers")}
@@ -167,7 +170,7 @@ export function MenuBar({
           <CommandItem id="deleteRange" />
         </Menu>
       )}
-      {session && (
+      {editing && (
         <Menu
           variant="bar"
           label={t("menuGraphics")}
