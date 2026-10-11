@@ -24,6 +24,7 @@ mod persistence_test;
 mod probe_test;
 mod project_test;
 mod proxy_test;
+mod recovery_test;
 mod release_check_test;
 mod render_overlay_passes_test;
 mod render_test;
