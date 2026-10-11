@@ -110,8 +110,12 @@
   padding: 0 16px;
   border-bottom: 1px solid var(--border-subtle);
   flex: none;
+  /* Four tabs do not fit the narrowest library: scroll them instead of cutting the last one. */
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 .panel-tabs > button[role="tab"] {
+  flex: none;
   text-transform: uppercase;
   background: transparent;
   border: 0;
@@ -131,11 +135,10 @@
   color: var(--accent);
   border-bottom-color: var(--accent);
 }
-.panel-tabs > .menu {
-  margin-left: auto;
+.media-head > .menu {
   align-self: center;
 }
-.panel-tabs > .menu .menu-trigger {
+.media-head > .menu .menu-trigger {
   background: var(--surface-2);
   border: 1px solid var(--border);
   width: 24px;
@@ -182,6 +185,12 @@
   padding: 4px 18px 10px;
   font-size: 12px;
   flex: none;
+  white-space: nowrap;
+}
+.media-head > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .media-head .count {
   margin-left: auto;
@@ -253,7 +262,7 @@
 
 /* ---- library import button, focusable cards ---- */
 .import-btn {
-  margin-left: auto;
+  margin-left: 8px;
   align-self: center;
   display: inline-flex;
   align-items: center;
@@ -261,11 +270,8 @@
   padding: 3px 10px;
   font-size: 12px;
 }
-.panel-tabs > .import-btn + .menu {
+.media-head > .menu {
   margin-left: 4px;
-}
-.panel-tabs > .menu:not(.import-btn + .menu) {
-  margin-left: auto;
 }
 .asset:focus-visible {
   outline: 2px solid var(--accent);
@@ -273,3 +279,46 @@
   border-radius: 5px;
 }
 
+/* ---- effects browser ---- */
+.effects-browser {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+.effects-hint {
+  margin: 0;
+  color: var(--text-muted);
+  padding: 8px 12px 0;
+}
+.effects-tree {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px 0;
+}
+.effects-folder > summary {
+  padding: 6px 12px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.effects-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 5px 12px 5px 28px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+.effects-item:hover:not(:disabled) {
+  background: var(--surface-hover, var(--surface));
+}
+
+/* The library is at its narrowest on small windows: the count and the import button matter more
+   than the heading. */
+@media (max-width: 1100px) {
+  .media-head > span:first-child {
+    display: none;
+  }
+}

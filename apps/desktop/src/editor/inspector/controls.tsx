@@ -1,10 +1,11 @@
 import { cx } from "../../cx";
 import baseStyles from "../../styles/base.module.css";
 import styles from "./inspector.module.css";
-import { type ReactNode } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { Icon } from "../chrome/Icon";
 import { useDraft } from "../../hooks/useDraft";
 import { t } from "../../i18n";
+import { rememberSection, sectionOverride } from "./memory";
 
 /** Collapsible property group, closed by default unless `defaultOpen` -- mirrors
  *  `crates/ui/src/components/property.rs`'s `property_section`. Uncontrolled (`<details
@@ -42,18 +43,36 @@ export function Section({
   keyframe?: SectionKeyframe;
   children: ReactNode;
 }) {
+  // What the user last chose for this section wins over the clip-derived default.
+  const memoryKey = testId ?? label;
+  const [initial] = useState(() => {
+    return sectionOverride(memoryKey) ?? defaultOpen;
+  });
+  const lastOpen = useRef(initial);
   return (
     <details
       className={cx(styles, baseStyles, "property-section")}
-      open={defaultOpen}
+      open={initial}
       data-testid={testId}
       data-group={group}
+      onToggle={(e) => {
+        const open = e.currentTarget.open;
+        // The event also fires once on mount, with the state it was rendered in.
+        if (open !== lastOpen.current) {
+          lastOpen.current = open;
+          rememberSection(memoryKey, open);
+        }
+      }}
     >
       <summary>
         <span>{label}</span>
         {keyframe && (
           <button
-            className={cx(styles, baseStyles, "icon section-keyframe" + (keyframe.active ? " active" : ""))}
+            className={cx(
+              styles,
+              baseStyles,
+              "icon section-keyframe" + (keyframe.active ? " active" : ""),
+            )}
             aria-label={t("keyframeToggle") + ": " + label}
             aria-pressed={keyframe.active}
             title={keyframe.disabled ? t("keyframeOutside") : t("keyframeToggle")}

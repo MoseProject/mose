@@ -128,6 +128,7 @@ function slide(label: string, value: number) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
   patchUi({ selectedClipIds: [7] });
 });
 afterEach(() => {
@@ -574,6 +575,11 @@ describe("section resets", () => {
     ["speed", { speedFactor: 1 }],
     ["colorAdjust", { brightness: 0, contrast: 1, saturation: 1 }],
     ["crop", { cropX: 0, cropY: 0, cropW: 1, cropH: 1 }],
+    ["mask", { maskShape: "None", maskCornerRadius: 0 }],
+    [
+      "transition",
+      { transitionIn: "None", transitionDurationSecs: 0.5, fadeInSecs: 0, fadeOutSecs: 0 },
+    ],
   ])("restores %s to its defaults without toggling the section", (key, patch) => {
     render(<Inspector session={sessionFor()} />);
     const label = t(key as never);
@@ -592,6 +598,10 @@ describe("inspector grouping and selection", () => {
       return screen.getByText(text).closest("[data-group]")!.getAttribute("data-group");
     };
     expect(group(t("voiceCleanup"))).toBe("audio");
+    expect(screen.getByTestId("section-mask").getAttribute("data-group")).toBe("inspector");
+    expect(
+      screen.getAllByText(t("transition"))[0].closest("[data-group]")!.getAttribute("data-group"),
+    ).toBe("effects");
     expect(group(t("freeze"))).toBe("inspector");
     expect(group(t("flip"))).toBe("inspector");
     expect(container.querySelector('[data-group="effects"]')).toBeTruthy();
@@ -672,5 +682,48 @@ describe("keyframe diamond", () => {
       contrastKeyframes: [{ time_fraction: 1, value: 1.2 }],
       saturationKeyframes: [{ time_fraction: 1, value: 1 }],
     });
+  });
+});
+
+describe("inspector memory", () => {
+  it("opens on the tab that was last used", () => {
+    const first = render(<Inspector session={sessionFor()} />);
+    fireEvent.click(screen.getByRole("tab", { name: t("inspectorAudio") }));
+    first.unmount();
+    const { container } = render(<Inspector session={sessionFor()} />);
+    expect(container.querySelector(".inspector-body")!.getAttribute("data-tab")).toBe("audio");
+  });
+
+  it("ignores a stored tab it does not know", () => {
+    localStorage.setItem("oca.inspector.tab", "nonsense");
+    const { container } = render(<Inspector session={sessionFor()} />);
+    expect(container.querySelector(".inspector-body")!.getAttribute("data-tab")).toBe("inspector");
+  });
+
+  it("keeps a section closed or open as the user left it, over the clip's own default", async () => {
+    const first = render(<Inspector session={sessionFor()} />);
+    const transform = screen.getByTestId("section-transform") as HTMLDetailsElement;
+    expect(transform.open).toBe(true);
+    transform.open = false;
+    fireEvent(transform, new Event("toggle"));
+    first.unmount();
+    render(<Inspector session={sessionFor()} />);
+    expect((screen.getByTestId("section-transform") as HTMLDetailsElement).open).toBe(false);
+  });
+
+  it("works when storage is unavailable", () => {
+    const get = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    const set = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    render(<Inspector session={sessionFor()} />);
+    fireEvent.click(screen.getByRole("tab", { name: t("inspectorEffects") }));
+    expect(
+      screen.getByRole("tab", { name: t("inspectorEffects") }).getAttribute("aria-selected"),
+    ).toBe("true");
+    get.mockRestore();
+    set.mockRestore();
   });
 });
