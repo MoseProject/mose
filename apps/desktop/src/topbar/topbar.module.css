@@ -20,7 +20,10 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  /* Takes the shrinking when the bar is too narrow: the names truncate before anything else. */
+  flex: 0 1 auto;
   min-width: 0;
+  overflow: hidden;
   padding: 0 18px;
   white-space: nowrap;
   font-size: 12px;
@@ -100,3 +103,41 @@
   color: var(--accent);
 }
 
+
+/* ---- narrow windows (the app's minimum is 960 px wide) ---- */
+@media (max-width: 1400px) {
+  /* The source's frame rate and size are the first things to go. */
+  .readout .muted {
+    display: none;
+  }
+}
+@media (max-width: 1100px) {
+  .crumbs {
+    padding: 0 8px;
+  }
+  .menubar {
+    margin-left: 0;
+  }
+  .menubar .menubar-item {
+    padding: 6px 6px;
+  }
+  .readout {
+    margin-right: 4px;
+  }
+  .readout .timecode {
+    padding: 6px 8px;
+  }
+  /* The export button keeps its icon and its tooltip. */
+  .topbar button.export .export-label {
+    display: none;
+  }
+  .topbar button.export {
+    padding: 7px 9px;
+  }
+}
+@media (max-width: 1040px) {
+  /* There is no room left for the names; the menus and the controls matter more. */
+  .crumbs {
+    display: none;
+  }
+}

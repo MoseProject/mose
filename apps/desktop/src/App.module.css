@@ -2,6 +2,9 @@
 .app {
   display: grid;
   grid-template-rows: 50px 1fr;
+  /* The one column is the window's width. Left as `auto` it grew to the widest content (the top
+     bar, 1380 px with media open), pushing the inspector and the Export button off screen. */
+  grid-template-columns: minmax(0, 1fr);
   height: 100%;
 }
 

@@ -93,8 +93,8 @@ export function ProjectActions({
         <Icon
           name="upload"
           size={14}
-        />{" "}
-        {t("export")}
+        />
+        <span className={cx(styles, baseStyles, "export-label")}> {t("export")}</span>
       </button>
     </>
   );

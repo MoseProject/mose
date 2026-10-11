@@ -2,9 +2,11 @@
 .editor {
   display: grid;
   grid-template-columns:
-    57px var(--library-width, 340px) 6px minmax(0, 1fr) 6px var(--inspector-width, 296px)
-    84px;
-  grid-template-rows: minmax(200px, 1fr) 6px var(--timeline-height, 300px);
+    57px min(var(--library-width, 340px), 28vw) 6px minmax(0, 1fr) 6px
+    min(var(--inspector-width, 296px), 26vw) 84px;
+  /* The timeline is as tall as the user set, but never so tall that the preview loses its
+     200 px or the page grows past the window (top bar 50 + status bar 24 + gap 6 = 80). */
+  grid-template-rows: minmax(200px, 1fr) 6px min(var(--timeline-height, 300px), calc(100vh - 380px));
   min-height: 0;
   background: var(--bg-workspace);
 }
