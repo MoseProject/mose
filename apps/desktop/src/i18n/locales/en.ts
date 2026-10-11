@@ -403,6 +403,7 @@ export const en = {
   confirmOverwriteTitle: "Replace the file?",
   confirmOverwriteAction: "Replace",
   confirmKeepBoth: "Save under another name",
+  encoderCopy: "lossless copy",
   encoderGpu: "GPU",
   encoderCpu: "CPU",
   encoderUnknown: "encoder unknown",

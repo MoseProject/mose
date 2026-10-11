@@ -828,3 +828,335 @@ fn an_export_reports_which_encoder_it_ran_on() {
         "unexpected encoder {name}"
     );
 }
+
+/// A silent video whose every frame is a flat grey of its own number (frame N has luma N mod
+/// 256), keyframe every 2 s, made by `encoder_args`. Lets a test see exactly which source frame
+/// an output frame came from.
+fn numbered_frames(ffmpeg: &Path, name: &str, seconds: u32, encoder_args: &[&str]) -> PathBuf {
+    let output = scratch(name);
+    let status = Command::new(ffmpeg)
+        .args(["-v", "error", "-y", "-f", "lavfi", "-i"])
+        .arg(format!(
+            "color=c=black:s=320x180:r=30:d={seconds},geq=lum='mod(N\\,256)':cb=128:cr=128"
+        ))
+        .args(["-pix_fmt", "yuv420p"])
+        .args(encoder_args)
+        .arg(&output)
+        .status()
+        .unwrap();
+    assert!(status.success(), "ffmpeg could not make the numbered clip");
+    output
+}
+
+/// The luma (0..255) of the middle of frame `frame` of `file`.
+fn luma(ffmpeg: &Path, file: &Path, frame: u32) -> u8 {
+    let output = Command::new(ffmpeg)
+        .args(["-v", "error", "-i"])
+        .arg(file)
+        .arg("-vf")
+        .arg(format!(
+            "select=eq(n\\,{frame}),crop=2:2:100:50,format=gray"
+        ))
+        .args(["-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "gray", "-"])
+        .output()
+        .unwrap();
+    assert!(
+        !output.stdout.is_empty(),
+        "no frame {frame} in {}",
+        file.display()
+    );
+    output.stdout[0]
+}
+
+fn frame_count(ffprobe_bin: &Path, file: &Path) -> u64 {
+    let report = ffprobe_counting(ffprobe_bin, file);
+    report["streams"][0]["nb_read_frames"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap()
+}
+
+fn ffprobe_counting(ffprobe_bin: &Path, file: &Path) -> Value {
+    let output = Command::new(ffprobe_bin)
+        .args(["-v", "error", "-count_frames", "-select_streams", "v:0"])
+        .args([
+            "-show_entries",
+            "stream=codec_name,nb_read_frames,width,height",
+        ])
+        .args(["-of", "json"])
+        .arg(file)
+        .output()
+        .unwrap();
+    serde_json::from_slice(&output.stdout).unwrap()
+}
+
+/// Cuts `source` between `in_secs` and `out_secs` without re-encoding the middle, and checks the
+/// result frame by frame against the source.
+fn check_lossless_cut(
+    ffmpeg: &Path,
+    ffprobe_bin: &Path,
+    source: &Path,
+    in_secs: f64,
+    out_secs: f64,
+) {
+    static CUTS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let number = CUTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let output = scratch(&format!("lossless_cut_{number}.mp4"));
+    let canvas = avbridge::Canvas {
+        width: 320,
+        height: 180,
+        fps_num: 30,
+        fps_den: 1,
+        bit_rate_bps: 4_000_000,
+    };
+    let outcome = avbridge::smart_cut_video(
+        source,
+        in_secs,
+        out_secs,
+        canvas,
+        &output,
+        &AtomicBool::new(false),
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, avbridge::SmartCutOutcome::Done);
+
+    // It decodes without a single error, parameter-set switches included.
+    let decode = Command::new(ffmpeg)
+        .args(["-v", "error", "-xerror", "-i"])
+        .arg(&output)
+        .args(["-f", "null", "-"])
+        .output()
+        .unwrap();
+    assert!(
+        decode.status.success() && decode.stderr.is_empty(),
+        "decode: {}",
+        String::from_utf8_lossy(&decode.stderr)
+    );
+
+    let first = (in_secs * 30.0).ceil() as u32;
+    let last = (out_secs * 30.0).ceil() as u32; // exclusive
+    let expected = u64::from(last - first);
+    assert_eq!(frame_count(ffprobe_bin, &output), expected, "frame count");
+    assert_eq!(
+        ffprobe_counting(ffprobe_bin, &output)["streams"][0]["codec_name"],
+        "h264"
+    );
+
+    // Every frame is the source frame it should be: exact where it was copied, close where it
+    // was encoded again at the ends.
+    let step = 7.max(expected as u32 / 40);
+    let mut checked = 0;
+    let mut frame = 0;
+    while u64::from(frame) < expected {
+        let want = luma(ffmpeg, source, first + frame);
+        let got = luma(ffmpeg, &output, frame);
+        assert!(
+            (i32::from(want) - i32::from(got)).abs() <= 8,
+            "output frame {frame} is source frame {} (luma {want}) but has luma {got}",
+            first + frame
+        );
+        frame += step;
+        checked += 1;
+    }
+    for frame in [0, 1, (expected - 2) as u32, (expected - 1) as u32] {
+        let want = luma(ffmpeg, source, first + frame);
+        let got = luma(ffmpeg, &output, frame);
+        assert!(
+            (i32::from(want) - i32::from(got)).abs() <= 8,
+            "edge frame {frame}: want luma {want}, got {got}"
+        );
+    }
+    assert!(checked > 10);
+}
+
+#[test]
+fn a_lossless_cut_is_frame_accurate_on_a_stream_without_b_frames() {
+    let Some((ffmpeg, ffprobe_bin)) = oracles() else {
+        return;
+    };
+    let source = numbered_frames(
+        &ffmpeg,
+        "numbered_plain.mp4",
+        12,
+        &["-c:v", "libopenh264", "-b:v", "4M", "-g", "60"],
+    );
+    // Neither end on a keyframe (every 60 frames): both ends are encoded again.
+    check_lossless_cut(&ffmpeg, &ffprobe_bin, &source, 3.5, 9.4);
+}
+
+/// An `ffmpeg` with libx264, for sources with B-frames (the pinned LGPL build has none): set
+/// `OCA_X264_FFMPEG` to one to run the tests that need it.
+fn x264_ffmpeg() -> Option<PathBuf> {
+    let path = PathBuf::from(std::env::var_os("OCA_X264_FFMPEG")?);
+    path.exists().then_some(path)
+}
+
+#[test]
+fn a_lossless_cut_is_frame_accurate_on_a_stream_with_b_frames() {
+    let (Some((ffmpeg, ffprobe_bin)), Some(x264)) = (oracles(), x264_ffmpeg()) else {
+        return;
+    };
+    let source = numbered_frames(
+        &x264,
+        "numbered_bframes.mp4",
+        12,
+        &[
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-b:v",
+            "4M",
+            "-bf",
+            "3",
+            "-g",
+            "60",
+            "-keyint_min",
+            "60",
+            "-sc_threshold",
+            "0",
+            "-x264-params",
+            "open-gop=0",
+        ],
+    );
+    check_lossless_cut(&ffmpeg, &ffprobe_bin, &source, 3.5, 9.4);
+    // Cut points exactly on keyframes: nothing to encode again at either end.
+    check_lossless_cut(&ffmpeg, &ffprobe_bin, &source, 4.0, 8.0);
+    // Starts on a keyframe, ends inside a GOP.
+    check_lossless_cut(&ffmpeg, &ffprobe_bin, &source, 2.0, 7.3);
+}
+
+#[test]
+fn a_cut_without_a_whole_gop_between_its_points_is_left_to_the_normal_export() {
+    let Some((ffmpeg, _)) = oracles() else {
+        return;
+    };
+    let source = numbered_frames(
+        &ffmpeg,
+        "numbered_short.mp4",
+        12,
+        &["-c:v", "libopenh264", "-b:v", "4M", "-g", "60"],
+    );
+    let output = scratch("lossless_short.mp4");
+    let canvas = avbridge::Canvas {
+        width: 320,
+        height: 180,
+        fps_num: 30,
+        fps_den: 1,
+        bit_rate_bps: 4_000_000,
+    };
+    // 4.2 s to 5.4 s lies inside one GOP (4 s to 6 s).
+    let outcome = avbridge::smart_cut_video(
+        &source,
+        4.2,
+        5.4,
+        canvas,
+        &output,
+        &AtomicBool::new(false),
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, avbridge::SmartCutOutcome::NotApplicable);
+    assert!(!output.exists(), "nothing should have been written");
+    // Another size is not a match either.
+    let wrong = avbridge::Canvas {
+        width: 640,
+        ..canvas
+    };
+    let outcome = avbridge::smart_cut_video(
+        &source,
+        1.0,
+        9.0,
+        wrong,
+        &output,
+        &AtomicBool::new(false),
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, avbridge::SmartCutOutcome::NotApplicable);
+}
+
+#[test]
+fn a_single_cut_export_copies_the_picture_and_normalises_the_sound() {
+    let Some((ffmpeg, ffprobe_bin)) = oracles() else {
+        return;
+    };
+    // Numbered frames with a tone, keyframe every 2 s.
+    let source = scratch("numbered_sound.mp4");
+    let status = Command::new(&ffmpeg)
+        .args(["-v", "error", "-y", "-f", "lavfi", "-i"])
+        .arg("color=c=black:s=320x180:r=30:d=12,geq=lum='mod(N\\,256)':cb=128:cr=128")
+        .args([
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:sample_rate=48000:d=12",
+        ])
+        .args(["-af", "volume=0.05", "-pix_fmt", "yuv420p"])
+        .args([
+            "-c:v",
+            "libopenh264",
+            "-b:v",
+            "4M",
+            "-g",
+            "60",
+            "-c:a",
+            "aac",
+            "-shortest",
+        ])
+        .arg(&source)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let output = scratch("single_cut_out.mp4");
+    let track = Track {
+        id: 1,
+        name: "V1".to_string(),
+        kind: TrackKind::Video,
+        clips: vec![clip(1, 1, 0.0, 3.5, 9.4)],
+        text_clips: vec![],
+        shape_clips: vec![],
+        visible: true,
+        audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
+        locked: false,
+        color_label: None,
+    };
+    let outcome = render_timeline_export(
+        &sequence_with(vec![track]),
+        &[media(&source, 1)],
+        &output,
+        -14.0,
+        avcore::GpuEncoderPreference::Cpu,
+        &AtomicBool::new(false),
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, RenderOutcome::Completed);
+    assert_eq!(
+        avcore::last_video_encoder().as_deref(),
+        Some("copy"),
+        "it was not a copy"
+    );
+
+    let report = ffprobe(&ffprobe_bin, &output);
+    assert_eq!(stream(&report, "video")["codec_name"], "h264");
+    assert_eq!(stream(&report, "audio")["codec_name"], "aac");
+    let length = number(&report["format"]["duration"]);
+    assert!((length - 5.9).abs() < 0.15, "length {length}");
+    // Frame accurate against the source (the first is 3.5 s = frame 105).
+    for frame in [0u32, 20, 90, 150, 176] {
+        let want = luma(&ffmpeg, &source, 105 + frame);
+        let got = luma(&ffmpeg, &output, frame);
+        assert!(
+            (i32::from(want) - i32::from(got)).abs() <= 8,
+            "frame {frame}: {want} vs {got}"
+        );
+    }
+    let (lufs, peak) = ebur128(&ffmpeg, &output);
+    assert!((lufs + 14.0).abs() <= 1.0, "loudness {lufs}");
+    assert!(peak <= -0.9, "peak {peak}");
+}

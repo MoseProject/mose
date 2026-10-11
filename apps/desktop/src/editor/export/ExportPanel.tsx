@@ -109,9 +109,11 @@ export function exportSummary(job: ExportJobView): string | null {
       })
     : false;
   const parts = [
-    report.encoder
-      ? `${report.encoder} (${hardware ? t("encoderGpu") : t("encoderCpu")})`
-      : t("encoderUnknown"),
+    report.encoder === "copy"
+      ? t("encoderCopy")
+      : report.encoder
+        ? `${report.encoder} (${hardware ? t("encoderGpu") : t("encoderCpu")})`
+        : t("encoderUnknown"),
     formatTime(report.tookSecs),
   ];
   if (report.tookSecs > 0 && report.videoSecs > 0) {

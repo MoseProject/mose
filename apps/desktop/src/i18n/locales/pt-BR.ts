@@ -406,6 +406,7 @@ export const ptBR = {
   confirmOverwriteTitle: "Substituir o arquivo?",
   confirmOverwriteAction: "Substituir",
   confirmKeepBoth: "Salvar com outro nome",
+  encoderCopy: "cópia sem reencode",
   encoderGpu: "GPU",
   encoderCpu: "CPU",
   encoderUnknown: "encoder desconhecido",

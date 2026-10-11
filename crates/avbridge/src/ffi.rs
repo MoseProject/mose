@@ -204,6 +204,20 @@ unsafe extern "C" {
         segment_count: c_int,
     ) -> *mut c_char;
     pub(crate) fn avbridge_free_string(s: *mut c_char);
+    pub(crate) fn avbridge_smart_cut_video(
+        in_path: *const c_char,
+        in_secs: f64,
+        out_secs: f64,
+        canvas_width: c_int,
+        canvas_height: c_int,
+        canvas_fps_num: c_int,
+        canvas_fps_den: c_int,
+        canvas_bit_rate_bps: c_longlong,
+        out_path: *const c_char,
+        progress_cb: Option<unsafe extern "C" fn(user_data: *mut c_void, seconds: f64)>,
+        progress_user_data: *mut c_void,
+        cancel: *const u8,
+    ) -> c_int;
     pub(crate) fn avbridge_last_video_encoder() -> *const c_char;
     pub(crate) fn avbridge_encode_timeline_export_with_post(
         segments: *const RawClipSegment,

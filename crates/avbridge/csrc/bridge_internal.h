@@ -144,6 +144,10 @@ AVCodecContext *open_overlay_pass_encoder(int width, int height, AVRational fps,
 /* Returns the preferred available software H.264 encoder: libopenh264 when present, otherwise
    libx264. Returns NULL when the FFmpeg build provides neither. Defined in gpu_encoder.c. */
 const AVCodec *find_cpu_h264_encoder(void);
+/* Records the name avbridge_last_video_encoder reports (gpu_encoder.c). */
+void record_video_encoder_name(const char *name);
+/* While on, the calling thread's software H.264 encoders open as High profile with CABAC. */
+void request_high_profile_encoders(int on);
 
 /* Opens `path` and reads its stream info into a new AVFormatContext.
    Returns 0 on success (caller owns *fmt_ctx_out and must close it),
