@@ -32,9 +32,29 @@ EncodeStatus avbridge_encode_timeline_export(const ClipSegment *segments, int se
                                              float target_lufs, int gpu_encoder_preference,
                                              ProgressCallback progress_cb, void *progress_user_data,
                                              const uint8_t *cancel) {
+    return avbridge_encode_timeline_export_with_post(
+        segments, segment_count, canvas_width, canvas_height, canvas_fps_num, canvas_fps_den,
+        canvas_bit_rate_bps, out_path, target_lufs, gpu_encoder_preference, progress_cb,
+        progress_user_data, cancel, NULL, 0);
+}
+
+/* At most this many graphs run over the finished frames (text, then shapes). */
+#define MAX_POST_FILTERS 4
+
+EncodeStatus avbridge_encode_timeline_export_with_post(
+    const ClipSegment *segments, int segment_count, int canvas_width, int canvas_height,
+    int canvas_fps_num, int canvas_fps_den, int64_t canvas_bit_rate_bps, const char *out_path,
+    float target_lufs, int gpu_encoder_preference, ProgressCallback progress_cb,
+    void *progress_user_data, const uint8_t *cancel, const char *const *post_filters,
+    int post_filter_count) {
     if (segment_count <= 0) {
         return ENCODE_ERR_EMPTY_TIMELINE;
     }
+    if (post_filter_count < 0 || post_filter_count > MAX_POST_FILTERS) {
+        return ENCODE_ERR_FILTER_GRAPH;
+    }
+    VideoFilterChain post_chains[MAX_POST_FILTERS] = {{0}};
+    int post_built = 0;
 
     AVFormatContext *out_ctx = NULL;
     AVCodecContext *venc_ctx = NULL;
@@ -87,6 +107,19 @@ EncodeStatus avbridge_encode_timeline_export(const ClipSegment *segments, int se
         if (name) {
             venc_pix_fmt_name = name;
         }
+    }
+
+    /* Graphs that run over the finished frames, in order, before the encoder: they take the
+       place of the second decode, filter and encode of the whole file that overlays used to
+       need. Their `t` is the timeline's, one tick per canvas frame. */
+    for (int i = 0; i < post_filter_count; i++) {
+        if (init_post_filter_chain(canvas_width, canvas_height, venc_pix_fmt, av_inv_q(canvas_fps),
+                                   post_filters[i], &post_chains[i]) < 0) {
+            status = ENCODE_ERR_FILTER_GRAPH;
+            goto cleanup;
+        }
+        post_built = i + 1;
+        if (i > 0) post_chains[i - 1].post = &post_chains[i];
     }
 
     pkt = av_packet_alloc();
@@ -222,6 +255,7 @@ EncodeStatus avbridge_encode_timeline_export(const ClipSegment *segments, int se
                 status = ENCODE_ERR_FILTER_GRAPH;
                 goto segment_cleanup;
             }
+            vchain.post = post_built > 0 ? &post_chains[0] : NULL;
         }
 
         /* Seek to source_in_secs (container-wide — av_seek_frame with stream_index=-1 seeks
@@ -437,6 +471,11 @@ EncodeStatus avbridge_encode_timeline_export(const ClipSegment *segments, int se
             status = ENCODE_ERR_PIPELINE;
         }
     }
+    if (status == ENCODE_OK && post_built > 0 &&
+        flush_post_filter_chains(&post_chains[0], out_ctx, venc_ctx, video_out_stream, enc_pkt) <
+            0) {
+        status = ENCODE_ERR_PIPELINE;
+    }
     if (status == ENCODE_OK &&
         encode_write_packet(out_ctx, venc_ctx, video_out_stream, NULL, enc_pkt) < 0) {
         status = ENCODE_ERR_PIPELINE;
@@ -447,6 +486,9 @@ EncodeStatus avbridge_encode_timeline_export(const ClipSegment *segments, int se
     }
 
 cleanup:
+    for (int i = 0; i < post_built; i++) {
+        free_post_filter_chain(&post_chains[i]);
+    }
     audio_worker_finish(&audio_worker, 0);
     av_packet_free(&pkt);
     av_packet_free(&enc_pkt);

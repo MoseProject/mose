@@ -320,8 +320,115 @@ int filter_encode_write_video_frame(AVFormatContext *out_ctx, VideoFilterChain *
             return ret;
         }
         filt_frame->pts = (*next_pts)++;
-        ret = encode_write_packet(out_ctx, enc_ctx, out_stream, filt_frame, enc_pkt);
+        ret = encode_video_frame_through(chain->post, out_ctx, enc_ctx, out_stream, filt_frame,
+                                         enc_pkt);
         av_frame_unref(filt_frame);
         if (ret < 0) return ret;
     }
+}
+
+void free_post_filter_chain(VideoFilterChain *chain) {
+    avfilter_graph_free(&chain->graph);
+    av_frame_free(&chain->scratch);
+    chain->buffersrc_ctx = NULL;
+    chain->buffersink_ctx = NULL;
+}
+
+int init_post_filter_chain(int width, int height, enum AVPixelFormat pix_fmt, AVRational time_base,
+                           const char *filter_descr, VideoFilterChain *chain) {
+    char args[256];
+    const AVFilter *buffersrc = avfilter_get_by_name("buffer");
+    const AVFilter *buffersink = avfilter_get_by_name("buffersink");
+    AVFilterInOut *outputs = avfilter_inout_alloc();
+    AVFilterInOut *inputs = avfilter_inout_alloc();
+    int ret;
+
+    chain->buffersrc_ctx = NULL;
+    chain->buffersink_ctx = NULL;
+    chain->post = NULL;
+    chain->graph = avfilter_graph_alloc();
+    chain->scratch = av_frame_alloc();
+    if (!outputs || !inputs || !chain->graph || !chain->scratch || !buffersrc || !buffersink) {
+        ret = AVERROR(ENOMEM);
+        goto end;
+    }
+    snprintf(args, sizeof(args), "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=1/1",
+             width, height, (int)pix_fmt, time_base.num, time_base.den);
+    ret = avfilter_graph_create_filter(&chain->buffersrc_ctx, buffersrc, "in", args, NULL,
+                                       chain->graph);
+    if (ret < 0) goto end;
+
+    /* The sink is held to the encoder's own format (pixel_formats is a pre-init-only option, so
+       the sink is allocated and initialised in two steps): an overlay left to negotiate freely
+       can hand a packed or RGBA frame to an encoder that wants planar YUV. */
+    chain->buffersink_ctx = avfilter_graph_alloc_filter(chain->graph, buffersink, "out");
+    if (!chain->buffersink_ctx) {
+        ret = AVERROR(ENOMEM);
+        goto end;
+    }
+    ret = av_opt_set_array(chain->buffersink_ctx, "pixel_formats", AV_OPT_SEARCH_CHILDREN, 0, 1,
+                           AV_OPT_TYPE_PIXEL_FMT, &pix_fmt);
+    if (ret < 0) goto end;
+    ret = avfilter_init_str(chain->buffersink_ctx, NULL);
+    if (ret < 0) goto end;
+
+    outputs->name = av_strdup("in");
+    outputs->filter_ctx = chain->buffersrc_ctx;
+    outputs->pad_idx = 0;
+    outputs->next = NULL;
+    inputs->name = av_strdup("out");
+    inputs->filter_ctx = chain->buffersink_ctx;
+    inputs->pad_idx = 0;
+    inputs->next = NULL;
+
+    ret = avfilter_graph_parse_ptr(chain->graph, filter_descr, &inputs, &outputs, NULL);
+    if (ret < 0) goto end;
+    ret = avfilter_graph_config(chain->graph, NULL);
+
+end:
+    avfilter_inout_free(&inputs);
+    avfilter_inout_free(&outputs);
+    if (ret < 0) {
+        free_post_filter_chain(chain);
+    }
+    return ret;
+}
+
+int encode_video_frame_through(VideoFilterChain *post, AVFormatContext *out_ctx,
+                               AVCodecContext *enc_ctx, AVStream *out_stream, AVFrame *frame,
+                               AVPacket *enc_pkt) {
+    if (!post) {
+        return encode_write_packet(out_ctx, enc_ctx, out_stream, frame, enc_pkt);
+    }
+    int ret = av_buffersrc_add_frame_flags(post->buffersrc_ctx, frame, 0);
+    if (ret < 0) return ret;
+    while (1) {
+        ret = av_buffersink_get_frame(post->buffersink_ctx, post->scratch);
+        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) return 0;
+        if (ret < 0) return ret;
+        post->scratch->pict_type = AV_PICTURE_TYPE_NONE;
+        ret = encode_video_frame_through(post->post, out_ctx, enc_ctx, out_stream, post->scratch,
+                                         enc_pkt);
+        av_frame_unref(post->scratch);
+        if (ret < 0) return ret;
+    }
+}
+
+int flush_post_filter_chains(VideoFilterChain *post, AVFormatContext *out_ctx,
+                             AVCodecContext *enc_ctx, AVStream *out_stream, AVPacket *enc_pkt) {
+    for (; post; post = post->post) {
+        int ret = av_buffersrc_add_frame_flags(post->buffersrc_ctx, NULL, 0);
+        if (ret < 0) return ret;
+        while (1) {
+            ret = av_buffersink_get_frame(post->buffersink_ctx, post->scratch);
+            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) break;
+            if (ret < 0) return ret;
+            post->scratch->pict_type = AV_PICTURE_TYPE_NONE;
+            ret = encode_video_frame_through(post->post, out_ctx, enc_ctx, out_stream,
+                                             post->scratch, enc_pkt);
+            av_frame_unref(post->scratch);
+            if (ret < 0) return ret;
+        }
+    }
+    return 0;
 }

@@ -228,16 +228,33 @@ ReencodeStatus avbridge_reencode_with_filter(const char *in_path, const char *ou
                                              int canvas_height, int canvas_fps_num,
                                              int canvas_fps_den, int bound_output_to_input_frames);
 
-typedef struct {
+typedef struct VideoFilterChain {
     AVFilterContext *buffersrc_ctx;
     AVFilterContext *buffersink_ctx;
     AVFilterGraph *graph;
+    /* A graph that runs over the whole export after this one (the text and shape overlays),
+       or NULL. Owned by the export, not by this chain: it outlives every segment's chain. */
+    struct VideoFilterChain *post;
+    AVFrame *scratch; /* only set on a post chain: where its output frames land */
 } VideoFilterChain;
 
 /* All defined in filters.c. */
 void free_video_filter_chain(VideoFilterChain *chain);
 int init_video_filter_chain(AVCodecContext *dec_ctx, const char *filter_descr,
                             VideoFilterChain *chain);
+/* Builds `chain` as a graph that runs over the finished frames of an export: the given size and
+   pixel format in, `time_base` for `t` (one frame per tick), the same pixel format out. Returns
+   a negative value when the description does not build. */
+int init_post_filter_chain(int width, int height, enum AVPixelFormat pix_fmt, AVRational time_base,
+                           const char *filter_descr, VideoFilterChain *chain);
+void free_post_filter_chain(VideoFilterChain *chain);
+/* Encodes `frame`, or first runs it through the `post` chains when there are any. */
+int encode_video_frame_through(VideoFilterChain *post, AVFormatContext *out_ctx,
+                               AVCodecContext *enc_ctx, AVStream *out_stream, AVFrame *frame,
+                               AVPacket *enc_pkt);
+/* Tells the `post` chains their input has ended and encodes what they still hold. */
+int flush_post_filter_chains(VideoFilterChain *post, AVFormatContext *out_ctx,
+                             AVCodecContext *enc_ctx, AVStream *out_stream, AVPacket *enc_pkt);
 int filter_encode_write_video_frame(AVFormatContext *out_ctx, VideoFilterChain *chain,
                                     AVCodecContext *enc_ctx, AVStream *out_stream, AVFrame *frame,
                                     AVFrame *filt_frame, int64_t *next_pts, AVPacket *enc_pkt);
