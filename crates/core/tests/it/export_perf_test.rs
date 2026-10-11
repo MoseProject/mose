@@ -1,5 +1,5 @@
 //! How long an export takes. Ignored by default: it needs a real clip and prints timings instead of
-//! asserting them. Run with
+//! asserting them. Make the clip with `scripts/make-bench-video.sh`, then run with
 //! `OCA_BENCH_VIDEO=/path/clip.mp4 cargo test --release -p core --test it export_perf -- --ignored --nocapture --test-threads=1`
 //! (the clip should have audio; `OCA_BENCH_ENCODER` picks cpu, auto, nvenc, ...;
 //! `OCA_BENCH_ONLY` keeps the cases whose name contains it; `OCA_BENCH_KEEP` leaves the last
@@ -221,6 +221,40 @@ fn export_perf() {
                     value: 1.5,
                 },
             ]
+        }),
+    );
+    time_export(
+        "zoom out keyframes",
+        &asset,
+        one(&|c| {
+            c.scale_keyframes = vec![
+                Keyframe {
+                    time_fraction: 0.0,
+                    value: 1.0,
+                },
+                Keyframe {
+                    time_fraction: 1.0,
+                    value: 0.7,
+                },
+            ]
+        }),
+    );
+    time_export(
+        "crop keyframes",
+        &asset,
+        one(&|c| {
+            let zoom = vec![
+                Keyframe {
+                    time_fraction: 0.0,
+                    value: 1.0,
+                },
+                Keyframe {
+                    time_fraction: 1.0,
+                    value: 0.6,
+                },
+            ];
+            c.crop_w_keyframes = zoom.clone();
+            c.crop_h_keyframes = zoom;
         }),
     );
     time_export(

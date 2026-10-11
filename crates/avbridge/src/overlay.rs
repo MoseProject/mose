@@ -19,8 +19,8 @@ use std::path::{Path, PathBuf};
 
 use crate::ffi::{
     avbridge_apply_privacy_blur, avbridge_apply_shape_overlays, avbridge_apply_text_overlays,
-    avbridge_free_string, avbridge_shape_overlay_filter, avbridge_text_overlay_filter,
-    RawShapeSegment, RawTextSegment,
+    avbridge_free_string, avbridge_privacy_blur_filter, avbridge_shape_overlay_filter,
+    avbridge_text_overlay_filter, RawShapeSegment, RawTextSegment,
 };
 
 /// One pre-rasterized text overlay to composite over an exported video. The core crate writes
@@ -427,6 +427,28 @@ pub fn text_overlay_filter(
     let raw = RawTextSegments::new(segments)?;
     // SAFETY: `raw` and the strings it points into outlive the call; the C side only reads them.
     let ptr = unsafe { avbridge_text_overlay_filter(raw.raw.as_ptr(), raw.raw.len() as c_int) };
+    Ok(take_c_string(ptr))
+}
+
+/// The graph that blurs the area `matte_path` (a matte video at the canvas's size and frame rate,
+/// as long as the export) marks, for [`crate::encode_timeline_export_with_post`]. `None` when the
+/// path or sigma cannot be used.
+pub fn privacy_blur_filter(
+    matte_path: &Path,
+    blur_sigma: f64,
+    canvas: crate::timeline_export::Canvas,
+) -> Result<Option<String>, TextOverlayError> {
+    let c_path = CString::new(matte_path.to_string_lossy().as_bytes())
+        .map_err(TextOverlayError::InvalidPath)?;
+    // SAFETY: the path is a valid C string held for the call.
+    let ptr = unsafe {
+        avbridge_privacy_blur_filter(
+            c_path.as_ptr(),
+            blur_sigma,
+            canvas.width as c_int,
+            canvas.height as c_int,
+        )
+    };
     Ok(take_c_string(ptr))
 }
 

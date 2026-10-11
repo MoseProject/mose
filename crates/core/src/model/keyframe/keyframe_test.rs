@@ -303,13 +303,25 @@ fn a_zoom_in_ramp_uses_zoompan_where_the_graph_allows_it() {
 }
 
 #[test]
+fn a_zoom_out_ramp_pads_the_picture_and_zooms_into_it() {
+    let expr = scale_filter_expr(&zoom(1.0, 0.5), 30, 1, 5.0, true).unwrap();
+    assert!(expr.starts_with("pad=w='trunc(iw/0.50000/2)*2'"));
+    assert!(expr.contains(",zoompan=z='("));
+    assert!(expr.contains(")/0.50000'"));
+    assert!(!expr.contains("geq"));
+    // Zooming in and out in one ramp pads for the smallest value.
+    let both = scale_filter_expr(&zoom(0.8, 1.5), 30, 1, 5.0, true).unwrap();
+    assert!(both.starts_with("pad=w='trunc(iw/0.80000/2)*2'"));
+}
+
+#[test]
 fn a_zoom_ramp_keeps_the_geq_where_zoompan_would_break_or_cannot_go() {
     // Not allowed here (an overlay graph pairs layers by timestamp).
     assert!(scale_filter_expr(&zoom(1.0, 1.5), 30, 1, 5.0, false)
         .unwrap()
         .starts_with("geq="));
-    // A zoom out is outside zoompan's range, and so is a zoom past 10.
-    assert!(scale_filter_expr(&zoom(1.0, 0.5), 30, 1, 5.0, true)
+    // A zoom out too deep to pad for, and a zoom past 10, are outside zoompan's range.
+    assert!(scale_filter_expr(&zoom(1.0, 0.2), 30, 1, 5.0, true)
         .unwrap()
         .starts_with("geq="));
     assert!(scale_filter_expr(&zoom(1.0, 12.0), 30, 1, 5.0, true)
@@ -511,14 +523,14 @@ fn animated_luma_keeps_a_constant_saturation_in_the_lookup_table_and_animates_it
 #[test]
 fn crop_filter_expr_is_none_for_a_fully_uncropped_unanimated_frame() {
     assert_eq!(
-        crop_filter_expr(&[], &[], &[], &[], 0.0, 0.0, 1.0, 1.0, 30, 1, 5.0),
+        crop_filter_expr(&[], &[], &[], &[], 0.0, 0.0, 1.0, 1.0, 30, 1, 5.0, false),
         None
     );
 }
 
 #[test]
 fn crop_filter_expr_builds_a_geq_expression_for_a_static_crop_with_no_keyframes() {
-    let expr = crop_filter_expr(&[], &[], &[], &[], 0.1, 0.2, 0.5, 0.6, 30, 1, 5.0).unwrap();
+    let expr = crop_filter_expr(&[], &[], &[], &[], 0.1, 0.2, 0.5, 0.6, 30, 1, 5.0, false).unwrap();
     assert!(expr.starts_with("geq="));
     assert!(!expr.contains("if(lt(N,")); // no animation, just plain constants
 }
@@ -547,10 +559,63 @@ fn crop_filter_expr_animates_only_the_keyframed_axis() {
         30,
         1,
         5.0,
+        false,
     )
     .unwrap();
     assert!(expr.contains("if(lt(N,"));
     assert!(expr.contains("if(between(N,"));
+}
+
+#[test]
+fn a_crop_window_that_keeps_the_frames_shape_is_a_zoompan() {
+    let pan = vec![
+        Keyframe {
+            time_fraction: 0.0,
+            value: 0.0,
+        },
+        Keyframe {
+            time_fraction: 1.0,
+            value: 0.5,
+        },
+    ];
+    let expr = crop_filter_expr(&pan, &[], &[], &[], 0.0, 0.0, 0.5, 0.5, 30, 1, 5.0, true).unwrap();
+    assert!(expr.starts_with("zoompan=z='1/(0.5000000)':x='("));
+    assert!(expr.contains("if(between(on,"));
+    assert!(expr.contains(&format!("s={CANVAS_SIZE_TOKEN}")));
+    assert!(!expr.contains("geq"));
+    // A window of another shape, one past the frame, or a graph that forbids it keep the geq.
+    for (w, h, x, allowed) in [
+        (0.5, 0.6, 0.0, true),
+        (0.5, 0.5, 1.5, true),
+        (0.5, 0.5, 0.0, false),
+    ] {
+        let x_frames = vec![
+            Keyframe {
+                time_fraction: 0.0,
+                value: 0.0,
+            },
+            Keyframe {
+                time_fraction: 1.0,
+                value: x,
+            },
+        ];
+        let expr = crop_filter_expr(
+            &x_frames,
+            &[],
+            &[],
+            &[],
+            0.0,
+            0.0,
+            w,
+            h,
+            30,
+            1,
+            5.0,
+            allowed,
+        )
+        .unwrap();
+        assert!(expr.starts_with("geq="), "{w} {h} {x} {allowed}: {expr}");
+    }
 }
 
 #[test]

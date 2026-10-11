@@ -304,6 +304,10 @@ pub const CANVAS_SIZE_TOKEN: &str = "@CANVAS@";
 /// The largest zoom `zoompan` accepts.
 const ZOOMPAN_MAX_ZOOM: f32 = 10.0;
 
+/// The smallest zoom out done by padding and `zoompan`: below it the padded picture would be
+/// too large to be worth it, and the per-pixel `geq` is used instead.
+const ZOOMPAN_MIN_ZOOM_OUT: f32 = 0.25;
+
 const KENBURNS_MIN_SCALE: f32 = 0.1;
 const KENBURNS_MAX_SCALE: f32 = 20.0;
 
@@ -346,19 +350,32 @@ pub fn scale_filter_expr(
     let total_frames = (timeline_duration_secs * fps_num as f64 / fps_den.max(1) as f64).max(1.0);
     let n_last = (total_frames - 1.0).max(1.0);
 
-    // A zoom in (every value at least 1, `zoompan`'s own range) is a crop and a rescale, which
-    // `zoompan` does at 10 times the speed of the per-pixel `geq` below. It restarts the frame
+    // A zoom (every value within `zoompan`'s own range) is a crop and a rescale, which `zoompan`
+    // does at 10 times the speed of the per-pixel `geq` below. It restarts the frame
     // timestamps, so it is only used where the caller says nothing downstream depends on them
     // (an export graph that renumbers its own output frames), and it needs the canvas size,
-    // which the C side fills in for `CANVAS_SIZE_TOKEN`.
-    let zoom_in_only = sorted.iter().all(|k| {
-        let v = clamp_scale(k.value);
-        (1.0..=ZOOMPAN_MAX_ZOOM).contains(&v)
-    });
-    if zoompan_ok && zoom_in_only {
+    // which the C side fills in for `CANVAS_SIZE_TOKEN`. `zoompan` cannot zoom out, so a zoom
+    // out first pads the picture with black to the size the smallest zoom needs and zooms into
+    // that (zoom `z` on the picture is zoom `z / smallest` on the padded one).
+    let smallest = sorted
+        .iter()
+        .map(|k| clamp_scale(k.value))
+        .fold(1.0_f32, f32::min);
+    let largest = sorted
+        .iter()
+        .map(|k| clamp_scale(k.value))
+        .fold(1.0_f32, f32::max);
+    if zoompan_ok && smallest >= ZOOMPAN_MIN_ZOOM_OUT && largest / smallest <= ZOOMPAN_MAX_ZOOM {
         let z = piecewise_expr(&sorted, n_last, "on", clamp_scale);
+        let pad = if smallest < 1.0 {
+            format!(
+                "pad=w='trunc(iw/{smallest:.5}/2)*2':h='trunc(ih/{smallest:.5}/2)*2':x='trunc((ow-iw)/4)*2':y='trunc((oh-ih)/4)*2':color=black,"
+            )
+        } else {
+            String::new()
+        };
         return Some(format!(
-            "zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={CANVAS_SIZE_TOKEN}:fps={fps_num}/{fps_den}"
+            "{pad}zoompan=z='({z})/{smallest:.5}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={CANVAS_SIZE_TOKEN}:fps={fps_num}/{fps_den}"
         ));
     }
     let z = piecewise_expr(&sorted, n_last, "N", clamp_scale);
@@ -428,6 +445,7 @@ pub fn crop_filter_expr(
     fps_num: u32,
     fps_den: u32,
     timeline_duration_secs: f64,
+    zoompan_ok: bool,
 ) -> Option<String> {
     let animated = !crop_x_keyframes.is_empty()
         || !crop_y_keyframes.is_empty()
@@ -441,17 +459,46 @@ pub fn crop_filter_expr(
     let n_last = (total_frames - 1.0).max(1.0);
     let identity = |v: f32| v;
 
-    let axis = |keyframes: &[Keyframe<f32>], constant: f32| -> String {
+    let axis_in = |keyframes: &[Keyframe<f32>], constant: f32, var: &str| -> String {
         match keyframes.len() {
             0 => format!("{constant:.7}"),
             1 => format!("{:.7}", keyframes[0].value),
             _ => {
                 let mut sorted = keyframes.to_vec();
                 sorted.sort_by(|a, b| a.time_fraction.total_cmp(&b.time_fraction));
-                piecewise_expr(&sorted, n_last, "N", identity)
+                piecewise_expr(&sorted, n_last, var, identity)
             }
         }
     };
+    let axis = |keyframes: &[Keyframe<f32>], constant: f32| axis_in(keyframes, constant, "N");
+
+    // A window that keeps the frame's shape (its width and height are the same fraction), stays
+    // inside the frame and is not tiny is a zoom and a pan: `zoompan`, about 10 times faster than
+    // the per-pixel `geq` below (see `scale_filter_expr` for when it may be used).
+    let within = |keyframes: &[Keyframe<f32>], constant: f32, low: f32, high: f32| {
+        let ok = |v: f32| (low..=high).contains(&v);
+        if keyframes.is_empty() {
+            ok(constant)
+        } else {
+            keyframes.iter().all(|k| ok(k.value))
+        }
+    };
+    if zoompan_ok
+        && within(crop_x_keyframes, crop_x, 0.0, 1.0)
+        && within(crop_y_keyframes, crop_y, 0.0, 1.0)
+        && within(crop_w_keyframes, crop_w, 1.0 / ZOOMPAN_MAX_ZOOM, 1.0)
+        && within(crop_h_keyframes, crop_h, 1.0 / ZOOMPAN_MAX_ZOOM, 1.0)
+    {
+        let w = axis_in(crop_w_keyframes, crop_w, "on");
+        let h = axis_in(crop_h_keyframes, crop_h, "on");
+        if w == h {
+            let x = axis_in(crop_x_keyframes, crop_x, "on");
+            let y = axis_in(crop_y_keyframes, crop_y, "on");
+            return Some(format!(
+                "zoompan=z='1/({w})':x='({x})*iw':y='({y})*ih':d=1:s={CANVAS_SIZE_TOKEN}:fps={fps_num}/{fps_den}"
+            ));
+        }
+    }
 
     let cx = axis(crop_x_keyframes, crop_x);
     let cy = axis(crop_y_keyframes, crop_y);

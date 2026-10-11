@@ -594,6 +594,10 @@ const char *avbridge_last_video_encoder(void);
 
 char *avbridge_text_overlay_filter(const TextSegment *segments, int segment_count);
 char *avbridge_shape_overlay_filter(const ShapeSegment *segments, int segment_count);
+/* The same for one privacy-blur segment: `matte_path` is a matte video at the canvas's size and
+   frame rate and as long as the export. NULL when the arguments are unusable. */
+char *avbridge_privacy_blur_filter(const char *matte_path, double blur_sigma, int canvas_width,
+                                   int canvas_height);
 void avbridge_free_string(char *s);
 
 typedef enum {

@@ -13,7 +13,9 @@
 // You should have received a copy of the GNU General Public License
 
 use super::errors::{RenderError, RenderOutcome};
-use super::privacy::{apply_privacy_blur_pass, resolve_privacy_blur_segments, PrivacyBlurSegment};
+use super::privacy::{
+    apply_privacy_blur_pass, privacy_blur_mattes, resolve_privacy_blur_segments, PrivacyBlurSegment,
+};
 use super::segments::{
     clip_segment_duration_secs, resolve_audio_segments, resolve_timeline_segments_multi,
     timeline_duration,
@@ -113,9 +115,20 @@ pub fn render_export_job(
     if let Ok(Some(filter)) = avbridge::shape_overlay_filter(shape_segments) {
         post_filters.push(filter);
     }
-    // Both must have built, or the passes below take over for whichever did not.
-    let expected_filters =
-        usize::from(!text_segments.is_empty()) + usize::from(!shape_segments.is_empty());
+    // Privacy blur last, so it blurs whatever text and shapes ended up in its region too. Each
+    // segment's matte is built first (a small file), and removed once the export is done.
+    let mattes = privacy_blur_mattes(output, canvas, total_duration_secs, privacy_blur_segments);
+    for (matte, segment) in mattes.iter().zip(privacy_blur_segments) {
+        if let Ok(Some(filter)) =
+            avbridge::privacy_blur_filter(matte.path(), f64::from(segment.blur_sigma), canvas)
+        {
+            post_filters.push(filter);
+        }
+    }
+    // All must have built, or the passes below take over for whichever did not.
+    let expected_filters = usize::from(!text_segments.is_empty())
+        + usize::from(!shape_segments.is_empty())
+        + privacy_blur_segments.len();
     let mut overlays_inline = !post_filters.is_empty() && post_filters.len() == expected_filters;
     if !overlays_inline {
         post_filters.clear();
@@ -148,6 +161,7 @@ pub fn render_export_job(
         other => other?,
     };
     drop(text_rasters);
+    drop(mattes);
 
     Ok(match outcome {
         avbridge::EncodeOutcome::Completed => {
@@ -166,7 +180,7 @@ pub fn render_export_job(
                     apply_shape_overlay_pass(output, canvas, shape_segments);
                 }
             }
-            if !privacy_blur_segments.is_empty() {
+            if !overlays_inline && !privacy_blur_segments.is_empty() {
                 apply_privacy_blur_pass(output, canvas, total_duration_secs, privacy_blur_segments);
             }
             RenderOutcome::Completed
