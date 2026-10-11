@@ -119,7 +119,7 @@ mod tests {
     #[test]
     fn a_time_snaps_to_the_nearest_boundary_never_further_than_half_a_frame() {
         for rate in FrameRate::COMMON {
-            for secs in [0.001, 0.5, 1.2345, 59.97, 1_234.5678] {
+            for secs in [0.001, 0.5, 1.2345, 59.97, 1234.5678] {
                 let snapped = rate.snap_secs(secs);
                 assert!(
                     (snapped - secs).abs() <= rate.frame_secs() / 2.0 + 1e-9,
