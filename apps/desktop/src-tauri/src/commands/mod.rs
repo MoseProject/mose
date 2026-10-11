@@ -22,6 +22,7 @@ pub mod overlays;
 pub mod paths;
 pub mod prefs;
 pub mod privacy_blur;
+pub mod recovery;
 pub mod scene_detection;
 pub mod sequences;
 pub mod silence;
