@@ -124,6 +124,37 @@ release builds. Record delivered fps, dropped/deadline-missed frames, p95 frame 
 utilization, memory high-water mark, A/V drift, and angle-switch latency. Compare CPU and GPU
 using the same input and include transfer costs.
 
+### Many clips: memory and the open-session limit (measured 2026-10-11)
+
+Prompted by FilmCraft's memory work (12 H.264 clips on a timeline reached a 12 GB footprint there;
+its decoders were kept per clip with no limit). `crates/bush/examples/memory_probe.rs` measures
+the same thing here: 12 distinct 1080p60 H.264 files (20 s, GOP 120), a 1280x720 CPU canvas, the
+app's limits (6 open sessions, 192 MiB frame cache), release build, 4 cores, Linux, FFmpeg 6.1.
+
+**Crossing a timeline of cuts** (45 frames of each clip in turn): resident memory rises by about
+60 to 75 MiB per clip until the sixth and then stays at 660 to 690 MiB for the twelfth. Memory is
+bounded by the open-session limit and the frame cache, as designed; the unbounded growth
+FilmCraft had does not exist here. Median 7 to 10 ms/frame throughout.
+
+**Several clips in one frame** (layers shown together), before and after this change:
+
+| Layers | Before: ms/frame, resident | After: ms/frame, resident |
+| ---: | --- | --- |
+| 1 | 10, 311 MiB | same |
+| 4 | 28, 586 MiB | 22, 571 MiB |
+| 6 | 43, 712 MiB | 35, 781 MiB |
+| 7 | **505**, 713 MiB | 43, 888 MiB |
+| 8 | **506**, 698 MiB | 47, 934 MiB |
+| 12 | **802**, 716 MiB | 88, 1398 MiB |
+
+A frame that needed more distinct clips than `max_open_sources` decoded them one at a time and
+reopened the decoders on every frame, a cliff of about 12x from the seventh layer (2 frames per
+second in the preview). The engine now keeps every clip of the current frame open, up to
+`MAX_SESSIONS_FOR_ONE_FRAME` (16), and goes back to `max_open_sources` once a crowded frame is
+over. The price is about 100 MiB per extra session at 1080p (under 2 GiB at the limit); past 16
+clips the old one-at-a-time path remains. `EngineStats::sessions_opened` counts sessions opened:
+if it grows with every frame, decoders are being reopened.
+
 ### P2: app delivery and latency attribution
 
 **Evidence:** the earlier app run recorded 6.7 ms JPEG encoding per frame at 1280x720, and the
