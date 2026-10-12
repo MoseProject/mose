@@ -26,6 +26,7 @@ fn project() -> Project {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     text.text_clips
@@ -115,6 +116,7 @@ fn text_timeline(clips: Vec<TextClip>) -> Timeline {
             muted: false,
             solo: false,
             locked: false,
+            mix: Default::default(),
             color_label: None,
         }],
         playhead_secs: 0.0,

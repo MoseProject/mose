@@ -149,6 +149,7 @@ fn track(id: u64, name: &str, clips: Vec<ClipInstance>) -> Track {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     }
 }
@@ -350,6 +351,7 @@ fn resolve_audio_segments_includes_background_and_additional_audio_tracks() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let sequence = sequence_with(vec![background, audio_track]);
@@ -384,6 +386,7 @@ fn resolve_audio_segments_carries_the_track_audio_role_as_duck_role() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let music_track = Track {
@@ -398,6 +401,7 @@ fn resolve_audio_segments_carries_the_track_audio_role_as_duck_role() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let sequence = sequence_with(vec![background, mic_track, music_track]);
@@ -437,6 +441,7 @@ fn resolve_audio_segments_ignores_hidden_audio_tracks() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let sequence = sequence_with(vec![background, hidden_audio]);
@@ -744,6 +749,7 @@ fn audio_track(id: u64, clips: Vec<ClipInstance>) -> Track {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     }
 }

@@ -314,6 +314,7 @@ fn a_cut_timeline_is_exactly_as_long_as_its_clips() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let output = scratch("cut_out.mp4");
@@ -375,6 +376,7 @@ fn export_one_clip(
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let output = scratch(&format!("one_out_{source_in}.mp4"));
@@ -494,6 +496,7 @@ fn red_under_green(
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let sequence = sequence_with(vec![
@@ -612,6 +615,7 @@ fn animated_brightness_brightens_the_picture_over_the_clip() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let output = scratch("brightness_out.mp4");
@@ -693,6 +697,7 @@ fn an_animated_zoom_in_magnifies_the_picture_about_its_centre() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let output = scratch("zoom_out.mp4");
@@ -781,6 +786,7 @@ fn an_animated_zoom_out_shrinks_the_picture_about_its_centre() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let output = scratch("zoomout_out.mp4");
@@ -868,6 +874,7 @@ fn an_animated_crop_pan_slides_the_window_across_the_picture() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let output = scratch("croppan_out.mp4");
@@ -916,6 +923,7 @@ fn a_text_caption_is_burned_into_the_export_in_its_window_only() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let captions = Track {
@@ -957,6 +965,7 @@ fn a_text_caption_is_burned_into_the_export_in_its_window_only() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let output = scratch("caption_out.mp4");
@@ -1003,6 +1012,7 @@ fn an_export_reports_which_encoder_it_ran_on() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let outcome = render_timeline_export(
@@ -1412,6 +1422,7 @@ fn cut_export(target: f32, out_name: &str, ranges: &[(f64, f64)]) -> Option<(f64
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let outcome = render_timeline_export(
@@ -1497,6 +1508,7 @@ fn privacy_blur_inside_the_export_blurs_only_what_the_matte_marks() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let output = scratch("blur_out.mp4");

@@ -79,6 +79,7 @@ fn project_at(project_path: &Path, assets: Vec<MediaAsset>) -> Project {
                     muted: false,
                     solo: false,
                     locked: false,
+                    mix: Default::default(),
                     color_label: None,
                 }],
                 playhead_secs: 0.0,

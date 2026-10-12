@@ -48,6 +48,7 @@ fn empty_track() -> Track {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     }
 }
@@ -343,4 +344,74 @@ fn edits_that_change_nothing_report_false() {
     assert!(!track.clips[0].slip(0.0, None));
     assert_eq!(track, snapshot);
     assert_eq!(next_id, 100, "no id is spent on an edit that did nothing");
+}
+
+#[test]
+fn a_track_mix_is_neutral_by_default_clamped_and_follows_the_pan_law() {
+    use avcore::timeline::TrackMix;
+
+    let neutral = TrackMix::default();
+    assert!(neutral.is_neutral());
+    assert_eq!(
+        neutral.pan_gains(),
+        (1.0, 1.0),
+        "a centred track is left alone"
+    );
+    assert!((neutral.linear_gain() - 1.0).abs() < 1e-6);
+
+    // Out-of-range and non-finite values are brought inside the limits.
+    let wild = TrackMix {
+        volume_db: 500.0,
+        pan: -9.0,
+    }
+    .clamped();
+    assert_eq!((wild.volume_db, wild.pan), (TrackMix::MAX_VOLUME_DB, -1.0));
+    let broken = TrackMix {
+        volume_db: f32::NAN,
+        pan: f32::INFINITY,
+    }
+    .clamped();
+    assert!(broken.is_neutral());
+
+    // The far side falls off to silence at the extreme, the near side stays at unity.
+    let (left, right) = TrackMix {
+        volume_db: 0.0,
+        pan: 1.0,
+    }
+    .pan_gains();
+    assert!(left < 1e-6 && right == 1.0);
+    let (left, right) = TrackMix {
+        volume_db: 0.0,
+        pan: -1.0,
+    }
+    .pan_gains();
+    assert!(right < 1e-6 && left == 1.0);
+    // Symmetric, and monotonic as the pan moves.
+    let mut previous = 1.0;
+    for step in 0..=20 {
+        let pan = step as f32 / 20.0;
+        let (far, near) = TrackMix {
+            volume_db: 0.0,
+            pan,
+        }
+        .pan_gains();
+        let (mirror_near, mirror_far) = TrackMix {
+            volume_db: 0.0,
+            pan: -pan,
+        }
+        .pan_gains();
+        assert_eq!((far, near), (mirror_far, mirror_near));
+        assert!(far <= previous + 1e-6 && near == 1.0);
+        previous = far;
+    }
+    assert!(
+        (TrackMix {
+            volume_db: -6.0,
+            pan: 0.0
+        }
+        .linear_gain()
+            - 0.501187)
+            .abs()
+            < 1e-5
+    );
 }

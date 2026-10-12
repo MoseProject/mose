@@ -172,6 +172,7 @@ fn large_project(asset_count: usize, clips_per_track: usize) -> Project {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
 

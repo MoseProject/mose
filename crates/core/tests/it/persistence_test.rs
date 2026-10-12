@@ -174,6 +174,7 @@ fn fixture_project() -> Project {
                     muted: false,
                     solo: false,
                     locked: false,
+                    mix: Default::default(),
                     color_label: None,
                 }],
                 markers: Vec::new(),
@@ -257,6 +258,7 @@ fn project_with_styled_text() -> Project {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     });
     project
@@ -849,9 +851,14 @@ fn the_project_layout_refuses_other_versions_and_damaged_input() {
 
 /// A project file the way version 3 wrote it: the current encoding without the trailing
 /// `frame_rate: None`, under the old version byte. Only exact for a project without media, since
-/// versions 3 and 4 wrote each asset with fewer fields than the current layout does.
+/// versions 3 and 4 wrote each asset with fewer fields than the current layout does, and 3 to 5
+/// wrote each track without its mix.
 fn version_3_bytes(project: &Project) -> Vec<u8> {
     assert!(project.media_library.is_empty());
+    assert!(project
+        .sequences
+        .iter()
+        .all(|s| s.timeline.tracks.is_empty()));
     use avcore::persistence::to_project_bytes;
     let current = to_project_bytes(project).unwrap();
     let size = u32::from_le_bytes(current[5..9].try_into().unwrap()) as usize;
@@ -873,6 +880,9 @@ fn version_3_bytes(project: &Project) -> Vec<u8> {
 fn a_version_3_project_file_still_opens_with_no_frame_rate() {
     let mut project = fixture_project();
     project.media_library.clear();
+    for sequence in &mut project.sequences {
+        sequence.timeline.tracks.clear();
+    }
     let opened = avcore::persistence::from_project_bytes(&version_3_bytes(&project)).unwrap();
     assert_eq!(opened, project);
     assert_eq!(opened.frame_rate, None);
@@ -894,7 +904,7 @@ fn a_frame_rate_survives_a_save_and_load() {
 #[test]
 fn other_project_format_versions_are_still_refused() {
     let mut bytes = avcore::persistence::to_project_bytes(&fixture_project()).unwrap();
-    for version in [0u8, 2, 6, 255] {
+    for version in [0u8, 2, 7, 255] {
         bytes[4] = version;
         assert!(
             matches!(

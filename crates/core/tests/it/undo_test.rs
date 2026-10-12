@@ -117,6 +117,7 @@ fn sequence_with_clips(name: &str, clips: usize) -> Sequence {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     });
     sequence

@@ -44,6 +44,7 @@ fn track(clips: Vec<avcore::timeline::ClipInstance>) -> Track {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     }
 }
@@ -130,6 +131,7 @@ fn caption(length: f64) -> Track {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     }
 }
