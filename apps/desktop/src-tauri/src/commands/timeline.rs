@@ -555,6 +555,31 @@ pub fn set_track_flags<R: Runtime>(
     })
 }
 
+/// Sets a track's fader (`volume_db`) and pan, both clamped to their limits. A rejected value
+/// (not a number) becomes neutral; a change to the same mix leaves no undo step.
+#[tauri::command]
+pub fn set_track_mix<R: Runtime>(
+    app: AppHandle<R>,
+    track_id: u64,
+    volume_db: f32,
+    pan: f32,
+) -> Result<(), String> {
+    undoable(&app, |project| {
+        let Some(track) = project
+            .timeline_mut()
+            .tracks
+            .iter_mut()
+            .find(|t| t.id == track_id)
+        else {
+            return false;
+        };
+        let mix = avcore::timeline::TrackMix { volume_db, pan }.clamped();
+        let changed = track.mix != mix;
+        track.mix = mix;
+        changed
+    })
+}
+
 /// Removes `[start_secs, end_secs)` from every unlocked video and audio track and closes the
 /// gap (the I/O range delete). Overlay tracks are left alone, as in [`delete`] with ripple.
 #[tauri::command]

@@ -172,6 +172,7 @@ fn diff_track(ops: &mut Vec<Op>, at: &[Value], prev: &Track, next: &Track) {
         solo,
         locked,
         color_label,
+        mix,
     } = next;
     field(ops, at, "id", &prev.id, id);
     field(ops, at, "name", &prev.name, name);
@@ -190,6 +191,7 @@ fn diff_track(ops: &mut Vec<Op>, at: &[Value], prev: &Track, next: &Track) {
     field(ops, at, "solo", &prev.solo, solo);
     field(ops, at, "locked", &prev.locked, locked);
     field(ops, at, "color_label", &prev.color_label, color_label);
+    field(ops, at, "mix", &prev.mix, mix);
 }
 
 fn diff_timeline(ops: &mut Vec<Op>, at: &[Value], prev: &Timeline, next: &Timeline) {
