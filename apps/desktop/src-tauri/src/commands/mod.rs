@@ -296,6 +296,13 @@ pub fn preview_set_max_dim(state: State<'_, AppState>, dim: u32) {
     state.preview.set_max_dim(dim);
 }
 
+/// The playhead drag starts (`true`) or ends (`false`): while it lasts, seeks may show an earlier
+/// frame of a long-GOP file; at its end the exact frame is shown.
+#[tauri::command]
+pub fn preview_set_scrubbing(state: State<'_, AppState>, scrubbing: bool) {
+    state.preview.set_scrubbing(scrubbing);
+}
+
 #[tauri::command]
 pub fn preview_step(state: State<'_, AppState>, delta_frames: i64) {
     state.preview.step(delta_frames);

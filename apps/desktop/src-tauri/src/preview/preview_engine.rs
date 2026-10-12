@@ -63,6 +63,9 @@ pub(crate) enum Command {
     Seek(f64),
     Step(i64),
     Playing(bool),
+    /// The playhead is being dragged: seeks may show an earlier frame of a long GOP rather than
+    /// wait for the exact one. Off again, the exact frame is shown.
+    Scrubbing(bool),
     /// The longest side the preview should composite at (the size the monitor really shows).
     MaxDim(u32),
 }
@@ -172,6 +175,11 @@ impl PreviewEngine {
 
     pub fn seek(&self, position_secs: f64) {
         let _ = self.tx.send(Command::Seek(position_secs));
+    }
+
+    /// Marks the start and end of a playhead drag; see [`Command::Scrubbing`].
+    pub fn set_scrubbing(&self, scrubbing: bool) {
+        let _ = self.tx.send(Command::Scrubbing(scrubbing));
     }
 
     pub fn step(&self, delta_frames: i64) {

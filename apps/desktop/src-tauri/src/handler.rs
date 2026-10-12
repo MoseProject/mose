@@ -17,6 +17,7 @@ macro_rules! all_commands {
             $crate::commands::preview_seek,
             $crate::commands::preview_step,
             $crate::commands::preview_set_playing,
+            $crate::commands::preview_set_scrubbing,
             $crate::commands::preview_set_max_dim,
             $crate::commands::set_export_settings,
             $crate::commands::set_project_frame_rate,

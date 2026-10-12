@@ -47,6 +47,10 @@ const FRAME_CACHE_BYTES: usize = 192 * 1024 * 1024;
 /// A render that has not answered after this long is assumed lost and the next frame is asked for.
 const OUTSTANDING_TIMEOUT: Duration = Duration::from_millis(250);
 /// Poll cadence while playing: short enough to request the next frame right after one lands.
+/// How long a seek made while the playhead is dragged may decode forward before it shows the newest
+/// frame it has. About the cost of reaching a key frame, so a drag over a long-GOP file follows the
+/// pointer instead of waiting a second per position.
+const SCRUB_SEEK_BUDGET: Duration = Duration::from_millis(30);
 const PLAYING_POLL_INTERVAL: Duration = Duration::from_millis(1);
 /// How long the loop waits for a command when no render or tick is pending.
 const IDLE_WAIT: Duration = Duration::from_millis(250);
@@ -227,6 +231,8 @@ pub(crate) fn run_with_audio<R: Runtime>(
     let mut error: Option<String> = None;
     let mut frame_seq = 0u64;
     let mut dirty = true;
+    // The playhead is being dragged: seeks settle for a nearby frame of a long GOP.
+    let mut scrubbing = false;
     // The longest side to composite at: what the monitor shows, up to PREVIEW_MAX_DIM.
     let mut max_dim = PREVIEW_MAX_DIM;
     let mut last_tick = Instant::now();
@@ -320,6 +326,11 @@ pub(crate) fn run_with_audio<R: Runtime>(
                     }
                     dirty = true;
                 }
+                Command::Scrubbing(next) => {
+                    scrubbing = next;
+                    // Dropping out of it shows the exact frame at the playhead.
+                    dirty = true;
+                }
                 Command::Step(delta_frames) => {
                     let fps = first_video_fps(&timeline, &media);
                     if let Some(player) = player.as_mut() {
@@ -356,6 +367,11 @@ pub(crate) fn run_with_audio<R: Runtime>(
             }
         }
 
+        if let Some(player) = player.as_ref() {
+            player
+                .engine()
+                .set_seek_budget(scrubbing.then_some(SCRUB_SEEK_BUDGET));
+        }
         if rebuild {
             revision += 1;
             min_frame_interval = Duration::from_secs_f64(0.9 / first_video_fps(&timeline, &media));
