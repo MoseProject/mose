@@ -151,7 +151,10 @@ export function App() {
       )}
       {session && ui.exportDialogOpen && (
         <Suspense fallback={null}>
-          <ExportDialog session={session} />
+          <ExportDialog
+            session={session}
+            clipIds={ui.exportClipIds}
+          />
         </Suspense>
       )}
       {ui.settingsOpen && (

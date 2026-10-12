@@ -365,6 +365,15 @@ export const en = {
   exportUpscale: "upscale",
   exportUpscaleNote:
     "Scaling the picture up adds no detail and makes the file larger. It can still help for a platform such as YouTube, which tends to process 1440p and above at higher quality. The original size is the recommendation; the choice is yours.",
+  exportClipsTitle: "Export {n} videos",
+  exportFilePrefix: "Name prefix",
+  exportEstimateTotal: "total ≈",
+  exportNoClips: "Select video clips on the timeline to export.",
+  exportOverwriteConfirmMany:
+    "{n} files already exist in that folder. Replace them, or keep both and save the new ones beside them?",
+  exportClips: "Export clip…",
+  exportClipsMany: "Export {n} clips…",
+  exportFilePrefixPlaceholder: "Optional, e.g. Highlights",
   exportErrNoName: "Type a file name.",
   exportKeepsBitrate:
     "Same as source keeps the source bitrate and, for a plain cut, copies the picture without re-encoding it.",

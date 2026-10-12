@@ -84,6 +84,9 @@ export interface UiState {
   exportQueueOpen: boolean;
   /** The export options dialog (aspect ratio, loudness target, encoder). */
   exportDialogOpen: boolean;
+  /** Set while the export dialog is open for the selected clips (each exported as its own
+   *  video) rather than the whole sequence. */
+  exportClipIds: number[] | null;
   /** How many modal dialogs are open; global shortcuts stand down while it is above zero. */
   openDialogs: number;
   /** Timeline in/out marks (seconds) set with I and O; `null` when unset. */
@@ -125,6 +128,7 @@ export const uiStore = createStore<UiState>({
   drawingShapePoints: null,
   exportQueueOpen: false,
   exportDialogOpen: false,
+  exportClipIds: null,
   openDialogs: 0,
   markIn: null,
   markOut: null,
@@ -179,6 +183,8 @@ const ERROR_CODES: Record<string, TextKey> = {
   noName: "exportErrNoName",
   invalidBitrate: "exportBitrateRange",
   invalidResolution: "exportErrResolution",
+  noClips: "exportNoClips",
+  clipMissing: "exportNoClips",
   projectMissing: "projectMissing",
   projectNameEmpty: "projectNameEmpty",
 };

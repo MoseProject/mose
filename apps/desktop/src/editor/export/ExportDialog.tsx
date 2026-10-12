@@ -51,11 +51,20 @@ function measuredLufs(session: SessionView): number | null {
 
 /** Export settings, the way an editor's export panel lays them out: where the file goes and what
  *  it is called, quality, size, audio loudness. Exporting queues the job
- *  directly, with no further file picker. */
-export function ExportDialog({ session }: { session: SessionView }) {
+ *  directly, with no further file picker. With `clipIds` it exports every one of those clips as
+ *  its own video: the name field becomes an optional prefix and each file is named after its clip. */
+export function ExportDialog({
+  session,
+  clipIds = null,
+}: {
+  session: SessionView;
+  /** Set to export each of these clips as its own video, instead of the whole sequence. */
+  clipIds?: number[] | null;
+}) {
+  const batch = clipIds !== null;
   const sequence = session.project.sequences[session.project.active_sequence];
   const settings = sequence.export_settings;
-  const [fileName, setFileName] = useState(sequence.name);
+  const [fileName, setFileName] = useState(batch ? "" : sequence.name);
   const [folder, setFolder] = useState("");
   // The picture keeps the aspect ratio the project is set to; it is not chosen per export.
   const aspect: ExportAspectRatio = settings.aspect_ratio;
@@ -71,7 +80,7 @@ export function ExportDialog({ session }: { session: SessionView }) {
   const measured = measuredLufs(session);
   const lufsValid = !normalize || (Number.isFinite(lufs) && lufs >= MIN_LUFS && lufs <= MAX_LUFS);
   const emptyTimeline = canvasLoaded && canvas === null;
-  const ready = fileName.trim() !== "" && folder.trim() !== "" && !emptyTimeline;
+  const ready = (batch || fileName.trim() !== "") && folder.trim() !== "" && !emptyTimeline;
   // A fixed step above the bitrate the picture already has would only make the file bigger.
   const sourceMbps = canvas
     ? summarize(canvas, { maxHeight: maxHeight ?? undefined }).bitrateMbps
@@ -110,7 +119,7 @@ export function ExportDialog({ session }: { session: SessionView }) {
 
   useEffect(() => {
     let stale = false;
-    api.exportCanvas(aspect).then(
+    api.exportCanvas(aspect, clipIds ?? undefined).then(
       (value) => {
         if (!stale) {
           setCanvas(value);
@@ -127,10 +136,10 @@ export function ExportDialog({ session }: { session: SessionView }) {
     return () => {
       stale = true;
     };
-  }, [aspect]);
+  }, [aspect, clipIds]);
 
   const close = () => {
-    patchUi({ exportDialogOpen: false });
+    patchUi({ exportDialogOpen: false, exportClipIds: null });
   };
 
   const browse = async () => {
@@ -145,26 +154,38 @@ export function ExportDialog({ session }: { session: SessionView }) {
     if (!lufsValid || !bitrateValid || !ready) {
       return;
     }
-    let target: { path: string; exists: boolean };
+    let targets: { path: string; exists: boolean }[];
     try {
-      target = await api.exportTarget(folder, fileName);
+      targets = clipIds
+        ? await api.exportClipsTargets(clipIds, folder, fileName)
+        : [await api.exportTarget(folder, fileName)];
     } catch (e) {
       setError(describeError(e));
       return;
     }
+    const existing = targets.filter((target) => {
+      return target.exists;
+    }).length;
     close();
     patchUi({ exportQueueOpen: true });
     await run(api.setNormalizeAudio(normalize));
     await run(api.setExportSettings(Number.isFinite(lufs) ? lufs : settings.target_lufs, aspect));
-    const replace = target.exists
-      ? await askConfirm({
-          title: t("confirmOverwriteTitle"),
-          message: t("exportOverwriteConfirm"),
-          confirmLabel: t("confirmOverwriteAction"),
-          cancelLabel: t("confirmKeepBoth"),
-        })
-      : true;
-    await run(api.startExport(target.path, target.exists && !replace, options));
+    const replace =
+      existing > 0
+        ? await askConfirm({
+            title: t("confirmOverwriteTitle"),
+            message: clipIds
+              ? t("exportOverwriteConfirmMany").replace("{n}", String(existing))
+              : t("exportOverwriteConfirm"),
+            confirmLabel: t("confirmOverwriteAction"),
+            cancelLabel: t("confirmKeepBoth"),
+          })
+        : true;
+    if (clipIds) {
+      await run(api.startExportClips(clipIds, folder, fileName, existing > 0 && !replace, options));
+    } else {
+      await run(api.startExport(targets[0].path, existing > 0 && !replace, options));
+    }
     const prefs = await run(api.getPrefs());
     if (prefs && prefs.outputFolder !== folder) {
       await run(api.setPrefs({ ...prefs, outputFolder: folder }));
@@ -173,7 +194,11 @@ export function ExportDialog({ session }: { session: SessionView }) {
 
   return (
     <Dialog
-      title={t("exportDialogTitle")}
+      title={
+        clipIds
+          ? t("exportClipsTitle").replace("{n}", String(clipIds.length))
+          : t("exportDialogTitle")
+      }
       onClose={close}
       actions={
         <>
@@ -196,16 +221,17 @@ export function ExportDialog({ session }: { session: SessionView }) {
       }
     >
       <label className={cx(styles, baseStyles, "dialog-field")}>
-        <span>{t("exportFileName")}</span>
+        <span>{batch ? t("exportFilePrefix") : t("exportFileName")}</span>
         <input
           type="text"
           value={fileName}
+          placeholder={batch ? t("exportFilePrefixPlaceholder") : undefined}
           onChange={(e) => {
             setFileName(e.target.value);
             setError("");
           }}
         />
-        <span className={cx(styles, baseStyles, "muted")}>.mp4</span>
+        <span className={cx(styles, baseStyles, "muted")}>{batch ? "" : ".mp4"}</span>
       </label>
       <div className={cx(styles, baseStyles, "dialog-field")}>
         <span id="export-folder-label">{t("exportFolder")}</span>
@@ -395,7 +421,7 @@ export function ExportDialog({ session }: { session: SessionView }) {
           <span>{t("exportSummary")}</span>
           <span className={cx(styles, baseStyles, "mono")}>
             {summary.width}x{summary.height} · {summary.bitrateMbps.toFixed(1)} Mbps ·{" "}
-            {t("exportEstimate")} {formatSize(summary.sizeMb)}
+            {batch ? t("exportEstimateTotal") : t("exportEstimate")} {formatSize(summary.sizeMb)}
           </span>
         </p>
       )}
@@ -404,7 +430,7 @@ export function ExportDialog({ session }: { session: SessionView }) {
           className={cx(styles, baseStyles, "dialog-error")}
           role="alert"
         >
-          {t("exportEmptyTimeline")}
+          {batch ? t("exportNoClips") : t("exportEmptyTimeline")}
         </p>
       )}
       {!emptyTimeline && Object.keys(options).length === 0 && (

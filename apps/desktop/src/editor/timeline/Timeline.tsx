@@ -762,6 +762,21 @@ export function Timeline({ session }: { session: SessionView }) {
     if (hit && !ui.selectedClipIds.includes(hit.clipId)) {
       patchUi({ selectedClipIds: [hit.clipId] });
     }
+    // The clips the menu acts on: the selection when the clicked clip is part of it.
+    const acted =
+      hit && ui.selectedClipIds.includes(hit.clipId) ? ui.selectedClipIds : [hit?.clipId];
+    const exportable = tracks
+      .filter((track) => {
+        return track.kind === "Video";
+      })
+      .flatMap((track) => {
+        return track.clips.map((clip) => {
+          return clip.id;
+        });
+      })
+      .filter((id) => {
+        return acted.includes(id);
+      });
     setMenu({
       x: e.clientX,
       y: e.clientY,
@@ -774,6 +789,20 @@ export function Timeline({ session }: { session: SessionView }) {
             cmdItem("duplicate"),
             cmdItem("delete", { separator: true }),
             cmdItem("rippleDelete"),
+            ...(exportable.length > 0
+              ? [
+                  {
+                    label:
+                      exportable.length === 1
+                        ? t("exportClips")
+                        : t("exportClipsMany").replace("{n}", String(exportable.length)),
+                    separator: true,
+                    onSelect: () => {
+                      patchUi({ exportClipIds: exportable, exportDialogOpen: true });
+                    },
+                  },
+                ]
+              : []),
           ]
         : [cmdItem("paste"), cmdItem("selectAll"), cmdItem("zoomFit", { separator: true })],
     });
