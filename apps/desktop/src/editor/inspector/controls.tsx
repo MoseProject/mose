@@ -150,6 +150,7 @@ export function Slider(props: {
       <label>{props.label}</label>
       <input
         type="range"
+        aria-label={props.label}
         min={props.min}
         max={props.max}
         step={props.step}
