@@ -258,3 +258,25 @@ fn text_overlays_without_segments_are_a_no_op() {
     apply_text_overlays(&fixture("video.mp4"), &out, &[], 320, 240, 30, 1).unwrap();
     assert!(!out.exists());
 }
+
+#[test]
+fn extracts_one_audio_stream_as_its_own_file() {
+    let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../core/tests/fixtures/audio_codecs/obs_multitrack.mkv");
+    let dir = std::env::temp_dir().join(format!("avbridge-extract-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+
+    // Stream 2 of the fixture is the one titled "Mic".
+    let out = dir.join("mic.mka");
+    avbridge::extract_audio_stream(&source, &out, 2).expect("extracts");
+    let info = avbridge::probe(&out).expect("the copy probes");
+    assert_eq!(info.audio_stream_count, 1);
+    assert_eq!(info.kind, avbridge::StreamKind::Audio);
+    assert_eq!(info.codec_name, "aac");
+    assert!((info.duration_secs - 0.4).abs() < 0.1, "{}", info.duration_secs);
+
+    // The video stream and out-of-range indexes are refused.
+    assert!(avbridge::extract_audio_stream(&source, &dir.join("video.mka"), 0).is_err());
+    assert!(avbridge::extract_audio_stream(&source, &dir.join("none.mka"), 9).is_err());
+    let _ = std::fs::remove_dir_all(&dir);
+}
