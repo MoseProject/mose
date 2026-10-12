@@ -207,6 +207,7 @@ unsafe extern "C" {
         timeline_duration_secs: f64,
         out_path: *const c_char,
         target_lufs: f32,
+        format: c_int,
         cancel: *const u8,
     ) -> c_int;
     pub(crate) fn avbridge_mux_video_audio(

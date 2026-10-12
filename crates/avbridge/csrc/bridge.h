@@ -410,14 +410,24 @@ typedef enum {
     AUDIO_MIX_CANCELLED = 9,
 } AudioMixStatus;
 
-/* Mixes every segment that contains audio onto one timeline and writes AAC 192 kbps to an
-   audio-only container. Per-segment trim, gain, speed, and timeline placement are applied
-   before the shared afftdn/loudnorm/limiter chain. Inputs without an audio stream are skipped;
-   returns AUDIO_MIX_ERR_NO_AUDIO when none remain. timeline_duration_secs trims the final mix
-   so an audio clip cannot extend the output past the rendered video. */
+/* Output formats of the audio mix. */
+enum {
+    AUDIO_MIX_FORMAT_AAC = 0,   /* 192 kbps, the audio of a video export */
+    AUDIO_MIX_FORMAT_WAV24 = 1, /* uncompressed 24-bit PCM */
+    AUDIO_MIX_FORMAT_FLAC = 2,  /* lossless, 24-bit */
+    AUDIO_MIX_FORMAT_MP3 = 3,   /* 256 kbps */
+    AUDIO_MIX_FORMAT_OPUS = 4   /* 160 kbps */
+};
+
+/* Mixes every segment that contains audio onto one timeline and writes it in `format` (one of
+   AUDIO_MIX_FORMAT_*; the container follows out_path's extension) to an audio-only file.
+   Per-segment trim, gain, speed, and timeline placement are applied before the shared
+   afftdn/loudnorm/limiter chain. Inputs without an audio stream are skipped; returns
+   AUDIO_MIX_ERR_NO_AUDIO when none remain. timeline_duration_secs trims the final mix so an audio
+   clip cannot extend the output past the rendered video. */
 AudioMixStatus avbridge_mix_audio_timeline(const AudioSegment *segments, int segment_count,
                                            double timeline_duration_secs, const char *out_path,
-                                           float target_lufs, const uint8_t *cancel);
+                                           float target_lufs, int format, const uint8_t *cancel);
 
 typedef enum {
     MEDIA_MUX_OK = 0,

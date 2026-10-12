@@ -192,6 +192,54 @@ pub enum AudioMixError {
     Unknown(c_int),
 }
 
+/// What the mixed audio is written as. The container follows the output path's extension, so a
+/// format has to be paired with a matching one (see [`AudioMixFormat::extension`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub enum AudioMixFormat {
+    /// AAC 192 kbps, the audio of a video export.
+    #[default]
+    Aac,
+    /// Uncompressed 24-bit PCM.
+    Wav24,
+    /// Lossless FLAC at 24 bits.
+    Flac,
+    /// MP3 at 256 kbps.
+    Mp3,
+    /// Opus at 160 kbps.
+    Opus,
+}
+
+impl AudioMixFormat {
+    pub const ALL: [AudioMixFormat; 5] = [
+        AudioMixFormat::Aac,
+        AudioMixFormat::Wav24,
+        AudioMixFormat::Flac,
+        AudioMixFormat::Mp3,
+        AudioMixFormat::Opus,
+    ];
+
+    /// The file extension (without the dot) the container for this format uses.
+    pub const fn extension(self) -> &'static str {
+        match self {
+            AudioMixFormat::Aac => "m4a",
+            AudioMixFormat::Wav24 => "wav",
+            AudioMixFormat::Flac => "flac",
+            AudioMixFormat::Mp3 => "mp3",
+            AudioMixFormat::Opus => "opus",
+        }
+    }
+
+    const fn code(self) -> c_int {
+        match self {
+            AudioMixFormat::Aac => 0,
+            AudioMixFormat::Wav24 => 1,
+            AudioMixFormat::Flac => 2,
+            AudioMixFormat::Mp3 => 3,
+            AudioMixFormat::Opus => 4,
+        }
+    }
+}
+
 /// Mixes `segments` into one AAC stream. Inputs without an audio stream are skipped by the C
 /// bridge, allowing silent video overlays to coexist with actual audio tracks.
 pub fn mix_audio_timeline(
@@ -199,6 +247,25 @@ pub fn mix_audio_timeline(
     timeline_duration_secs: f64,
     out_path: &Path,
     target_lufs: f32,
+    cancel: &AtomicBool,
+) -> Result<AudioMixOutcome, AudioMixError> {
+    mix_audio_timeline_as(
+        segments,
+        timeline_duration_secs,
+        out_path,
+        target_lufs,
+        AudioMixFormat::Aac,
+        cancel,
+    )
+}
+
+/// [`mix_audio_timeline`] writing `format` instead of AAC, for an audio-only export.
+pub fn mix_audio_timeline_as(
+    segments: &[AudioSegment],
+    timeline_duration_secs: f64,
+    out_path: &Path,
+    target_lufs: f32,
+    format: AudioMixFormat,
     cancel: &AtomicBool,
 ) -> Result<AudioMixOutcome, AudioMixError> {
     if segments.is_empty() {
@@ -260,6 +327,7 @@ pub fn mix_audio_timeline(
             timeline_duration_secs,
             c_out.as_ptr(),
             target_lufs,
+            format.code(),
             cancel.as_ptr() as *const u8,
         )
     };
