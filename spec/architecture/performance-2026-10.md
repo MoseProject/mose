@@ -43,9 +43,38 @@ Per extra visible layer the CPU compositor costs about 3.5 ms at 720p, plus 7 ms
 adjustments and 17 ms for blur. GPU compositing (`OCA_BUSH_RENDERER=gpu`) is the remaining lever
 and has not been measured on this setup.
 
+Second round (4 cores, Linux, release, FFmpeg 8.1.3, `layers_probe` with 4 layers at 720p):
+
+- Masks: a pixel far from the mask edge gets its factor (exactly one or zero) from a comparison
+  instead of a square root and a division (`LayerMask::alpha_factor_fast`, equal bit for bit to the
+  full expression over a dense grid), a fully transparent pixel skips the blend, and which effects
+  apply is decided once per layer (`Shading`). Mask 44 -> 35 ms, rotate 31 -> 27 ms, colour
+  7.8 -> 5.8 ms. What is left of the mask cost is mostly decoding four sources.
+- Scrubbing a long-GOP original (1080p60, 50 Mbps, 100-frame GOP): random seeks were p50 274 to
+  476 ms, p95 1.1 to 1.5 s, because a seek decodes forward from the key frame (about 4.5 ms a
+  frame). Skipping non-reference frames while decoding forward saved 3 % in an ffmpeg test, so it
+  was not pursued. `Engine::set_seek_budget` lets a seek stop decoding forward at a deadline and
+  show the newest frame it has (never cached; the exact request after it carries on from there):
+  with a 20 ms budget p50 64 ms, p95 91 ms. The editor sets a 30 ms budget while the playhead is
+  dragged (timeline ruler and the monitor slider) and renders the exact frame when it ends.
+  Proxies (short GOP, no B-frames) were already fast (p50 16 ms) and are unaffected.
+- Playback jitter (p95 51 ms against p50 12 ms, max 260 ms in one run) was the machine: the
+  outliers were scattered rather than periodic (`PROBE_TRACE=1` on `playback_probe` lists them),
+  decode-only runs were steady at 4.9 ms/frame, and in quiet runs p50 was 10 ms, p95 21 ms,
+  max under 50 ms. Emulating a frame buffer pool (no mmap churn, `MALLOC_MMAP_THRESHOLD_`)
+  changed nothing, so no pool was added.
+- Blur (about 11 ms a layer at 720p, 4 cores) already uses running sums, vectorized column
+  bands and all cores, and costs the same at any sigma. Only an approximation (blur a half-size
+  copy and scale it back, for strong blurs) would be faster, by about 1.5x after the scaling, and
+  it would give up the exact result the CPU and GPU paths share; it was left out.
+- Preview JPEG (`cargo test --release -p desktop jpeg_cost -- --ignored --nocapture`, noisy
+  synthetic frames): 854x480 3.7 ms, 1280x720 8.6 ms, 1920x1080 19.6 ms, 4:2:0 with SIMD, on its
+  own thread so it overlaps the next render; below the 33 ms frame interval at every size.
+
 Import is bound by decoding (the 480p proxy of 22 s of 1080p60 takes 8 s, ffmpeg itself 7.4 s).
 Random scrub on the 480p proxy: p50 16 ms, p95 31 ms; on a 1080p source with a 2 s GOP: p50 60 ms,
-p95 133 ms (no prefetch exists).
+p95 133 ms on the earlier machine, 274 ms and 1.1 s on this one before the seek budget (see above).
+No prefetch exists; the budget made one unnecessary for dragging.
 
 ## Editor UI
 
@@ -64,8 +93,10 @@ snapshot (first load only) is 50 ms. JS heap: 35 MB (48 clips), 55 MB (6000 clip
 | Benchmark clip | `scripts/make-bench-video.sh` |
 | Export timings | `OCA_BENCH_VIDEO=clip.mp4 cargo test --release -p core --test it export_perf -- --ignored --nocapture` (`OCA_BENCH_ONLY` filters) |
 | Import steps | `import_perf` in the same test binary |
+| Slow frames in playback | `PROBE_TRACE=1 playback_probe clip.mp4` lists frames over twice the median |
+| Preview JPEG cost | `cargo test --release -p desktop jpeg_cost -- --ignored --nocapture` |
 | Decode speed | `cargo run --release -p bush --example decode_throughput -- clip.mp4` |
-| Scrub latency | `scrub_probe` example |
+| Scrub latency | `scrub_probe` example (`PROBE_BUDGET_MS=30` for the drag behaviour) |
 | Playback cost per layer count | `layers_probe` example (plain, fade, colour, mask, blur, rotate) |
 | Per-edit backend cost on a big project | `cargo test --release -p desktop stress -- --ignored --nocapture` |
 | Frontend against a mocked backend | `apps/desktop/tools/ui-perf.mjs`, `ui-drag.mjs`, `ui-shots.mjs`, `ui-sizes.mjs`, `ui-a11y.mjs`; the session JSON comes from `dump_session_json` (see the header of `ui-perf.mjs`) |
