@@ -106,9 +106,9 @@ export interface MediaAsset {
   /** What the file says about its pixels and audio streams, read on import. */
   streams: StreamInfo;
   hdr_handling: HdrHandling;
-  /** The audio stream of the file this asset plays (a track of a multi-track recording), or null
-   *  for the file's first one. */
-  audio_stream: number | null;
+  /** For an audio asset made from one track of a multi-track recording: where it came from. Null
+   *  for every other asset. */
+  audio_stream: { origin: string; stream_index: number } | null;
 }
 
 export type ColorTransfer = "Unspecified" | "Bt709" | "Srgb" | "Pq" | "Hlg" | "Other";
