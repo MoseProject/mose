@@ -5,7 +5,13 @@ import { useEffect, useState } from "react";
 import { t, type TextKey } from "../../i18n";
 import { api } from "../../ipc";
 import { describeError, patchUi, run } from "../../store";
-import type { ExportAspectRatio, ExportCanvas, SessionView } from "../../types";
+import {
+  AUDIO_EXPORT_EXTENSIONS,
+  type AudioExportFormat,
+  type ExportAspectRatio,
+  type ExportCanvas,
+  type SessionView,
+} from "../../types";
 import { Dialog, type DialogExit } from "../chrome/Dialog";
 import { InfoTip } from "../chrome/InfoTip";
 import { alreadyNormalized } from "./audioNormalization";
@@ -28,6 +34,12 @@ const QUALITIES: [QualityChoice, TextKey][] = [
   ["medium", "exportQualityMedium"],
   ["low", "exportQualityLow"],
   ["custom", "exportQualityCustom"],
+];
+const AUDIO_FORMATS: [AudioExportFormat, TextKey][] = [
+  ["Wav24", "exportFormatWav24"],
+  ["Flac", "exportFormatFlac"],
+  ["Mp3", "exportFormatMp3"],
+  ["Opus", "exportFormatOpus"],
 ];
 const FADE_MS = 160;
 const FLIGHT_MS = 450;
@@ -95,6 +107,9 @@ export function ExportDialog({
   const [folder, setFolder] = useState("");
   // The picture keeps the aspect ratio the project is set to; it is not chosen per export.
   const aspect: ExportAspectRatio = settings.aspect_ratio;
+  // `null` exports the video; a format exports only the mixed sound.
+  const [audioFormat, setAudioFormat] = useState<AudioExportFormat | null>(null);
+  const extension = audioFormat ? AUDIO_EXPORT_EXTENSIONS[audioFormat] : "mp4";
   const [chosenQuality, setQuality] = useState<QualityChoice>("source");
   const [customMbps, setCustomMbps] = useState(10);
   const [maxHeight, setMaxHeight] = useState<number | null>(null);
@@ -114,7 +129,7 @@ export function ExportDialog({
   const already = alreadyNormalized(session, lufs, clipIds);
   const normalize = normalizeChoice ?? (storedNormalize && already !== true);
   const lufsValid = !normalize || (Number.isFinite(lufs) && lufs >= MIN_LUFS && lufs <= MAX_LUFS);
-  const emptyTimeline = canvasLoaded && canvas === null;
+  const emptyTimeline = audioFormat === null && canvasLoaded && canvas === null;
   const ready = (batch || fileName.trim() !== "") && folder.trim() !== "" && !emptyTimeline;
   // A fixed step above the bitrate the picture already has would only make the file bigger.
   const sourceMbps = canvas
@@ -130,9 +145,13 @@ export function ExportDialog({
   };
   // A step the current picture size made too high falls back to the source quality.
   const quality = stepDisabled(chosenQuality) ? "source" : chosenQuality;
-  const bitrateValid = quality !== "custom" || customBitrateValid(customMbps);
+  const bitrateValid =
+    audioFormat !== null || quality !== "custom" || customBitrateValid(customMbps);
   const picture = exportOptions(quality, customMbps, maxHeight);
-  const options = normalize ? picture : { ...picture, normalize: false };
+  const videoOptions = normalize ? picture : { ...picture, normalize: false };
+  const options = audioFormat
+    ? { ...(normalize ? {} : { normalize: false }), audioFormat }
+    : videoOptions;
   const summary = canvas && bitrateValid ? summarize(canvas, picture) : null;
   const someStepDisabled = QUALITIES.some(([value]) => {
     return stepDisabled(value);
@@ -184,7 +203,10 @@ export function ExportDialog({
     const timer = setTimeout(() => {
       const lookup = clipIds
         ? api.exportClipsTargets(clipIds, folder, fileName)
-        : api.exportTarget(folder, fileName).then((target) => {
+        : (audioFormat
+            ? api.exportTarget(folder, fileName, extension)
+            : api.exportTarget(folder, fileName)
+          ).then((target) => {
             return [target];
           });
       lookup.then(
@@ -208,7 +230,7 @@ export function ExportDialog({
       stale = true;
       clearTimeout(timer);
     };
-  }, [ready, folder, fileName, clipIds]);
+  }, [ready, folder, fileName, clipIds, audioFormat, extension]);
   const existingShown = ready ? existing : 0;
 
   const close = () => {
@@ -256,7 +278,9 @@ export function ExportDialog({
       if (clipIds) {
         await api.exportClipsTargets(clipIds, folder, fileName);
       } else {
-        target = await api.exportTarget(folder, fileName);
+        target = audioFormat
+          ? await api.exportTarget(folder, fileName, extension)
+          : await api.exportTarget(folder, fileName);
       }
     } catch (e) {
       setError(describeError(e));
@@ -329,7 +353,7 @@ export function ExportDialog({
             setError("");
           }}
         />
-        <span className={cx(styles, baseStyles, "muted")}>{batch ? "" : ".mp4"}</span>
+        <span className={cx(styles, baseStyles, "muted")}>{batch ? "" : `.${extension}`}</span>
       </label>
       <div className={cx(styles, baseStyles, "dialog-field")}>
         <span id="export-folder-label">{t("exportFolder")}</span>
@@ -383,87 +407,118 @@ export function ExportDialog({
           {error}
         </p>
       )}
-      <label className={cx(styles, baseStyles, "dialog-field")}>
-        <span>{t("exportQuality")}</span>
-        <select
-          value={quality}
-          onChange={(e) => {
-            setQuality(e.target.value as QualityChoice);
-          }}
-        >
-          {QUALITIES.map(([value, label]) => {
-            return (
-              <option
-                key={value}
-                value={value}
-                disabled={stepDisabled(value)}
-              >
-                {t(label)}
-              </option>
-            );
-          })}
-        </select>
-      </label>
-      {someStepDisabled && (
-        <p className={cx(styles, baseStyles, "muted")}>{t("exportQualityAboveSource")}</p>
-      )}
-      {quality === "custom" && (
+      {!batch && (
         <label className={cx(styles, baseStyles, "dialog-field")}>
-          <span>{t("exportBitrate")}</span>
-          <input
-            type="number"
-            min={MIN_MBPS}
-            max={MAX_MBPS}
-            step={0.5}
-            value={Number.isFinite(customMbps) ? customMbps : ""}
-            aria-invalid={!bitrateValid}
+          <span>{t("exportFormat")}</span>
+          <select
+            value={audioFormat ?? "video"}
             onChange={(e) => {
-              setCustomMbps(e.target.value === "" ? Number.NaN : Number(e.target.value));
+              setAudioFormat(
+                e.target.value === "video" ? null : (e.target.value as AudioExportFormat),
+              );
+              setError("");
             }}
-          />
-          <span className={cx(styles, baseStyles, "muted")}>Mbps</span>
+          >
+            <option value="video">{t("exportFormatVideo")}</option>
+            {AUDIO_FORMATS.map(([value, label]) => {
+              return (
+                <option
+                  key={value}
+                  value={value}
+                >
+                  {t(label)}
+                </option>
+              );
+            })}
+          </select>
         </label>
       )}
-      {!bitrateValid && (
-        <p
-          className={cx(styles, baseStyles, "dialog-error")}
-          role="alert"
-        >
-          {t("exportBitrateRange")}
-        </p>
-      )}
-      <label className={cx(styles, baseStyles, "dialog-field")}>
-        <span>{t("exportResolution")}</span>
-        <select
-          value={maxHeight === null ? "source" : String(maxHeight)}
-          onChange={(e) => {
-            setMaxHeight(e.target.value === "source" ? null : Number(e.target.value));
-          }}
-        >
-          <option value="source">
-            {t("exportResolutionSource")}
-            {canvas ? ` (${canvas.width}x${canvas.height}) · ${t("exportRecommended")}` : ""}
-          </option>
-          {RESOLUTION_HEIGHTS.filter((h) => {
-            return canvas === null || h !== canvas.height;
-          }).map((height) => {
-            return (
-              <option
-                key={height}
-                value={height}
-              >
-                {height}p{canvas && height > canvas.height ? ` · ${t("exportUpscale")}` : ""}
+      {audioFormat && <p className={cx(styles, baseStyles, "muted")}>{t("exportAudioOnlyNote")}</p>}
+      {audioFormat === null && (
+        <>
+          <label className={cx(styles, baseStyles, "dialog-field")}>
+            <span>{t("exportQuality")}</span>
+            <select
+              value={quality}
+              onChange={(e) => {
+                setQuality(e.target.value as QualityChoice);
+              }}
+            >
+              {QUALITIES.map(([value, label]) => {
+                return (
+                  <option
+                    key={value}
+                    value={value}
+                    disabled={stepDisabled(value)}
+                  >
+                    {t(label)}
+                  </option>
+                );
+              })}
+            </select>
+          </label>
+          {someStepDisabled && (
+            <p className={cx(styles, baseStyles, "muted")}>{t("exportQualityAboveSource")}</p>
+          )}
+          {quality === "custom" && (
+            <label className={cx(styles, baseStyles, "dialog-field")}>
+              <span>{t("exportBitrate")}</span>
+              <input
+                type="number"
+                min={MIN_MBPS}
+                max={MAX_MBPS}
+                step={0.5}
+                value={Number.isFinite(customMbps) ? customMbps : ""}
+                aria-invalid={!bitrateValid}
+                onChange={(e) => {
+                  setCustomMbps(e.target.value === "" ? Number.NaN : Number(e.target.value));
+                }}
+              />
+              <span className={cx(styles, baseStyles, "muted")}>Mbps</span>
+            </label>
+          )}
+          {!bitrateValid && (
+            <p
+              className={cx(styles, baseStyles, "dialog-error")}
+              role="alert"
+            >
+              {t("exportBitrateRange")}
+            </p>
+          )}
+          <label className={cx(styles, baseStyles, "dialog-field")}>
+            <span>{t("exportResolution")}</span>
+            <select
+              value={maxHeight === null ? "source" : String(maxHeight)}
+              onChange={(e) => {
+                setMaxHeight(e.target.value === "source" ? null : Number(e.target.value));
+              }}
+            >
+              <option value="source">
+                {t("exportResolutionSource")}
+                {canvas ? ` (${canvas.width}x${canvas.height}) · ${t("exportRecommended")}` : ""}
               </option>
-            );
-          })}
-        </select>
-        {isUpscale(canvas, maxHeight) && (
-          <InfoTip
-            label={t("exportUpscale")}
-            text={t("exportUpscaleNote")}
-          />
-        )}
-      </label>
+              {RESOLUTION_HEIGHTS.filter((h) => {
+                return canvas === null || h !== canvas.height;
+              }).map((height) => {
+                return (
+                  <option
+                    key={height}
+                    value={height}
+                  >
+                    {height}p{canvas && height > canvas.height ? ` · ${t("exportUpscale")}` : ""}
+                  </option>
+                );
+              })}
+            </select>
+            {isUpscale(canvas, maxHeight) && (
+              <InfoTip
+                label={t("exportUpscale")}
+                text={t("exportUpscaleNote")}
+              />
+            )}
+          </label>
+        </>
+      )}
       <label className={cx(styles, baseStyles, "dialog-check")}>
         <input
           type="checkbox"
@@ -542,7 +597,7 @@ export function ExportDialog({
           </p>
         )}
       </fieldset>
-      {summary && canvas && (
+      {audioFormat === null && summary && canvas && (
         <p
           className={cx(styles, baseStyles, "export-summary")}
           data-testid="export-summary"
@@ -562,7 +617,7 @@ export function ExportDialog({
           {batch ? t("exportNoClips") : t("exportEmptyTimeline")}
         </p>
       )}
-      {!emptyTimeline && Object.keys(picture).length === 0 && (
+      {audioFormat === null && !emptyTimeline && Object.keys(picture).length === 0 && (
         <p className={cx(styles, baseStyles, "muted")}>{t("exportKeepsBitrate")}</p>
       )}
     </Dialog>

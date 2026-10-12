@@ -624,8 +624,12 @@ export const api = {
   setExportSettings: (targetLufs: number, aspectRatio: ExportAspectRatio) => {
     return invoke<void>("set_export_settings", { targetLufs, aspectRatio });
   },
-  exportTarget: (folder: string, fileName: string) => {
-    return invoke<{ path: string; exists: boolean }>("export_target", { folder, fileName });
+  exportTarget: (folder: string, fileName: string, extension?: string) => {
+    return invoke<{ path: string; exists: boolean }>("export_target", {
+      folder,
+      fileName,
+      extension: extension ?? null,
+    });
   },
   exportCanvas: (aspectRatio: ExportAspectRatio, clipIds?: number[]) => {
     return invoke<ExportCanvas>("export_canvas", { aspectRatio, clipIds: clipIds ?? null });

@@ -71,7 +71,18 @@ export interface ExportOptions {
   maxHeight?: number;
   /** `false` exports without normalizing the loudness; absent follows the app setting. */
   normalize?: boolean;
+  /** Exports only the mixed sound in this format, no video. */
+  audioFormat?: AudioExportFormat;
 }
+/** The audio-only export formats; the value is the backend's `AudioMixFormat` name. */
+export type AudioExportFormat = "Wav24" | "Flac" | "Mp3" | "Opus";
+/** The file extension each audio-only format is written with. */
+export const AUDIO_EXPORT_EXTENSIONS: Record<AudioExportFormat, string> = {
+  Wav24: "wav",
+  Flac: "flac",
+  Mp3: "mp3",
+  Opus: "opus",
+};
 /** Size, source-matched bitrate and length an export would have before any option. */
 export interface ExportCanvas {
   width: number;
