@@ -163,6 +163,16 @@ describe("import failures and media commands", () => {
   });
 });
 
+describe("media commands", () => {
+  it("send the HDR choice with the asset", async () => {
+    await ipc.api.setHdrHandling(3, "TreatAsSdr");
+    expect(invoke).toHaveBeenLastCalledWith("set_hdr_handling", {
+      assetId: 3,
+      handling: "TreatAsSdr",
+    });
+  });
+});
+
 describe("export commands", () => {
   it("resolve the target of a folder and a name", async () => {
     invoke.mockResolvedValueOnce({ path: "D:/out/a.mp4", exists: false });
