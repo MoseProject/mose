@@ -67,7 +67,7 @@ pub use auto_reframe::{
     compute_reframe_crop, detect_faces, main_subject_center, CropRect, FaceBox, ReframeError,
 };
 pub use avbridge::{
-    extract_pcm_16k_mono, last_video_encoder, AudioSegment, Canvas, ClipSegment,
+    extract_pcm_16k_mono, last_video_encoder, AudioMixFormat, AudioSegment, Canvas, ClipSegment,
     GpuEncoderPreference, PcmError, ShapeSegment,
 };
 pub use background_removal::{encode_matte_video, segment_person, MatteEncodeError, SegmentError};
@@ -128,12 +128,12 @@ pub use probe::{probe_media, ProbeError, ProbedMedia};
 pub use project::{PanelLayout, Project, Recency, Sequence, SequenceExportSettings};
 pub use proxy::{ensure_proxy, PreviewQuality, ProxyError};
 pub use render::{
-    apply_export_aspect_ratio, render_export, render_export_job, render_export_job_multi,
-    render_export_job_multi_with_audio, render_export_job_multi_with_options,
-    render_timeline_export, resolve_audio_segments, resolve_privacy_blur_segments,
-    resolve_shape_segments, resolve_text_segments, resolve_timeline_segments,
-    resolve_timeline_segments_multi, PrivacyBlurSegment, RenderError, RenderOutcome, TextSegment,
-    NO_NORMALIZATION,
+    apply_export_aspect_ratio, render_audio_only, render_export, render_export_job,
+    render_export_job_multi, render_export_job_multi_with_audio,
+    render_export_job_multi_with_options, render_timeline_export, resolve_audio_segments,
+    resolve_audio_segments_for_audio_export, resolve_privacy_blur_segments, resolve_shape_segments,
+    resolve_text_segments, resolve_timeline_segments, resolve_timeline_segments_multi,
+    PrivacyBlurSegment, RenderError, RenderOutcome, TextSegment, NO_NORMALIZATION,
 };
 pub use scene_detection::{detect_scene_cuts, SceneCut, DEFAULT_SCENE_CUT_THRESHOLD};
 pub use scopes::{

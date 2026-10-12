@@ -523,6 +523,24 @@ pub fn resolve_audio_segments(
     sequence: &Sequence,
     media_library: &[MediaAsset],
 ) -> Result<Vec<avbridge::AudioSegment>, RenderError> {
+    resolve_audio_segments_inner(sequence, media_library, false)
+}
+
+/// Every audible clip of `sequence` as mix segments, for an audio-only export: unlike
+/// [`resolve_audio_segments`], there is no video file whose own audio could be copied instead, so
+/// the whole mix is always built. Empty only when nothing in the sequence carries sound.
+pub fn resolve_audio_segments_for_audio_export(
+    sequence: &Sequence,
+    media_library: &[MediaAsset],
+) -> Result<Vec<avbridge::AudioSegment>, RenderError> {
+    resolve_audio_segments_inner(sequence, media_library, true)
+}
+
+fn resolve_audio_segments_inner(
+    sequence: &Sequence,
+    media_library: &[MediaAsset],
+    always_mix: bool,
+) -> Result<Vec<avbridge::AudioSegment>, RenderError> {
     let first_video_track = sequence.timeline.tracks.iter().position(|track| {
         track.kind == TrackKind::Video && track.visible && !track.clips.is_empty()
     });
@@ -580,7 +598,7 @@ pub fn resolve_audio_segments(
         }
         return Ok(Vec::new());
     }
-    if !has_additional_contributor && !silenced_clips {
+    if !always_mix && !has_additional_contributor && !silenced_clips {
         return Ok(Vec::new());
     }
     resolved.sort_by(|a, b| a.timeline_start_secs.total_cmp(&b.timeline_start_secs));
