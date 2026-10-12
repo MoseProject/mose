@@ -704,6 +704,64 @@ fn a_hard_cut_takes_the_mix_path_with_a_declick_and_a_split_stays_on_the_one_pas
 }
 
 #[test]
+fn an_audio_only_export_always_builds_the_mix_and_writes_every_format() {
+    let (sequence, media) = mix_fixture(Default::default());
+    // The video export would copy this untouched clip's own audio; the audio export has no video.
+    assert!(resolve_audio_segments(&sequence, &media)
+        .unwrap()
+        .is_empty());
+    let segments = resolve_audio_segments_for_audio_export(&sequence, &media).unwrap();
+    assert_eq!(segments.len(), 1);
+
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    for format in crate::AudioMixFormat::ALL {
+        let output = std::env::temp_dir().join(format!(
+            "core_audio_only_{}.{}",
+            std::process::id(),
+            format.extension()
+        ));
+        let _ = std::fs::remove_file(&output);
+        let mut last = 0;
+        let outcome = render_audio_only(
+            &segments,
+            0.4,
+            &output,
+            crate::NO_NORMALIZATION,
+            format,
+            &cancel,
+            |percent| last = percent,
+        )
+        .unwrap_or_else(|error| panic!("{format:?}: {error}"));
+        assert_eq!(outcome, RenderOutcome::Completed, "{format:?}");
+        assert_eq!(last, 100);
+        let probed = crate::probe_media(&output).unwrap_or_else(|e| panic!("{format:?}: {e}"));
+        assert!(
+            probed.has_audio && probed.kind == crate::MediaKind::Audio,
+            "{format:?}: {:?}",
+            probed.kind
+        );
+        assert!((probed.duration_secs - 0.4).abs() < 0.15, "{format:?}");
+        let _ = std::fs::remove_file(&output);
+    }
+
+    // A cancelled mix leaves nothing behind.
+    let output = std::env::temp_dir().join(format!("core_audio_cancel_{}.wav", std::process::id()));
+    let cancelled = std::sync::atomic::AtomicBool::new(true);
+    let outcome = render_audio_only(
+        &segments,
+        0.4,
+        &output,
+        crate::NO_NORMALIZATION,
+        crate::AudioMixFormat::Wav24,
+        &cancelled,
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, RenderOutcome::Cancelled);
+    assert!(!output.exists());
+}
+
+#[test]
 fn a_fader_or_pan_sends_the_track_through_the_mix_with_its_level_added_to_the_clips() {
     let (sequence, media) = mix_fixture(crate::timeline::TrackMix {
         volume_db: -6.0,
