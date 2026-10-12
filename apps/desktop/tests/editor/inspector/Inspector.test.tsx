@@ -44,7 +44,7 @@ vi.mock("../../../src/editor/inspector/ShapeInspector", () => {
 
 const { Inspector, Section, Slider } = await import("../../../src/editor/inspector/Inspector");
 // The parts the inspector fetches when first shown, loaded now so that they arrive at once.
-await import("../../../src/editor/inspector/EffectsSections");
+await import("../../../src/editor/inspector/AiActionsSection");
 await import("../../../src/editor/inspector/TextInspector");
 await import("../../../src/editor/inspector/ShapeInspector");
 const { api } = await import("../../../src/ipc");
@@ -923,14 +923,14 @@ describe("what is built only when it is on show", () => {
   });
 });
 
-describe("the Effects sections are fetched with their tab", () => {
-  it("leaves them out until the Effects tab is shown", async () => {
+describe("the AI actions are fetched with the Effects tab", () => {
+  it("keeps them out until the Effects tab is shown, while the Inspector tab keeps its sections", async () => {
     render(<Inspector session={sessionFor()} />);
     await settled();
-    expect(screen.queryByTestId("section-mask")).toBeNull();
+    expect(screen.getByTestId("section-mask")).toBeTruthy();
+    expect(screen.queryByText(t("aiActions"), { selector: "summary > span" })).toBeNull();
     fireEvent.click(screen.getByRole("tab", { name: t("inspectorEffects") }));
     await settled();
-    expect(screen.getByTestId("section-mask")).toBeTruthy();
-    expect(sectionOf(t("keyframes"))).toBeTruthy();
+    expect(screen.getByText(t("aiActions"), { selector: "summary > span" })).toBeTruthy();
   });
 });
