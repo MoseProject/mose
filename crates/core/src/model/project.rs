@@ -47,6 +47,35 @@ pub struct Sequence {
     pub export_settings: SequenceExportSettings,
 }
 
+impl Sequence {
+    /// A copy of this sequence holding only the clip `clip_id`, moved to the start of the
+    /// timeline: what exporting that one clip as its own video renders. Every other clip, text
+    /// and shape is left out, and tracks left empty are dropped. `None` when no such clip exists.
+    pub fn isolating_clip(&self, clip_id: u64) -> Option<Sequence> {
+        let start = self
+            .timeline
+            .tracks
+            .iter()
+            .flat_map(|track| track.clips.iter())
+            .find(|clip| clip.id == clip_id)?
+            .start_secs;
+        let mut sequence = self.clone();
+        sequence.timeline.markers.clear();
+        sequence.timeline.playhead_secs = 0.0;
+        for track in &mut sequence.timeline.tracks {
+            track.clips.retain(|clip| clip.id == clip_id);
+            track.text_clips.clear();
+            track.shape_clips.clear();
+            for clip in &mut track.clips {
+                clip.start_secs -= start;
+                clip.transition_in = crate::timeline::TransitionType::None;
+            }
+        }
+        sequence.timeline.tracks.retain(|track| !track.clips.is_empty());
+        Some(sequence)
+    }
+}
+
 /// Persisted export choices for one [`Sequence`]. Output path and GPU preference remain
 /// app/job-level concerns; aspect ratio and normalization target describe the sequence's
 /// intended presentation and therefore follow the tab across saves and project switches.
