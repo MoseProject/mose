@@ -56,6 +56,7 @@ fn mixes_overlapping_audio_segments_and_muxes_them_without_reencoding_video() {
             voice_cleanup_ceiling_linear: 0.95,
             fade_in_secs: 0.0,
             fade_out_secs: 0.0,
+            pan: 0.0,
         },
         AudioSegment {
             source_path: source,
@@ -73,6 +74,7 @@ fn mixes_overlapping_audio_segments_and_muxes_them_without_reencoding_video() {
             voice_cleanup_ceiling_linear: 0.95,
             fade_in_secs: 0.0,
             fade_out_secs: 0.0,
+            pan: 0.0,
         },
     ];
 
@@ -119,6 +121,7 @@ fn mix_segment_fades_ramp_the_branch_in_and_out() {
         voice_cleanup_ceiling_linear: 0.95,
         fade_in_secs: 0.3,
         fade_out_secs: 0.3,
+        pan: 0.0,
     };
     let outcome =
         mix_audio_timeline(&[segment], 1.0, &mixed, -14.0, &AtomicBool::new(false)).unwrap();
@@ -171,6 +174,7 @@ fn mixes_with_sidechain_ducking_when_both_roles_are_present() {
             voice_cleanup_ceiling_linear: 0.95,
             fade_in_secs: 0.0,
             fade_out_secs: 0.0,
+            pan: 0.0,
         },
         AudioSegment {
             source_path: source,
@@ -188,6 +192,7 @@ fn mixes_with_sidechain_ducking_when_both_roles_are_present() {
             voice_cleanup_ceiling_linear: 0.95,
             fade_in_secs: 0.0,
             fade_out_secs: 0.0,
+            pan: 0.0,
         },
     ];
 
@@ -217,6 +222,7 @@ fn voice_cleanup_segment(source: PathBuf, voice_cleanup_enabled: bool) -> AudioS
         voice_cleanup_ceiling_linear: 0.95,
         fade_in_secs: 0.0,
         fade_out_secs: 0.0,
+        pan: 0.0,
     }
 }
 
@@ -343,6 +349,7 @@ fn mixes_with_sidechain_ducking_across_multiple_branches_per_role() {
             voice_cleanup_ceiling_linear: 0.95,
             fade_in_secs: 0.0,
             fade_out_secs: 0.0,
+            pan: 0.0,
         },
         AudioSegment {
             source_path: source.clone(),
@@ -360,6 +367,7 @@ fn mixes_with_sidechain_ducking_across_multiple_branches_per_role() {
             voice_cleanup_ceiling_linear: 0.95,
             fade_in_secs: 0.0,
             fade_out_secs: 0.0,
+            pan: 0.0,
         },
         AudioSegment {
             source_path: source.clone(),
@@ -377,6 +385,7 @@ fn mixes_with_sidechain_ducking_across_multiple_branches_per_role() {
             voice_cleanup_ceiling_linear: 0.95,
             fade_in_secs: 0.0,
             fade_out_secs: 0.0,
+            pan: 0.0,
         },
         AudioSegment {
             source_path: source,
@@ -394,6 +403,7 @@ fn mixes_with_sidechain_ducking_across_multiple_branches_per_role() {
             voice_cleanup_ceiling_linear: 0.95,
             fade_in_secs: 0.0,
             fade_out_secs: 0.0,
+            pan: 0.0,
         },
     ];
 
@@ -429,6 +439,7 @@ fn a_target_branch_without_any_trigger_falls_back_to_a_plain_mix() {
         voice_cleanup_ceiling_linear: 0.95,
         fade_in_secs: 0.0,
         fade_out_secs: 0.0,
+        pan: 0.0,
     }];
 
     let outcome =
@@ -471,6 +482,7 @@ fn mixes_a_segment_with_a_keyframed_gain_expression() {
         voice_cleanup_ceiling_linear: 0.95,
         fade_in_secs: 0.0,
         fade_out_secs: 0.0,
+        pan: 0.0,
     }];
 
     let outcome =
@@ -480,4 +492,64 @@ fn mixes_a_segment_with_a_keyframed_gain_expression() {
     assert!(mixed_info.has_audio);
 
     let _ = std::fs::remove_file(&mixed);
+}
+
+/// Left and right RMS of the stereo audio file `path`.
+fn channel_rms(path: &Path) -> (f32, f32) {
+    let (mut session, _) = avbridge::AudioDecodeSession::open(path, 48_000, 2).unwrap();
+    let cancel = AtomicBool::new(false);
+    let (mut left, mut right, mut frames) = (0.0f64, 0.0f64, 0usize);
+    while let Some(block) = session.next_block(&cancel).unwrap() {
+        for pair in block.samples.chunks_exact(2) {
+            left += f64::from(pair[0]).powi(2);
+            right += f64::from(pair[1]).powi(2);
+        }
+        frames += block.frame_count;
+    }
+    let frames = frames.max(1) as f64;
+    (
+        (left / frames).sqrt() as f32,
+        (right / frames).sqrt() as f32,
+    )
+}
+
+fn panned_mix(name: &str, pan: f32) -> (f32, f32) {
+    let mixed = std::env::temp_dir().join(format!("avbridge_pan_{name}.m4a"));
+    let _ = std::fs::remove_file(&mixed);
+    let mut segment = AudioSegment::plain(fixture("audio.m4a"), 0.0, 0.8, 0.0);
+    segment.pan = pan;
+    let outcome =
+        mix_audio_timeline(&[segment], 1.0, &mixed, -14.0, &AtomicBool::new(false)).unwrap();
+    assert_eq!(outcome, AudioMixOutcome::Completed);
+    let levels = channel_rms(&mixed);
+    let _ = std::fs::remove_file(&mixed);
+    levels
+}
+
+/// The pan stage of the mix graph: a hard pan silences the far side and a centred branch is
+/// left exactly as it was.
+#[test]
+fn a_panned_segment_moves_to_one_side_and_a_centred_one_is_untouched() {
+    let (centre_l, centre_r) = panned_mix("centre", 0.0);
+    assert!(centre_l > 0.01 && (centre_l - centre_r).abs() < 0.01 * centre_l.max(centre_r));
+
+    let (right_l, right_r) = panned_mix("right", 1.0);
+    assert!(
+        right_l < 0.02 * right_r,
+        "hard right still plays left: {right_l} vs {right_r}"
+    );
+    assert!(right_r > 0.5 * centre_r, "the near side keeps its level");
+
+    let (left_l, left_r) = panned_mix("left", -1.0);
+    assert!(
+        left_r < 0.02 * left_l,
+        "hard left still plays right: {left_r} vs {left_l}"
+    );
+
+    // Halfway is quieter on the far side than the near one, but not silent.
+    let (half_l, half_r) = panned_mix("half", 0.5);
+    assert!(
+        half_l < half_r && half_l > 0.3 * half_r,
+        "{half_l} vs {half_r}"
+    );
 }
