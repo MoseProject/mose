@@ -388,11 +388,15 @@ describe("ExportDialog", () => {
     };
     expect(label("1440")).toBe(`1440p · ${t("exportUpscale")}`);
     expect(label("720")).toBe("720p");
-    expect(screen.queryByText(t("exportUpscaleNote"))).toBeNull();
+    expect(screen.queryByRole("tooltip")).toBeNull();
     choose(t("exportResolution"), "1440");
-    expect(screen.getByText(t("exportUpscaleNote"))).toBeTruthy();
+    // The note is a tooltip described by an info button beside the dropdown.
+    const tip = screen.getByRole("button", { name: t("exportUpscale") });
+    const note = screen.getByRole("tooltip");
+    expect(note.textContent).toBe(t("exportUpscaleNote"));
+    expect(tip.getAttribute("aria-describedby")).toBe(note.id);
     expect(screen.getByTestId("export-summary").textContent).toContain("2560x1440");
     choose(t("exportResolution"), "720");
-    expect(screen.queryByText(t("exportUpscaleNote"))).toBeNull();
+    expect(screen.queryByRole("tooltip")).toBeNull();
   });
 });

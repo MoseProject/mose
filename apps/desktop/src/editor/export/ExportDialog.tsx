@@ -8,6 +8,7 @@ import { askConfirm } from "../../notifications";
 import { describeError, patchUi, run } from "../../store";
 import type { ExportAspectRatio, ExportCanvas, SessionView } from "../../types";
 import { Dialog } from "../chrome/Dialog";
+import { InfoTip } from "../chrome/InfoTip";
 import {
   customBitrateValid,
   isUpscale,
@@ -308,10 +309,13 @@ export function ExportDialog({ session }: { session: SessionView }) {
             );
           })}
         </select>
+        {isUpscale(canvas, maxHeight) && (
+          <InfoTip
+            label={t("exportUpscale")}
+            text={t("exportUpscaleNote")}
+          />
+        )}
       </label>
-      {isUpscale(canvas, maxHeight) && (
-        <p className={cx(styles, baseStyles, "muted")}>{t("exportUpscaleNote")}</p>
-      )}
       <label className={cx(styles, baseStyles, "dialog-check")}>
         <input
           type="checkbox"
