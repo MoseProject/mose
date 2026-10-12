@@ -81,9 +81,25 @@ describe("ExportDialog", () => {
     const value = (label: string) => {
       return (screen.getByLabelText(label, { exact: false }) as HTMLSelectElement).value;
     };
-    expect(value(t("aspectRatio"))).toBe("Portrait");
     expect(value(t("loudnessTarget"))).toBe("-16");
-    expect((screen.getByRole("spinbutton") as HTMLInputElement).value).toBe("-16");
+    // A preset and the custom field are exclusive: the field exists only for "custom".
+    expect(screen.queryByRole("spinbutton")).toBeNull();
+  });
+
+  it("takes the aspect ratio from the project, with no choice offered", async () => {
+    render(<ExportDialog session={session({ aspect: "Portrait" })} />);
+    expect(screen.queryByLabelText(t("aspectRatio"), { exact: false })).toBeNull();
+    await waitFor(() => {
+      expect(api.exportCanvas).toHaveBeenCalledWith("Portrait");
+    });
+  });
+
+  it("starts on custom, with the field, when the sequence target is not a preset", () => {
+    render(<ExportDialog session={session({ lufs: -18 })} />);
+    expect(
+      (screen.getByLabelText(t("loudnessTarget"), { exact: false }) as HTMLSelectElement).value,
+    ).toBe("custom");
+    expect((screen.getByRole("spinbutton") as HTMLInputElement).value).toBe("-18");
   });
 
   it("shows the measured loudness of the first clip, when there is one", () => {
@@ -165,7 +181,6 @@ describe("ExportDialog", () => {
     fireEvent.change(screen.getByLabelText(t("exportFileName"), { exact: false }), {
       target: { value: "final" },
     });
-    choose(t("aspectRatio"), "Square");
     choose(t("loudnessTarget"), "-23");
     choose(t("exportQuality"), "low");
     choose(t("exportResolution"), "720");
@@ -178,7 +193,7 @@ describe("ExportDialog", () => {
       bitrateMbps: 4,
       maxHeight: 720,
     });
-    expect(api.setExportSettings).toHaveBeenCalledWith(-23, "Square");
+    expect(api.setExportSettings).toHaveBeenCalledWith(-23, "Original");
     expect(api.setNormalizeAudio).toHaveBeenCalledWith(true);
     expect(uiStore.get().exportDialogOpen).toBe(false);
     expect(uiStore.get().exportQueueOpen).toBe(true);
@@ -265,11 +280,10 @@ describe("ExportDialog", () => {
 
   it("accepts a custom loudness target and rejects one out of range", async () => {
     render(<ExportDialog session={session()} />);
-    const input = screen.getByRole("spinbutton") as HTMLInputElement;
-    // Only the "custom" choice makes the field editable.
-    expect(input.disabled).toBe(true);
+    // Only the "custom" choice brings the field.
+    expect(screen.queryByRole("spinbutton")).toBeNull();
     choose(t("loudnessTarget"), "custom");
-    expect(input.disabled).toBe(false);
+    const input = screen.getByRole("spinbutton") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "-3" } });
     expect(screen.getByRole("alert").textContent).toBe(t("loudnessRange"));
     expect((screen.getByText(t("exportChooseFile")) as HTMLButtonElement).disabled).toBe(true);
