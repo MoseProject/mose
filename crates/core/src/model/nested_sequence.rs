@@ -247,6 +247,11 @@ fn materialize_inner(
     Ok(rendered_any)
 }
 
+/// One compound clip render at a time in the process. The file is named by sequence id, and the
+/// preview (in the background) and an export may both ask for the same one: two renders writing
+/// the same path would corrupt it.
+static RENDER_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// Renders `sequence` (whose own nested clips are already resolved in `already_materialized`)
 /// to a fresh file under `cache_dir`, named by sequence id — a later render of the same sequence
 /// overwrites it, no stale-file accumulation.
@@ -256,6 +261,9 @@ fn render_nested_sequence(
     cache_dir: &Path,
     already_materialized: &HashMap<u64, MediaAsset>,
 ) -> Result<PathBuf, RenderError> {
+    let _one_at_a_time = RENDER_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let mut media_library = project.media_library.clone();
     media_library.extend(already_materialized.values().cloned());
 
