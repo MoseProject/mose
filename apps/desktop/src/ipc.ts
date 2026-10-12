@@ -9,6 +9,8 @@ import type {
   AutoReframeEvent,
   ClipPatch,
   ExportAspectRatio,
+  ExportCanvas,
+  ExportOptions,
   ExportJobView,
   FrameRate,
   LayerTemplate,
@@ -609,11 +611,14 @@ export const api = {
   setExportSettings: (targetLufs: number, aspectRatio: ExportAspectRatio) => {
     return invoke<void>("set_export_settings", { targetLufs, aspectRatio });
   },
-  pickExportPath: () => {
-    return invoke<{ path: string; exists: boolean } | null>("pick_export_path");
+  exportTarget: (folder: string, fileName: string) => {
+    return invoke<{ path: string; exists: boolean }>("export_target", { folder, fileName });
   },
-  startExport: (path: string, rename: boolean) => {
-    return invoke<number>("start_export", { path, rename });
+  exportCanvas: (aspectRatio: ExportAspectRatio) => {
+    return invoke<ExportCanvas>("export_canvas", { aspectRatio });
+  },
+  startExport: (path: string, rename: boolean, options?: ExportOptions) => {
+    return invoke<number>("start_export", { path, rename, options: options ?? null });
   },
   exportActiveSequenceSrt: () => {
     return invoke<boolean>("export_active_sequence_srt");
@@ -650,18 +655,6 @@ export const api = {
   },
 };
 
-/** Asks for an output file and queues the active sequence. An existing file is overwritten
- *  only after the user confirms; otherwise the export goes to an auto-renamed sibling. */
-export async function exportActiveSequence(
-  confirmOverwrite: () => boolean | Promise<boolean>,
-): Promise<void> {
-  const target = await api.pickExportPath();
-  if (!target) {
-    return;
-  }
-  const replace = target.exists ? await confirmOverwrite() : true;
-  await api.startExport(target.path, target.exists && !replace);
-}
 /** One video frame of an asset at a source time, for the timeline's clip strips. */
 export const frameAtUrl = (assetId: number, millis: number) => {
   return `${schemeBase}/thumb/${assetId}/${millis}`;

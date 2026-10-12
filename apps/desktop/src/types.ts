@@ -64,6 +64,19 @@ export const BLEND_MODES = [
 export type BlendMode = (typeof BLEND_MODES)[number];
 export type AudioRole = "Unspecified" | "GameAudio" | "Mic" | "Music";
 export type ExportAspectRatio = "Original" | "Landscape" | "Portrait" | "Square";
+/** What the export dialog asks beyond the sequence's settings; absent fields keep the
+ *  source-matched defaults. */
+export interface ExportOptions {
+  bitrateMbps?: number;
+  maxHeight?: number;
+}
+/** Size, source-matched bitrate and length an export would have before any option. */
+export interface ExportCanvas {
+  width: number;
+  height: number;
+  bitrateMbps: number;
+  durationSecs: number;
+}
 export type MarkerKind = "Standard" | "ToDo" | "Chapter" | "Highlight";
 
 export interface LoudnessMetrics {

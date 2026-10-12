@@ -77,3 +77,19 @@
   color: var(--error);
   font-size: 11px;
 }
+.dialog-field input[type="text"] {
+  flex: 1;
+  min-width: 0;
+}
+.export-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0 6px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+.export-summary > span:first-child {
+  color: var(--text-secondary);
+}
