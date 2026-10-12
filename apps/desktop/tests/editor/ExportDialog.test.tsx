@@ -345,4 +345,14 @@ describe("ExportDialog", () => {
     choose(t("exportQuality"), "low");
     expect(screen.queryByText(t("exportKeepsBitrate"))).toBeNull();
   });
+
+  it("names the original resolution, which is also the largest one offered", async () => {
+    render(<ExportDialog session={session()} />);
+    const select = screen.getByLabelText(t("exportResolution"), {
+      exact: false,
+    }) as HTMLSelectElement;
+    await waitFor(() => {
+      expect(select.options[0].textContent).toBe(`${t("exportResolutionSource")} (1920x1080)`);
+    });
+  });
 });
