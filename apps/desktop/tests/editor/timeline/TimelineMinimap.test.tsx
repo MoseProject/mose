@@ -49,6 +49,31 @@ const mount = (scrollSecs = 0, viewSecs = 20, onScrollTo = vi.fn()) => {
 };
 
 describe("TimelineMinimap", () => {
+  it("joins touching clips into runs on a big sequence instead of one element per clip", () => {
+    const many = [
+      {
+        id: 1,
+        kind: "Video",
+        // 500 clips laid end to end, then one after a gap.
+        clips: [...Array.from({ length: 500 }, (_, i) => clip(i * 10, 10)), clip(6000, 10)],
+        text_clips: [],
+        shape_clips: [],
+      },
+    ] as unknown as Track[];
+    const { container } = render(
+      <TimelineMinimap
+        tracks={many}
+        scrollSecs={0}
+        viewSecs={20}
+        onScrollTo={vi.fn()}
+      />,
+    );
+    // The run of 500 and the clip after the gap.
+    expect(container.querySelectorAll(".minimap-clip")).toHaveLength(2);
+    const run = container.querySelector(".minimap-clip") as HTMLElement;
+    expect(parseFloat(run.style.width)).toBeCloseTo((5000 / 6010) * 100, 0);
+  });
+
   it("draws every clip and overlay over the whole sequence", () => {
     const { container } = mount();
     expect(container.querySelectorAll(".minimap-clip")).toHaveLength(3);
