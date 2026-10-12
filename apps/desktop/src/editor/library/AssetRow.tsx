@@ -1,7 +1,7 @@
 import { cx } from "../../cx";
 import baseStyles from "../../styles/base.module.css";
 import styles from "./library.module.css";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { formatTime, t } from "../../i18n";
 import { Icon } from "../chrome/Icon";
 import { api, thumbnailUrl } from "../../ipc";
@@ -9,12 +9,13 @@ import { assetDragStore, run, transcribingAssetIdStore, useStore } from "../../s
 import type { MediaAsset } from "../../types";
 import { trackPointerDrag } from "./pointerDrag";
 
-export function AssetRow({
+/** Memoized: the library re-renders with every zoom and scroll of the timeline. */
+export const AssetRow = memo(function AssetRow({
   asset,
   onContextMenu,
 }: {
   asset: MediaAsset;
-  onContextMenu: (e: React.MouseEvent) => void;
+  onContextMenu: (asset: MediaAsset, e: React.MouseEvent) => void;
 }) {
   const [thumbFailed, setThumbFailed] = useState(false);
   const transcribingAssetId = useStore(transcribingAssetIdStore);
@@ -86,7 +87,9 @@ export function AssetRow({
       className={cx(styles, baseStyles, `asset ${asset.kind === "Audio" ? "audio" : ""}`)}
       title={asset.source_path}
       tabIndex={0}
-      onContextMenu={onContextMenu}
+      onContextMenu={(e) => {
+        onContextMenu(asset, e);
+      }}
       onKeyDown={(e) => {
         if (e.key === "Enter" && e.target === e.currentTarget) {
           e.preventDefault();
@@ -146,4 +149,4 @@ export function AssetRow({
       )}
     </div>
   );
-}
+});

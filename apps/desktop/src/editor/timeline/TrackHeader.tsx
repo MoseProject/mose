@@ -6,6 +6,7 @@ import { api } from "../../ipc";
 import { Icon } from "../chrome/Icon";
 import { run } from "../../store";
 import { TRACK_HEIGHT } from "../../timelineGeometry";
+import { memo } from "react";
 import { type AudioRole, type Track } from "../../types";
 
 const AUDIO_ROLES: [AudioRole, TextKey][] = [
@@ -15,19 +16,23 @@ const AUDIO_ROLES: [AudioRole, TextKey][] = [
   ["Music", "roleMusic"],
 ];
 
-export function TrackHeader({
+/** Memoized: zooming or scrolling re-renders the timeline many times a second, and a project can
+ *  have dozens of tracks whose headers have not changed. */
+export const TrackHeader = memo(function TrackHeader({
   track,
   onContextMenu,
 }: {
   track: Track;
-  onContextMenu: (e: React.MouseEvent) => void;
+  onContextMenu: (track: Track, e: React.MouseEvent) => void;
 }) {
   const carriesAudio = track.kind === "Video" || track.kind === "Audio";
   return (
     <div
       className={cx(styles, baseStyles, "track-header")}
       style={{ height: TRACK_HEIGHT }}
-      onContextMenu={onContextMenu}
+      onContextMenu={(e) => {
+        onContextMenu(track, e);
+      }}
     >
       <div className={cx(styles, baseStyles, "track-header-row")}>
         <span className={cx(styles, baseStyles, "name")}>{track.name}</span>
@@ -104,4 +109,4 @@ export function TrackHeader({
       )}
     </div>
   );
-}
+});
