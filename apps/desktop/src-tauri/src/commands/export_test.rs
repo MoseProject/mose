@@ -211,7 +211,7 @@ fn the_target_joins_folder_and_name_and_tells_if_it_exists() {
     let folder = h.dir.display().to_string();
     std::fs::write(path_in(&h.dir, "taken.mp4"), b"x").unwrap();
 
-    let taken = export_target(folder.clone(), "taken".to_string()).unwrap();
+    let taken = export_target(folder.clone(), "taken".to_string(), None).unwrap();
     assert!(taken.exists);
     assert_eq!(
         taken.path,
@@ -219,11 +219,11 @@ fn the_target_joins_folder_and_name_and_tells_if_it_exists() {
     );
     // The extension is not doubled, and characters a file name cannot hold become `_`.
     assert!(
-        export_target(folder.clone(), "taken.MP4".to_string())
+        export_target(folder.clone(), "taken.MP4".to_string(), None)
             .unwrap()
             .exists
     );
-    let fresh = export_target(folder.clone(), " a/b:c? ".to_string()).unwrap();
+    let fresh = export_target(folder.clone(), " a/b:c? ".to_string(), None).unwrap();
     assert!(!fresh.exists);
     assert!(fresh.path.ends_with("a_b_c_.mp4"));
 }
@@ -233,18 +233,26 @@ fn a_target_without_folder_or_name_is_a_coded_error() {
     let h = harness();
     let folder = h.dir.display().to_string();
     assert_eq!(
-        export_target(" ".into(), "x".into()).unwrap_err(),
+        export_target(" ".into(), "x".into(), None).unwrap_err(),
         "noFolder"
     );
     assert_eq!(
-        export_target(path_in(&h.dir, "missing").display().to_string(), "x".into()).unwrap_err(),
+        export_target(
+            path_in(&h.dir, "missing").display().to_string(),
+            "x".into(),
+            None
+        )
+        .unwrap_err(),
         "folderMissing"
     );
     assert_eq!(
-        export_target(folder.clone(), " .mp4".into()).unwrap_err(),
+        export_target(folder.clone(), " .mp4".into(), None).unwrap_err(),
         "noName"
     );
-    assert_eq!(export_target(folder, "...".into()).unwrap_err(), "noName");
+    assert_eq!(
+        export_target(folder, "...".into(), None).unwrap_err(),
+        "noName"
+    );
 }
 
 #[test]
@@ -266,6 +274,7 @@ fn a_custom_bitrate_and_height_reach_the_queued_job_and_forbid_the_copy() {
         bitrate_mbps: Some(2.0),
         max_height: Some(144),
         normalize: None,
+        audio_format: None,
     };
     start_export(
         h.handle(),
@@ -292,6 +301,7 @@ fn an_unusable_bitrate_is_refused_before_anything_is_queued() {
             bitrate_mbps: Some(mbps),
             max_height: None,
             normalize: None,
+            audio_format: None,
         };
         let result = start_export(
             h.handle(),
@@ -314,6 +324,7 @@ fn a_larger_height_exports_the_picture_scaled_up() {
         bitrate_mbps: None,
         max_height: Some(original.height + 144),
         normalize: None,
+        audio_format: None,
     };
     start_export(
         h.handle(),
@@ -331,5 +342,26 @@ fn a_larger_height_exports_the_picture_scaled_up() {
     assert_eq!(
         probed.resolution.map(|(_, height)| height),
         Some((original.height + 144) & !1)
+    );
+}
+
+#[test]
+fn the_target_takes_an_audio_extension_and_refuses_unknown_ones() {
+    let h = harness();
+    let folder = h.dir.display().to_string();
+    for extension in ["wav", "flac", "mp3", "opus"] {
+        let target = export_target(folder.clone(), "take".into(), Some(extension.into())).unwrap();
+        assert!(
+            target.path.ends_with(&format!("take.{extension}")),
+            "{}",
+            target.path
+        );
+    }
+    // A name already ending in an export extension does not double it.
+    let target = export_target(folder.clone(), "take.FLAC".into(), Some("flac".into())).unwrap();
+    assert!(target.path.ends_with("take.flac"));
+    assert_eq!(
+        export_target(folder, "take".into(), Some("exe".into())).unwrap_err(),
+        "badExtension"
     );
 }
