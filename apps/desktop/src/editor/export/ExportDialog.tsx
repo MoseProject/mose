@@ -131,7 +131,7 @@ export function ExportDialog({ session }: { session: SessionView }) {
           })}
         </div>
       </fieldset>
-      <label className={cx(styles, baseStyles, "dialog-field")}>
+      <label className={cx(styles, baseStyles, "dialog-check")}>
         <input
           type="checkbox"
           checked={normalize}

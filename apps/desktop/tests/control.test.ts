@@ -42,7 +42,7 @@ describe("control channel, window side", () => {
     const split = list.find((command) => {
       return command.id === "split";
     });
-    expect(split).toMatchObject({ id: "split", keys: ["S", "C"] });
+    expect(split).toMatchObject({ id: "split", keys: ["S", "C", "Ctrl+B"] });
     expect(split?.label).not.toBe("");
     expect(split?.group).not.toBe("");
   });

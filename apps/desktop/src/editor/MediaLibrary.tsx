@@ -2,7 +2,7 @@ import editorStyles from "../screens/editor.module.css";
 import { cx } from "../cx";
 import baseStyles from "../styles/base.module.css";
 import styles from "./library/library.module.css";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { t } from "../i18n";
 import { Icon } from "./chrome/Icon";
 import { ContextMenu } from "./chrome/ContextMenu";
@@ -62,6 +62,11 @@ export function MediaLibrary({ session }: { session: SessionView }) {
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"grid" | "list">("grid");
   const [menu, setMenu] = useState<{ x: number; y: number; asset: MediaAsset } | null>(null);
+  // Stable, so the memoized rows are not rebuilt by every zoom or scroll of the timeline.
+  const openAssetMenu = useCallback((asset: MediaAsset, e: React.MouseEvent) => {
+    e.preventDefault();
+    setMenu({ x: e.clientX, y: e.clientY, asset });
+  }, []);
   const all = session.project.media_library;
 
   const inTab =
@@ -202,10 +207,7 @@ export function MediaLibrary({ session }: { session: SessionView }) {
                 return (
                   <AssetRow
                     key={asset.id}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      setMenu({ x: e.clientX, y: e.clientY, asset });
-                    }}
+                    onContextMenu={openAssetMenu}
                     asset={asset}
                   />
                 );

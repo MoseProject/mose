@@ -51,6 +51,8 @@ import { TimelineToolbar } from "./TimelineToolbar";
 
 /** Seeks sent while scrubbing the ruler are coalesced to preview cadence (egui: 33 ms). */
 const SCRUB_SEEK_INTERVAL_MS = 33;
+/** Clips a timeline lists in full for screen readers; a bigger one lists the ones on screen. */
+const SCREEN_READER_LIST_LIMIT = 200;
 
 export function Timeline({ session }: { session: SessionView }) {
   const ui = useStore(uiStore);
@@ -823,33 +825,71 @@ export function Timeline({ session }: { session: SessionView }) {
     setMenu({ x: e.clientX, y: e.clientY, items });
   };
 
-  /** Clips in timeline order, for keyboard navigation and the screen-reader list. */
-  const orderedClips = tracks
-    .flatMap((track, row) => {
-      return [
-        ...track.clips.map((clip) => {
-          return {
-            id: clip.id,
-            start: clip.start_secs,
-            row,
-            label:
-              media.find((asset) => {
-                return asset.id === clip.asset_id;
-              })?.file_name ?? "#" + clip.asset_id,
-            track: track.name,
-          };
-        }),
-        ...track.text_clips.map((clip) => {
-          return { id: clip.id, start: clip.start_secs, row, label: clip.text, track: track.name };
-        }),
-        ...track.shape_clips.map((clip) => {
-          return { id: clip.id, start: clip.start_secs, row, label: t("shape"), track: track.name };
-        }),
-      ];
-    })
-    .sort((a, b) => {
-      return a.start - b.start || a.row - b.row;
+  // A stable handler for the memoized track headers: the menu only uses the track it is given.
+  const trackMenuRef = useRef(trackMenu);
+  useLayoutEffect(() => {
+    trackMenuRef.current = trackMenu;
+  });
+  const openTrackMenu = useCallback((track: Track, e: React.MouseEvent) => {
+    trackMenuRef.current(track, e);
+  }, []);
+
+  /** Clips in timeline order, for keyboard navigation and the screen-reader list. Worked out
+   *  again only when the tracks or the library change, not on every scroll or zoom. */
+  const orderedClips = useMemo(() => {
+    return tracks
+      .flatMap((track, row) => {
+        return [
+          ...track.clips.map((clip) => {
+            return {
+              id: clip.id,
+              start: clip.start_secs,
+              end: clip.start_secs + clipDuration(clip),
+              row,
+              label: assetsById.get(clip.asset_id)?.file_name ?? "#" + clip.asset_id,
+              track: track.name,
+            };
+          }),
+          ...track.text_clips.map((clip) => {
+            return {
+              id: clip.id,
+              start: clip.start_secs,
+              end: clip.start_secs + clip.duration_secs,
+              row,
+              label: clip.text,
+              track: track.name,
+            };
+          }),
+          ...track.shape_clips.map((clip) => {
+            return {
+              id: clip.id,
+              start: clip.start_secs,
+              end: clip.start_secs + clip.duration_secs,
+              row,
+              label: t("shape"),
+              track: track.name,
+            };
+          }),
+        ];
+      })
+      .sort((a, b) => {
+        return a.start - b.start || a.row - b.row;
+      });
+  }, [tracks, assetsById]);
+
+  // The screen-reader list has one button per clip. Beyond a few hundred clips that is thousands of
+  // DOM nodes rebuilt on every scroll, so a big timeline lists what is on screen (and what is
+  // selected); the arrow keys on the canvas still walk every clip.
+  const listedClips = useMemo(() => {
+    if (orderedClips.length <= SCREEN_READER_LIST_LIMIT) {
+      return orderedClips;
+    }
+    const from = scrollSecs;
+    const to = scrollSecs + viewWidth / ui.pxPerSec;
+    return orderedClips.filter((clip) => {
+      return (clip.end >= from && clip.start <= to) || ui.selectedClipIds.includes(clip.id);
     });
+  }, [orderedClips, scrollSecs, viewWidth, ui.pxPerSec, ui.selectedClipIds]);
 
   const onCanvasKeyDown = (e: React.KeyboardEvent<HTMLCanvasElement>) => {
     if (e.key === "Escape" && dragRef.current) {
@@ -924,9 +964,7 @@ export function Timeline({ session }: { session: SessionView }) {
                 <TrackHeader
                   key={track.id}
                   track={track}
-                  onContextMenu={(e) => {
-                    trackMenu(track, e);
-                  }}
+                  onContextMenu={openTrackMenu}
                 />
               );
             })}
@@ -956,7 +994,7 @@ export function Timeline({ session }: { session: SessionView }) {
             className={cx(styles, baseStyles, chromeStyles, "sr-only")}
             aria-label={t("timelineClips")}
           >
-            {orderedClips.map((clip) => {
+            {listedClips.map((clip) => {
               return (
                 <li key={clip.id}>
                   <button

@@ -139,3 +139,33 @@ fn stress() {
         });
     }
 }
+
+/// Writes a big project as the JSON the webview receives, for driving the real frontend against
+/// it (`OCA_DUMP_SESSION=path OCA_DUMP_TRACKS=30 OCA_DUMP_CLIPS=100`).
+#[test]
+#[ignore]
+fn dump_session_json() {
+    let Some(path) = std::env::var_os("OCA_DUMP_SESSION") else {
+        return;
+    };
+    let number = |name: &str, default: usize| {
+        std::env::var(name)
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(default)
+    };
+    let project = big_project(number("OCA_DUMP_TRACKS", 30), number("OCA_DUMP_CLIPS", 100));
+    let view = serde_json::json!({
+        "rev": 1,
+        "project": project,
+        "filePath": null,
+        "canUndo": false,
+        "canRedo": false,
+        "dirty": false,
+    });
+    std::fs::write(
+        path,
+        serde_json::to_vec(&crate::session_sync::snapshot(&view)).unwrap(),
+    )
+    .unwrap();
+}

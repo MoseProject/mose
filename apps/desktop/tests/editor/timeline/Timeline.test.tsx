@@ -1228,6 +1228,26 @@ describe("keyboard and screen readers", () => {
   });
 });
 
+describe("a big timeline", () => {
+  it("lists only the clips on screen (and the selected one) for screen readers", () => {
+    const big = track({
+      id: 10,
+      clips: Array.from({ length: 400 }, (_, i) => {
+        return clip({ id: i + 1, asset_id: 1, start_secs: i * 10 });
+      }),
+    });
+    const session = makeSession([{ id: 1, name: "Main", tracks: [big] }]);
+    (session.project as unknown as { media_library: unknown[] }).media_library = [
+      { id: 1, file_name: "a.mp4", duration_secs: 10, has_waveform: false },
+    ];
+    mount(session);
+    const items = screen.getByLabelText(t("timelineClips")).querySelectorAll("button");
+    // 400 clips, but the view holds a few hundred seconds at most.
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.length).toBeLessThan(150);
+  });
+});
+
 describe("timeline actions from outside", () => {
   it("zooms in, out and to fit when asked by a shortcut", () => {
     mount();

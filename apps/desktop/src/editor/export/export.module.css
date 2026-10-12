@@ -55,6 +55,23 @@
 .dialog-field select {
   flex: 1;
 }
+.dialog-check {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  margin: 12px 0 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.dialog-check input[type="checkbox"] {
+  flex: none;
+  width: auto;
+  margin: 0;
+}
+.dialog-group:disabled {
+  opacity: 0.45;
+}
 .dialog-error {
   margin: 6px 0 0;
   color: var(--error);
