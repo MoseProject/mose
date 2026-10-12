@@ -305,6 +305,8 @@ const resetUi = () => {
     watchOpen: false,
     monitorZoom: "fit",
     monitorGuides: false,
+    scopesOpen: false,
+    scopeKind: "waveform",
   });
 };
 

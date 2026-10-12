@@ -148,6 +148,8 @@ beforeEach(() => {
     watchOpen: false,
     monitorZoom: "fit",
     monitorGuides: false,
+    scopesOpen: false,
+    scopeKind: "waveform",
   });
   previewStore.set({
     frameSeq: 0,
