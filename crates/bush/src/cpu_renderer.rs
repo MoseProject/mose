@@ -639,6 +639,7 @@ fn blend_layer(
         end_y,
     } = geometry;
     let neutral_effects = layer.effects.is_neutral() && layer.lut.is_none();
+    let shading = Shading::for_layer(layer, neutral_effects);
     let canvas_width = canvas_width as usize;
     let band_rows = (canvas.len() / (canvas_width * 4)) as i64;
     let band_start = first_row as i64;
@@ -759,7 +760,7 @@ fn blend_layer(
                 shade_and_blend(
                     canvas,
                     layer,
-                    neutral_effects,
+                    &shading,
                     tone,
                     tables,
                     source_y * source.stride_bytes() + (crop_x0 + local_x) as usize * 4,
@@ -787,7 +788,7 @@ fn blend_layer(
             shade_and_blend(
                 canvas,
                 layer,
-                neutral_effects,
+                &shading,
                 tone,
                 tables,
                 (crop_y0 + local_y) as usize * source.stride_bytes()
@@ -805,6 +806,26 @@ fn identity_path(identity: bool, neutral_effects: bool) -> bool {
     identity && neutral_effects
 }
 
+/// What the per-pixel shading has to do for a layer, decided once per layer instead of once per
+/// pixel.
+struct Shading {
+    neutral: bool,
+    chroma_key: Option<ChromaKey>,
+    colour: bool,
+    mask: Option<LayerMask>,
+}
+
+impl Shading {
+    fn for_layer(layer: &LayerFrame<'_>, neutral: bool) -> Self {
+        Self {
+            neutral,
+            chroma_key: layer.effects.chroma_key,
+            colour: layer.lut.is_some() || !layer.effects.colour_is_neutral(),
+            mask: layer.effects.mask,
+        }
+    }
+}
+
 /// Reads one source pixel, runs the layer's effects over it and blends it onto the canvas pixel
 /// at `destination_index`. `nx`/`ny` are the pixel's place in the layer, `-1.0..=1.0` from the
 /// centre.
@@ -813,7 +834,7 @@ fn identity_path(identity: bool, neutral_effects: bool) -> bool {
 fn shade_and_blend(
     canvas: &mut [u8],
     layer: &LayerFrame<'_>,
-    neutral_effects: bool,
+    shading: &Shading,
     tone: Option<&ToneTable>,
     tables: Option<&BlendTables>,
     source_index: usize,
@@ -824,12 +845,12 @@ fn shade_and_blend(
     let mut pixel: [u8; 4] = layer.frame.pixels()[source_index..source_index + 4]
         .try_into()
         .expect("slice of four bytes");
-    if !neutral_effects {
-        if let Some(key) = layer.effects.chroma_key {
+    if !shading.neutral {
+        if let Some(key) = shading.chroma_key {
             let factor = key.alpha_factor([pixel[0], pixel[1], pixel[2]]);
             pixel[3] = (f32::from(pixel[3]) * factor).round() as u8;
         }
-        if layer.lut.is_some() || !layer.effects.colour_is_neutral() {
+        if shading.colour {
             if let Some(tone) = tone {
                 tone.apply(&mut pixel);
             } else {
@@ -850,9 +871,13 @@ fn shade_and_blend(
                 }
             }
         }
-        if let Some(mask) = layer.effects.mask {
-            let factor = mask.alpha_factor(nx, ny);
+        if let Some(mask) = shading.mask {
+            let factor = mask.alpha_factor_fast(nx, ny);
             pixel[3] = (f32::from(pixel[3]) * factor).round() as u8;
+            if pixel[3] == 0 {
+                // A fully transparent source leaves the backdrop untouched in every blend mode.
+                return;
+            }
         }
     }
     blend_with(

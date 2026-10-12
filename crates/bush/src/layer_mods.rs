@@ -39,6 +39,10 @@ impl ChromaKey {
     }
 }
 
+/// How far from the edge, in normalised units, [`LayerMask::alpha_factor_fast`] stops trusting its
+/// comparison; far larger than the rounding error of the full expression.
+const SETTLED_MARGIN: f32 = 1e-3;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MaskShape {
     Rectangle,
@@ -60,6 +64,39 @@ pub struct LayerMask {
 impl LayerMask {
     pub(crate) fn is_valid(&self) -> bool {
         (0.0..=1.0).contains(&self.corner_radius) && (0.0..=1.0).contains(&self.feather)
+    }
+
+    /// [`LayerMask::alpha_factor`] with the pixels that are far from the edge settled by a
+    /// comparison instead of a square root and a division: well inside the shape the factor is
+    /// exactly one, well outside exactly zero (reversed when inverted), and those are the values
+    /// the full expression returns there, so the result is the same bit for bit. Pixels within
+    /// [`SETTLED_MARGIN`] of the feathered edge take the full expression.
+    #[inline(always)]
+    pub(crate) fn alpha_factor_fast(&self, nx: f32, ny: f32) -> f32 {
+        let band = if self.feather > 0.0 {
+            self.feather * 0.5
+        } else {
+            0.0
+        } + SETTLED_MARGIN;
+        let (inside, outside) = match self.shape {
+            MaskShape::Ellipse => {
+                let r2 = nx * nx + ny * ny;
+                let near = (1.0 - band).max(0.0);
+                let far = 1.0 + band;
+                (r2 <= near * near, r2 >= far * far)
+            }
+            MaskShape::Rectangle => {
+                let m = nx.abs().max(ny.abs());
+                (m <= 1.0 - band.max(self.corner_radius), m >= 1.0 + band)
+            }
+        };
+        if inside {
+            return if self.invert { 0.0 } else { 1.0 };
+        }
+        if outside {
+            return if self.invert { 1.0 } else { 0.0 };
+        }
+        self.alpha_factor(nx, ny)
     }
 
     /// Alpha multiplier at normalised layer coordinates (`-1.0..=1.0` on both axes).
@@ -216,5 +253,53 @@ mod tests {
         let entries: Vec<[f32; 3]> = (0..8).map(|index| [index as f32 / 8.0; 3]).collect();
         let lut = Lut3D::new(2, entries.clone()).unwrap();
         assert_eq!(lut.entries(), entries.as_slice());
+    }
+
+    /// Deterministic spread of normalised coordinates, dense near the edge (where the settled
+    /// shortcut hands over to the full expression) and including the layer's corners.
+    fn coordinates() -> Vec<(f32, f32)> {
+        let mut points = Vec::new();
+        let steps = 400;
+        for i in 0..=steps {
+            for j in 0..=steps {
+                let nx = -1.0 + 2.0 * i as f32 / steps as f32;
+                let ny = -1.0 + 2.0 * j as f32 / steps as f32;
+                points.push((nx, ny));
+            }
+        }
+        // A ring of points around every distance the shapes treat as the edge.
+        for k in 0..20_000 {
+            let angle = k as f32 * 0.000_314;
+            for radius in [0.5, 0.75, 0.9, 0.99, 0.999, 1.0, 1.001] {
+                points.push((angle.cos() * radius, angle.sin() * radius));
+            }
+        }
+        points
+    }
+
+    #[test]
+    fn the_settled_shortcut_gives_the_full_expressions_value_bit_for_bit() {
+        let points = coordinates();
+        for shape in [MaskShape::Ellipse, MaskShape::Rectangle] {
+            for corner_radius in [0.0, 0.1, 0.5, 1.0] {
+                for feather in [0.0, 0.01, 0.1, 0.5, 1.0] {
+                    for invert in [false, true] {
+                        let mask = LayerMask {
+                            shape,
+                            corner_radius,
+                            feather,
+                            invert,
+                        };
+                        for &(nx, ny) in &points {
+                            assert_eq!(
+                                mask.alpha_factor_fast(nx, ny).to_bits(),
+                                mask.alpha_factor(nx, ny).to_bits(),
+                                "{mask:?} at ({nx}, {ny})"
+                            );
+                        }
+                    }
+                }
+            }
+        }
     }
 }
