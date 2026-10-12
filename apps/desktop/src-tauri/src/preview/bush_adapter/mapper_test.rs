@@ -855,3 +855,48 @@ fn the_preview_fades_clip_sound_at_hard_cuts_and_handles_but_not_at_a_split() {
     assert_eq!((fade(11).in_secs, fade(11).out_secs), (0.0, declick));
     assert_eq!((fade(12).in_secs, fade(12).out_secs), (declick, 1.0));
 }
+
+#[test]
+fn the_audio_role_and_voice_cleanup_reach_the_preview_scene() {
+    let mut mic = track(
+        1,
+        TrackKind::Audio,
+        vec![ClipInstance::new(11, 2, 0.0, 0.0, 4.0)],
+    );
+    mic.audio_role = AudioRole::Mic;
+    mic.clips[0].voice_cleanup_enabled = true;
+    mic.clips[0].voice_cleanup_noise_floor_db = -45.0;
+    let mut music = track(
+        2,
+        TrackKind::Audio,
+        vec![ClipInstance::new(12, 2, 0.0, 0.0, 4.0)],
+    );
+    music.audio_role = AudioRole::Music;
+    let plain = track(
+        3,
+        TrackKind::Audio,
+        vec![ClipInstance::new(13, 2, 0.0, 0.0, 4.0)],
+    );
+    let mapped = map_with(vec![mic, music, plain], Vec::new());
+    let placement = |id: u64| {
+        mapped
+            .scene
+            .contributors()
+            .iter()
+            .find(|c| c.id.0 == id)
+            .unwrap()
+            .placement
+            .clone()
+    };
+    assert_eq!(placement(11).duck, bush::DuckRole::Trigger);
+    assert_eq!(placement(12).duck, bush::DuckRole::Target);
+    assert_eq!(placement(13).duck, bush::DuckRole::None);
+
+    let voice = placement(11).voice;
+    assert_eq!(voice.highpass_hz, 80.0);
+    assert_eq!(voice.gate_floor_db, -35.0);
+    assert_eq!(voice.comp_makeup, 1.5);
+    assert!(!voice.is_neutral());
+    // Without the toggle there is no chain.
+    assert!(placement(12).voice.is_neutral());
+}
