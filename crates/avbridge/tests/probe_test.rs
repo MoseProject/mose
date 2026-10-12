@@ -58,3 +58,60 @@ fn non_media_file_returns_open_error() {
     let err = probe(&fixture("garbage.bin")).unwrap_err();
     assert!(matches!(err, ProbeError::Open));
 }
+
+fn core_fixture(name: &str) -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../core/tests/fixtures")
+        .join(name)
+}
+
+// FFmpeg's own numbers: AVCOL_SPC_BT709 1, AVCOL_SPC_BT2020_NCL 9, AVCOL_PRI_BT2020 9,
+// AVCOL_TRC_BT709 1, AVCOL_TRC_SMPTE2084 16.
+#[test]
+fn reports_the_colour_description_of_sdr_and_hdr_video() {
+    let sdr = probe(&core_fixture("color/hd709_tagged.mkv")).unwrap();
+    let color = sdr.color.expect("a video stream has a colour description");
+    assert_eq!(color.bit_depth, 8);
+    assert_eq!(color.space, 1);
+    assert!(!color.full_range);
+
+    let hdr = probe(&core_fixture("color/hdr10_pq.mkv")).unwrap();
+    let color = hdr.color.unwrap();
+    assert_eq!(color.bit_depth, 10);
+    assert_eq!(color.space, 9);
+    assert_eq!(color.primaries, 9);
+    assert_eq!(color.transfer, 16);
+
+    let full = probe(&core_fixture("color/hd709_fullrange.mkv")).unwrap();
+    assert!(full.color.unwrap().full_range);
+}
+
+#[test]
+fn an_audio_only_file_has_no_colour_description() {
+    assert_eq!(probe(&fixture("audio.m4a")).unwrap().color, None);
+}
+
+#[test]
+fn lists_every_audio_stream_with_its_title() {
+    let info = probe(&core_fixture("audio_codecs/obs_multitrack.mkv")).unwrap();
+    assert_eq!(info.audio_stream_count, 3);
+    let titles: Vec<&str> = info
+        .audio_streams
+        .iter()
+        .map(|s| s.title.as_str())
+        .collect();
+    assert_eq!(titles, ["Game", "Mic", "Chat"]);
+    assert_eq!(info.audio_streams[0].language, "por");
+    assert_eq!(info.audio_streams[0].stream_index, 1);
+    assert!(info
+        .audio_streams
+        .iter()
+        .all(|s| s.channels == 2 && s.codec_name == "aac"));
+}
+
+#[test]
+fn a_file_with_one_audio_stream_lists_one() {
+    let info = probe(&fixture("video.mp4")).unwrap();
+    assert_eq!(info.audio_stream_count, 1);
+    assert_eq!(info.audio_streams.len(), 1);
+}
