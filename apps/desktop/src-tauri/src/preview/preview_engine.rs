@@ -87,6 +87,9 @@ pub struct PreviewTick {
     pub peak_r: f32,
     /// Momentary loudness in LUFS while playing; `None` when silent or stopped.
     pub momentary_lufs: Option<f32>,
+    /// A compound clip is being rendered in the background: the preview shows its previous
+    /// render (or nothing) until that finishes.
+    pub rendering_compound: bool,
 }
 
 pub struct PreviewEngine {
