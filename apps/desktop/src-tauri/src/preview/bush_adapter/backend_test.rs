@@ -60,6 +60,7 @@ fn timeline_with(kind: TrackKind, visible: bool, clip_asset: u64) -> Timeline {
             solo: false,
             color_label: None,
             locked: false,
+            mix: Default::default(),
         }],
         playhead_secs: 0.0,
         markers: Vec::new(),
@@ -374,6 +375,7 @@ fn project_with_clip() -> avcore::Project {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     });
     project

@@ -78,6 +78,7 @@ fn big_project(tracks: usize, clips_per_track: usize) -> Project {
                 solo: false,
                 color_label: None,
                 locked: false,
+                mix: Default::default(),
             }
         })
         .collect();
@@ -96,6 +97,7 @@ fn big_project(tracks: usize, clips_per_track: usize) -> Project {
         solo: false,
         color_label: None,
         locked: false,
+        mix: Default::default(),
     };
     let mut text = overlay(900, TrackKind::Text, "T1");
     text.text_clips = (0..6)
