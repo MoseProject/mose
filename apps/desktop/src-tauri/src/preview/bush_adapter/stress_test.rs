@@ -130,7 +130,7 @@ fn ms(label: &str, runs: u32, mut work: impl FnMut()) {
 #[test]
 #[ignore]
 fn stress() {
-    for (tracks, clips) in [(10, 100), (30, 100), (60, 100)] {
+    for (tracks, clips) in [(10, 100), (30, 100), (60, 100), (100, 400)] {
         let project = big_project(tracks, clips);
         eprintln!("{tracks} tracks x {clips} clips = {} clips", tracks * clips);
         ms("clone the project", 5, || {

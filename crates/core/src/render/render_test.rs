@@ -353,3 +353,79 @@ fn every_avbridge_encode_error_maps_to_its_render_error() {
         RenderError::Unknown(7)
     ));
 }
+
+/// How resolving a sequence into export segments grows with a big project. Ignored (it prints
+/// timings): `cargo test --release -p core --lib resolve_cost -- --ignored --nocapture`.
+#[test]
+#[ignore]
+fn resolve_cost() {
+    use crate::timeline::{AudioRole, ClipInstance, Timeline, Track, TrackKind};
+    use crate::{MediaAsset, MediaKind, Sequence};
+    use std::time::Instant;
+
+    let media: Vec<MediaAsset> = (1..=100)
+        .map(|id| MediaAsset {
+            id,
+            file_name: format!("asset-{id}"),
+            source_path: format!("asset-{id}.mp4").into(),
+            kind: MediaKind::Video,
+            has_audio: true,
+            duration_secs: 600.0,
+            codec: "h264".into(),
+            source_bitrate_mbps: 8.0,
+            resolution: Some((1920, 1080)),
+            fps: Some(60.0),
+            sample_rate_khz: None,
+            loudness: None,
+            proxy_path: None,
+            waveform_peaks: None,
+            favorited: false,
+        })
+        .collect();
+    for (track_count, clips_per_track) in [(1usize, 400usize), (10, 400), (40, 400)] {
+        let mut next_id = 1;
+        let tracks = (0..track_count)
+            .map(|t| Track {
+                id: t as u64 + 1,
+                name: format!("V{t}"),
+                kind: TrackKind::Video,
+                clips: (0..clips_per_track)
+                    .map(|c| {
+                        next_id += 1;
+                        ClipInstance::new(next_id, 1 + next_id % 100, c as f64 * 5.0, 0.0, 5.0)
+                    })
+                    .collect(),
+                text_clips: vec![],
+                shape_clips: vec![],
+                visible: true,
+                audio_role: AudioRole::Unspecified,
+                muted: false,
+                solo: false,
+                locked: false,
+                color_label: None,
+            })
+            .collect();
+        let sequence = Sequence {
+            id: 1,
+            name: "s".into(),
+            timeline: Timeline {
+                tracks,
+                playhead_secs: 0.0,
+                markers: vec![],
+                multicam_groups: vec![],
+            },
+            export_settings: Default::default(),
+        };
+        let started = Instant::now();
+        let video = resolve_timeline_segments_multi(&sequence, &media).unwrap();
+        let video_ms = started.elapsed().as_secs_f64() * 1e3;
+        let started = Instant::now();
+        let audio = resolve_audio_segments(&sequence, &media).unwrap();
+        eprintln!(
+            "{track_count} tracks x {clips_per_track} clips: video segments {video_ms:.1} ms ({} layers), audio segments {:.1} ms ({} segments)",
+            video.0.len(),
+            started.elapsed().as_secs_f64() * 1e3,
+            audio.len()
+        );
+    }
+}
