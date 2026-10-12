@@ -131,6 +131,13 @@ ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path, i
         venc_ctx->width = dst_w;
         venc_ctx->height = dst_h;
         venc_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
+        /* The proxy keeps the source's YUV values, so it must say which matrix they use: a 480p
+           proxy of HD footage would otherwise be read as BT.601 (the rule for untagged SD). */
+        venc_ctx->colorspace = avbridge_resolve_colorspace_for(vdec_ctx->colorspace, src_w, src_h);
+        venc_ctx->color_range = vdec_ctx->color_range == AVCOL_RANGE_JPEG ? AVCOL_RANGE_JPEG
+                                                                           : AVCOL_RANGE_MPEG;
+        venc_ctx->color_primaries = vdec_ctx->color_primaries;
+        venc_ctx->color_trc = vdec_ctx->color_trc;
         AVRational frame_rate = in_ctx->streams[video_in_index]->avg_frame_rate;
         if (frame_rate.num <= 0 || frame_rate.den <= 0) {
             frame_rate = (AVRational){30, 1};
@@ -272,6 +279,8 @@ ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path, i
         goto cleanup_output_io;
     }
     scaled_frame->format = venc_ctx->pix_fmt;
+    scaled_frame->colorspace = venc_ctx->colorspace;
+    scaled_frame->color_range = venc_ctx->color_range;
     scaled_frame->width = venc_ctx->width;
     scaled_frame->height = venc_ctx->height;
     if (av_frame_get_buffer(scaled_frame, 0) < 0) {
