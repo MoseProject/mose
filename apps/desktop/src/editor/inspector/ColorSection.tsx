@@ -5,6 +5,7 @@ import { t } from "../../i18n";
 import { hasKeyframeAt, valueAt, withKeyframe, withoutKeyframe } from "../../keyframeAt";
 import { type ClipInstance, type ClipPatch } from "../../types";
 import { Section, Slider, type SectionKeyframe } from "./controls";
+import { GradeSection } from "./GradeSection";
 import { animatedRow } from "./keyframeRow";
 
 type Commit = (patch: ClipPatch) => Promise<unknown>;
@@ -140,6 +141,10 @@ export function ColorSection({
           }}
         />
       </Section>
+      <GradeSection
+        clip={clip}
+        commit={commit}
+      />
       <div
         className={cx(styles, baseStyles, "clip-checks")}
         data-group="inspector"
