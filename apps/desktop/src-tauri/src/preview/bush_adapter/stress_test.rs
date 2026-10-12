@@ -78,6 +78,34 @@ fn big_project(tracks: usize, clips_per_track: usize) -> Project {
             }
         })
         .collect();
+    let mut tracks_vec: Vec<Track> = tracks_vec;
+    // A caption track and a shape track, so the inspector and timeline have both to show.
+    let overlay = |id: u64, kind: TrackKind, name: &str| Track {
+        id,
+        name: name.into(),
+        kind,
+        clips: Vec::new(),
+        text_clips: Vec::new(),
+        shape_clips: Vec::new(),
+        visible: true,
+        audio_role: AudioRole::Unspecified,
+        muted: false,
+        solo: false,
+        color_label: None,
+        locked: false,
+    };
+    let mut text = overlay(900, TrackKind::Text, "T1");
+    text.text_clips = (0..6)
+        .map(|i| {
+            avcore::timeline::TextClip::new(10_000 + i, i as f64 * 7.0, format!("Legenda {i}"))
+        })
+        .collect();
+    let mut shapes = overlay(901, TrackKind::Shape, "S1");
+    shapes.shape_clips = (0..4)
+        .map(|i| avcore::timeline::ShapeClip::new(11_000 + i, i as f64 * 9.0))
+        .collect();
+    tracks_vec.push(text);
+    tracks_vec.push(shapes);
     project.sequences[0].timeline = Timeline {
         tracks: tracks_vec,
         playhead_secs: 0.0,
