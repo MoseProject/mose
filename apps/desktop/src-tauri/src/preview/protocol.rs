@@ -189,7 +189,7 @@ impl ThumbnailCache {
         }
         let extracted = self
             .workers
-            .extract(source, millis as f64 / 1000.0, THUMBNAIL_MAX_DIM)
+            .extract_tile(source, millis as f64 / 1000.0, THUMBNAIL_MAX_DIM)
             .map(Arc::new);
         {
             let mut tiles = lock_or_recover(&self.tiles);
