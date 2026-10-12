@@ -21,6 +21,8 @@ macro_rules! all_commands {
             $crate::commands::set_export_settings,
             $crate::commands::set_project_frame_rate,
             $crate::commands::export::pick_export_path,
+            $crate::commands::export::export_target,
+            $crate::commands::export::export_canvas,
             $crate::commands::export::start_export,
             $crate::commands::export::pause_export,
             $crate::commands::export::resume_export,

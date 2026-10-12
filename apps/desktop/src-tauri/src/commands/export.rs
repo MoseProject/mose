@@ -3,12 +3,12 @@ use std::path::{Path, PathBuf};
 use avcore::GpuEncoderPreference;
 use tauri::{AppHandle, Manager, Runtime, State};
 
-use crate::export::prepare_export;
+use crate::export::{prepare_export_with, ExportOptions};
 use crate::state::AppState;
 
 /// The output file the user picked for an export, and whether it already exists -- the webview
 /// asks overwrite-or-rename with its own translated text before calling [`start_export`].
-#[derive(serde::Serialize)]
+#[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportTarget {
     pub path: String,
@@ -35,14 +35,100 @@ pub async fn pick_export_path<R: Runtime>(
     )
 }
 
+/// The file an export dialog's folder and name field point at: the folder must exist, the name
+/// loses anything a file name cannot hold and gains `.mp4`. Errors are codes the webview
+/// translates (`noFolder`, `folderMissing`, `noName`).
+#[tauri::command]
+pub fn export_target(folder: String, file_name: String) -> Result<ExportTarget, String> {
+    if folder.trim().is_empty() {
+        return Err("noFolder".to_string());
+    }
+    let folder = PathBuf::from(folder.trim());
+    if !folder.is_dir() {
+        return Err("folderMissing".to_string());
+    }
+    let name = sanitize_file_name(&file_name);
+    if name.is_empty() {
+        return Err("noName".to_string());
+    }
+    let path = folder.join(format!("{name}.mp4"));
+    Ok(ExportTarget {
+        exists: path.exists(),
+        path: path.display().to_string(),
+    })
+}
+
+/// A file name stem with path separators and the characters Windows forbids replaced, and no
+/// trailing dots, spaces or `.mp4`.
+pub(crate) fn sanitize_file_name(raw: &str) -> String {
+    let cleaned: String = raw
+        .trim()
+        .chars()
+        .map(|c| match c {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+            c if c.is_control() => '_',
+            c => c,
+        })
+        .collect();
+    let stem = match cleaned.rsplit_once('.') {
+        Some((stem, ext)) if ext.eq_ignore_ascii_case("mp4") => stem,
+        _ => cleaned.as_str(),
+    };
+    stem.trim_end_matches(['.', ' ']).to_string()
+}
+
+/// What the export would produce for the dialog's aspect ratio before any option: size, the
+/// source-matched bitrate and the length, so the dialog can show defaults and a size estimate.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportCanvas {
+    pub width: u32,
+    pub height: u32,
+    pub bitrate_mbps: f32,
+    pub duration_secs: f64,
+}
+
+#[tauri::command]
+pub fn export_canvas(
+    state: State<'_, AppState>,
+    aspect_ratio: avcore::ExportAspectRatio,
+) -> Result<ExportCanvas, String> {
+    let session = state.session();
+    let sequence = session.project.active_sequence();
+    let (tracks, canvas) =
+        avcore::resolve_timeline_segments_multi(sequence, &session.project.media_library)
+            .map_err(|e| e.to_string())?;
+    let canvas = avcore::apply_export_aspect_ratio(canvas, aspect_ratio);
+    let duration_secs = tracks
+        .iter()
+        .map(|track| {
+            track
+                .iter()
+                .map(|s| {
+                    (s.source_out_secs - s.source_in_secs) / f64::from(s.speed_factor.max(0.01))
+                })
+                .sum::<f64>()
+        })
+        .fold(0.0, f64::max);
+    Ok(ExportCanvas {
+        width: canvas.width,
+        height: canvas.height,
+        bitrate_mbps: (canvas.bit_rate_bps as f64 / 1_000_000.0) as f32,
+        duration_secs,
+    })
+}
+
 /// Queues the active sequence for export to `path`. With `rename`, an existing file is kept and
-/// the output goes to the next free `<stem> (n)` sibling instead of overwriting it.
+/// the output goes to the next free `<stem> (n)` sibling instead of overwriting it. `options`
+/// carries the dialog's bitrate and resolution ceiling.
 #[tauri::command]
 pub fn start_export<R: Runtime>(
     app: AppHandle<R>,
     path: String,
     rename: bool,
+    options: Option<ExportOptions>,
 ) -> Result<u64, String> {
+    let options = options.unwrap_or_default();
     let (prepared, title) = {
         let state = app.state::<AppState>();
         let session = state.session();
@@ -66,7 +152,7 @@ pub fn start_export<R: Runtime>(
             project
         };
         (
-            prepare_export(&project)?,
+            prepare_export_with(&project, options)?,
             session.project.active_sequence().name.clone(),
         )
     };
