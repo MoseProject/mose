@@ -68,6 +68,9 @@ impl Default for ExportSettings {
 pub struct ExportOptions {
     pub bitrate_mbps: Option<f32>,
     pub max_height: Option<u32>,
+    /// `Some(false)` exports this one without normalizing its loudness; `None` follows the app
+    /// setting.
+    pub normalize: Option<bool>,
 }
 
 impl ExportOptions {
@@ -124,6 +127,7 @@ pub struct PreparedExport {
     pub canvas: Canvas,
     pub target_lufs: f32,
     pub allow_copy: bool,
+    pub normalize: bool,
 }
 #[cfg(test)]
 pub fn prepare_export(project: &Project) -> Result<PreparedExport, String> {
@@ -154,6 +158,7 @@ pub fn prepare_export_with(
         canvas,
         target_lufs: sequence.export_settings.target_lufs,
         allow_copy: unchanged,
+        normalize: options.normalize.unwrap_or(true),
     })
 }
 pub struct ExportQueue {
@@ -270,6 +275,7 @@ impl ExportQueue {
             canvas: prepared.canvas,
             target_lufs: prepared.target_lufs,
             allow_copy: prepared.allow_copy,
+            normalize: prepared.normalize,
             output_path: output.display().to_string(),
             status: ExportJobStatus::Queued,
         });
@@ -430,7 +436,7 @@ impl ExportQueue {
             let queue = Arc::clone(self);
             let worker_app = app.clone();
             let gpu = self.gpu_encoder_preference();
-            let target_lufs = if self.normalize_audio() {
+            let target_lufs = if self.normalize_audio() && job.normalize {
                 job.target_lufs
             } else {
                 avcore::NO_NORMALIZATION
