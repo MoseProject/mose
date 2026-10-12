@@ -594,6 +594,18 @@ export function PreviewPanel() {
                 "--fill": `${duration > 0 ? Math.min(100, (tick.playheadSecs / duration) * 100) : 0}%`,
               } as React.CSSProperties
             }
+            onPointerDown={() => {
+              void run(api.setScrubbing(true));
+            }}
+            onPointerUp={() => {
+              void run(api.setScrubbing(false));
+            }}
+            onPointerCancel={() => {
+              void run(api.setScrubbing(false));
+            }}
+            onBlur={() => {
+              void run(api.setScrubbing(false));
+            }}
             onChange={(e) => {
               stopShuttle();
               return void run(api.seek(Number(e.target.value)));

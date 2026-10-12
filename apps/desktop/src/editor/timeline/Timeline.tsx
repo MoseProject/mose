@@ -439,6 +439,7 @@ export function Timeline({ session }: { session: SessionView }) {
         return;
       }
       dragRef.current = { mode: "scrub" };
+      void run(api.setScrubbing(true));
       scrubTo(x, true);
       return;
     }
@@ -564,6 +565,9 @@ export function Timeline({ session }: { session: SessionView }) {
    *  away): the clip stays where it was and the ghost disappears. */
   const cancelDrag = () => {
     if (dragRef.current) {
+      if (dragRef.current.mode === "scrub") {
+        void run(api.setScrubbing(false));
+      }
       dragRef.current = null;
       scheduleDraw();
     }
@@ -577,6 +581,7 @@ export function Timeline({ session }: { session: SessionView }) {
     }
     if (drag.mode === "scrub") {
       scrubTo(lanePoint(e).x, true);
+      void run(api.setScrubbing(false));
     } else if (drag.mode === "move") {
       const found = findSpan(tracks, drag.clipId);
       const target = tracks[drag.ghostTrack];
