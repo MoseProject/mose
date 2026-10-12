@@ -211,11 +211,70 @@ static int build_mix_graph(const AudioSegment *segments, const uint8_t *valid, i
             pan_tail = pan_filter;
         }
 
+        /* The strip's tone and dynamics, in the order a mixer strip has them: high-pass, low-pass,
+           low shelf, mid bell, high shelf, compressor. Only the stages that are not neutral exist,
+           so a neutral strip leaves the graph as it was. */
+        AVFilterContext *strip_tail = pan_tail;
+        {
+            struct {
+                int active;
+                const char *filter;
+                char args[96];
+            } stages[7] = {{0}};
+            int count = 0;
+            if (seg->highpass_hz > 0.0f) {
+                stages[count].filter = "highpass";
+                snprintf(stages[count].args, sizeof(stages[count].args), "f=%.3f",
+                         (double)seg->highpass_hz);
+                stages[count++].active = 1;
+            }
+            if (seg->lowpass_hz > 0.0f) {
+                stages[count].filter = "lowpass";
+                snprintf(stages[count].args, sizeof(stages[count].args), "f=%.3f",
+                         (double)seg->lowpass_hz);
+                stages[count++].active = 1;
+            }
+            if (seg->eq_low_db != 0.0f) {
+                stages[count].filter = "bass";
+                snprintf(stages[count].args, sizeof(stages[count].args), "g=%.3f:f=120",
+                         (double)seg->eq_low_db);
+                stages[count++].active = 1;
+            }
+            if (seg->eq_mid_db != 0.0f) {
+                stages[count].filter = "equalizer";
+                snprintf(stages[count].args, sizeof(stages[count].args), "f=1000:t=q:w=1:g=%.3f",
+                         (double)seg->eq_mid_db);
+                stages[count++].active = 1;
+            }
+            if (seg->eq_high_db != 0.0f) {
+                stages[count].filter = "treble";
+                snprintf(stages[count].args, sizeof(stages[count].args), "g=%.3f:f=6000",
+                         (double)seg->eq_high_db);
+                stages[count++].active = 1;
+            }
+            if (seg->comp_ratio > 1.0f) {
+                stages[count].filter = "acompressor";
+                snprintf(stages[count].args, sizeof(stages[count].args),
+                         "threshold=%.3fdB:ratio=%.3f:attack=10:release=250",
+                         (double)seg->comp_threshold_db, (double)seg->comp_ratio);
+                stages[count++].active = 1;
+            }
+            for (int stage = 0; stage < count; stage++) {
+                AVFilterContext *filter = NULL;
+                snprintf(name, sizeof(name), "strip_%s_%d", stages[stage].filter, branch);
+                if ((ret = create_filter(graph, &filter, stages[stage].filter, name,
+                                         stages[stage].args)) < 0)
+                    goto fail;
+                if ((ret = avfilter_link(strip_tail, 0, filter, 0)) < 0) goto fail;
+                strip_tail = filter;
+            }
+        }
+
         if ((ret = avfilter_link(movie, 0, trim, 0)) < 0 ||
             (ret = avfilter_link(trim, 0, pts, 0)) < 0 ||
             (ret = avfilter_link(pts, 0, tempo, 0)) < 0 ||
             (ret = avfilter_link(tempo, 0, volume, 0)) < 0 ||
-            (ret = avfilter_link(pan_tail, 0, delay, 0)) < 0)
+            (ret = avfilter_link(strip_tail, 0, delay, 0)) < 0)
             goto fail;
 
         branch_ctx[branch] = delay;

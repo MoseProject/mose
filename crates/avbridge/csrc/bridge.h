@@ -385,6 +385,16 @@ typedef struct {
        pan moves away from is attenuated with a quarter-sine taper, the other stays at unity.
        Applied after the branch's voice cleanup, before it joins the mix. */
     float pan;
+    /* A mixer strip's tone and dynamics, applied after the pan: low shelf at 120 Hz, mid bell at
+       1 kHz and high shelf at 6 kHz (gains in dB, 0 = no filter), high-pass and low-pass corners in
+       Hz (0 = open), and a compressor (threshold in dB, ratio; a ratio <= 1 is off). */
+    float eq_low_db;
+    float eq_mid_db;
+    float eq_high_db;
+    float highpass_hz;
+    float lowpass_hz;
+    float comp_threshold_db;
+    float comp_ratio;
 } AudioSegment;
 
 typedef enum {
