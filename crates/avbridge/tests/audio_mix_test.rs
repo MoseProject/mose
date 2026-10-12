@@ -690,3 +690,45 @@ fn a_strip_boosts_and_cuts_its_own_band_and_a_neutral_one_does_nothing() {
         "a loud tone over the threshold is brought down"
     );
 }
+
+/// Every audio-only format is written with its own codec and container, decodes back to the tone
+/// that went in, and runs the same mix (strip, loudness) as the video export's audio.
+#[test]
+fn the_mix_is_written_as_wav_flac_mp3_and_opus_and_decodes_back_to_the_same_tone() {
+    use avbridge::{mix_audio_timeline_as, AudioMixFormat};
+    let source = sine_wav(1000.0, 0.6);
+    let mut reference = None;
+    for format in AudioMixFormat::ALL {
+        let out = std::env::temp_dir().join(format!("avbridge_format.{}", format.extension()));
+        let _ = std::fs::remove_file(&out);
+        let segment = AudioSegment::plain(source.clone(), 0.0, 0.6, 0.0);
+        let outcome = mix_audio_timeline_as(
+            &[segment],
+            0.6,
+            &out,
+            f32::NAN,
+            format,
+            &AtomicBool::new(false),
+        )
+        .unwrap_or_else(|error| panic!("{format:?}: {error}"));
+        assert_eq!(outcome, AudioMixOutcome::Completed, "{format:?}");
+        assert!(std::fs::metadata(&out).unwrap().len() > 1000, "{format:?}");
+
+        let probe = avbridge::probe(&out).unwrap_or_else(|e| panic!("{format:?}: {e:?}"));
+        assert!(
+            (probe.duration_secs - 0.6).abs() < 0.1,
+            "{format:?}: {} s",
+            probe.duration_secs
+        );
+        let (left, right) = channel_rms(&out);
+        let level = (left + right) / 2.0;
+        // The 0.25 sine has an RMS of about 0.177; every format keeps it within ~1.5 dB.
+        let flat = reference.get_or_insert(level);
+        assert!(
+            db(level / *flat).abs() < 1.5,
+            "{format:?}: {level} against {flat}"
+        );
+        assert!(level > 0.1, "{format:?}: {level}");
+        let _ = std::fs::remove_file(&out);
+    }
+}
