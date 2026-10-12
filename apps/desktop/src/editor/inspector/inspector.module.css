@@ -305,3 +305,51 @@ input[type="range"] {
 .row-keyframe:disabled {
   opacity: 0.4;
 }
+
+/* ---- number rows (position, scale, rotation) ---- */
+.number-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.number-field > span:first-child {
+  flex: 0 0 71px;
+}
+.number-field input[type="number"] {
+  flex: 1;
+  min-width: 0;
+}
+.number-field > .muted {
+  flex: none;
+  min-width: 14px;
+}
+/* Position X and Y stack, with the keyframe diamond centred beside the pair. */
+.field-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20px;
+  align-items: center;
+  column-gap: 8px;
+}
+.field-row > .number-field {
+  grid-column: 1;
+  min-width: 0;
+}
+.field-row > .row-keyframe {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+.clip-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  padding: 10px 0;
+}
+.multi-selection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 0;
+}

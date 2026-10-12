@@ -47,11 +47,7 @@ for (const file of files.filter((f) => {
 const UNSTYLED_HOOKS = [
   "Audio", // an asset's kind used as a class
   "bar", // Menu's variant marker
-  "clip-checks",
-  "field-row",
   "idle",
-  "multi-selection",
-  "number-field",
   "task-label",
 ];
 
