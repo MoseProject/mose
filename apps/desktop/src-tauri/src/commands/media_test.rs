@@ -259,3 +259,101 @@ fn a_rebuild_for_a_replaced_project_stops_without_touching_it() {
     std::thread::sleep(std::time::Duration::from_secs(3));
     assert!(h.session().project.media_library[0].proxy_path.is_none());
 }
+
+fn multitrack_recording() -> std::path::PathBuf {
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../crates/core/tests/fixtures/audio_codecs/obs_multitrack.mkv")
+}
+
+/// Imports the three-track recording and waits until its two extra tracks are assets too.
+fn import_multitrack(h: &Harness) {
+    import_media(
+        h.handle(),
+        vec![multitrack_recording().display().to_string()],
+    );
+    h.wait_until("the extra tracks to be imported", |s| {
+        s.project
+            .media_library
+            .iter()
+            .filter(|a| a.audio_stream.is_some())
+            .count()
+            == 2
+    });
+}
+
+#[test]
+fn a_multitrack_recording_brings_its_extra_tracks_as_audio_assets() {
+    let h = saved_harness();
+    import_multitrack(&h);
+    let session = h.session();
+    let library = &session.project.media_library;
+    assert_eq!(library.len(), 3, "the recording and two more tracks");
+
+    let recording = library.iter().find(|a| a.kind == MediaKind::Video).unwrap();
+    assert_eq!(recording.file_name, "obs_multitrack.mkv");
+    assert!(
+        recording.audio_stream.is_none(),
+        "the first track stays with the video"
+    );
+
+    let mut tracks: Vec<_> = library
+        .iter()
+        .filter(|a| a.audio_stream.is_some())
+        .collect();
+    tracks.sort_by_key(|a| a.audio_stream.as_ref().map(|s| s.stream_index));
+    assert_eq!(tracks[0].file_name, "obs_multitrack - Mic");
+    assert_eq!(tracks[1].file_name, "obs_multitrack - Chat");
+    for track in &tracks {
+        assert_eq!(track.kind, MediaKind::Audio);
+        assert_ne!(
+            track.source_path,
+            multitrack_recording(),
+            "a copy of its own"
+        );
+        assert!(track.source_path.exists());
+        assert_eq!(
+            track.audio_stream.as_ref().unwrap().origin,
+            multitrack_recording()
+        );
+    }
+}
+
+#[test]
+fn the_extra_tracks_get_their_waveform_and_loudness_like_any_audio() {
+    let h = saved_harness();
+    import_multitrack(&h);
+    h.wait_until("the track analysis", |s| {
+        s.project
+            .media_library
+            .iter()
+            .filter(|a| a.audio_stream.is_some())
+            .all(|a| a.loudness.is_some() && a.waveform_peaks.is_some())
+    });
+}
+
+#[test]
+fn a_track_copy_that_went_missing_is_made_again_when_the_project_loads() {
+    let h = saved_harness();
+    import_multitrack(&h);
+    let (id, copy) = {
+        let session = h.session();
+        let track = session
+            .project
+            .media_library
+            .iter()
+            .find(|a| a.audio_stream.is_some())
+            .unwrap();
+        (track.id, track.source_path.clone())
+    };
+    std::fs::remove_file(&copy).unwrap();
+
+    let epoch = h.session().project_epoch;
+    rehydrate_proxies(&h.handle(), epoch);
+    h.wait_until("the track copy to be made again", |s| {
+        s.project
+            .media_library
+            .iter()
+            .find(|a| a.id == id)
+            .is_some_and(|a| a.source_path.exists())
+    });
+}
