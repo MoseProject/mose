@@ -2947,6 +2947,18 @@ resolved in favor of consolidating, see items 3 and 5).
     (`Text::QueueEmpty`), plain muted text matching the existing empty-state convention elsewhere
     (Library, Sound Library) rather than waiting on the still-in-progress icon system.
 
+## Mixer, HDR and color (2026-10-12)
+
+Plan, findings and acceptance criteria: [architecture/mixer-hdr-color.md](architecture/mixer-hdr-color.md).
+
+33. `[ ]` **CM-00 SDR decode uses the wrong matrix.** Measured: BT.709 footage shows as
+    186, 46, 41 instead of 200, 60, 40 in the preview (BT.601 matrix). First slice, small fix.
+34. `[ ]` CM-01 color metadata, CM-02 HDR to SDR, CM-03 output tagging, CM-04 10-bit/HDR output,
+    CM-05 grading tools, CM-06 scopes.
+35. `[ ]` MX-00 preview equals export for ducking and voice cleanup, MX-01 multi-stream audio
+    (OBS multi-track files play one stream today), MX-02 track strip and master, MX-03 EQ and
+    dynamics, MX-04 crossfades and audio-only export.
+
 ---
 
 [← back to spec/INDEX.md](INDEX.md)
