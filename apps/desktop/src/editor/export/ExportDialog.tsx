@@ -4,11 +4,11 @@ import styles from "./export.module.css";
 import { useEffect, useState } from "react";
 import { t, type TextKey } from "../../i18n";
 import { api } from "../../ipc";
-import { askConfirm } from "../../notifications";
 import { describeError, patchUi, run } from "../../store";
 import type { ExportAspectRatio, ExportCanvas, SessionView } from "../../types";
-import { Dialog } from "../chrome/Dialog";
+import { Dialog, type DialogExit } from "../chrome/Dialog";
 import { InfoTip } from "../chrome/InfoTip";
+import { alreadyNormalized } from "./audioNormalization";
 import {
   customBitrateValid,
   isUpscale,
@@ -29,6 +29,33 @@ const QUALITIES: [QualityChoice, TextKey][] = [
   ["low", "exportQualityLow"],
   ["custom", "exportQualityCustom"],
 ];
+const FADE_MS = 160;
+const FLIGHT_MS = 450;
+
+/** False when the user asked the system for reduced motion, or there is no way to ask. */
+function motionEnabled(): boolean {
+  return (
+    typeof window.matchMedia === "function" &&
+    !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
+/** The exit that carries the dialog to the export queue button, or a fade without one. */
+function flightToQueue(): DialogExit {
+  const panel = document.querySelector<HTMLElement>('[role="dialog"]');
+  const target = document.querySelector<HTMLElement>('[data-fly-target="export-queue"]');
+  if (!panel || !target) {
+    return "fade";
+  }
+  const from = panel.getBoundingClientRect();
+  const to = target.getBoundingClientRect();
+  return {
+    dx: to.left + to.width / 2 - (from.left + from.width / 2),
+    dy: to.top + to.height / 2 - (from.top + from.height / 2),
+    scale: Math.min(0.2, Math.max(0.03, to.width / Math.max(1, from.width))),
+  };
+}
+
 const LOUDNESS_PRESETS = [-14, -16, -23];
 const MIN_LUFS = -40;
 const MAX_LUFS = -5;
@@ -75,9 +102,17 @@ export function ExportDialog({
   const [canvasLoaded, setCanvasLoaded] = useState(false);
   const [lufsCustom, setLufsCustom] = useState(!LOUDNESS_PRESETS.includes(settings.target_lufs));
   const [lufs, setLufs] = useState(settings.target_lufs);
-  const [normalize, setNormalize] = useState(true);
+  const [storedNormalize, setStoredNormalize] = useState(true);
+  // `null` until the user touches the checkbox: then the sound already normalized on the clips
+  // turns the export's own normalization off by default.
+  const [normalizeChoice, setNormalizeChoice] = useState<boolean | null>(null);
+  const [existing, setExisting] = useState(0);
+  const [ifExists, setIfExists] = useState<"rename" | "replace">("rename");
+  const [leaving, setLeaving] = useState<DialogExit | null>(null);
   const [error, setError] = useState("");
   const measured = measuredLufs(session);
+  const already = alreadyNormalized(session, lufs, clipIds);
+  const normalize = normalizeChoice ?? (storedNormalize && already !== true);
   const lufsValid = !normalize || (Number.isFinite(lufs) && lufs >= MIN_LUFS && lufs <= MAX_LUFS);
   const emptyTimeline = canvasLoaded && canvas === null;
   const ready = (batch || fileName.trim() !== "") && folder.trim() !== "" && !emptyTimeline;
@@ -96,8 +131,9 @@ export function ExportDialog({
   // A step the current picture size made too high falls back to the source quality.
   const quality = stepDisabled(chosenQuality) ? "source" : chosenQuality;
   const bitrateValid = quality !== "custom" || customBitrateValid(customMbps);
-  const options = exportOptions(quality, customMbps, maxHeight);
-  const summary = canvas && bitrateValid ? summarize(canvas, options) : null;
+  const picture = exportOptions(quality, customMbps, maxHeight);
+  const options = normalize ? picture : { ...picture, normalize: false };
+  const summary = canvas && bitrateValid ? summarize(canvas, picture) : null;
   const someStepDisabled = QUALITIES.some(([value]) => {
     return stepDisabled(value);
   });
@@ -105,7 +141,7 @@ export function ExportDialog({
   useEffect(() => {
     void run(api.getNormalizeAudio()).then((value) => {
       if (typeof value === "boolean") {
-        setNormalize(value);
+        setStoredNormalize(value);
       }
     });
     void run(api.getPrefs()).then((prefs) => {
@@ -138,8 +174,66 @@ export function ExportDialog({
     };
   }, [aspect, clipIds]);
 
+  // Whether the file(s) about to be written already exist, looked up as the name or folder is
+  // typed so the choice is made here rather than in a question after Export.
+  useEffect(() => {
+    if (!ready) {
+      return;
+    }
+    let stale = false;
+    const timer = setTimeout(() => {
+      const lookup = clipIds
+        ? api.exportClipsTargets(clipIds, folder, fileName)
+        : api.exportTarget(folder, fileName).then((target) => {
+            return [target];
+          });
+      lookup.then(
+        (targets) => {
+          if (!stale) {
+            setExisting(
+              targets.filter((target) => {
+                return target.exists;
+              }).length,
+            );
+          }
+        },
+        () => {
+          if (!stale) {
+            setExisting(0);
+          }
+        },
+      );
+    }, 250);
+    return () => {
+      stale = true;
+      clearTimeout(timer);
+    };
+  }, [ready, folder, fileName, clipIds]);
+  const existingShown = ready ? existing : 0;
+
   const close = () => {
     patchUi({ exportDialogOpen: false, exportClipIds: null });
+  };
+
+  /** Plays the exit and waits for it; with reduced motion, or no motion at all, it is instant. */
+  const leave = async (exit: DialogExit) => {
+    if (!motionEnabled()) {
+      return;
+    }
+    setLeaving(exit);
+    await new Promise((resolve) => {
+      setTimeout(resolve, exit === "fade" ? FADE_MS : FLIGHT_MS);
+    });
+  };
+
+  const dismiss = async () => {
+    if (leaving) {
+      return;
+    }
+    if (motionEnabled()) {
+      await leave("fade");
+    }
+    close();
   };
 
   const browse = async () => {
@@ -154,38 +248,37 @@ export function ExportDialog({
     if (!lufsValid || !bitrateValid || !ready) {
       return;
     }
-    let targets: { path: string; exists: boolean }[];
+    if (leaving) {
+      return;
+    }
+    let target: { path: string; exists: boolean } | null = null;
     try {
-      targets = clipIds
-        ? await api.exportClipsTargets(clipIds, folder, fileName)
-        : [await api.exportTarget(folder, fileName)];
+      if (clipIds) {
+        await api.exportClipsTargets(clipIds, folder, fileName);
+      } else {
+        target = await api.exportTarget(folder, fileName);
+      }
     } catch (e) {
       setError(describeError(e));
       return;
     }
-    const existing = targets.filter((target) => {
-      return target.exists;
-    }).length;
+    const rename = existingShown > 0 && ifExists === "rename";
+    // The job is queued while the dialog flies to the queue button.
+    const queued = (async () => {
+      if (normalizeChoice !== null) {
+        await run(api.setNormalizeAudio(normalizeChoice));
+      }
+      await run(api.setExportSettings(Number.isFinite(lufs) ? lufs : settings.target_lufs, aspect));
+      if (clipIds) {
+        await run(api.startExportClips(clipIds, folder, fileName, rename, options));
+      } else if (target) {
+        await run(api.startExport(target.path, rename, options));
+      }
+    })();
+    await leave(flightToQueue());
     close();
     patchUi({ exportQueueOpen: true });
-    await run(api.setNormalizeAudio(normalize));
-    await run(api.setExportSettings(Number.isFinite(lufs) ? lufs : settings.target_lufs, aspect));
-    const replace =
-      existing > 0
-        ? await askConfirm({
-            title: t("confirmOverwriteTitle"),
-            message: clipIds
-              ? t("exportOverwriteConfirmMany").replace("{n}", String(existing))
-              : t("exportOverwriteConfirm"),
-            confirmLabel: t("confirmOverwriteAction"),
-            cancelLabel: t("confirmKeepBoth"),
-          })
-        : true;
-    if (clipIds) {
-      await run(api.startExportClips(clipIds, folder, fileName, existing > 0 && !replace, options));
-    } else {
-      await run(api.startExport(targets[0].path, existing > 0 && !replace, options));
-    }
+    await queued;
     const prefs = await run(api.getPrefs());
     if (prefs && prefs.outputFolder !== folder) {
       await run(api.setPrefs({ ...prefs, outputFolder: folder }));
@@ -199,12 +292,17 @@ export function ExportDialog({
           ? t("exportClipsTitle").replace("{n}", String(clipIds.length))
           : t("exportDialogTitle")
       }
-      onClose={close}
+      onClose={() => {
+        void dismiss();
+      }}
+      leaving={leaving}
       actions={
         <>
           <button
             className={cx(styles, baseStyles, "icon")}
-            onClick={close}
+            onClick={() => {
+              void dismiss();
+            }}
           >
             {t("cancel")}
           </button>
@@ -253,6 +351,30 @@ export function ExportDialog({
           {t("browse")}
         </button>
       </div>
+      {existingShown > 0 && (
+        <>
+          <p
+            className={cx(styles, baseStyles, "dialog-warning")}
+            role="status"
+          >
+            {batch
+              ? t("exportExistsMany").replace("{n}", String(existingShown))
+              : t("exportExistsOne")}
+          </p>
+          <label className={cx(styles, baseStyles, "dialog-field")}>
+            <span>{t("exportIfExists")}</span>
+            <select
+              value={ifExists}
+              onChange={(e) => {
+                setIfExists(e.target.value as "rename" | "replace");
+              }}
+            >
+              <option value="rename">{t("exportKeepBoth")}</option>
+              <option value="replace">{t("exportReplace")}</option>
+            </select>
+          </label>
+        </>
+      )}
       {error && (
         <p
           className={cx(styles, baseStyles, "dialog-error")}
@@ -347,12 +469,19 @@ export function ExportDialog({
           type="checkbox"
           checked={normalize}
           onChange={(e) => {
-            setNormalize(e.target.checked);
+            setNormalizeChoice(e.target.checked);
           }}
         />
         <span>{t("normalizeAudio")}</span>
       </label>
-      {!normalize && <p className={cx(styles, baseStyles, "muted")}>{t("normalizeAudioHint")}</p>}
+      {already === true && (
+        <p className={cx(styles, baseStyles, "muted")}>
+          {t("normalizeAlready").replace("{lufs}", String(lufs))}
+        </p>
+      )}
+      {!normalize && already !== true && (
+        <p className={cx(styles, baseStyles, "muted")}>{t("normalizeAudioHint")}</p>
+      )}
       <fieldset
         className={cx(styles, baseStyles, "dialog-group")}
         disabled={!normalize}
@@ -433,7 +562,7 @@ export function ExportDialog({
           {batch ? t("exportNoClips") : t("exportEmptyTimeline")}
         </p>
       )}
-      {!emptyTimeline && Object.keys(options).length === 0 && (
+      {!emptyTimeline && Object.keys(picture).length === 0 && (
         <p className={cx(styles, baseStyles, "muted")}>{t("exportKeepsBitrate")}</p>
       )}
     </Dialog>

@@ -27,6 +27,7 @@ fn job(id: u64, status: ExportJobStatus) -> ExportJob {
         },
         target_lufs: -14.0,
         allow_copy: true,
+        normalize: true,
         output_path: format!("out{id}.mp4"),
         status,
     }
@@ -502,6 +503,7 @@ fn a_lower_height_scales_width_and_bitrate_with_the_pixels() {
     let applied = ExportOptions {
         bitrate_mbps: None,
         max_height: Some(720),
+        normalize: None,
     }
     .apply(canvas_1080p());
     assert_eq!((applied.width, applied.height), (1280, 720));
@@ -513,6 +515,7 @@ fn a_height_above_the_canvas_scales_up_with_the_pixels() {
     let applied = ExportOptions {
         bitrate_mbps: None,
         max_height: Some(2160),
+        normalize: None,
     }
     .apply(canvas_1080p());
     assert_eq!((applied.width, applied.height), (3840, 2160));
@@ -524,6 +527,7 @@ fn an_explicit_bitrate_wins_over_the_scaled_one() {
     let applied = ExportOptions {
         bitrate_mbps: Some(5.5),
         max_height: Some(720),
+        normalize: None,
     }
     .apply(canvas_1080p());
     assert_eq!(applied.bit_rate_bps, 5_500_000);
@@ -536,6 +540,7 @@ fn bitrates_and_heights_outside_what_the_encoder_takes_are_refused() {
         ExportOptions {
             bitrate_mbps,
             max_height,
+            normalize: None,
         }
         .validate()
     };
@@ -544,4 +549,24 @@ fn bitrates_and_heights_outside_what_the_encoder_takes_are_refused() {
     assert!(bad(None, Some(100)).is_err());
     assert!(bad(None, Some(5000)).is_err());
     assert!(bad(Some(8.0), Some(720)).is_ok());
+}
+
+#[test]
+fn an_export_can_opt_out_of_normalization_and_defaults_to_it() {
+    let h = harness();
+    h.add_fixture_clip();
+    let project = h.session().project.clone();
+    assert!(
+        prepare_export_with(&project, ExportOptions::default())
+            .unwrap()
+            .normalize
+    );
+    let off = ExportOptions {
+        normalize: Some(false),
+        ..ExportOptions::default()
+    };
+    let prepared = prepare_export_with(&project, off).unwrap();
+    assert!(!prepared.normalize);
+    // Asking for no normalization does not touch the picture, so the lossless copy stays on.
+    assert!(prepared.allow_copy);
 }

@@ -68,3 +68,8 @@
 .export-summary > span:first-child {
   color: var(--text-secondary);
 }
+.dialog-warning {
+  margin: 6px 0 0;
+  color: var(--warning);
+  font-size: 11px;
+}

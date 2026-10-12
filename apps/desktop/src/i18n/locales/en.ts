@@ -374,6 +374,13 @@ export const en = {
   exportClips: "Export clip…",
   exportClipsMany: "Export {n} clips…",
   exportFilePrefixPlaceholder: "Optional, e.g. Highlights",
+  normalizeAlready:
+    "The clips are already normalized to about {lufs} LUFS, so the export does not normalize again. Turn it on to normalize anyway.",
+  exportExistsOne: "A file with this name already exists in that folder.",
+  exportExistsMany: "{n} of these files already exist in that folder.",
+  exportIfExists: "If it exists",
+  exportKeepBoth: "Save with another name",
+  exportReplace: "Replace it",
   exportErrNoName: "Type a file name.",
   exportKeepsBitrate:
     "Same as source keeps the source bitrate and, for a plain cut, copies the picture without re-encoding it.",

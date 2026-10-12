@@ -8,6 +8,10 @@ import { uiStore } from "../../store";
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+/** How a dialog leaves: a plain fade, or a flight to a point (offsets in pixels from where the
+ *  panel is, `scale` the size it shrinks to). */
+export type DialogExit = "fade" | { dx: number; dy: number; scale: number };
+
 /** A modal dialog: labelled, Escape and backdrop close it, Tab stays inside, focus returns to the
  *  control that opened it, and global shortcuts stand down while it is open. */
 export function Dialog({
@@ -15,6 +19,7 @@ export function Dialog({
   onClose,
   dismissible = true,
   wide = false,
+  leaving = null,
   children,
   actions,
 }: {
@@ -24,6 +29,10 @@ export function Dialog({
   dismissible?: boolean;
   /** A wider panel for forms and lists. */
   wide?: boolean;
+  /** Plays the exit: `"fade"` dims the dialog away; an offset and scale make the panel shrink
+   *  and travel by that many pixels, towards a control. The caller removes the dialog once the
+   *  motion is over. */
+  leaving?: DialogExit | null;
   children: ReactNode;
   actions?: ReactNode;
 }) {
@@ -72,9 +81,14 @@ export function Dialog({
     }
   };
 
+  const flight = typeof leaving === "object" ? leaving : null;
+  const overlayClasses = ["modal-overlay", leaving ? "leaving" : "", flight ? "flying" : ""].join(
+    " ",
+  );
+
   return (
     <div
-      className={cx(styles, baseStyles, homeStyles, "modal-overlay")}
+      className={cx(styles, baseStyles, homeStyles, overlayClasses)}
       onClick={(e) => {
         if (dismissible && e.target === e.currentTarget) {
           onClose();
@@ -89,6 +103,11 @@ export function Dialog({
         aria-labelledby={titleId}
         tabIndex={-1}
         onKeyDown={onKeyDown}
+        style={
+          flight
+            ? { transform: `translate(${flight.dx}px, ${flight.dy}px) scale(${flight.scale})` }
+            : undefined
+        }
       >
         <h3 id={titleId}>{title}</h3>
         {children}

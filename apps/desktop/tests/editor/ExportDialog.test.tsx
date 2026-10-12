@@ -2,7 +2,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../src/i18n";
-import { ConfirmHost } from "../../src/editor/chrome/Notifications";
 import { uiStore } from "../../src/store";
 import type { SessionView } from "../../src/types";
 
@@ -75,6 +74,15 @@ const session = (overrides: { aspect?: string; lufs?: number; loudness?: number 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(api.getNormalizeAudio).mockResolvedValue(true);
+  // clearAllMocks keeps implementations set by an earlier test.
+  vi.mocked(api.exportTarget).mockImplementation(async (folder, name) => {
+    return { path: `${folder}/${name}.mp4`, exists: false };
+  });
+  vi.mocked(api.exportClipsTargets).mockImplementation(async (ids, folder, prefix) => {
+    return ids.map((id) => {
+      return { path: `${folder}/${prefix}${id}.mp4`, exists: false };
+    });
+  });
   uiStore.set({ ...uiStore.get(), exportDialogOpen: true, exportQueueOpen: false });
 });
 afterEach(() => {
@@ -201,7 +209,8 @@ describe("ExportDialog", () => {
       maxHeight: 720,
     });
     expect(api.setExportSettings).toHaveBeenCalledWith(-23, "Original");
-    expect(api.setNormalizeAudio).toHaveBeenCalledWith(true);
+    // Untouched, the stored normalization setting is left alone.
+    expect(api.setNormalizeAudio).not.toHaveBeenCalled();
     expect(uiStore.get().exportDialogOpen).toBe(false);
     expect(uiStore.get().exportQueueOpen).toBe(true);
   });
@@ -223,24 +232,38 @@ describe("ExportDialog", () => {
     });
   });
 
-  it("asks before replacing an existing file, naming the two outcomes", async () => {
-    vi.mocked(api.exportTarget).mockResolvedValueOnce({ path: "D:/videos/a.mp4", exists: true });
-    render(
-      <>
-        <ExportDialog session={session()} />
-        <ConfirmHost />
-      </>,
-    );
-    await waitFor(() => {
-      expect((screen.getByLabelText(t("exportFolder")) as HTMLInputElement).value).toBe(
-        "D:/videos",
-      );
-    });
+  it("warns as soon as the file exists, and keeps both files unless told to replace", async () => {
+    vi.mocked(api.exportTarget).mockResolvedValue({ path: "D:/videos/a.mp4", exists: true });
+    render(<ExportDialog session={session()} />);
+    expect((await screen.findByRole("status")).textContent).toBe(t("exportExistsOne"));
+    const choice = screen.getByLabelText(t("exportIfExists"), {
+      exact: false,
+    }) as HTMLSelectElement;
+    expect(choice.value).toBe("rename");
     fireEvent.click(screen.getByText(t("exportChooseFile")));
-    fireEvent.click(await screen.findByText(t("confirmKeepBoth")));
     await waitFor(() => {
       expect(api.startExport).toHaveBeenCalledWith("D:/videos/a.mp4", true, {});
     });
+  });
+
+  it("replaces the existing file when that is chosen", async () => {
+    vi.mocked(api.exportTarget).mockResolvedValue({ path: "D:/videos/a.mp4", exists: true });
+    render(<ExportDialog session={session()} />);
+    await screen.findByRole("status");
+    choose(t("exportIfExists"), "replace");
+    fireEvent.click(screen.getByText(t("exportChooseFile")));
+    await waitFor(() => {
+      expect(api.startExport).toHaveBeenCalledWith("D:/videos/a.mp4", false, {});
+    });
+  });
+
+  it("does not warn when the name is free", async () => {
+    render(<ExportDialog session={session()} />);
+    await ready();
+    await new Promise((resolve) => {
+      setTimeout(resolve, 400);
+    });
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("keeps the dialog open and says why when the folder or name is refused", async () => {
@@ -281,7 +304,7 @@ describe("ExportDialog", () => {
     await waitFor(() => {
       expect(api.startExport).toHaveBeenCalledTimes(1);
     });
-    expect(api.setNormalizeAudio).toHaveBeenCalledWith(false);
+    expect(api.startExport).toHaveBeenCalledWith(expect.any(String), false, { normalize: false });
     expect(api.setExportSettings).toHaveBeenCalledWith(-14, "Original");
   });
 
@@ -455,24 +478,17 @@ describe("ExportDialog", () => {
       expect(uiStore.get().exportQueueOpen).toBe(true);
     });
 
-    it("asks once, with the count, before replacing files and can keep both", async () => {
-      vi.mocked(api.exportClipsTargets).mockResolvedValueOnce([
+    it("warns with the count of files that exist and keeps both by default", async () => {
+      vi.mocked(api.exportClipsTargets).mockResolvedValue([
         { path: "a.mp4", exists: true },
         { path: "b.mp4", exists: true },
         { path: "c.mp4", exists: false },
       ]);
-      render(
-        <>
-          {many()}
-          <ConfirmHost />
-        </>,
+      render(many());
+      expect((await screen.findByRole("status")).textContent).toBe(
+        t("exportExistsMany").replace("{n}", "2"),
       );
-      await ready();
       fireEvent.click(screen.getByText(t("exportChooseFile")));
-      expect(
-        await screen.findByText(t("exportOverwriteConfirmMany").replace("{n}", "2")),
-      ).toBeTruthy();
-      fireEvent.click(screen.getByText(t("confirmKeepBoth")));
       await waitFor(() => {
         expect(api.startExportClips).toHaveBeenCalledWith([4, 7, 9], "D:/videos", "", true, {});
       });
@@ -485,6 +501,142 @@ describe("ExportDialog", () => {
       fireEvent.click(screen.getByText(t("exportChooseFile")));
       expect((await screen.findByRole("alert")).textContent).toBe(t("exportNoClips"));
       expect(api.startExportClips).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("audio already normalized on the clips", () => {
+    const withLoudness = (integrated: number, gain: number) => {
+      return {
+        project: {
+          active_sequence: 0,
+          media_library: [{ id: 1, has_audio: true, loudness: { integrated_lufs: integrated } }],
+          sequences: [
+            {
+              name: "Montage",
+              export_settings: { aspect_ratio: "Original", target_lufs: -14 },
+              timeline: {
+                tracks: [
+                  {
+                    kind: "Video",
+                    muted: false,
+                    clips: [
+                      {
+                        id: 1,
+                        asset_id: 1,
+                        gain_db: gain,
+                        gain_keyframes: [],
+                        nested_sequence_id: null,
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      } as unknown as SessionView;
+    };
+
+    it("leaves normalization off by default and says why", async () => {
+      render(<ExportDialog session={withLoudness(-18, 4)} />);
+      const box = screen.getByLabelText(t("normalizeAudio")) as HTMLInputElement;
+      await waitFor(() => {
+        expect(box.checked).toBe(false);
+      });
+      expect(screen.getByText(t("normalizeAlready").replace("{lufs}", "-14"))).toBeTruthy();
+      await ready();
+      fireEvent.click(screen.getByText(t("exportChooseFile")));
+      await waitFor(() => {
+        expect(api.startExport).toHaveBeenCalledWith(expect.any(String), false, {
+          normalize: false,
+        });
+      });
+      // The stored preference is not rewritten by the automatic choice.
+      expect(api.setNormalizeAudio).not.toHaveBeenCalled();
+    });
+
+    it("lets the user normalize anyway, which also saves the setting", async () => {
+      render(<ExportDialog session={withLoudness(-18, 4)} />);
+      const box = screen.getByLabelText(t("normalizeAudio")) as HTMLInputElement;
+      fireEvent.click(box);
+      expect(box.checked).toBe(true);
+      await ready();
+      fireEvent.click(screen.getByText(t("exportChooseFile")));
+      await waitFor(() => {
+        expect(api.startExport).toHaveBeenCalledWith(expect.any(String), false, {});
+      });
+      expect(api.setNormalizeAudio).toHaveBeenCalledWith(true);
+    });
+
+    it("keeps normalizing when the clips are not at the target", () => {
+      render(<ExportDialog session={withLoudness(-18, 0)} />);
+      expect((screen.getByLabelText(t("normalizeAudio")) as HTMLInputElement).checked).toBe(true);
+      expect(screen.queryByText(t("normalizeAlready").replace("{lufs}", "-14"))).toBeNull();
+    });
+  });
+
+  describe("motion", () => {
+    const motion = (on: boolean) => {
+      Object.defineProperty(window, "matchMedia", {
+        configurable: true,
+        value: () => {
+          return { matches: !on };
+        },
+      });
+    };
+    afterEach(() => {
+      Reflect.deleteProperty(window, "matchMedia");
+    });
+    const overlay = () => {
+      return screen.getByRole("dialog").parentElement as HTMLElement;
+    };
+
+    it("fades away on Cancel before closing", async () => {
+      motion(true);
+      render(<ExportDialog session={session()} />);
+      fireEvent.click(screen.getByText(t("cancel")));
+      expect(overlay().className).toContain("leaving");
+      expect(overlay().className).not.toContain("flying");
+      expect(uiStore.get().exportDialogOpen).toBe(true);
+      await waitFor(() => {
+        expect(uiStore.get().exportDialogOpen).toBe(false);
+      });
+    });
+
+    it("closes at once when the system asks for reduced motion", () => {
+      motion(false);
+      render(<ExportDialog session={session()} />);
+      fireEvent.click(screen.getByText(t("cancel")));
+      expect(uiStore.get().exportDialogOpen).toBe(false);
+    });
+
+    it("flies towards the export queue button when exporting", async () => {
+      motion(true);
+      const target = document.createElement("button");
+      target.setAttribute("data-fly-target", "export-queue");
+      target.getBoundingClientRect = () => {
+        return { left: 900, top: 10, width: 30, height: 30 } as DOMRect;
+      };
+      document.body.append(target);
+      render(<ExportDialog session={session()} />);
+      screen.getByRole("dialog").getBoundingClientRect = () => {
+        return { left: 300, top: 200, width: 400, height: 500 } as DOMRect;
+      };
+      await ready();
+      fireEvent.click(screen.getByText(t("exportChooseFile")));
+      await waitFor(() => {
+        expect(overlay().className).toContain("flying");
+      });
+      // From the middle of the panel (500, 450) to the middle of the button (915, 25).
+      expect(screen.getByRole("dialog").style.transform).toBe(
+        "translate(415px, -425px) scale(0.075)",
+      );
+      await waitFor(() => {
+        expect(uiStore.get().exportDialogOpen).toBe(false);
+      });
+      expect(uiStore.get().exportQueueOpen).toBe(true);
+      expect(api.startExport).toHaveBeenCalled();
+      target.remove();
     });
   });
 });

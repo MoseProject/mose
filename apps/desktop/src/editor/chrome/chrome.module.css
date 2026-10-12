@@ -338,25 +338,41 @@ button.danger {
   padding: 2px;
   border: 0;
   background: none;
-  color: var(--warning, var(--accent));
+  box-shadow: none;
+  color: var(--accent);
   cursor: help;
 }
+.info-tip-button:hover:not(:disabled) {
+  background: none;
+  color: var(--text-primary);
+}
 .info-tip-pop {
-  display: none;
   position: absolute;
   right: 0;
   bottom: calc(100% + 6px);
   z-index: 5;
   width: 260px;
   padding: 8px 10px;
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
   border-radius: var(--radius);
   font-size: 11px;
   line-height: 1.45;
   color: var(--text-secondary);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 160ms ease,
+    visibility 0s linear 160ms;
 }
 .info-tip:hover .info-tip-pop,
 .info-tip:focus-within .info-tip-pop {
-  display: block;
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .info-tip-pop {
+    transition: none;
+  }
 }
