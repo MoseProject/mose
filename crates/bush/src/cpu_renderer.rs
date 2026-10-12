@@ -650,6 +650,53 @@ fn blend_layer(
         && transform.scale_y == 1.0
         && sin == 0.0
         && cos == 1.0;
+    let tables = BlendTables::for_layer(layer);
+    let tables = tables.as_ref();
+    let tone = ToneTable::for_layer(layer);
+    let tone = tone.as_ref();
+    let block = i64::from(layer.effects.pixelize_block);
+    // The source column or row (and the effects' normalised coordinate) one distance from the
+    // layer centre samples: mosaic blocks and mirroring applied, `None` outside the layer.
+    let sample = |u: f32, extent: i64, mirrored: bool| -> Option<(i64, f32)> {
+        if u < 0.0 || u >= extent as f32 {
+            return None;
+        }
+        let mut local = u as i64;
+        if block > 1 {
+            // Mosaic: every pixel in a block samples the block centre.
+            local = ((local / block) * block + block / 2).min(extent - 1);
+        }
+        if mirrored {
+            local = extent - 1 - local;
+        }
+        // Only the effects read the normalised coordinate.
+        let normalised = if neutral_effects {
+            0.0
+        } else {
+            (u / extent as f32 - 0.5) * 2.0
+        };
+        Some((local, normalised))
+    };
+    // Unrotated, the source column depends on the destination column alone and the source row on
+    // the destination row alone, so each is worked out once per layer instead of once per pixel.
+    // The expressions are the rotated ones with `sin == 0` and `cos == 1`, which leave `dx` and
+    // `dy` unchanged: the same values, bit for bit.
+    let axis_aligned = sin == 0.0 && cos == 1.0;
+    let columns: Vec<Option<(i64, f32)>> =
+        if axis_aligned && !identity_path(identity, neutral_effects) {
+            (start_x..end_x)
+                .map(|destination_x| {
+                    let dx = destination_x as f32 + 0.5 - center_x;
+                    sample(
+                        dx / transform.scale_x + crop_w as f32 / 2.0,
+                        crop_w,
+                        transform.flip_x,
+                    )
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
     for destination_y in start_y..end_y {
         if identity && neutral_effects {
             // Unscaled, unrotated, uncoloured: the source maps 1:1 onto destination pixels, so
@@ -684,11 +731,41 @@ fn blend_layer(
                 debug_assert!(source_x >= crop_x0 && source_x < crop_x0 + crop_w);
                 let source_index = source_y * source.stride_bytes() + source_x as usize * 4;
                 let destination_index = row_start + destination_x as usize * 4;
-                blend_pixel(
+                blend_with(
                     &mut canvas[destination_index..destination_index + 4],
                     &source.pixels()[source_index..source_index + 4],
-                    layer.opacity,
-                    layer.blend,
+                    layer,
+                    tables,
+                );
+            }
+            continue;
+        }
+        if axis_aligned {
+            let dy = destination_y as f32 + 0.5 - center_y;
+            let Some((local_y, ny)) = sample(
+                dy / transform.scale_y + crop_h as f32 / 2.0,
+                crop_h,
+                transform.flip_y,
+            ) else {
+                continue;
+            };
+            let source_y = (crop_y0 + local_y) as usize;
+            let row_start = (destination_y - band_start) as usize * canvas_width;
+            for (offset, column) in columns.iter().enumerate() {
+                let Some((local_x, nx)) = *column else {
+                    continue;
+                };
+                let destination_x = start_x as usize + offset;
+                shade_and_blend(
+                    canvas,
+                    layer,
+                    neutral_effects,
+                    tone,
+                    tables,
+                    source_y * source.stride_bytes() + (crop_x0 + local_x) as usize * 4,
+                    (row_start + destination_x) * 4,
+                    nx,
+                    ny,
                 );
             }
             continue;
@@ -701,67 +778,187 @@ fn blend_layer(
             let ry = -dx * sin + dy * cos;
             let u = rx / transform.scale_x + crop_w as f32 / 2.0;
             let v = ry / transform.scale_y + crop_h as f32 / 2.0;
-            if u < 0.0 || v < 0.0 || u >= crop_w as f32 || v >= crop_h as f32 {
+            let (Some((local_x, nx)), Some((local_y, ny))) = (
+                sample(u, crop_w, transform.flip_x),
+                sample(v, crop_h, transform.flip_y),
+            ) else {
                 continue;
-            }
-            let (mut local_x, mut local_y) = (u as i64, v as i64);
-            let block = i64::from(layer.effects.pixelize_block);
-            if block > 1 {
-                // Mosaic: every pixel in a block samples the block centre.
-                local_x = ((local_x / block) * block + block / 2).min(crop_w - 1);
-                local_y = ((local_y / block) * block + block / 2).min(crop_h - 1);
-            }
-            if transform.flip_x {
-                local_x = crop_w - 1 - local_x;
-            }
-            if transform.flip_y {
-                local_y = crop_h - 1 - local_y;
-            }
-            let source_x = (crop_x0 + local_x) as usize;
-            let source_y = (crop_y0 + local_y) as usize;
-            let source_index = source_y * source.stride_bytes() + source_x * 4;
-            let destination_index =
-                ((destination_y - band_start) as usize * canvas_width + destination_x as usize) * 4;
-            let mut pixel: [u8; 4] = source.pixels()[source_index..source_index + 4]
-                .try_into()
-                .expect("slice of four bytes");
-            if !neutral_effects {
-                let nx = (u / crop_w as f32 - 0.5) * 2.0;
-                let ny = (v / crop_h as f32 - 0.5) * 2.0;
-                if let Some(key) = layer.effects.chroma_key {
-                    let factor = key.alpha_factor([pixel[0], pixel[1], pixel[2]]);
-                    pixel[3] = (f32::from(pixel[3]) * factor).round() as u8;
-                }
-                if layer.lut.is_some() || !layer.effects.colour_is_neutral() {
-                    let mut rgb = [
-                        pixel[0] as f32 / 255.0,
-                        pixel[1] as f32 / 255.0,
-                        pixel[2] as f32 / 255.0,
-                    ];
-                    if let Some(lut) = layer.lut {
-                        rgb = lut.apply(rgb);
-                    }
-                    if !layer.effects.colour_is_neutral() {
-                        let radius = ((nx * nx + ny * ny) / 2.0).sqrt();
-                        rgb = layer.effects.apply(rgb, radius);
-                    }
-                    for channel in 0..3 {
-                        pixel[channel] = (rgb[channel] * 255.0).round() as u8;
-                    }
-                }
-                if let Some(mask) = layer.effects.mask {
-                    let factor = mask.alpha_factor(nx, ny);
-                    pixel[3] = (f32::from(pixel[3]) * factor).round() as u8;
-                }
-            }
-            blend_pixel(
-                &mut canvas[destination_index..destination_index + 4],
-                &pixel,
-                layer.opacity,
-                layer.blend,
+            };
+            shade_and_blend(
+                canvas,
+                layer,
+                neutral_effects,
+                tone,
+                tables,
+                (crop_y0 + local_y) as usize * source.stride_bytes()
+                    + (crop_x0 + local_x) as usize * 4,
+                ((destination_y - band_start) as usize * canvas_width + destination_x as usize) * 4,
+                nx,
+                ny,
             );
         }
     }
+}
+
+/// Whether the 1:1 copy loop handles the layer, which never reads the column table.
+fn identity_path(identity: bool, neutral_effects: bool) -> bool {
+    identity && neutral_effects
+}
+
+/// Reads one source pixel, runs the layer's effects over it and blends it onto the canvas pixel
+/// at `destination_index`. `nx`/`ny` are the pixel's place in the layer, `-1.0..=1.0` from the
+/// centre.
+#[inline(always)]
+#[allow(clippy::too_many_arguments)]
+fn shade_and_blend(
+    canvas: &mut [u8],
+    layer: &LayerFrame<'_>,
+    neutral_effects: bool,
+    tone: Option<&ToneTable>,
+    tables: Option<&BlendTables>,
+    source_index: usize,
+    destination_index: usize,
+    nx: f32,
+    ny: f32,
+) {
+    let mut pixel: [u8; 4] = layer.frame.pixels()[source_index..source_index + 4]
+        .try_into()
+        .expect("slice of four bytes");
+    if !neutral_effects {
+        if let Some(key) = layer.effects.chroma_key {
+            let factor = key.alpha_factor([pixel[0], pixel[1], pixel[2]]);
+            pixel[3] = (f32::from(pixel[3]) * factor).round() as u8;
+        }
+        if layer.lut.is_some() || !layer.effects.colour_is_neutral() {
+            if let Some(tone) = tone {
+                tone.apply(&mut pixel);
+            } else {
+                let mut rgb = [
+                    pixel[0] as f32 / 255.0,
+                    pixel[1] as f32 / 255.0,
+                    pixel[2] as f32 / 255.0,
+                ];
+                if let Some(lut) = layer.lut {
+                    rgb = lut.apply(rgb);
+                }
+                if !layer.effects.colour_is_neutral() {
+                    let radius = ((nx * nx + ny * ny) / 2.0).sqrt();
+                    rgb = layer.effects.apply(rgb, radius);
+                }
+                for channel in 0..3 {
+                    pixel[channel] = (rgb[channel] * 255.0).round() as u8;
+                }
+            }
+        }
+        if let Some(mask) = layer.effects.mask {
+            let factor = mask.alpha_factor(nx, ny);
+            pixel[3] = (f32::from(pixel[3]) * factor).round() as u8;
+        }
+    }
+    blend_with(
+        &mut canvas[destination_index..destination_index + 4],
+        &pixel,
+        layer,
+        tables,
+    );
+}
+
+/// Brightness and contrast for each of the 256 values a channel can have, computed with the
+/// expression [`LayerEffects::apply`] uses, for the common case of a layer whose colour work is
+/// only brightness, contrast and saturation (no vignette, sepia or lookup table): the per-pixel
+/// part is then the saturation mix alone, with the same arithmetic and so the same result.
+struct ToneTable {
+    tone: [f32; 256],
+    saturation: f32,
+}
+
+impl ToneTable {
+    fn for_layer(layer: &LayerFrame<'_>) -> Option<Self> {
+        let effects = &layer.effects;
+        if layer.lut.is_some()
+            || effects.colour_is_neutral()
+            || effects.vignette != 0.0
+            || effects.sepia != 0.0
+        {
+            return None;
+        }
+        let mut tone = [0.0f32; 256];
+        for (value, entry) in tone.iter_mut().enumerate() {
+            let channel = value as f32 / 255.0;
+            *entry =
+                (((channel - 0.5) * effects.contrast + 0.5) + effects.brightness).clamp(0.0, 1.0);
+        }
+        Some(Self {
+            tone,
+            saturation: effects.saturation,
+        })
+    }
+
+    fn apply(&self, pixel: &mut [u8; 4]) {
+        let mut out = [
+            self.tone[pixel[0] as usize],
+            self.tone[pixel[1] as usize],
+            self.tone[pixel[2] as usize],
+        ];
+        let luma = 0.2126 * out[0] + 0.7152 * out[1] + 0.0722 * out[2];
+        for (channel, value) in out.iter_mut().enumerate() {
+            *value = (luma + (*value - luma) * self.saturation).clamp(0.0, 1.0);
+            pixel[channel] = (*value * 255.0).round() as u8;
+        }
+    }
+}
+
+/// What a normally blended, translucent layer contributes to an opaque backdrop, per source and
+/// per backdrop value: `source_alpha * (s / 255)` and `(1 - source_alpha) * (d / 255)`, the two
+/// terms of the blend in [`blend_pixel`], so adding them gives its result exactly.
+struct BlendTables {
+    source: [f32; 256],
+    backdrop: [f32; 256],
+}
+
+impl BlendTables {
+    fn for_layer(layer: &LayerFrame<'_>) -> Option<Self> {
+        let opacity = layer.opacity;
+        // Over an opaque backdrop with an opaque source, `blend_pixel` takes its shortcut only
+        // when the output alpha comes out as exactly one; the same test decides here.
+        let keep = 1.0 - opacity;
+        if layer.blend != BlendMode::Normal
+            || !(opacity > 0.0 && opacity < 1.0)
+            || opacity + 1.0 * keep != 1.0
+        {
+            return None;
+        }
+        let mut tables = Self {
+            source: [0.0; 256],
+            backdrop: [0.0; 256],
+        };
+        for value in 0..256 {
+            tables.source[value] = opacity * (value as f32 / 255.0);
+            tables.backdrop[value] = keep * (value as f32 / 255.0);
+        }
+        Some(tables)
+    }
+}
+
+/// [`blend_pixel`] for a layer, through [`BlendTables`] when the pixels allow it.
+#[inline(always)]
+fn blend_with(
+    destination: &mut [u8],
+    source: &[u8],
+    layer: &LayerFrame<'_>,
+    tables: Option<&BlendTables>,
+) {
+    if let Some(tables) = tables {
+        if source[3] == 255 && destination[3] == 255 {
+            for channel in 0..3 {
+                let premultiplied = tables.source[source[channel] as usize]
+                    + tables.backdrop[destination[channel] as usize];
+                destination[channel] = (premultiplied * 255.0).round() as u8;
+            }
+            return;
+        }
+    }
+    blend_pixel(destination, source, layer.opacity, layer.blend);
 }
 
 /// W3C compositing: `co = as*(1-ab)*cs + as*ab*B(cb,cs) + (1-as)*ab*cb`, `ao = as + ab*(1-as)`.

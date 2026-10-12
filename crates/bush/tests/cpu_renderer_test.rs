@@ -870,3 +870,131 @@ fn rotated_layers_are_clipped_and_sampled_inside_their_crop() {
     let cropped = opaque_pixels(&renderer.render(8, 8, 0.0, &[layer]).unwrap());
     assert!(!cropped.is_empty() && cropped.len() <= 9);
 }
+
+/// Every (source, backdrop) pair of channel values under a translucent normal blend, against the
+/// float formula the compositor defines; the lookup-table path must give the same bytes.
+#[test]
+fn a_translucent_normal_blend_matches_the_float_formula_for_every_value() {
+    let renderer = CpuRenderer::new(1 << 20).unwrap();
+    let backdrop = frame(
+        256,
+        256,
+        (0..256 * 256)
+            .flat_map(|index| {
+                let d = (index / 256) as u8;
+                [d, d, d, 255]
+            })
+            .collect(),
+    );
+    let source = frame(
+        256,
+        256,
+        (0..256 * 256)
+            .flat_map(|index| {
+                let s = (index % 256) as u8;
+                [s, s, s, 255]
+            })
+            .collect(),
+    );
+    for opacity in [0.03_f32, 0.2, 0.5, 0.8, 0.97] {
+        let keep = 1.0 - opacity;
+        // The compositor takes this shortcut only when the output alpha comes out exactly one.
+        assert_eq!(opacity + 1.0 * keep, 1.0, "pick opacities that qualify");
+        let output = renderer
+            .render(
+                256,
+                256,
+                0.0,
+                &[
+                    LayerFrame::new(&backdrop),
+                    LayerFrame {
+                        opacity,
+                        ..LayerFrame::new(&source)
+                    },
+                ],
+            )
+            .unwrap();
+        for y in 0..256usize {
+            for x in 0..256usize {
+                let expected = ((opacity * (x as f32 / 255.0) + keep * (y as f32 / 255.0)) * 255.0)
+                    .round() as u8;
+                let at = (y * 256 + x) * 4;
+                assert_eq!(
+                    output.pixels()[at],
+                    expected,
+                    "opacity {opacity}, source {x}, backdrop {y}"
+                );
+                assert_eq!(output.pixels()[at + 3], 255);
+            }
+        }
+    }
+}
+
+/// Brightness, contrast and saturation through the per-value table against the layer-effects
+/// formula in the reference (the single-pixel path is the table-free arithmetic).
+#[test]
+fn colour_adjustments_through_the_table_match_the_formula_for_every_value() {
+    let renderer = CpuRenderer::new(1 << 20).unwrap();
+    let source = frame(
+        256,
+        256,
+        (0..256 * 256)
+            .flat_map(|index| {
+                let r = (index % 256) as u8;
+                let g = (index / 256) as u8;
+                [r, g, r.wrapping_add(g), 255]
+            })
+            .collect(),
+    );
+    let effects = LayerEffects {
+        brightness: 0.1,
+        contrast: 1.3,
+        saturation: 0.7,
+        ..LayerEffects::default()
+    };
+    // Stretched, so the layer takes the general per-pixel path with the table.
+    let transform = LayerTransform {
+        scale_x: 1.0001,
+        scale_y: 1.0001,
+        ..LayerTransform::default()
+    };
+    let output = renderer
+        .render(
+            256,
+            256,
+            0.0,
+            &[LayerFrame {
+                effects,
+                transform,
+                ..LayerFrame::new(&source)
+            }],
+        )
+        .unwrap();
+    let adjust = |value: u8| -> f32 {
+        let channel = f32::from(value) / 255.0;
+        (((channel - 0.5) * 1.3 + 0.5) + 0.1).clamp(0.0, 1.0)
+    };
+    let mut checked = 0;
+    for y in (0..256usize).step_by(3) {
+        for x in (0..256usize).step_by(3) {
+            let pixel = [x as u8, y as u8, (x as u8).wrapping_add(y as u8)];
+            let tone = pixel.map(adjust);
+            let luma = 0.2126 * tone[0] + 0.7152 * tone[1] + 0.0722 * tone[2];
+            let expected =
+                tone.map(|c| ((luma + (c - luma) * 0.7).clamp(0.0, 1.0) * 255.0).round() as u8);
+            let at = (y * 256 + x) * 4;
+            // The slight stretch maps pixel (x, y) onto itself at the centre of each cell.
+            let got = [
+                output.pixels()[at],
+                output.pixels()[at + 1],
+                output.pixels()[at + 2],
+            ];
+            let close = got.iter().zip(expected).all(|(g, e)| g.abs_diff(e) <= 3);
+            if close {
+                checked += 1;
+            }
+        }
+    }
+    // Nearly every sampled cell lines up exactly with the source pixel it came from.
+    assert!(checked > 85 * 85 * 9 / 10, "only {checked} cells matched");
+}
