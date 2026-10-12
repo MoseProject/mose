@@ -22,6 +22,7 @@ import type {
   PathStatus,
   PrefsView,
   PrivacyBlurEvent,
+  TrackMix,
   RecentProject,
   RecoverySession,
   SessionPatch,
@@ -413,8 +414,8 @@ export const api = {
       audioRole: flags.audioRole ?? null,
     });
   },
-  setTrackMix: (trackId: number, volumeDb: number, pan: number) => {
-    return invoke<void>("set_track_mix", { trackId, volumeDb, pan });
+  setTrackMix: (trackId: number, mix: TrackMix) => {
+    return invoke<void>("set_track_mix", { trackId, mix });
   },
   getKeybindings: () => {
     return invoke<Record<string, string[]>>("get_keybindings");

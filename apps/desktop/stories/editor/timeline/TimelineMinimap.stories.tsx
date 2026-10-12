@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { TimelineMinimap } from "../../../src/editor/timeline/TimelineMinimap";
-import type { ClipInstance, Track } from "../../../src/types";
+import { NEUTRAL_TRACK_MIX, type ClipInstance, type Track } from "../../../src/types";
 
 const videoClip = {
   start_secs: 0,
@@ -30,7 +30,7 @@ const makeTrack = (id: number, name: string, kind: Track["kind"], clips: ClipIns
     locked: false,
     muted: false,
     solo: false,
-    mix: { volume_db: 0, pan: 0 },
+    mix: NEUTRAL_TRACK_MIX,
   };
 };
 
