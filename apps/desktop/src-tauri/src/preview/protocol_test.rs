@@ -32,6 +32,34 @@ fn the_frame_route_serves_the_latest_preview_frame_or_a_404() {
 }
 
 #[test]
+fn the_scope_route_draws_the_latest_frame_or_answers_404() {
+    let h = harness_with_cache();
+    // No frame yet, an unknown scope and a frame that is not a picture all answer 404.
+    assert_eq!(
+        answer(&h, "/scope/waveform/1").status(),
+        StatusCode::NOT_FOUND
+    );
+    h.state().preview.set_latest_frame(vec![0xFF, 0xD8, 0xFF]);
+    assert_eq!(
+        answer(&h, "/scope/waveform/2").status(),
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        answer(&h, "/scope/nonsense/2").status(),
+        StatusCode::NOT_FOUND
+    );
+
+    let rgba: Vec<u8> = (0..64 * 36).flat_map(|_| [200, 60, 40, 255]).collect();
+    let jpeg = crate::frames::encode_jpeg_rgba(64, 36, &rgba, 64).unwrap();
+    h.state().preview.set_latest_frame(jpeg);
+    for kind in ["waveform", "parade", "histogram", "vectorscope"] {
+        let response = answer(&h, &format!("/scope/{kind}/3"));
+        assert_eq!(response.status(), StatusCode::OK, "{kind}");
+        assert_eq!(&response.body()[..2], &[0xFF, 0xD8], "{kind} is a JPEG");
+    }
+}
+
+#[test]
 fn the_thumbnail_route_serves_a_jpeg_for_a_video_asset() {
     let h = harness_with_cache();
     let mut asset = video_asset(7, 5.0);
