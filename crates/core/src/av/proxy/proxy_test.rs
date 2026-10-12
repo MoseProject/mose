@@ -100,3 +100,53 @@ fn a_proxy_keeps_the_colour_of_hd_footage_even_though_it_is_small() {
         );
     }
 }
+
+fn audio_fixture(name: &str) -> std::path::PathBuf {
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/audio_codecs")
+        .join(name)
+}
+
+#[test]
+fn a_proxy_is_made_for_flac_opus_and_pcm_audio_in_matroska_and_keeps_its_length() {
+    // Matroska stamps audio in milliseconds, and PCM in it has no channel layout: each of these
+    // used to fail (timestamps going backwards, or an encoder refusing "2 channels").
+    for name in ["flac_in_mkv.mkv", "opus_in_mkv.mkv", "pcm_in_mkv.mkv"] {
+        let source = audio_fixture(name);
+        let dir =
+            std::env::temp_dir().join(format!("oca-proxy-audio-{name}-{}", std::process::id()));
+        let proxy = ensure_proxy(&source, &dir, PreviewQuality::Low)
+            .unwrap_or_else(|error| panic!("{name}: {error}"));
+        let made = crate::probe_media(&proxy).expect("the proxy probes");
+        let original = crate::probe_media(&source).expect("the source probes");
+        let _ = fs::remove_dir_all(&dir);
+        assert!(made.has_audio, "{name}: the proxy lost its audio");
+        assert!(
+            (made.duration_secs - original.duration_secs).abs() < 0.15,
+            "{name}: {} s became {} s",
+            original.duration_secs,
+            made.duration_secs
+        );
+    }
+}
+
+#[test]
+fn a_failed_proxy_leaves_nothing_behind_to_be_taken_for_a_good_one() {
+    let dir = std::env::temp_dir().join(format!("oca-proxy-failed-{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    let not_media = dir.join("clip.mp4");
+    fs::write(&not_media, b"this is not a video").unwrap();
+    let proxies = dir.join("proxies");
+
+    assert!(ensure_proxy(&not_media, &proxies, PreviewQuality::Medium).is_err());
+    let leftovers: Vec<_> = fs::read_dir(&proxies)
+        .map(|entries| entries.flatten().map(|e| e.file_name()).collect())
+        .unwrap_or_default();
+    let again = ensure_proxy(&not_media, &proxies, PreviewQuality::Medium);
+    let _ = fs::remove_dir_all(&dir);
+    assert!(leftovers.is_empty(), "left behind: {leftovers:?}");
+    assert!(
+        again.is_err(),
+        "the next call took a leftover for a finished proxy"
+    );
+}
