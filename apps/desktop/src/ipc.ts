@@ -604,6 +604,11 @@ export const api = {
   setPlaying: (playing: boolean) => {
     return invoke<void>("preview_set_playing", { playing });
   },
+  /** A playhead drag starts or ends: while it lasts the preview may show an earlier frame of a
+   *  long-GOP file; at its end it shows the exact frame. */
+  setScrubbing: (scrubbing: boolean) => {
+    return invoke<void>("preview_set_scrubbing", { scrubbing });
+  },
   setPreviewMaxDim: (dim: number) => {
     return invoke<void>("preview_set_max_dim", { dim });
   },

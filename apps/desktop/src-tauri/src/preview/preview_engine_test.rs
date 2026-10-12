@@ -55,6 +55,13 @@ fn the_engine_decodes_a_clip_and_publishes_frames_and_transport_state() {
         (t["playheadSecs"].as_f64().unwrap_or(0.0) - 0.5).abs() < 0.2
     });
     engine.step(1);
+    // A playhead drag and its end are harmless to a short clip and leave the engine responsive.
+    engine.set_scrubbing(true);
+    engine.seek(0.25);
+    engine.set_scrubbing(false);
+    wait_for_tick(&ticks, "the exact frame after a drag", |t| {
+        (t["playheadSecs"].as_f64().unwrap_or(0.0) - 0.25).abs() < 0.2
+    });
     engine.set_playing(true);
     wait_for_tick(&ticks, "playback", |t| t["playing"] == true);
     engine.set_playing(false);
@@ -409,6 +416,7 @@ fn a_crashed_playback_thread_is_restarted_with_its_scene_and_playhead() {
                 Command::Step(_) => "step",
                 Command::Playing(_) => "playing",
                 Command::MaxDim(_) => "max_dim",
+                Command::Scrubbing(_) => "scrubbing",
             };
             RECEIVED.lock().unwrap().push(name);
         }

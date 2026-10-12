@@ -31,6 +31,7 @@ vi.mock("../../../src/editor/SilenceReviewPanel", () => {
 vi.mock("../../../src/ipc", () => {
   const names = [
     "seek",
+    "setScrubbing",
     "addAssetToTimeline",
     "updateClip",
     "selectSequence",
@@ -691,6 +692,27 @@ describe("ruler", () => {
     expect(calls.seek).toHaveBeenCalledTimes(3);
     ptr("pointerup", 400, 10);
     expect(calls.seek).toHaveBeenCalledTimes(3);
+  });
+
+  it("tells the preview a drag is on while scrubbing, and that it is over on release", () => {
+    mount();
+    ptr("pointerdown", 200, 10);
+    expect(calls.setScrubbing).toHaveBeenLastCalledWith(true);
+    ptr("pointermove", 280, 10);
+    expect(calls.setScrubbing).toHaveBeenCalledTimes(1);
+    ptr("pointerup", 320, 10);
+    expect(calls.setScrubbing).toHaveBeenLastCalledWith(false);
+    expect(calls.setScrubbing).toHaveBeenCalledTimes(2);
+  });
+
+  it("ends the drag when it is cancelled, and is not started by a marker jump", () => {
+    mount();
+    ptr("pointerdown", 200, 10);
+    fireEvent(canvas(), new MouseEvent("pointercancel", { bubbles: true }));
+    expect(calls.setScrubbing).toHaveBeenLastCalledWith(false);
+    calls.setScrubbing.mockClear();
+    ptr("pointerdown", 121, 10);
+    expect(calls.setScrubbing).not.toHaveBeenCalled();
   });
 
   it("never seeks before zero", () => {

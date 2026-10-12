@@ -1,5 +1,5 @@
 //! Latency of random scrubbing over a whole clip (long-GOP seeks included), as the engine sees
-//! it. Run: `cargo run --release -p bush --example scrub_probe -- clip.mp4 [width height steps]`.
+//! it (`PROBE_BUDGET_MS` makes seeks approximate, see below). Run: `cargo run --release -p bush --example scrub_probe -- clip.mp4 [width height steps]`.
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -52,6 +52,14 @@ fn main() {
         renderer: RendererChoice::Cpu,
     })
     .unwrap();
+    // `PROBE_BUDGET_MS=40` scrubs the way the editor's playhead drag does: each seek may spend that
+    // long decoding forward and then shows the newest frame it has.
+    if let Some(ms) = std::env::var("PROBE_BUDGET_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+    {
+        engine.set_seek_budget(Some(Duration::from_millis(ms)));
+    }
     let mut state = 0x9E37_79B9_7F4A_7C15_u64;
     let mut times = Vec::new();
     for _ in 0..steps {

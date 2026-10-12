@@ -107,6 +107,11 @@ describe("api wrappers", () => {
     expect(invoke).toHaveBeenLastCalledWith("preview_seek", { positionSecs: 1.5 });
   });
 
+  it("tell the preview a playhead drag starts and ends", async () => {
+    await ipc.api.setScrubbing(true);
+    expect(invoke).toHaveBeenLastCalledWith("preview_set_scrubbing", { scrubbing: true });
+  });
+
   it("resolve with what the command returns", async () => {
     invoke.mockResolvedValueOnce(42);
     await expect(ipc.api.startExport("out.mp4", false)).resolves.toBe(42);

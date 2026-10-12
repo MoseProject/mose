@@ -181,6 +181,9 @@ struct Shared {
     event_wake: Condvar,
     stopped: AtomicBool,
     counters: Counters,
+    /// Microseconds a seek may spend decoding forward before it settles for the newest frame it
+    /// has; `0` means exact seeks. See [`Engine::set_seek_budget`].
+    seek_budget_micros: AtomicU64,
 }
 
 /// The preview engine. Dropping it shuts the engine thread down and releases native sessions.
@@ -229,6 +232,7 @@ impl Engine {
             event_wake: Condvar::new(),
             stopped: AtomicBool::new(false),
             counters: Counters::default(),
+            seek_budget_micros: AtomicU64::new(0),
         });
         let worker_shared = Arc::clone(&shared);
         let join = thread::spawn(move || {
@@ -248,6 +252,19 @@ impl Engine {
             join: Mutex::new(Some(join)),
             renderer_name,
         })
+    }
+
+    /// While scrubbing: how long a seek into a long GOP may spend decoding forward before it shows
+    /// the newest frame it has (earlier than the target, by up to the part of the GOP it could not
+    /// reach). `None` is the default, exact seeks. A frame shown short of its target is never
+    /// cached, and the next exact request decodes on from where the approximate one stopped.
+    pub fn set_seek_budget(&self, budget: Option<Duration>) {
+        let micros = budget.map_or(0, |budget| {
+            u64::try_from(budget.as_micros()).unwrap_or(u64::MAX).max(1)
+        });
+        self.shared
+            .seek_budget_micros
+            .store(micros, Ordering::Release);
     }
 
     /// Replaces any unstarted request, cancels the in-flight one, and returns the new
@@ -403,6 +420,24 @@ fn canvas_budget(config: &EngineConfig) -> Option<usize> {
 type CacheKey = (PathBuf, u64, i64, Option<(u32, u32)>);
 
 type DecodeResult = Result<Option<Arc<VideoFrame>>, crate::DecodeSourceError>;
+
+/// One decoded need: its index, the frame (or why not) and whether it is the exact frame, as
+/// opposed to the newest one a seek budget allowed.
+type Decoded = (usize, DecodeResult, bool);
+
+/// Decodes one frame, within `deadline` when there is one.
+fn decode_one(
+    source: &mut DecodeSource,
+    time: f64,
+    cancel: &AtomicBool,
+    deadline: Option<Instant>,
+) -> (DecodeResult, bool) {
+    let result = match deadline {
+        Some(deadline) => source.frame_at_by(time, cancel, deadline),
+        None => source.frame_at(time, cancel),
+    };
+    (result, !source.last_frame_was_approximate())
+}
 
 /// One source frame a render needs: which media, and the source time to present.
 struct MediaNeed<'a> {
@@ -808,7 +843,7 @@ impl EngineThread {
 
         if !misses.is_empty() {
             let decoded = self.decode_misses(needs, &misses, cancel)?;
-            for (index, result) in decoded {
+            for (index, result, exact) in decoded {
                 let need = &needs[index];
                 let frame = match result {
                     Ok(Some(frame)) => frame,
@@ -818,10 +853,12 @@ impl EngineThread {
                     }
                     Err(error) => return Err(format!("{}: {error:?}", display_name(need.path))),
                 };
-                let bytes = frame.retained_bytes();
-                let _ = self
-                    .cache
-                    .insert(need.cache_key(), Arc::clone(&frame), bytes);
+                if exact {
+                    let bytes = frame.retained_bytes();
+                    let _ = self
+                        .cache
+                        .insert(need.cache_key(), Arc::clone(&frame), bytes);
+                }
                 frames[index] = Some(frame);
             }
         }
@@ -839,7 +876,9 @@ impl EngineThread {
         needs: &[MediaNeed<'_>],
         misses: &[usize],
         cancel: &AtomicBool,
-    ) -> Result<Vec<(usize, DecodeResult)>, String> {
+    ) -> Result<Vec<Decoded>, String> {
+        let budget = self.shared.seek_budget_micros.load(Ordering::Acquire);
+        let deadline = (budget > 0).then(|| Instant::now() + Duration::from_micros(budget));
         let mut distinct: Vec<(&Path, u64)> = Vec::new();
         for &index in misses {
             let key = (needs[index].path, needs[index].version);
@@ -858,7 +897,9 @@ impl EngineThread {
                 let slot =
                     self.open_source(need.path, need.version, self.config.max_open_sources)?;
                 self.sources[slot].1.set_output_limit(need.limit);
-                results.push((index, self.sources[slot].1.frame_at(need.time, cancel)));
+                let (result, exact) =
+                    decode_one(&mut self.sources[slot].1, need.time, cancel, deadline);
+                results.push((index, result, exact));
             }
             return Ok(results);
         }
@@ -899,7 +940,8 @@ impl EngineThread {
                 .iter()
                 .map(|&index| {
                     source.set_output_limit(needs[index].limit);
-                    (index, source.frame_at(needs[index].time, cancel))
+                    let (result, exact) = decode_one(source, needs[index].time, cancel, deadline);
+                    (index, result, exact)
                 })
                 .collect());
         }
@@ -920,7 +962,9 @@ impl EngineThread {
                             .iter()
                             .map(|&index| {
                                 source.set_output_limit(needs[index].limit);
-                                (index, source.frame_at(needs[index].time, cancel))
+                                let (result, exact) =
+                                    decode_one(source, needs[index].time, cancel, deadline);
+                                (index, result, exact)
                             })
                             .collect::<Vec<_>>()
                     })

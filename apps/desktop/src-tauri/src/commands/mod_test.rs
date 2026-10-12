@@ -131,10 +131,14 @@ fn transport_commands_reach_the_preview_engine() {
     preview_seek(h.state(), 4.5);
     preview_step(h.state(), -3);
     preview_set_playing(h.state(), true);
+    preview_set_scrubbing(h.state(), true);
+    preview_set_scrubbing(h.state(), false);
     let sent = h.drain_preview();
     assert!(matches!(sent[0], Command::Seek(secs) if secs == 4.5));
     assert!(matches!(sent[1], Command::Step(-3)));
     assert!(matches!(sent[2], Command::Playing(true)));
+    assert!(matches!(sent[3], Command::Scrubbing(true)));
+    assert!(matches!(sent[4], Command::Scrubbing(false)));
 }
 
 #[test]
