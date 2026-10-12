@@ -357,3 +357,58 @@ fn a_track_copy_that_went_missing_is_made_again_when_the_project_loads() {
             .is_some_and(|a| a.source_path.exists())
     });
 }
+
+#[test]
+fn the_hdr_choice_is_stored_and_the_proxy_is_made_again_for_it() {
+    let h = saved_harness();
+    let source = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../crates/core/tests/fixtures/color/hdr10_pq.mkv");
+    let probed = avcore::probe_media(&source).expect("probing the HDR fixture");
+    h.session()
+        .project
+        .media_library
+        .push(probed.into_media_asset(1, "hdr.mkv".into(), source));
+    assert_eq!(
+        h.session().project.media_library[0].hdr_handling,
+        avcore::HdrHandling::Auto
+    );
+
+    set_hdr_handling(h.handle(), 1, avcore::HdrHandling::TreatAsSdr).unwrap();
+    assert_eq!(
+        h.session().project.media_library[0].hdr_handling,
+        avcore::HdrHandling::TreatAsSdr
+    );
+    assert!(h.session().dirty);
+    // The proxy of the new choice arrives on a background thread, under its own name.
+    let started = std::time::Instant::now();
+    loop {
+        let proxy = h.session().project.media_library[0].proxy_path.clone();
+        if proxy.is_some_and(|p| p.display().to_string().ends_with("_asis.mp4")) {
+            break;
+        }
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(60),
+            "no unconverted proxy appeared"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+
+    // The same choice again changes nothing, and an unknown asset is refused.
+    set_hdr_handling(h.handle(), 1, avcore::HdrHandling::TreatAsSdr).unwrap();
+    assert_eq!(
+        set_hdr_handling(h.handle(), 404, avcore::HdrHandling::ToneMap),
+        Err("assetMissing".to_string())
+    );
+}
+
+#[test]
+fn the_hdr_choice_is_refused_for_audio() {
+    let h = harness();
+    let mut audio = video_asset(1, 5.0);
+    audio.kind = avcore::MediaKind::Audio;
+    h.session().project.media_library.push(audio);
+    assert_eq!(
+        set_hdr_handling(h.handle(), 1, avcore::HdrHandling::ToneMap),
+        Err("notVideo".to_string())
+    );
+}
