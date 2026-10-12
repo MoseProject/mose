@@ -49,6 +49,28 @@ pub fn encode_jpeg_rgba(width: u32, height: u32, rgba: &[u8], max_dim: u32) -> O
     encode_with(&rgb, width, height, false)
 }
 
+/// A tightly packed RGBA image as a high-quality JPEG without chroma subsampling, for graphics
+/// made of thin coloured lines (the colour scopes), which the 4:2:0 encoding of a photo smears
+/// into a dim blur.
+pub fn encode_jpeg_sharp(width: u32, height: u32, rgba: &[u8]) -> Option<Vec<u8>> {
+    if width == 0 || height == 0 || rgba.len() < width as usize * height as usize * 4 {
+        return None;
+    }
+    let (width, height) = (u16::try_from(width).ok()?, u16::try_from(height).ok()?);
+    let mut out = Vec::new();
+    let mut encoder = jpeg_encoder::Encoder::new(&mut out, 92);
+    encoder.set_sampling_factor(jpeg_encoder::SamplingFactor::F_1_1);
+    encoder
+        .encode(
+            &rgba[..usize::from(width) * usize::from(height) * 4],
+            width,
+            height,
+            jpeg_encoder::ColorType::Rgba,
+        )
+        .ok()?;
+    Some(out)
+}
+
 fn encode_with(data: &[u8], width: u32, height: u32, has_alpha: bool) -> Option<Vec<u8>> {
     let (width, height) = (u16::try_from(width).ok()?, u16::try_from(height).ok()?);
     let mut out = Vec::with_capacity(data.len() / 10);

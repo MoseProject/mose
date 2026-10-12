@@ -202,6 +202,10 @@ const schemeBase = isWindows ? "http://oca.localhost" : "oca://localhost";
 export const frameUrl = (seq: number) => {
   return `${schemeBase}/frame/${seq}`;
 };
+/** The colour scope `kind` of the frame being shown; `seq` busts the cache. */
+export const scopeUrl = (kind: string, seq: number) => {
+  return `${schemeBase}/scope/${kind}/${seq}`;
+};
 export const thumbnailUrl = (assetId: number) => {
   return `${schemeBase}/thumb/${assetId}`;
 };

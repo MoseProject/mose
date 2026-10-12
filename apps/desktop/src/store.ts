@@ -24,7 +24,14 @@ import {
   onTts,
 } from "./ipc";
 import { localeFromPrefs, setLocale, t, type TextKey } from "./i18n";
-import type { ClipPatch, ExportJobView, LayerTemplate, PreviewTick, SessionView } from "./types";
+import type {
+  ClipPatch,
+  ExportJobView,
+  LayerTemplate,
+  PreviewTick,
+  ScopeKind,
+  SessionView,
+} from "./types";
 
 export interface Store<T> {
   get: () => T;
@@ -102,6 +109,9 @@ export interface UiState {
   monitorZoom: "fit" | "50" | "100";
   /** Title/action safe-area and center guides over the monitor. */
   monitorGuides: boolean;
+  /** The colour scopes strip under the monitor, and which scope it shows. */
+  scopesOpen: boolean;
+  scopeKind: ScopeKind;
 }
 
 export const sessionStore = createStore<SessionView | null>(null);
@@ -140,6 +150,8 @@ export const uiStore = createStore<UiState>({
   watchOpen: false,
   monitorZoom: "fit",
   monitorGuides: false,
+  scopesOpen: false,
+  scopeKind: "waveform",
 });
 
 /** An asset being dragged from the media library toward the timeline. */

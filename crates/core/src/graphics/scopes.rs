@@ -229,6 +229,184 @@ pub fn render_scopes_rgba(
     (waveform_rgba, vectorscope_rgba)
 }
 
+/// Renders an RGB parade from `src_rgba`: the red, green and blue waveforms side by side in thirds
+/// of `out_w`, each drawn in its own colour on black. Same orientation and per-column
+/// normalization as [`luma_waveform_rgba`] (`0` at the bottom, `255` at the top). Judges colour
+/// balance: three traces at the same height are neutral, one riding higher is a cast.
+pub fn rgb_parade_rgba(src_rgba: &[u8], src_w: u32, src_h: u32, out_w: u32, out_h: u32) -> Vec<u8> {
+    if src_w == 0
+        || src_h == 0
+        || out_w < 3
+        || out_h == 0
+        || !is_packed_rgba_frame(src_rgba, src_w, src_h)
+    {
+        return Vec::new();
+    }
+    const GAIN: f64 = 6.0;
+    let third = out_w / 3;
+    let mut counts = vec![[0u32; 3]; (out_w * out_h) as usize];
+    for y in 0..src_h {
+        for x in 0..src_w {
+            let i = ((y * src_w + x) * 4) as usize;
+            let col_in_third = (x * third / src_w).min(third - 1);
+            for channel in 0..3u32 {
+                let value = src_rgba[i + channel as usize] as u32;
+                let row = (out_h - 1).saturating_sub((value * (out_h - 1)) / 255);
+                let col = channel * third + col_in_third;
+                counts[(row * out_w + col) as usize][channel as usize] += 1;
+            }
+        }
+    }
+    let column_total = src_h as f64;
+    let mut rgba = vec![0u8; (out_w * out_h * 4) as usize];
+    for (i, cell) in counts.iter().enumerate() {
+        let px = i * 4;
+        let column = i as u32 % out_w;
+        let channel = (column / third.max(1)).min(2) as usize;
+        let intensity =
+            ((cell[channel] as f64 / column_total) * GAIN * 255.0).clamp(0.0, 255.0) as u8;
+        rgba[px + channel] = intensity;
+        rgba[px + 3] = 255;
+    }
+    rgba
+}
+
+/// Renders an RGB histogram from `src_rgba`: one bar per intensity level across `out_w`, the three
+/// channels drawn over one another (additively, so grey where they agree) and scaled to the
+/// tallest bin. A pile against the left edge is crushed shadows, against the right is clipped
+/// highlights.
+pub fn histogram_rgba(src_rgba: &[u8], src_w: u32, src_h: u32, out_w: u32, out_h: u32) -> Vec<u8> {
+    if src_w == 0
+        || src_h == 0
+        || out_w == 0
+        || out_h == 0
+        || !is_packed_rgba_frame(src_rgba, src_w, src_h)
+    {
+        return Vec::new();
+    }
+    let mut bins = [[0u32; 256]; 3];
+    for pixel in src_rgba.chunks_exact(4) {
+        for channel in 0..3 {
+            bins[channel][pixel[channel] as usize] += 1;
+        }
+    }
+    // Scaled to the tallest bin that is not a pile against either end, so a clipped highlight
+    // does not flatten the rest of the curve; the piles themselves are clamped to the top.
+    let tallest = bins
+        .iter()
+        .flat_map(|channel| channel[1..255].iter().copied())
+        .max()
+        .unwrap_or(1)
+        .max(1) as f64;
+    let mut rgba = vec![0u8; (out_w * out_h * 4) as usize];
+    for px in rgba.chunks_exact_mut(4) {
+        px[3] = 255;
+    }
+    for x in 0..out_w {
+        let level = ((x as u64 * 256) / out_w as u64).min(255) as usize;
+        for channel in 0..3 {
+            let height = ((bins[channel][level] as f64 / tallest).min(1.0) * out_h as f64) as u32;
+            for row in 0..height {
+                let y = out_h - 1 - row;
+                rgba[((y * out_w + x) * 4) as usize + channel] = 255;
+            }
+        }
+    }
+    rgba
+}
+
+/// Which scope a graticule is drawn for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScopeKind {
+    Waveform,
+    Parade,
+    Histogram,
+    Vectorscope,
+}
+
+/// Draws the reference lines of `kind` over a scope image of `width x height` (packed RGBA):
+/// horizontal lines at 0, 25, 50, 75 and 100 per cent for the waveform and the parade, vertical at
+/// 25, 50 and 75 for the histogram, and for the vectorscope the axes, a circle and the six colour
+/// targets (R, Yl, G, Cy, B, Mg) at 75% saturation. Blended in a dim cyan so the trace stays
+/// readable; the strong lines (0, 50, 100) are a little brighter.
+pub fn draw_graticule(rgba: &mut [u8], width: u32, height: u32, kind: ScopeKind) {
+    if width == 0 || height == 0 || rgba.len() != (width * height * 4) as usize {
+        return;
+    }
+    let mut blend = |x: u32, y: u32, strength: u8| {
+        if x < width && y < height {
+            let at = ((y * width + x) * 4) as usize;
+            for (channel, tint) in [(0usize, 40u32), (1, 160), (2, 180)] {
+                let base = rgba[at + channel] as u32;
+                let target = tint * strength as u32 / 255;
+                rgba[at + channel] = base.max(target) as u8;
+            }
+        }
+    };
+    match kind {
+        ScopeKind::Waveform | ScopeKind::Parade => {
+            for (index, percent) in [0u32, 25, 50, 75, 100].into_iter().enumerate() {
+                let y = (height - 1) - (percent * (height - 1) / 100);
+                let strength = if index % 2 == 0 { 140 } else { 70 };
+                for x in 0..width {
+                    blend(x, y, strength);
+                }
+            }
+            if kind == ScopeKind::Parade {
+                for divider in [width / 3, 2 * width / 3] {
+                    for y in 0..height {
+                        blend(divider, y, 70);
+                    }
+                }
+            }
+        }
+        ScopeKind::Histogram => {
+            for percent in [25u32, 50, 75] {
+                let x = percent * (width - 1) / 100;
+                for y in 0..height {
+                    blend(x, y, if percent == 50 { 100 } else { 60 });
+                }
+            }
+        }
+        ScopeKind::Vectorscope => {
+            let centre = (width - 1) as f64 / 2.0;
+            for step in 0..width {
+                blend(step, (height - 1) / 2, 70);
+                blend((width - 1) / 2, step, 70);
+            }
+            let radius = centre * 0.9;
+            for degrees in 0..720 {
+                let angle = f64::from(degrees) * std::f64::consts::PI / 360.0;
+                let x = centre + radius * angle.cos();
+                let y = centre - radius * angle.sin();
+                blend(x.round() as u32, y.round() as u32, 60);
+            }
+            for (r, g, b) in [
+                (255u8, 0u8, 0u8),
+                (255, 255, 0),
+                (0, 255, 0),
+                (0, 255, 255),
+                (0, 0, 255),
+                (255, 0, 255),
+            ] {
+                // Colour targets at 75% saturation, where a colour bar test pattern puts them.
+                let mix = |channel: u8| (255.0 * 0.25 + f64::from(channel) * 0.75).round() as u8;
+                let (cb, cr) = chroma_cb_cr(mix(r), mix(g), mix(b));
+                let x = (f64::from(cb) * (width - 1) as f64 / 255.0).round() as u32;
+                let y = (height - 1)
+                    .saturating_sub((f64::from(cr) * (height - 1) as f64 / 255.0).round() as u32);
+                for dx in 0..5u32 {
+                    for dy in 0..5u32 {
+                        if dx == 0 || dx == 4 || dy == 0 || dy == 4 {
+                            blend((x + dx).saturating_sub(2), (y + dy).saturating_sub(2), 200);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 #[path = "scopes/scopes_test.rs"]
 mod tests;

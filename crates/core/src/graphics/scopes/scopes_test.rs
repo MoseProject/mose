@@ -159,3 +159,94 @@ fn render_scopes_skips_only_the_zero_sized_output_side() {
         "vectorscope output was requested and should still render"
     );
 }
+
+fn flat(r: u8, g: u8, b: u8, w: u32, h: u32) -> Vec<u8> {
+    (0..w * h).flat_map(|_| [r, g, b, 255]).collect()
+}
+
+fn pixel(rgba: &[u8], width: u32, x: u32, y: u32) -> [u8; 3] {
+    let at = ((y * width + x) * 4) as usize;
+    [rgba[at], rgba[at + 1], rgba[at + 2]]
+}
+
+#[test]
+fn the_parade_draws_each_channel_in_its_own_third_in_its_own_colour() {
+    // Pure red: only the left third is lit, red, at the top (255); the other thirds stay black
+    // except for the zero line at the bottom.
+    let image = rgb_parade_rgba(&flat(255, 0, 0, 30, 20), 30, 20, 30, 20);
+    assert_eq!(image.len(), 30 * 20 * 4);
+    assert_eq!(pixel(&image, 30, 5, 0)[1..], [0, 0], "red third: red only");
+    assert!(pixel(&image, 30, 5, 0)[0] > 200);
+    assert_eq!(
+        pixel(&image, 30, 15, 0),
+        [0, 0, 0],
+        "green third is dark at the top"
+    );
+    assert_eq!(
+        pixel(&image, 30, 25, 0),
+        [0, 0, 0],
+        "blue third is dark at the top"
+    );
+    // Green and blue sit at 0: the bottom row of their thirds is lit in their colour.
+    assert!(pixel(&image, 30, 15, 19)[1] > 200 && pixel(&image, 30, 25, 19)[2] > 200);
+    // Degenerate sizes give nothing instead of a panic.
+    assert!(rgb_parade_rgba(&[], 0, 0, 30, 20).is_empty());
+    assert!(rgb_parade_rgba(&flat(0, 0, 0, 2, 2), 2, 2, 2, 20).is_empty());
+}
+
+#[test]
+fn the_histogram_stacks_each_channel_at_its_level_and_piles_clamp_to_the_top() {
+    // Flat mid-grey 128: one bar at the middle in all three channels (white where they overlap).
+    let image = histogram_rgba(&flat(128, 128, 128, 16, 16), 16, 16, 256, 40);
+    assert_eq!(pixel(&image, 256, 128, 0), [255, 255, 255]);
+    assert_eq!(pixel(&image, 256, 100, 0), [0, 0, 0]);
+    assert_eq!(pixel(&image, 256, 200, 39), [0, 0, 0]);
+
+    // Clipped white (255) is a full-height bar at the right edge, and does not hide a real bin.
+    let mut pixels = flat(255, 255, 255, 10, 10);
+    for pixel in pixels.chunks_exact_mut(4).take(10) {
+        pixel[0] = 64;
+        pixel[1] = 64;
+        pixel[2] = 64;
+    }
+    let image = histogram_rgba(&pixels, 10, 10, 256, 40);
+    assert_eq!(pixel(&image, 256, 255, 0), [255, 255, 255]);
+    assert_eq!(pixel(&image, 256, 64, 0), [255, 255, 255]);
+}
+
+#[test]
+fn a_graticule_marks_the_reference_levels_and_leaves_other_pixels_alone() {
+    let (w, h) = (64u32, 41u32);
+    for kind in [ScopeKind::Waveform, ScopeKind::Parade] {
+        let mut image = vec![0u8; (w * h * 4) as usize];
+        for px in image.chunks_exact_mut(4) {
+            px[3] = 255;
+        }
+        draw_graticule(&mut image, w, h, kind);
+        // 0, 50 and 100 per cent are rows 40, 20 and 0 of a 41 row image.
+        for row in [0u32, 20, 40] {
+            assert_ne!(pixel(&image, w, 10, row), [0, 0, 0], "{kind:?} row {row}");
+        }
+        assert_eq!(
+            pixel(&image, w, 10, 7),
+            [0, 0, 0],
+            "{kind:?}: between the lines"
+        );
+    }
+    let mut histogram = vec![0u8; (w * h * 4) as usize];
+    draw_graticule(&mut histogram, w, h, ScopeKind::Histogram);
+    assert_ne!(pixel(&histogram, w, 31, 5), [0, 0, 0], "the 50% line");
+    assert_eq!(pixel(&histogram, w, 5, 5), [0, 0, 0]);
+
+    let mut vector = vec![0u8; (w * w * 4) as usize];
+    draw_graticule(&mut vector, w, w, ScopeKind::Vectorscope);
+    assert_ne!(
+        pixel(&vector, w, 5, (w - 1) / 2),
+        [0, 0, 0],
+        "the horizontal axis"
+    );
+    // A wrong buffer size is ignored, not indexed out of bounds.
+    let mut short = vec![0u8; 10];
+    draw_graticule(&mut short, w, h, ScopeKind::Waveform);
+    assert_eq!(short, vec![0u8; 10]);
+}

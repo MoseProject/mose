@@ -18,4 +18,5 @@ pub(crate) mod bush_adapter;
 pub(crate) mod frames;
 pub(crate) mod preview_engine;
 pub(crate) mod protocol;
+pub(crate) mod scope_image;
 pub(crate) mod tile_workers;

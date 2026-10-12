@@ -19,6 +19,9 @@ vi.mock("../../src/ipc", () => {
     frameUrl: (seq: number) => {
       return `oca://frame/${seq}`;
     },
+    scopeUrl: (kind: string, seq: number) => {
+      return `oca://scope/${kind}/${seq}`;
+    },
   };
 });
 
@@ -125,6 +128,8 @@ beforeEach(() => {
     watchOpen: false,
     monitorZoom: "fit",
     monitorGuides: false,
+    scopesOpen: false,
+    scopeKind: "waveform",
   });
 });
 afterEach(() => {
@@ -157,6 +162,24 @@ describe("preview panel", () => {
     previewStore.set(tick({ renderingCompound: false }));
     mount();
     expect(screen.queryByTestId("rendering-compound")).toBeNull();
+  });
+
+  it("opens and closes the colour scopes strip, only while there is a picture", () => {
+    previewStore.set(tick({ frameSeq: 3 }));
+    mount();
+    expect(screen.queryByTestId("scopes-panel")).toBeNull();
+    fireEvent.click(screen.getByTestId("toggle-scopes"));
+    expect(screen.getByTestId("scopes-panel")).toBeTruthy();
+    expect(screen.getByTestId("toggle-scopes").getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByTestId("toggle-scopes"));
+    expect(screen.queryByTestId("scopes-panel")).toBeNull();
+
+    // Nothing on the timeline: there is nothing to draw a scope of.
+    fireEvent.click(screen.getByTestId("toggle-scopes"));
+    act(() => {
+      previewStore.set(tick({ hasClip: false, frameSeq: 0 }));
+    });
+    expect(screen.queryByTestId("scopes-panel")).toBeNull();
   });
 
   it("shows the current frame", () => {
@@ -449,6 +472,8 @@ describe("monitor zoom and guides", () => {
       selectedClipIds: [1],
       monitorZoom: "fit",
       monitorGuides: false,
+      scopesOpen: false,
+      scopeKind: "waveform",
     });
   });
 
