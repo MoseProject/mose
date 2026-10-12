@@ -13,31 +13,6 @@
   text-transform: uppercase;
   color: var(--text-secondary);
 }
-.segmented {
-  display: flex;
-  gap: 0;
-}
-.segmented button {
-  flex: 1;
-  border-radius: 0;
-  margin-left: -1px;
-  background: var(--bg-workspace);
-}
-.segmented button:first-child {
-  border-radius: var(--radius) 0 0 var(--radius);
-  margin-left: 0;
-}
-.segmented button:last-child {
-  border-radius: 0 var(--radius) var(--radius) 0;
-}
-.segmented button.active,
-.segmented button[aria-checked="true"] {
-  background: var(--accent-tint);
-  border-color: var(--accent);
-  color: var(--accent);
-  position: relative;
-  z-index: 1;
-}
 .dialog-field {
   display: flex;
   align-items: center;

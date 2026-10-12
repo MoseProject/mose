@@ -161,7 +161,6 @@ export function ExportDialog({ session }: { session: SessionView }) {
     <Dialog
       title={t("exportDialogTitle")}
       onClose={close}
-      wide
       actions={
         <>
           <button
@@ -222,108 +221,94 @@ export function ExportDialog({ session }: { session: SessionView }) {
           {error}
         </p>
       )}
-      <fieldset className={cx(styles, baseStyles, "dialog-group")}>
-        <legend>{t("exportQuality")}</legend>
-        <div
-          className={cx(styles, baseStyles, "segmented")}
-          role="radiogroup"
-          aria-label={t("exportQuality")}
+      <label className={cx(styles, baseStyles, "dialog-field")}>
+        <span>{t("exportQuality")}</span>
+        <select
+          value={quality}
+          onChange={(e) => {
+            setQuality(e.target.value as QualityChoice);
+          }}
         >
           {QUALITIES.map(([value, label]) => {
             return (
-              <button
+              <option
                 key={value}
-                role="radio"
-                aria-checked={quality === value}
-                className={cx(styles, baseStyles, quality === value ? "active" : "")}
-                onClick={() => {
-                  setQuality(value);
-                }}
+                value={value}
               >
                 {t(label)}
-              </button>
+              </option>
             );
           })}
-        </div>
-        {quality === "custom" && (
-          <label className={cx(styles, baseStyles, "dialog-field")}>
-            <span>{t("exportBitrate")}</span>
-            <input
-              type="number"
-              min={MIN_MBPS}
-              max={MAX_MBPS}
-              step={0.5}
-              value={Number.isFinite(customMbps) ? customMbps : ""}
-              aria-invalid={!bitrateValid}
-              onChange={(e) => {
-                setCustomMbps(e.target.value === "" ? Number.NaN : Number(e.target.value));
-              }}
-            />
-            <span className={cx(styles, baseStyles, "muted")}>Mbps</span>
-          </label>
-        )}
-        {!bitrateValid && (
-          <p
-            className={cx(styles, baseStyles, "dialog-error")}
-            role="alert"
-          >
-            {t("exportBitrateRange")}
-          </p>
-        )}
-      </fieldset>
-      <fieldset className={cx(styles, baseStyles, "dialog-group")}>
-        <legend>{t("exportResolution")}</legend>
-        <div
-          className={cx(styles, baseStyles, "segmented")}
-          role="radiogroup"
-          aria-label={t("exportResolution")}
+        </select>
+      </label>
+      {quality === "custom" && (
+        <label className={cx(styles, baseStyles, "dialog-field")}>
+          <span>{t("exportBitrate")}</span>
+          <input
+            type="number"
+            min={MIN_MBPS}
+            max={MAX_MBPS}
+            step={0.5}
+            value={Number.isFinite(customMbps) ? customMbps : ""}
+            aria-invalid={!bitrateValid}
+            onChange={(e) => {
+              setCustomMbps(e.target.value === "" ? Number.NaN : Number(e.target.value));
+            }}
+          />
+          <span className={cx(styles, baseStyles, "muted")}>Mbps</span>
+        </label>
+      )}
+      {!bitrateValid && (
+        <p
+          className={cx(styles, baseStyles, "dialog-error")}
+          role="alert"
         >
-          {[
-            null,
-            ...RESOLUTION_HEIGHTS.filter((h) => {
-              return canvas === null || h < canvas.height;
-            }),
-          ].map((height) => {
+          {t("exportBitrateRange")}
+        </p>
+      )}
+      <label className={cx(styles, baseStyles, "dialog-field")}>
+        <span>{t("exportResolution")}</span>
+        <select
+          value={maxHeight === null ? "source" : String(maxHeight)}
+          onChange={(e) => {
+            setMaxHeight(e.target.value === "source" ? null : Number(e.target.value));
+          }}
+        >
+          <option value="source">{t("exportResolutionSource")}</option>
+          {RESOLUTION_HEIGHTS.filter((h) => {
+            return canvas === null || h < canvas.height;
+          }).map((height) => {
             return (
-              <button
-                key={height ?? "source"}
-                role="radio"
-                aria-checked={maxHeight === height}
-                className={cx(styles, baseStyles, maxHeight === height ? "active" : "")}
-                onClick={() => {
-                  setMaxHeight(height);
-                }}
+              <option
+                key={height}
+                value={height}
               >
-                {height === null ? t("exportResolutionSource") : `${height}p`}
-              </button>
+                {height}p
+              </option>
             );
           })}
-        </div>
-      </fieldset>
-      <fieldset className={cx(styles, baseStyles, "dialog-group")}>
-        <legend>{t("aspectRatio")}</legend>
-        <div
-          className={cx(styles, baseStyles, "segmented")}
-          role="radiogroup"
-          aria-label={t("aspectRatio")}
+        </select>
+      </label>
+      <label className={cx(styles, baseStyles, "dialog-field")}>
+        <span>{t("aspectRatio")}</span>
+        <select
+          value={aspect}
+          onChange={(e) => {
+            setAspect(e.target.value as ExportAspectRatio);
+          }}
         >
           {ASPECTS.map(([value, label]) => {
             return (
-              <button
+              <option
                 key={value}
-                role="radio"
-                aria-checked={aspect === value}
-                className={cx(styles, baseStyles, aspect === value ? "active" : "")}
-                onClick={() => {
-                  setAspect(value);
-                }}
+                value={value}
               >
                 {t(label)}
-              </button>
+              </option>
             );
           })}
-        </div>
-      </fieldset>
+        </select>
+      </label>
       <label className={cx(styles, baseStyles, "dialog-check")}>
         <input
           type="checkbox"
@@ -339,28 +324,29 @@ export function ExportDialog({ session }: { session: SessionView }) {
         className={cx(styles, baseStyles, "dialog-group")}
         disabled={!normalize}
       >
-        <legend>{t("loudnessTarget")}</legend>
-        <div
-          className={cx(styles, baseStyles, "segmented")}
-          role="radiogroup"
-          aria-label={t("loudnessTarget")}
-        >
-          {LOUDNESS_PRESETS.map((preset) => {
-            return (
-              <button
-                key={preset}
-                role="radio"
-                aria-checked={lufs === preset}
-                className={cx(styles, baseStyles, lufs === preset ? "active" : "")}
-                onClick={() => {
-                  setLufs(preset);
-                }}
-              >
-                {preset} LUFS
-              </button>
-            );
-          })}
-        </div>
+        <label className={cx(styles, baseStyles, "dialog-field")}>
+          <span>{t("loudnessTarget")}</span>
+          <select
+            value={LOUDNESS_PRESETS.includes(lufs) ? String(lufs) : "custom"}
+            onChange={(e) => {
+              if (e.target.value !== "custom") {
+                setLufs(Number(e.target.value));
+              }
+            }}
+          >
+            {LOUDNESS_PRESETS.map((preset) => {
+              return (
+                <option
+                  key={preset}
+                  value={preset}
+                >
+                  {preset} LUFS
+                </option>
+              );
+            })}
+            <option value="custom">{t("loudnessCustom")}</option>
+          </select>
+        </label>
         <label className={cx(styles, baseStyles, "dialog-field")}>
           <span>{t("loudnessCustom")}</span>
           <input
