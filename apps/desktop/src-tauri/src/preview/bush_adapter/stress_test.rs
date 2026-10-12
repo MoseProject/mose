@@ -42,6 +42,9 @@ fn asset(id: u64) -> MediaAsset {
         proxy_path: None,
         waveform_peaks: Some(vec![(-0.5, 0.5); 2000]),
         favorited: false,
+        streams: Default::default(),
+        hdr_handling: Default::default(),
+        audio_stream: None,
     }
 }
 

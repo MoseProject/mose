@@ -134,6 +134,9 @@ mod commands {
             proxy_path: None,
             waveform_peaks: None,
             favorited: false,
+            streams: Default::default(),
+            hdr_handling: Default::default(),
+            audio_stream: None,
         });
         add_asset_to_timeline(h.handle(), 1, None, None).unwrap();
         let clip = h.session().project.timeline().tracks[0].clips[0].id;
