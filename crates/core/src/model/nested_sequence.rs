@@ -168,21 +168,24 @@ pub fn cached_nested_assets(
         timeline: &Timeline,
         cache: &HashMap<u64, NestedSequenceCache>,
         assets: &mut HashMap<u64, MediaAsset>,
+        seen: &mut HashSet<u64>,
     ) {
         for id in nested_ids_of(timeline) {
-            if assets.contains_key(&id) {
+            // Once per sequence: also what stops a nesting cycle, which is only reported later,
+            // when a render is attempted.
+            if !seen.insert(id) {
                 continue;
             }
             if let Some(cached) = cache.get(&id).filter(|c| c.rendered_path.exists()) {
                 assets.insert(id, cached.asset.clone());
             }
             if let Some(sequence) = project.sequences.iter().find(|s| s.id == id) {
-                collect(project, &sequence.timeline, cache, assets);
+                collect(project, &sequence.timeline, cache, assets, seen);
             }
         }
     }
     let mut assets = HashMap::new();
-    collect(project, timeline, cache, &mut assets);
+    collect(project, timeline, cache, &mut assets, &mut HashSet::new());
     assets
 }
 
