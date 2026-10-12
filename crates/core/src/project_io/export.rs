@@ -15,7 +15,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{AudioSegment, Canvas, ClipSegment, PrivacyBlurSegment, ShapeSegment, TextSegment};
+use crate::{
+    AudioMixFormat, AudioSegment, Canvas, ClipSegment, PrivacyBlurSegment, ShapeSegment,
+    TextSegment,
+};
 
 /// Target output aspect ratio for a timeline export. `Original` preserves the source
 /// resolution inferred from the first clip; the fixed presets override width/height while
@@ -242,6 +245,10 @@ pub struct ExportJob {
     /// queues on the established behavior.
     #[serde(default = "default_allow_copy")]
     pub normalize: bool,
+    /// `Some(format)` exports only the mixed sound in that format instead of a video.
+    /// `#[serde(default)]` keeps older saved queues exporting video.
+    #[serde(default)]
+    pub audio_only: Option<AudioMixFormat>,
     pub output_path: String,
     pub status: ExportJobStatus,
 }

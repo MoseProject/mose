@@ -170,7 +170,18 @@ describe("export commands", () => {
       path: "D:/out/a.mp4",
       exists: false,
     });
-    expect(invoke).toHaveBeenLastCalledWith("export_target", { folder: "D:/out", fileName: "a" });
+    expect(invoke).toHaveBeenLastCalledWith("export_target", {
+      folder: "D:/out",
+      fileName: "a",
+      extension: null,
+    });
+    invoke.mockResolvedValueOnce({ path: "D:/out/a.flac", exists: false });
+    await ipc.api.exportTarget("D:/out", "a", "flac");
+    expect(invoke).toHaveBeenLastCalledWith("export_target", {
+      folder: "D:/out",
+      fileName: "a",
+      extension: "flac",
+    });
   });
 
   it("send the options along with the start, or null without them", async () => {

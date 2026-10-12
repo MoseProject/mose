@@ -72,6 +72,13 @@ pub(crate) struct RawAudioSegment {
     pub(crate) fade_in_secs: f32,
     pub(crate) fade_out_secs: f32,
     pub(crate) pan: f32,
+    pub(crate) eq_low_db: f32,
+    pub(crate) eq_mid_db: f32,
+    pub(crate) eq_high_db: f32,
+    pub(crate) highpass_hz: f32,
+    pub(crate) lowpass_hz: f32,
+    pub(crate) comp_threshold_db: f32,
+    pub(crate) comp_ratio: f32,
 }
 
 /// Mirror of `TextSegment` in `bridge.h` — one pre-rasterized text overlay image.
@@ -200,6 +207,7 @@ unsafe extern "C" {
         timeline_duration_secs: f64,
         out_path: *const c_char,
         target_lufs: f32,
+        format: c_int,
         cancel: *const u8,
     ) -> c_int;
     pub(crate) fn avbridge_mux_video_audio(

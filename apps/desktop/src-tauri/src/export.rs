@@ -71,6 +71,8 @@ pub struct ExportOptions {
     /// `Some(false)` exports this one without normalizing its loudness; `None` follows the app
     /// setting.
     pub normalize: Option<bool>,
+    /// `Some(format)` exports only the mixed sound in that format, no video.
+    pub audio_format: Option<avcore::AudioMixFormat>,
 }
 
 impl ExportOptions {
@@ -128,6 +130,7 @@ pub struct PreparedExport {
     pub target_lufs: f32,
     pub allow_copy: bool,
     pub normalize: bool,
+    pub audio_only: Option<avcore::AudioMixFormat>,
 }
 #[cfg(test)]
 pub fn prepare_export(project: &Project) -> Result<PreparedExport, String> {
@@ -139,6 +142,9 @@ pub fn prepare_export_with(
 ) -> Result<PreparedExport, String> {
     options.validate()?;
     let sequence = project.active_sequence();
+    if let Some(format) = options.audio_format {
+        return prepare_audio_only(project, options, format);
+    }
     let (track_segments, canvas) =
         avcore::resolve_timeline_segments_multi(sequence, &project.media_library)
             .map_err(|e| e.to_string())?;
@@ -159,7 +165,56 @@ pub fn prepare_export_with(
         target_lufs: sequence.export_settings.target_lufs,
         allow_copy: unchanged,
         normalize: options.normalize.unwrap_or(true),
+        audio_only: None,
     })
+}
+
+/// An export of only the sound: the whole mix, whatever tracks carry it, with no picture to
+/// resolve (a timeline of only audio tracks is fine). `noAudio` when nothing in the sequence has
+/// sound.
+fn prepare_audio_only(
+    project: &Project,
+    options: ExportOptions,
+    format: avcore::AudioMixFormat,
+) -> Result<PreparedExport, String> {
+    let sequence = project.active_sequence();
+    let audio_segments =
+        avcore::resolve_audio_segments_for_audio_export(sequence, &project.media_library)
+            .map_err(|e| e.to_string())?;
+    if audio_segments.is_empty() {
+        return Err("noAudio".to_string());
+    }
+    Ok(PreparedExport {
+        track_segments: Vec::new(),
+        audio_segments,
+        text_segments: Vec::new(),
+        shape_segments: Vec::new(),
+        privacy_blur_segments: Vec::new(),
+        // No picture is encoded; the job still carries a canvas.
+        canvas: avcore::Canvas {
+            width: 2,
+            height: 2,
+            fps_num: 30,
+            fps_den: 1,
+            bit_rate_bps: 1,
+        },
+        target_lufs: sequence.export_settings.target_lufs,
+        allow_copy: false,
+        normalize: options.normalize.unwrap_or(true),
+        audio_only: Some(format),
+    })
+}
+
+/// How long the mixed sound plays: the end of the last segment on the timeline.
+fn audio_end_secs(segments: &[avcore::AudioSegment]) -> f64 {
+    segments
+        .iter()
+        .map(|segment| {
+            segment.timeline_start_secs
+                + (segment.source_out_secs - segment.source_in_secs)
+                    / f64::from(segment.speed_factor.max(0.01))
+        })
+        .fold(0.0, f64::max)
 }
 pub struct ExportQueue {
     jobs: Mutex<Vec<ExportJob>>,
@@ -276,6 +331,7 @@ impl ExportQueue {
             target_lufs: prepared.target_lufs,
             allow_copy: prepared.allow_copy,
             normalize: prepared.normalize,
+            audio_only: prepared.audio_only,
             output_path: output.display().to_string(),
             status: ExportJobStatus::Queued,
         });
@@ -449,26 +505,44 @@ impl ExportQueue {
                 };
                 let mut last = 0;
                 let started_at = Instant::now();
-                let result = avcore::render_export_job_multi_with_options(
-                    &tracks,
-                    &job.audio_segments,
-                    job.canvas,
-                    &PathBuf::from(&job.output_path),
-                    target_lufs,
-                    gpu,
-                    &job.text_segments,
-                    &job.shape_segments,
-                    &job.privacy_blur_segments,
-                    job.allow_copy,
-                    control.cancel_flag(),
-                    |percent| {
-                        if percent != last {
-                            last = percent;
-                            queue.progress(&worker_app, job.id, percent)
-                        }
-                        control.wait_if_paused();
-                    },
-                );
+                let output = PathBuf::from(&job.output_path);
+                let result = if let Some(format) = job.audio_only {
+                    avcore::render_audio_only(
+                        &job.audio_segments,
+                        audio_end_secs(&job.audio_segments),
+                        &output,
+                        target_lufs,
+                        format,
+                        control.cancel_flag(),
+                        |percent| {
+                            if percent != last {
+                                last = percent;
+                                queue.progress(&worker_app, job.id, percent)
+                            }
+                        },
+                    )
+                } else {
+                    avcore::render_export_job_multi_with_options(
+                        &tracks,
+                        &job.audio_segments,
+                        job.canvas,
+                        &PathBuf::from(&job.output_path),
+                        target_lufs,
+                        gpu,
+                        &job.text_segments,
+                        &job.shape_segments,
+                        &job.privacy_blur_segments,
+                        job.allow_copy,
+                        control.cancel_flag(),
+                        |percent| {
+                            if percent != last {
+                                last = percent;
+                                queue.progress(&worker_app, job.id, percent)
+                            }
+                            control.wait_if_paused();
+                        },
+                    )
+                };
                 // The export ran on this thread, so this is the encoder it opened.
                 let report = ExportReport {
                     encoder: avcore::last_video_encoder(),

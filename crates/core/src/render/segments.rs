@@ -486,9 +486,10 @@ pub(crate) fn audio_segment(
         voice_cleanup_compressor_threshold_db: clip.voice_cleanup_compressor_threshold_db,
         voice_cleanup_compressor_ratio: clip.voice_cleanup_compressor_ratio,
         voice_cleanup_ceiling_linear: clip.voice_cleanup_ceiling_linear,
-        fade_in_secs: clip.fade_in_secs.max(track.dissolve_in_secs(clip) as f32),
-        fade_out_secs: clip.fade_out_secs.max(track.dissolve_out_secs(clip) as f32),
+        fade_in_secs: track.audio_fade_in_secs(clip),
+        fade_out_secs: track.audio_fade_out_secs(clip),
         pan: track.mix.pan,
+        strip: track.mix.strip(),
     }
 }
 
@@ -522,6 +523,24 @@ pub fn resolve_audio_segments(
     sequence: &Sequence,
     media_library: &[MediaAsset],
 ) -> Result<Vec<avbridge::AudioSegment>, RenderError> {
+    resolve_audio_segments_inner(sequence, media_library, false)
+}
+
+/// Every audible clip of `sequence` as mix segments, for an audio-only export: unlike
+/// [`resolve_audio_segments`], there is no video file whose own audio could be copied instead, so
+/// the whole mix is always built. Empty only when nothing in the sequence carries sound.
+pub fn resolve_audio_segments_for_audio_export(
+    sequence: &Sequence,
+    media_library: &[MediaAsset],
+) -> Result<Vec<avbridge::AudioSegment>, RenderError> {
+    resolve_audio_segments_inner(sequence, media_library, true)
+}
+
+fn resolve_audio_segments_inner(
+    sequence: &Sequence,
+    media_library: &[MediaAsset],
+    always_mix: bool,
+) -> Result<Vec<avbridge::AudioSegment>, RenderError> {
     let first_video_track = sequence.timeline.tracks.iter().position(|track| {
         track.kind == TrackKind::Video && track.visible && !track.clips.is_empty()
     });
@@ -541,6 +560,15 @@ pub fn resolve_audio_segments(
         }
         // A fader or pan needs the mixed audio path: the one-pass export copies the source's audio.
         if !track.mix.is_neutral() {
+            has_additional_contributor = true;
+        }
+        // A hard cut between two clips needs the mixed path, where the short declick fade lives;
+        // the one-pass export would join the two sounds with a click.
+        if track
+            .clips
+            .iter()
+            .any(|clip| track.audio_has_hard_cut(clip))
+        {
             has_additional_contributor = true;
         }
         // Clips that overlap (a cross-dissolve) need the mixed audio path, which plays both.
@@ -570,7 +598,7 @@ pub fn resolve_audio_segments(
         }
         return Ok(Vec::new());
     }
-    if !has_additional_contributor && !silenced_clips {
+    if !always_mix && !has_additional_contributor && !silenced_clips {
         return Ok(Vec::new());
     }
     resolved.sort_by(|a, b| a.timeline_start_secs.total_cmp(&b.timeline_start_secs));

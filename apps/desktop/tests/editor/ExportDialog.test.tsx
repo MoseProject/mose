@@ -17,8 +17,8 @@ vi.mock("../../src/ipc", () => {
       exportCanvas: vi
         .fn()
         .mockResolvedValue({ width: 1920, height: 1080, bitrateMbps: 16, durationSecs: 60 }),
-      exportTarget: vi.fn(async (folder: string, name: string) => {
-        return { path: `${folder}/${name}.mp4`, exists: false };
+      exportTarget: vi.fn(async (folder: string, name: string, extension?: string) => {
+        return { path: `${folder}/${name}.${extension ?? "mp4"}`, exists: false };
       }),
       startExport: vi.fn().mockResolvedValue(1),
       exportClipsTargets: vi.fn(async (ids: number[], folder: string, prefix: string) => {
@@ -75,8 +75,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(api.getNormalizeAudio).mockResolvedValue(true);
   // clearAllMocks keeps implementations set by an earlier test.
-  vi.mocked(api.exportTarget).mockImplementation(async (folder, name) => {
-    return { path: `${folder}/${name}.mp4`, exists: false };
+  vi.mocked(api.exportTarget).mockImplementation(async (folder, name, extension) => {
+    return { path: `${folder}/${name}.${extension ?? "mp4"}`, exists: false };
   });
   vi.mocked(api.exportClipsTargets).mockImplementation(async (ids, folder, prefix) => {
     return ids.map((id) => {
@@ -90,6 +90,35 @@ afterEach(() => {
 });
 
 describe("ExportDialog", () => {
+  it("exports only the sound in the chosen format, without the picture settings", async () => {
+    render(<ExportDialog session={session()} />);
+    await ready();
+    expect(screen.getByLabelText(t("exportQuality"), { exact: false })).toBeTruthy();
+    choose(t("exportFormat"), "Flac");
+    // The picture settings go away; the loudness stays.
+    expect(screen.queryByLabelText(t("exportQuality"), { exact: false })).toBeNull();
+    expect(screen.queryByLabelText(t("exportResolution"), { exact: false })).toBeNull();
+    expect(screen.getByLabelText(t("loudnessTarget"), { exact: false })).toBeTruthy();
+    fireEvent.click(screen.getByText(t("exportChooseFile")));
+    await waitFor(() => {
+      expect(api.startExport).toHaveBeenCalledTimes(1);
+    });
+    expect(api.exportTarget).toHaveBeenCalledWith("D:/videos", "Montage", "flac");
+    expect(api.startExport).toHaveBeenCalledWith("D:/videos/Montage.flac", false, {
+      audioFormat: "Flac",
+    });
+  });
+
+  it("offers no audio-only format for a batch of clips", () => {
+    render(
+      <ExportDialog
+        session={session()}
+        clipIds={[1, 2]}
+      />,
+    );
+    expect(screen.queryByLabelText(t("exportFormat"), { exact: false })).toBeNull();
+  });
+
   it("starts from the sequence's own settings", () => {
     render(<ExportDialog session={session({ aspect: "Portrait", lufs: -16 })} />);
     const value = (label: string) => {

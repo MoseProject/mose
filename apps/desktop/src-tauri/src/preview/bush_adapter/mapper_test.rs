@@ -153,18 +153,33 @@ fn a_tracks_fader_and_pan_reach_its_clips_in_the_preview() {
     louder.mix = avcore::timeline::TrackMix {
         volume_db: -6.0,
         pan: 0.5,
+        eq_low_db: 4.0,
+        highpass_hz: 90.0,
+        comp_ratio: 3.0,
+        comp_threshold_db: -24.0,
+        ..Default::default()
     };
     let mapped = map_with(vec![louder], Vec::new());
     let placement = &mapped.scene.contributors()[0].placement;
     assert!((placement.track_gain - 0.501_187).abs() < 1e-5);
     assert_eq!(placement.pan, 0.5);
+    assert_eq!(placement.strip.eq_low_db, 4.0);
+    assert_eq!(placement.strip.highpass_hz, 90.0);
+    assert_eq!(
+        (
+            placement.strip.comp_ratio,
+            placement.strip.comp_threshold_db
+        ),
+        (3.0, -24.0)
+    );
 
-    // A neutral track leaves both alone.
+    // A neutral track leaves all of it alone.
     let (_, plain) = one_clip(clip(0.0, 0.0, 4.0));
     assert_eq!(
         (plain.placement.track_gain, plain.placement.pan),
         (1.0, 0.0)
     );
+    assert!(plain.placement.strip.is_neutral());
 }
 
 #[test]
@@ -175,6 +190,7 @@ fn the_preview_and_the_export_pan_with_the_same_law() {
         let model = avcore::timeline::TrackMix {
             volume_db: 0.0,
             pan,
+            ..Default::default()
         }
         .pan_gains();
         assert_eq!(bush::pan_gains(pan), model, "pan {pan}");
@@ -809,4 +825,33 @@ fn transitions_that_collide_with_other_animation_are_ignored() {
         .approximations
         .contains(&Approximation::TransitionIgnored));
     assert!(contributor.placement.animation.scale_x.is_some());
+}
+
+#[test]
+fn the_preview_fades_clip_sound_at_hard_cuts_and_handles_but_not_at_a_split() {
+    let declick = f64::from(avcore::timeline::Track::AUDIO_DECLICK_SECS);
+    let mut first = ClipInstance::new(10, 1, 0.0, 0.0, 4.0);
+    // A split: the source carries on, so no fade at the join.
+    let second = ClipInstance::new(11, 1, 4.0, 4.0, 8.0);
+    // A jump cut straight after it.
+    let mut third = ClipInstance::new(12, 1, 8.0, 20.0, 24.0);
+    first.fade_in_secs = 0.5;
+    third.fade_out_secs = 1.0;
+    let mapped = map_with(
+        vec![track(1, TrackKind::Video, vec![first, second, third])],
+        Vec::new(),
+    );
+    let fade = |id: u64| {
+        mapped
+            .scene
+            .contributors()
+            .iter()
+            .find(|c| c.id.0 == id)
+            .unwrap()
+            .placement
+            .audio_fade
+    };
+    assert_eq!((fade(10).in_secs, fade(10).out_secs), (0.5, 0.0));
+    assert_eq!((fade(11).in_secs, fade(11).out_secs), (0.0, declick));
+    assert_eq!((fade(12).in_secs, fade(12).out_secs), (declick, 1.0));
 }

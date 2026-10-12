@@ -363,12 +363,14 @@ fn a_track_mix_is_neutral_by_default_clamped_and_follows_the_pan_law() {
     let wild = TrackMix {
         volume_db: 500.0,
         pan: -9.0,
+        ..Default::default()
     }
     .clamped();
     assert_eq!((wild.volume_db, wild.pan), (TrackMix::MAX_VOLUME_DB, -1.0));
     let broken = TrackMix {
         volume_db: f32::NAN,
         pan: f32::INFINITY,
+        ..Default::default()
     }
     .clamped();
     assert!(broken.is_neutral());
@@ -377,12 +379,14 @@ fn a_track_mix_is_neutral_by_default_clamped_and_follows_the_pan_law() {
     let (left, right) = TrackMix {
         volume_db: 0.0,
         pan: 1.0,
+        ..Default::default()
     }
     .pan_gains();
     assert!(left < 1e-6 && right == 1.0);
     let (left, right) = TrackMix {
         volume_db: 0.0,
         pan: -1.0,
+        ..Default::default()
     }
     .pan_gains();
     assert!(right < 1e-6 && left == 1.0);
@@ -393,11 +397,13 @@ fn a_track_mix_is_neutral_by_default_clamped_and_follows_the_pan_law() {
         let (far, near) = TrackMix {
             volume_db: 0.0,
             pan,
+            ..Default::default()
         }
         .pan_gains();
         let (mirror_near, mirror_far) = TrackMix {
             volume_db: 0.0,
             pan: -pan,
+            ..Default::default()
         }
         .pan_gains();
         assert_eq!((far, near), (mirror_far, mirror_near));
@@ -407,11 +413,157 @@ fn a_track_mix_is_neutral_by_default_clamped_and_follows_the_pan_law() {
     assert!(
         (TrackMix {
             volume_db: -6.0,
-            pan: 0.0
+            pan: 0.0,
+            ..Default::default()
         }
         .linear_gain()
             - 0.501187)
             .abs()
             < 1e-5
     );
+}
+
+#[test]
+fn a_mixer_strip_is_neutral_by_default_and_every_control_stays_inside_its_limits() {
+    use avcore::timeline::TrackMix;
+
+    let neutral = TrackMix::default();
+    assert!(neutral.is_neutral() && neutral.strip_is_neutral());
+    // A fader move alone leaves the strip untouched.
+    let fader = TrackMix {
+        volume_db: -3.0,
+        ..Default::default()
+    };
+    assert!(!fader.is_neutral() && fader.strip_is_neutral());
+    // Any one tone or dynamics control makes the strip active.
+    for touched in [
+        TrackMix {
+            eq_low_db: 3.0,
+            ..Default::default()
+        },
+        TrackMix {
+            eq_mid_db: -3.0,
+            ..Default::default()
+        },
+        TrackMix {
+            eq_high_db: 3.0,
+            ..Default::default()
+        },
+        TrackMix {
+            highpass_hz: 80.0,
+            ..Default::default()
+        },
+        TrackMix {
+            lowpass_hz: 9000.0,
+            ..Default::default()
+        },
+        TrackMix {
+            comp_ratio: 4.0,
+            ..Default::default()
+        },
+    ] {
+        assert!(!touched.strip_is_neutral(), "{touched:?}");
+    }
+    // A threshold with no ratio does nothing.
+    assert!(TrackMix {
+        comp_threshold_db: -40.0,
+        ..Default::default()
+    }
+    .strip_is_neutral());
+
+    let wild = TrackMix {
+        eq_low_db: 99.0,
+        eq_mid_db: -99.0,
+        eq_high_db: 99.0,
+        highpass_hz: 5.0,
+        lowpass_hz: 50.0,
+        comp_threshold_db: 12.0,
+        comp_ratio: 500.0,
+        ..Default::default()
+    }
+    .clamped();
+    assert_eq!(wild.eq_low_db, TrackMix::MAX_EQ_DB);
+    assert_eq!(wild.eq_mid_db, -TrackMix::MAX_EQ_DB);
+    assert_eq!(wild.eq_high_db, TrackMix::MAX_EQ_DB);
+    assert_eq!(wild.highpass_hz, TrackMix::MIN_HIGHPASS_HZ);
+    assert_eq!(wild.lowpass_hz, TrackMix::MIN_LOWPASS_HZ);
+    assert_eq!(wild.comp_threshold_db, 0.0);
+    assert_eq!(wild.comp_ratio, TrackMix::MAX_COMP_RATIO);
+
+    // A corner at zero or below stays off instead of snapping to the minimum.
+    let open = TrackMix {
+        highpass_hz: -3.0,
+        lowpass_hz: 0.0,
+        ..Default::default()
+    }
+    .clamped();
+    assert_eq!((open.highpass_hz, open.lowpass_hz), (0.0, 0.0));
+
+    let broken = TrackMix {
+        eq_low_db: f32::NAN,
+        highpass_hz: f32::INFINITY,
+        lowpass_hz: f32::NAN,
+        comp_threshold_db: f32::NAN,
+        comp_ratio: f32::NAN,
+        ..Default::default()
+    }
+    .clamped();
+    assert!(broken.is_neutral());
+}
+
+#[test]
+fn a_hard_cut_gets_a_declick_fade_and_a_split_does_not() {
+    let mut track = empty_track();
+    // Two clips of one asset split from a single take: the source carries on across the join.
+    let first = ClipInstance::new(1, 5, 0.0, 10.0, 12.0);
+    let second = ClipInstance::new(2, 5, 2.0, 12.0, 14.0);
+    // A jump cut: the same asset, but the source skips ahead.
+    let jump = ClipInstance::new(3, 5, 4.0, 20.0, 22.0);
+    // A different asset straight after.
+    let other = ClipInstance::new(4, 6, 6.0, 0.0, 2.0);
+    // A clip with a gap before it.
+    let apart = ClipInstance::new(5, 5, 9.0, 0.0, 1.0);
+    track.clips = vec![first, second, jump, other, apart];
+    let clips = track.clips.clone();
+    let declick = Track::AUDIO_DECLICK_SECS;
+
+    assert_eq!(
+        track.audio_fade_in_secs(&clips[0]),
+        0.0,
+        "nothing before it"
+    );
+    assert_eq!(
+        track.audio_fade_out_secs(&clips[0]),
+        0.0,
+        "a split is seamless"
+    );
+    assert_eq!(track.audio_fade_in_secs(&clips[1]), 0.0);
+    assert_eq!(
+        track.audio_fade_out_secs(&clips[1]),
+        declick,
+        "the jump follows"
+    );
+    assert_eq!(track.audio_fade_in_secs(&clips[2]), declick);
+    assert_eq!(
+        track.audio_fade_out_secs(&clips[2]),
+        declick,
+        "another asset follows"
+    );
+    assert_eq!(track.audio_fade_in_secs(&clips[3]), declick);
+    assert_eq!(
+        track.audio_fade_out_secs(&clips[3]),
+        0.0,
+        "a gap follows, no neighbour to meet"
+    );
+    assert_eq!(track.audio_fade_in_secs(&clips[4]), 0.0);
+
+    assert!(!track.audio_has_hard_cut(&clips[0]));
+    assert!(track.audio_has_hard_cut(&clips[1]));
+    assert!(track.audio_has_hard_cut(&clips[2]));
+    assert!(!track.audio_has_hard_cut(&clips[4]));
+
+    // A longer fade handle wins over the declick.
+    track.clips[2].fade_in_secs = 0.5;
+    let longer = track.clips[2].clone();
+    assert_eq!(track.audio_fade_in_secs(&longer), 0.5);
 }

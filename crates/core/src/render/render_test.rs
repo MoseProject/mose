@@ -82,6 +82,7 @@ fn audio_segment() -> avbridge::AudioSegment {
         fade_in_secs: 0.0,
         fade_out_secs: 0.0,
         pan: 0.0,
+        strip: Default::default(),
     }
 }
 
@@ -653,10 +654,119 @@ fn a_neutral_track_keeps_the_one_pass_audio_path() {
 }
 
 #[test]
+fn a_strip_alone_sends_the_track_through_the_mix_and_reaches_the_segment() {
+    let (sequence, media) = mix_fixture(crate::timeline::TrackMix {
+        eq_low_db: 4.0,
+        highpass_hz: 90.0,
+        comp_ratio: 3.0,
+        comp_threshold_db: -24.0,
+        ..Default::default()
+    });
+    let segments = resolve_audio_segments(&sequence, &media).unwrap();
+    assert_eq!(segments.len(), 1, "a strip needs the mix, not a copy");
+    let strip = &segments[0].strip;
+    assert_eq!(strip.eq_low_db, 4.0);
+    assert_eq!(strip.highpass_hz, 90.0);
+    assert_eq!((strip.comp_ratio, strip.comp_threshold_db), (3.0, -24.0));
+}
+
+#[test]
+fn a_hard_cut_takes_the_mix_path_with_a_declick_and_a_split_stays_on_the_one_pass_copy() {
+    use crate::timeline::ClipInstance;
+    // A neutral track with one clip copies the source audio: no segments.
+    let (mut sequence, media) = mix_fixture(Default::default());
+    assert!(resolve_audio_segments(&sequence, &media)
+        .unwrap()
+        .is_empty());
+
+    // A second clip that carries the source on from where the first stopped is a split.
+    sequence.timeline.tracks[0]
+        .clips
+        .push(ClipInstance::new(2, 1, 0.4, 0.4, 0.8));
+    assert!(resolve_audio_segments(&sequence, &media)
+        .unwrap()
+        .is_empty());
+
+    // One that jumps elsewhere in the source is a hard cut.
+    sequence.timeline.tracks[0].clips[1].source_in_secs = 0.0;
+    sequence.timeline.tracks[0].clips[1].source_out_secs = 0.4;
+    let segments = resolve_audio_segments(&sequence, &media).unwrap();
+    assert_eq!(segments.len(), 2, "the cut needs the mix");
+    let declick = crate::timeline::Track::AUDIO_DECLICK_SECS;
+    assert_eq!(
+        (segments[0].fade_in_secs, segments[0].fade_out_secs),
+        (0.0, declick)
+    );
+    assert_eq!(
+        (segments[1].fade_in_secs, segments[1].fade_out_secs),
+        (declick, 0.0)
+    );
+}
+
+#[test]
+fn an_audio_only_export_always_builds_the_mix_and_writes_every_format() {
+    let (sequence, media) = mix_fixture(Default::default());
+    // The video export would copy this untouched clip's own audio; the audio export has no video.
+    assert!(resolve_audio_segments(&sequence, &media)
+        .unwrap()
+        .is_empty());
+    let segments = resolve_audio_segments_for_audio_export(&sequence, &media).unwrap();
+    assert_eq!(segments.len(), 1);
+
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    for format in crate::AudioMixFormat::ALL {
+        let output = std::env::temp_dir().join(format!(
+            "core_audio_only_{}.{}",
+            std::process::id(),
+            format.extension()
+        ));
+        let _ = std::fs::remove_file(&output);
+        let mut last = 0;
+        let outcome = render_audio_only(
+            &segments,
+            0.4,
+            &output,
+            crate::NO_NORMALIZATION,
+            format,
+            &cancel,
+            |percent| last = percent,
+        )
+        .unwrap_or_else(|error| panic!("{format:?}: {error}"));
+        assert_eq!(outcome, RenderOutcome::Completed, "{format:?}");
+        assert_eq!(last, 100);
+        let probed = crate::probe_media(&output).unwrap_or_else(|e| panic!("{format:?}: {e}"));
+        assert!(
+            probed.has_audio && probed.kind == crate::MediaKind::Audio,
+            "{format:?}: {:?}",
+            probed.kind
+        );
+        assert!((probed.duration_secs - 0.4).abs() < 0.15, "{format:?}");
+        let _ = std::fs::remove_file(&output);
+    }
+
+    // A cancelled mix leaves nothing behind.
+    let output = std::env::temp_dir().join(format!("core_audio_cancel_{}.wav", std::process::id()));
+    let cancelled = std::sync::atomic::AtomicBool::new(true);
+    let outcome = render_audio_only(
+        &segments,
+        0.4,
+        &output,
+        crate::NO_NORMALIZATION,
+        crate::AudioMixFormat::Wav24,
+        &cancelled,
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, RenderOutcome::Cancelled);
+    assert!(!output.exists());
+}
+
+#[test]
 fn a_fader_or_pan_sends_the_track_through_the_mix_with_its_level_added_to_the_clips() {
     let (sequence, media) = mix_fixture(crate::timeline::TrackMix {
         volume_db: -6.0,
         pan: 0.5,
+        ..Default::default()
     });
     let segments = resolve_audio_segments(&sequence, &media).unwrap();
     assert_eq!(segments.len(), 1, "the track is mixed, not copied");
@@ -670,6 +780,7 @@ fn a_fader_or_pan_sends_the_track_through_the_mix_with_its_level_added_to_the_cl
     let (sequence, media) = mix_fixture(crate::timeline::TrackMix {
         volume_db: 0.0,
         pan: -1.0,
+        ..Default::default()
     });
     assert_eq!(resolve_audio_segments(&sequence, &media).unwrap().len(), 1);
 }
@@ -679,6 +790,7 @@ fn the_fader_multiplies_a_keyframed_gain() {
     let (mut sequence, media) = mix_fixture(crate::timeline::TrackMix {
         volume_db: -6.0,
         pan: 0.0,
+        ..Default::default()
     });
     sequence.timeline.tracks[0].clips[0].gain_keyframes = vec![
         crate::Keyframe {

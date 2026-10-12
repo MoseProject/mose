@@ -78,6 +78,39 @@ pub struct AudioSegment {
     /// so an `.ocqueue` job persisted before this field existed loads centred.
     #[serde(default)]
     pub pan: f32,
+    /// Tone and dynamics of the branch's track (see [`AudioStrip`]); neutral leaves it untouched.
+    #[serde(default)]
+    pub strip: AudioStrip,
+}
+
+/// The equaliser and compressor of a mixer strip, applied to a branch after its pan. Neutral (the
+/// default) adds no filter at all.
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct AudioStrip {
+    /// Gain of the low shelf (120 Hz), the mid bell (1 kHz) and the high shelf (6 kHz), in dB.
+    pub eq_low_db: f32,
+    pub eq_mid_db: f32,
+    pub eq_high_db: f32,
+    /// High-pass and low-pass corner frequencies in Hz; `0.0` leaves that end open.
+    pub highpass_hz: f32,
+    pub lowpass_hz: f32,
+    /// Compressor threshold in dB below full scale and ratio; a ratio of `1.0` or less is off.
+    pub comp_threshold_db: f32,
+    pub comp_ratio: f32,
+}
+
+impl Default for AudioStrip {
+    fn default() -> Self {
+        Self {
+            eq_low_db: 0.0,
+            eq_mid_db: 0.0,
+            eq_high_db: 0.0,
+            highpass_hz: 0.0,
+            lowpass_hz: 0.0,
+            comp_threshold_db: -18.0,
+            comp_ratio: 1.0,
+        }
+    }
 }
 
 impl AudioSegment {
@@ -107,6 +140,7 @@ impl AudioSegment {
             fade_in_secs: 0.0,
             fade_out_secs: 0.0,
             pan: 0.0,
+            strip: AudioStrip::default(),
         }
     }
 }
@@ -158,6 +192,54 @@ pub enum AudioMixError {
     Unknown(c_int),
 }
 
+/// What the mixed audio is written as. The container follows the output path's extension, so a
+/// format has to be paired with a matching one (see [`AudioMixFormat::extension`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub enum AudioMixFormat {
+    /// AAC 192 kbps, the audio of a video export.
+    #[default]
+    Aac,
+    /// Uncompressed 24-bit PCM.
+    Wav24,
+    /// Lossless FLAC at 24 bits.
+    Flac,
+    /// MP3 at 256 kbps.
+    Mp3,
+    /// Opus at 160 kbps.
+    Opus,
+}
+
+impl AudioMixFormat {
+    pub const ALL: [AudioMixFormat; 5] = [
+        AudioMixFormat::Aac,
+        AudioMixFormat::Wav24,
+        AudioMixFormat::Flac,
+        AudioMixFormat::Mp3,
+        AudioMixFormat::Opus,
+    ];
+
+    /// The file extension (without the dot) the container for this format uses.
+    pub const fn extension(self) -> &'static str {
+        match self {
+            AudioMixFormat::Aac => "m4a",
+            AudioMixFormat::Wav24 => "wav",
+            AudioMixFormat::Flac => "flac",
+            AudioMixFormat::Mp3 => "mp3",
+            AudioMixFormat::Opus => "opus",
+        }
+    }
+
+    const fn code(self) -> c_int {
+        match self {
+            AudioMixFormat::Aac => 0,
+            AudioMixFormat::Wav24 => 1,
+            AudioMixFormat::Flac => 2,
+            AudioMixFormat::Mp3 => 3,
+            AudioMixFormat::Opus => 4,
+        }
+    }
+}
+
 /// Mixes `segments` into one AAC stream. Inputs without an audio stream are skipped by the C
 /// bridge, allowing silent video overlays to coexist with actual audio tracks.
 pub fn mix_audio_timeline(
@@ -165,6 +247,25 @@ pub fn mix_audio_timeline(
     timeline_duration_secs: f64,
     out_path: &Path,
     target_lufs: f32,
+    cancel: &AtomicBool,
+) -> Result<AudioMixOutcome, AudioMixError> {
+    mix_audio_timeline_as(
+        segments,
+        timeline_duration_secs,
+        out_path,
+        target_lufs,
+        AudioMixFormat::Aac,
+        cancel,
+    )
+}
+
+/// [`mix_audio_timeline`] writing `format` instead of AAC, for an audio-only export.
+pub fn mix_audio_timeline_as(
+    segments: &[AudioSegment],
+    timeline_duration_secs: f64,
+    out_path: &Path,
+    target_lufs: f32,
+    format: AudioMixFormat,
     cancel: &AtomicBool,
 ) -> Result<AudioMixOutcome, AudioMixError> {
     if segments.is_empty() {
@@ -206,6 +307,13 @@ pub fn mix_audio_timeline(
             fade_in_secs: seg.fade_in_secs,
             fade_out_secs: seg.fade_out_secs,
             pan: seg.pan,
+            eq_low_db: seg.strip.eq_low_db,
+            eq_mid_db: seg.strip.eq_mid_db,
+            eq_high_db: seg.strip.eq_high_db,
+            highpass_hz: seg.strip.highpass_hz,
+            lowpass_hz: seg.strip.lowpass_hz,
+            comp_threshold_db: seg.strip.comp_threshold_db,
+            comp_ratio: seg.strip.comp_ratio,
         })
         .collect();
 
@@ -219,6 +327,7 @@ pub fn mix_audio_timeline(
             timeline_duration_secs,
             c_out.as_ptr(),
             target_lufs,
+            format.code(),
             cancel.as_ptr() as *const u8,
         )
     };

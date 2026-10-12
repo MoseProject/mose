@@ -286,9 +286,24 @@ pub fn map_timeline(
             else {
                 continue;
             };
-            // The track's fader and pan, on top of the clip's own gain.
+            // The track's fader, pan and strip, on top of the clip's own gain.
             mapped.placement.track_gain = track.mix.linear_gain();
             mapped.placement.pan = track.mix.pan;
+            // The sound fades like the export's mix: handles, a dissolve and the declick at a cut.
+            let audio_duration = clip.duration_secs();
+            mapped.placement.audio_fade = bush::Fade {
+                in_secs: f64::from(track.audio_fade_in_secs(clip)).min(audio_duration / 2.0),
+                out_secs: f64::from(track.audio_fade_out_secs(clip)).min(audio_duration / 2.0),
+            };
+            mapped.placement.strip = bush::Strip {
+                eq_low_db: track.mix.eq_low_db,
+                eq_mid_db: track.mix.eq_mid_db,
+                eq_high_db: track.mix.eq_high_db,
+                highpass_hz: track.mix.highpass_hz,
+                lowpass_hz: track.mix.lowpass_hz,
+                comp_threshold_db: track.mix.comp_threshold_db,
+                comp_ratio: track.mix.comp_ratio,
+            };
             contributors.push(Contributor {
                 id: ContributorId(clip.id),
                 // A clip overlapping an earlier one (a cross-dissolve) sits one layer above the

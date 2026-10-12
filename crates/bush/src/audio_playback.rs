@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
 use crate::k_weighting::{self, KWeighting};
+use crate::strip::StripBank;
 use crate::{
     AudioBlock, AudioBlockError, AudioMixer, AudioSink, AudioSource, AudioSourceError,
     ContributorContent, ContributorId, MixError, MixInput, SceneSnapshot, SinkError, TimeStretcher,
@@ -60,6 +61,8 @@ pub struct AudioRenderer {
     sources: Vec<(SourceKey, AudioSource)>,
     /// Time-stretch state for contributors playing at a speed other than 1.
     stretchers: HashMap<ContributorId, StretchState>,
+    /// Filter and compressor memory of the contributors with a mixer strip.
+    strips: StripBank,
 }
 
 #[derive(Debug)]
@@ -87,6 +90,7 @@ impl AudioRenderer {
             mixer: AudioMixer::new(sample_rate, channels, max_block_frames)?,
             sources: Vec::new(),
             stretchers: HashMap::new(),
+            strips: StripBank::default(),
         })
     }
 
@@ -131,6 +135,7 @@ impl AudioRenderer {
             let overlap_end = window_end.min(clip_start + clip_frames);
             if overlap_start >= overlap_end {
                 self.stretchers.remove(&contributor.id);
+                self.strips.forget(contributor.id);
                 continue;
             }
             let length = (overlap_end - overlap_start) as usize;
@@ -209,7 +214,41 @@ impl AudioRenderer {
                 }
                 None => placement.gain,
             };
+            if placement.audio_fade != crate::Fade::default() {
+                let duration = contributor.timeline_duration_secs();
+                let first_local = overlap_start as f64 / rate - placement.timeline_start_secs;
+                let channels = usize::from(self.channels).max(1);
+                for (index, frame) in samples.chunks_exact_mut(channels).enumerate() {
+                    let factor = placement
+                        .audio_fade
+                        .factor_at(first_local + index as f64 / rate, duration);
+                    if factor < 1.0 {
+                        for sample in frame {
+                            *sample *= factor;
+                        }
+                    }
+                }
+            }
             apply_pan(&mut samples, usize::from(self.channels), placement.pan);
+            let mut mix_gain = static_gain * placement.track_gain;
+            if !placement.strip.is_neutral() {
+                // The export applies the level before the strip, so the compressor sees the
+                // signal at its mixed level.
+                for sample in &mut samples {
+                    *sample *= mix_gain;
+                }
+                mix_gain = 1.0;
+                self.strips.process(
+                    contributor.id,
+                    self.sample_rate,
+                    usize::from(self.channels),
+                    overlap_start,
+                    &mut samples,
+                    placement.strip,
+                );
+            } else {
+                self.strips.forget(contributor.id);
+            }
             // Re-time from source time to timeline time so the mixer aligns it.
             let aligned = AudioBlock::new(
                 self.sample_rate,
@@ -217,7 +256,7 @@ impl AudioRenderer {
                 overlap_start as f64 / rate,
                 samples,
             )?;
-            parts.push((aligned, static_gain * placement.track_gain));
+            parts.push((aligned, mix_gain));
         }
 
         let mut inputs = vec![MixInput {

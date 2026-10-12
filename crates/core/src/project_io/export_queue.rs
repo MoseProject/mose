@@ -177,6 +177,7 @@ mod tests {
             target_lufs: -14.0,
             allow_copy: true,
             normalize: true,
+            audio_only: None,
             output_path: String::new(),
             status,
         }

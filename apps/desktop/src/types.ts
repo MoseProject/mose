@@ -71,7 +71,18 @@ export interface ExportOptions {
   maxHeight?: number;
   /** `false` exports without normalizing the loudness; absent follows the app setting. */
   normalize?: boolean;
+  /** Exports only the mixed sound in this format, no video. */
+  audioFormat?: AudioExportFormat;
 }
+/** The audio-only export formats; the value is the backend's `AudioMixFormat` name. */
+export type AudioExportFormat = "Wav24" | "Flac" | "Mp3" | "Opus";
+/** The file extension each audio-only format is written with. */
+export const AUDIO_EXPORT_EXTENSIONS: Record<AudioExportFormat, string> = {
+  Wav24: "wav",
+  Flac: "flac",
+  Mp3: "mp3",
+  Opus: "opus",
+};
 /** Size, source-matched bitrate and length an export would have before any option. */
 export interface ExportCanvas {
   width: number;
@@ -318,13 +329,42 @@ export interface Track {
   mix: TrackMix;
 }
 
+/** A track's mixer strip: fader, pan, tone and compressor. The limits mirror `TrackMix` in avcore. */
 export interface TrackMix {
   volume_db: number;
   pan: number;
+  /** Low shelf (120 Hz), mid bell (1 kHz) and high shelf (6 kHz) gains in dB. */
+  eq_low_db: number;
+  eq_mid_db: number;
+  eq_high_db: number;
+  /** Filter corners in Hz; 0 leaves that end open. */
+  highpass_hz: number;
+  lowpass_hz: number;
+  /** Compressor threshold in dB and ratio; a ratio of 1 is off. */
+  comp_threshold_db: number;
+  comp_ratio: number;
 }
+
+export const NEUTRAL_TRACK_MIX: TrackMix = {
+  volume_db: 0,
+  pan: 0,
+  eq_low_db: 0,
+  eq_mid_db: 0,
+  eq_high_db: 0,
+  highpass_hz: 0,
+  lowpass_hz: 0,
+  comp_threshold_db: -18,
+  comp_ratio: 1,
+};
 
 export const MIN_TRACK_VOLUME_DB = -60;
 export const MAX_TRACK_VOLUME_DB = 12;
+export const MAX_TRACK_EQ_DB = 15;
+export const MAX_TRACK_HIGHPASS_HZ = 2000;
+export const MIN_TRACK_LOWPASS_HZ = 500;
+export const MAX_TRACK_LOWPASS_HZ = 20000;
+export const MIN_TRACK_COMP_THRESHOLD_DB = -60;
+export const MAX_TRACK_COMP_RATIO = 20;
 
 export interface Marker {
   id: number;

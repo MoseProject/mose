@@ -84,9 +84,9 @@ test.describe("export dialog: what it offers", () => {
         return node.closest("label")?.textContent?.split("\n")[0].trim() ?? "";
       });
     });
-    // Quality, size and loudness: no encoder choice (a machine setting) and no aspect ratio
-    // (the project's own).
-    expect(labels.length).toBe(3);
+    // Format, quality, size and loudness: no encoder choice (a machine setting) and no aspect
+    // ratio (the project's own).
+    expect(labels.length).toBe(4);
     await expect(dialog.getByText(/GPU|Codificador|Proporção/)).toHaveCount(0);
     await expect(dialog.locator("input[type=text]")).toHaveCount(2);
   });

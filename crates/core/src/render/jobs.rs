@@ -404,6 +404,43 @@ pub fn render_export_job_multi_with_options(
     })
 }
 
+/// Mixes `audio_segments` into `output` as `format`, with no video: the audio-only export.
+/// `target_lufs` follows [`render_export`]'s rule (`NO_NORMALIZATION` leaves the level alone).
+/// A cancelled or failed mix leaves no partial file behind.
+pub fn render_audio_only(
+    audio_segments: &[avbridge::AudioSegment],
+    timeline_duration_secs: f64,
+    output: &Path,
+    target_lufs: f32,
+    format: avbridge::AudioMixFormat,
+    cancel: &AtomicBool,
+    mut on_progress: impl FnMut(u8),
+) -> Result<RenderOutcome, RenderError> {
+    validate_target_lufs(target_lufs)?;
+    on_progress(0);
+    match avbridge::mix_audio_timeline_as(
+        audio_segments,
+        timeline_duration_secs,
+        output,
+        target_lufs,
+        format,
+        cancel,
+    ) {
+        Ok(avbridge::AudioMixOutcome::Completed) => {
+            on_progress(100);
+            Ok(RenderOutcome::Completed)
+        }
+        Ok(avbridge::AudioMixOutcome::Cancelled) => {
+            let _ = std::fs::remove_file(output);
+            Ok(RenderOutcome::Cancelled)
+        }
+        Err(error) => {
+            let _ = std::fs::remove_file(output);
+            Err(RenderError::AudioMix(error.to_string()))
+        }
+    }
+}
+
 pub(crate) fn apply_audio_mix_pass(
     output: &Path,
     audio_segments: &[avbridge::AudioSegment],

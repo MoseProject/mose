@@ -28,6 +28,7 @@ fn job(id: u64, status: ExportJobStatus) -> ExportJob {
         target_lufs: -14.0,
         allow_copy: true,
         normalize: true,
+        audio_only: None,
         output_path: format!("out{id}.mp4"),
         status,
     }
@@ -504,6 +505,7 @@ fn a_lower_height_scales_width_and_bitrate_with_the_pixels() {
         bitrate_mbps: None,
         max_height: Some(720),
         normalize: None,
+        audio_format: None,
     }
     .apply(canvas_1080p());
     assert_eq!((applied.width, applied.height), (1280, 720));
@@ -516,6 +518,7 @@ fn a_height_above_the_canvas_scales_up_with_the_pixels() {
         bitrate_mbps: None,
         max_height: Some(2160),
         normalize: None,
+        audio_format: None,
     }
     .apply(canvas_1080p());
     assert_eq!((applied.width, applied.height), (3840, 2160));
@@ -528,6 +531,7 @@ fn an_explicit_bitrate_wins_over_the_scaled_one() {
         bitrate_mbps: Some(5.5),
         max_height: Some(720),
         normalize: None,
+        audio_format: None,
     }
     .apply(canvas_1080p());
     assert_eq!(applied.bit_rate_bps, 5_500_000);
@@ -541,6 +545,7 @@ fn bitrates_and_heights_outside_what_the_encoder_takes_are_refused() {
             bitrate_mbps,
             max_height,
             normalize: None,
+            audio_format: None,
         }
         .validate()
     };
@@ -569,4 +574,59 @@ fn an_export_can_opt_out_of_normalization_and_defaults_to_it() {
     assert!(!prepared.normalize);
     // Asking for no normalization does not touch the picture, so the lossless copy stays on.
     assert!(prepared.allow_copy);
+}
+
+#[test]
+fn an_audio_only_export_needs_sound_and_carries_its_format() {
+    let h = harness();
+    let audio = |format| ExportOptions {
+        audio_format: Some(format),
+        ..ExportOptions::default()
+    };
+    // An empty timeline has no sound to export.
+    assert_eq!(
+        prepare_export_with(&h.session().project, audio(avcore::AudioMixFormat::Flac))
+            .err()
+            .as_deref(),
+        Some("noAudio")
+    );
+    h.add_fixture_clip();
+    let prepared = prepare_export_with(
+        &h.session().project.clone(),
+        audio(avcore::AudioMixFormat::Flac),
+    )
+    .unwrap();
+    assert_eq!(prepared.audio_only, Some(avcore::AudioMixFormat::Flac));
+    assert!(!prepared.audio_segments.is_empty());
+    assert!(prepared.track_segments.is_empty() && !prepared.allow_copy);
+}
+
+#[test]
+fn an_audio_only_job_writes_the_sound_in_each_format_through_the_queue() {
+    for format in avcore::AudioMixFormat::ALL {
+        let h = harness();
+        h.add_fixture_clip();
+        let prepared = prepare_export_with(
+            &h.session().project.clone(),
+            ExportOptions {
+                audio_format: Some(format),
+                ..ExportOptions::default()
+            },
+        )
+        .unwrap();
+        let queue = queue(&h);
+        let output = path_in(&h.dir, &format!("out.{}", format.extension()));
+        let id = queue.enqueue(h.handle(), "Sound".into(), output.clone(), prepared);
+        wait_idle(&queue);
+        assert_eq!(
+            status_of(&queue, id),
+            Some(ExportJobStatus::Done),
+            "{format:?}"
+        );
+        let probed = avcore::probe_media(&output).unwrap();
+        assert!(
+            probed.has_audio && probed.kind == avcore::MediaKind::Audio,
+            "{format:?}"
+        );
+    }
 }

@@ -281,6 +281,7 @@ fn audio_segment(path: PathBuf) -> avbridge::AudioSegment {
         fade_in_secs: 0.0,
         fade_out_secs: 0.0,
         pan: 0.0,
+        strip: Default::default(),
     }
 }
 

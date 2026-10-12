@@ -51,7 +51,8 @@ static int create_filter(AVFilterGraph *graph, AVFilterContext **ctx, const char
 
 static int build_mix_graph(const AudioSegment *segments, const uint8_t *valid, int segment_count,
                            int valid_count, double timeline_duration_secs, float target_lufs,
-                           AVFilterGraph **out_graph, AVFilterContext **out_sink) {
+                           const char *sample_fmt, AVFilterGraph **out_graph,
+                           AVFilterContext **out_sink) {
     int ret = 0;
     int branch = 0;
     AVFilterGraph *graph = avfilter_graph_alloc();
@@ -211,11 +212,70 @@ static int build_mix_graph(const AudioSegment *segments, const uint8_t *valid, i
             pan_tail = pan_filter;
         }
 
+        /* The strip's tone and dynamics, in the order a mixer strip has them: high-pass, low-pass,
+           low shelf, mid bell, high shelf, compressor. Only the stages that are not neutral exist,
+           so a neutral strip leaves the graph as it was. */
+        AVFilterContext *strip_tail = pan_tail;
+        {
+            struct {
+                int active;
+                const char *filter;
+                char args[96];
+            } stages[7] = {{0}};
+            int count = 0;
+            if (seg->highpass_hz > 0.0f) {
+                stages[count].filter = "highpass";
+                snprintf(stages[count].args, sizeof(stages[count].args), "f=%.3f",
+                         (double)seg->highpass_hz);
+                stages[count++].active = 1;
+            }
+            if (seg->lowpass_hz > 0.0f) {
+                stages[count].filter = "lowpass";
+                snprintf(stages[count].args, sizeof(stages[count].args), "f=%.3f",
+                         (double)seg->lowpass_hz);
+                stages[count++].active = 1;
+            }
+            if (seg->eq_low_db != 0.0f) {
+                stages[count].filter = "bass";
+                snprintf(stages[count].args, sizeof(stages[count].args), "g=%.3f:f=120",
+                         (double)seg->eq_low_db);
+                stages[count++].active = 1;
+            }
+            if (seg->eq_mid_db != 0.0f) {
+                stages[count].filter = "equalizer";
+                snprintf(stages[count].args, sizeof(stages[count].args), "f=1000:t=q:w=1:g=%.3f",
+                         (double)seg->eq_mid_db);
+                stages[count++].active = 1;
+            }
+            if (seg->eq_high_db != 0.0f) {
+                stages[count].filter = "treble";
+                snprintf(stages[count].args, sizeof(stages[count].args), "g=%.3f:f=6000",
+                         (double)seg->eq_high_db);
+                stages[count++].active = 1;
+            }
+            if (seg->comp_ratio > 1.0f) {
+                stages[count].filter = "acompressor";
+                snprintf(stages[count].args, sizeof(stages[count].args),
+                         "threshold=%.3fdB:ratio=%.3f:attack=10:release=250",
+                         (double)seg->comp_threshold_db, (double)seg->comp_ratio);
+                stages[count++].active = 1;
+            }
+            for (int stage = 0; stage < count; stage++) {
+                AVFilterContext *filter = NULL;
+                snprintf(name, sizeof(name), "strip_%s_%d", stages[stage].filter, branch);
+                if ((ret = create_filter(graph, &filter, stages[stage].filter, name,
+                                         stages[stage].args)) < 0)
+                    goto fail;
+                if ((ret = avfilter_link(strip_tail, 0, filter, 0)) < 0) goto fail;
+                strip_tail = filter;
+            }
+        }
+
         if ((ret = avfilter_link(movie, 0, trim, 0)) < 0 ||
             (ret = avfilter_link(trim, 0, pts, 0)) < 0 ||
             (ret = avfilter_link(pts, 0, tempo, 0)) < 0 ||
             (ret = avfilter_link(tempo, 0, volume, 0)) < 0 ||
-            (ret = avfilter_link(pan_tail, 0, delay, 0)) < 0)
+            (ret = avfilter_link(strip_tail, 0, delay, 0)) < 0)
             goto fail;
 
         branch_ctx[branch] = delay;
@@ -381,9 +441,9 @@ static int build_mix_graph(const AudioSegment *segments, const uint8_t *valid, i
         goto fail;
     snprintf(args, sizeof(args), "end=%.9f", timeline_duration_secs);
     if ((ret = create_filter(graph, &final_trim, "atrim", "timeline_trim", args)) < 0) goto fail;
-    if ((ret = create_filter(graph, &format, "aformat", "format",
-                             "sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo")) < 0)
-        goto fail;
+    snprintf(args, sizeof(args), "sample_fmts=%s:sample_rates=48000:channel_layouts=stereo",
+             sample_fmt);
+    if ((ret = create_filter(graph, &format, "aformat", "format", args)) < 0) goto fail;
     if ((ret = create_filter(graph, &sink, "abuffersink", "out", NULL)) < 0) goto fail;
 
     if (normalize) {
@@ -411,10 +471,48 @@ fail:
     return ret;
 }
 
+/* What each output format needs from the shared mix: the encoder, the sample format the graph
+   ends in, and the encoder's own settings. Lossless and PCM formats take 24-bit integers. */
+typedef struct {
+    enum AVCodecID codec_id;
+    const char *encoder_name; /* preferred encoder when the codec id has several, or NULL */
+    enum AVSampleFormat sample_fmt;
+    const char *filter_fmt; /* the same format as the aformat filter spells it */
+    int64_t bit_rate;       /* 0 for lossless */
+    int bits_per_raw_sample;
+} AudioMixFormatSpec;
+
+static int audio_mix_format_spec(int format, AudioMixFormatSpec *spec) {
+    switch (format) {
+    case AUDIO_MIX_FORMAT_AAC:
+        *spec = (AudioMixFormatSpec){AV_CODEC_ID_AAC,          NULL, AV_SAMPLE_FMT_FLTP, "fltp",
+                                     EXPORT_AUDIO_BITRATE_BPS, 0};
+        return 0;
+    case AUDIO_MIX_FORMAT_WAV24:
+        *spec = (AudioMixFormatSpec){AV_CODEC_ID_PCM_S24LE, NULL, AV_SAMPLE_FMT_S32, "s32", 0, 24};
+        return 0;
+    case AUDIO_MIX_FORMAT_FLAC:
+        *spec = (AudioMixFormatSpec){AV_CODEC_ID_FLAC, NULL, AV_SAMPLE_FMT_S32, "s32", 0, 24};
+        return 0;
+    case AUDIO_MIX_FORMAT_MP3:
+        *spec = (AudioMixFormatSpec){AV_CODEC_ID_MP3, "libmp3lame", AV_SAMPLE_FMT_FLTP,
+                                     "fltp",          256000,       0};
+        return 0;
+    case AUDIO_MIX_FORMAT_OPUS:
+        *spec =
+            (AudioMixFormatSpec){AV_CODEC_ID_OPUS, "libopus", AV_SAMPLE_FMT_FLT, "flt", 160000, 0};
+        return 0;
+    default:
+        return -1;
+    }
+}
+
 AudioMixStatus avbridge_mix_audio_timeline(const AudioSegment *segments, int segment_count,
                                            double timeline_duration_secs, const char *out_path,
-                                           float target_lufs, const uint8_t *cancel) {
+                                           float target_lufs, int format, const uint8_t *cancel) {
     if (!segments || segment_count <= 0) return AUDIO_MIX_ERR_NO_AUDIO;
+    AudioMixFormatSpec spec;
+    if (audio_mix_format_spec(format, &spec) < 0) return AUDIO_MIX_ERR_ENCODER;
 
     AudioMixStatus status = AUDIO_MIX_OK;
     uint8_t *valid = av_calloc((size_t)segment_count, sizeof(*valid));
@@ -444,7 +542,7 @@ AudioMixStatus avbridge_mix_audio_timeline(const AudioSegment *segments, int seg
     }
 
     if (build_mix_graph(segments, valid, segment_count, valid_count, timeline_duration_secs,
-                        target_lufs, &graph, &sink) < 0) {
+                        target_lufs, spec.filter_fmt, &graph, &sink) < 0) {
         status = AUDIO_MIX_ERR_FILTER_GRAPH;
         goto cleanup;
     }
@@ -454,7 +552,9 @@ AudioMixStatus avbridge_mix_audio_timeline(const AudioSegment *segments, int seg
         status = AUDIO_MIX_ERR_ALLOC_OUTPUT;
         goto cleanup;
     }
-    const AVCodec *encoder = avcodec_find_encoder(AV_CODEC_ID_AAC);
+    const AVCodec *encoder = NULL;
+    if (spec.encoder_name) encoder = avcodec_find_encoder_by_name(spec.encoder_name);
+    if (!encoder) encoder = avcodec_find_encoder(spec.codec_id);
     if (!encoder) {
         status = AUDIO_MIX_ERR_ENCODER;
         goto cleanup;
@@ -465,9 +565,10 @@ AudioMixStatus avbridge_mix_audio_timeline(const AudioSegment *segments, int seg
         goto cleanup;
     }
     enc_ctx->sample_rate = EXPORT_AUDIO_SAMPLE_RATE;
-    enc_ctx->sample_fmt = AV_SAMPLE_FMT_FLTP;
+    enc_ctx->sample_fmt = spec.sample_fmt;
     av_channel_layout_default(&enc_ctx->ch_layout, 2);
-    enc_ctx->bit_rate = EXPORT_AUDIO_BITRATE_BPS;
+    if (spec.bit_rate > 0) enc_ctx->bit_rate = spec.bit_rate;
+    if (spec.bits_per_raw_sample > 0) enc_ctx->bits_per_raw_sample = spec.bits_per_raw_sample;
     enc_ctx->time_base = (AVRational){1, EXPORT_AUDIO_SAMPLE_RATE};
     if (out_ctx->oformat->flags & AVFMT_GLOBALHEADER) enc_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
     if (avcodec_open2(enc_ctx, encoder, NULL) < 0) {

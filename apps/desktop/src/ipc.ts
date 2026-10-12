@@ -22,6 +22,7 @@ import type {
   PathStatus,
   PrefsView,
   PrivacyBlurEvent,
+  TrackMix,
   RecentProject,
   RecoverySession,
   SessionPatch,
@@ -413,8 +414,8 @@ export const api = {
       audioRole: flags.audioRole ?? null,
     });
   },
-  setTrackMix: (trackId: number, volumeDb: number, pan: number) => {
-    return invoke<void>("set_track_mix", { trackId, volumeDb, pan });
+  setTrackMix: (trackId: number, mix: TrackMix) => {
+    return invoke<void>("set_track_mix", { trackId, mix });
   },
   getKeybindings: () => {
     return invoke<Record<string, string[]>>("get_keybindings");
@@ -623,8 +624,12 @@ export const api = {
   setExportSettings: (targetLufs: number, aspectRatio: ExportAspectRatio) => {
     return invoke<void>("set_export_settings", { targetLufs, aspectRatio });
   },
-  exportTarget: (folder: string, fileName: string) => {
-    return invoke<{ path: string; exists: boolean }>("export_target", { folder, fileName });
+  exportTarget: (folder: string, fileName: string, extension?: string) => {
+    return invoke<{ path: string; exists: boolean }>("export_target", {
+      folder,
+      fileName,
+      extension: extension ?? null,
+    });
   },
   exportCanvas: (aspectRatio: ExportAspectRatio, clipIds?: number[]) => {
     return invoke<ExportCanvas>("export_canvas", { aspectRatio, clipIds: clipIds ?? null });
