@@ -16,14 +16,20 @@ export function Menu({
   children,
   testId,
   variant,
+  deferred = false,
 }: {
   label: ReactNode;
   ariaLabel?: string;
   children: ReactNode;
   testId?: string;
   variant?: "bar";
+  /** Builds the entries when the menu is first opened rather than with the menu, for entries
+   *  that bring a dialog and code of their own. They are kept afterwards: a dialog an entry owns
+   *  outlives the menu closing. */
+  deferred?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [built, setBuilt] = useState(!deferred);
   const [pos, setPos] = useState({ left: 0, top: 0 });
   const root = useRef<HTMLDivElement>(null);
 
@@ -52,6 +58,7 @@ export function Menu({
   const toggle = (e: React.MouseEvent<HTMLButtonElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     setPos({ left: rect.left, top: rect.bottom + 2 });
+    setBuilt(true);
     setOpen((value) => {
       return !value;
     });
@@ -98,7 +105,7 @@ export function Menu({
           }
         }}
       >
-        {children}
+        {built ? children : null}
       </div>
     </div>
   );

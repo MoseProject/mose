@@ -3,13 +3,12 @@ import editorStyles from "../../screens/editor.module.css";
 import { cx } from "../../cx";
 import baseStyles from "../../styles/base.module.css";
 import styles from "./inspector.module.css";
-import { useState } from "react";
+import { Suspense, useContext, useState } from "react";
 import { formatTime, t } from "../../i18n";
 import { api } from "../../ipc";
 import { previewStore, run, uiStore, useStore } from "../../store";
 import { playheadFraction } from "../../keyframeAt";
-import { ShapeInspector } from "./ShapeInspector";
-import { TextInspector } from "./TextInspector";
+import { lazyNamed } from "../../lazy";
 import {
   activeTimeline,
   aspectRatioDims,
@@ -17,20 +16,27 @@ import {
   type ClipPatch,
   type SessionView,
 } from "../../types";
-import { Section, Slider, type InspectorGroup } from "./controls";
+import { InspectorTabContext, Section, Slider, type InspectorGroup } from "./controls";
 import { loadTab, saveTab } from "./memory";
 
 // Kept here for the importers that read these from the inspector module.
 export { Section, Slider };
-import { AiActionsSection } from "./AiActionsSection";
 import { ColorSection } from "./ColorSection";
 import { CropSection } from "./CropSection";
 import { GainSection } from "./GainSection";
-import { KeyframesSection } from "./KeyframesSection";
-import { MaskSection } from "./MaskSection";
 import { SpeedSection } from "./SpeedSection";
 import { TransformSection } from "./TransformSection";
-import { TransitionSection } from "./TransitionSection";
+
+// Code that only a text or shape clip, or the Effects tab, needs: fetched when first shown.
+const TextInspector = lazyNamed(() => {
+  return import("./TextInspector");
+}, "TextInspector");
+const ShapeInspector = lazyNamed(() => {
+  return import("./ShapeInspector");
+}, "ShapeInspector");
+const EffectsSections = lazyNamed(() => {
+  return import("./EffectsSections");
+}, "EffectsSections");
 
 export function Inspector({ session }: { session: SessionView }) {
   const { selectedClipIds } = useStore(uiStore);
@@ -73,6 +79,7 @@ export function Inspector({ session }: { session: SessionView }) {
           })
       : undefined;
 
+  const outerTab = useContext(InspectorTabContext);
   const [tab, setTabState] = useState<InspectorGroup>(loadTab);
   const setTab = (next: InspectorGroup) => {
     setTabState(next);
@@ -130,27 +137,33 @@ export function Inspector({ session }: { session: SessionView }) {
                   .join(" · ")}
               </span>
             </div>
-            <ClipControls
-              key={clip.id}
-              clip={clip}
-              measuredLufs={measuredLufs}
-              targetLufs={timelineSequence.export_settings.target_lufs}
-              canvas={aspectRatioDims(
-                timelineSequence.export_settings.aspect_ratio,
-                asset?.resolution ?? [1920, 1080],
-              )}
-            />
+            <InspectorTabContext.Provider value={outerTab ?? tab}>
+              <ClipControls
+                key={clip.id}
+                clip={clip}
+                measuredLufs={measuredLufs}
+                targetLufs={timelineSequence.export_settings.target_lufs}
+                canvas={aspectRatioDims(
+                  timelineSequence.export_settings.aspect_ratio,
+                  asset?.resolution ?? [1920, 1080],
+                )}
+              />
+            </InspectorTabContext.Provider>
           </div>
         ) : textClip ? (
-          <TextInspector
-            key={textClip.id}
-            clip={textClip}
-          />
+          <Suspense fallback={null}>
+            <TextInspector
+              key={textClip.id}
+              clip={textClip}
+            />
+          </Suspense>
         ) : shapeClip ? (
-          <ShapeInspector
-            key={shapeClip.id}
-            clip={shapeClip}
-          />
+          <Suspense fallback={null}>
+            <ShapeInspector
+              key={shapeClip.id}
+              clip={shapeClip}
+            />
+          </Suspense>
         ) : selectedClipIds.length > 1 ? (
           <MultiSelection ids={selectedClipIds} />
         ) : (
@@ -180,6 +193,7 @@ function ClipControls({
   };
   const { playheadSecs } = useStore(previewStore);
   const fraction = playheadFraction(clip, playheadSecs);
+  const tab = useContext(InspectorTabContext);
   return (
     <>
       <TransformSection
@@ -209,19 +223,14 @@ function ClipControls({
         commit={commit}
         fraction={fraction}
       />
-      <MaskSection
-        clip={clip}
-        commit={commit}
-      />
-      <TransitionSection
-        clip={clip}
-        commit={commit}
-      />
-      <KeyframesSection
-        clip={clip}
-        commit={commit}
-      />
-      <AiActionsSection clip={clip} />
+      {(tab === "effects" || tab === "all") && (
+        <Suspense fallback={null}>
+          <EffectsSections
+            clip={clip}
+            commit={commit}
+          />
+        </Suspense>
+      )}
     </>
   );
 }

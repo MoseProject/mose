@@ -15,12 +15,22 @@ import {
 import { Icon } from "../chrome/Icon";
 import { SequenceTabs } from "../SequenceTabs";
 import { Menu } from "../chrome/Menu";
-import { LayerTemplates } from "../LayerTemplates";
-import { SilenceReviewPanel } from "../SilenceReviewPanel";
-import { TranscriptPanel } from "../TranscriptPanel";
+import { Suspense } from "react";
+import { lazyNamed } from "../../lazy";
 import { patchUi, run } from "../../store";
 import { type SessionView } from "../../types";
 import type { Marker } from "../../types";
+
+// Menu entries that open their own dialog: fetched when their menu is first opened.
+const LayerTemplates = lazyNamed(() => {
+  return import("../LayerTemplates");
+}, "LayerTemplates");
+const SilenceReviewPanel = lazyNamed(() => {
+  return import("../SilenceReviewPanel");
+}, "SilenceReviewPanel");
+const TranscriptPanel = lazyNamed(() => {
+  return import("../TranscriptPanel");
+}, "TranscriptPanel");
 
 /** The timeline's header: sequence tabs, edit and add menus, marker and clip tools, and zoom. */
 export function TimelineToolbar({
@@ -63,7 +73,10 @@ export function TimelineToolbar({
       >
         {t("rippleDelete")}
       </button>
-      <Menu label={t("menuClip")}>
+      <Menu
+        label={t("menuClip")}
+        deferred
+      >
         <button
           disabled={selected.length < 2}
           onClick={() => {
@@ -81,9 +94,14 @@ export function TimelineToolbar({
         >
           {t("compoundClip")}
         </button>
-        <LayerTemplates session={session} />
+        <Suspense fallback={null}>
+          <LayerTemplates session={session} />
+        </Suspense>
       </Menu>
-      <Menu label={t("menuAnalyze")}>
+      <Menu
+        label={t("menuAnalyze")}
+        deferred
+      >
         <button
           disabled={selected.length !== 1}
           onClick={() => {
@@ -99,8 +117,10 @@ export function TimelineToolbar({
         >
           {t("detectHighlightsAction")}
         </button>
-        <TranscriptPanel session={session} />
-        <SilenceReviewPanel />
+        <Suspense fallback={null}>
+          <TranscriptPanel session={session} />
+          <SilenceReviewPanel />
+        </Suspense>
       </Menu>
       <Menu label={t("menuAdd")}>
         <button
