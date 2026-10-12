@@ -13,6 +13,7 @@ import {
 import { formatTimecode, t } from "../i18n";
 import { api, frameUrl } from "../ipc";
 import { previewMaxDim } from "../previewResolution";
+import { ScopesPanel } from "./ScopesPanel";
 import { Icon } from "./chrome/Icon";
 import { withShortcut } from "../commands";
 import { keymapStore } from "../keymap";
@@ -484,6 +485,18 @@ export function PreviewPanel() {
           >
             <Icon name="grid" />
           </button>
+          <button
+            className={cx(styles, baseStyles, "icon " + (ui.scopesOpen ? "active" : ""))}
+            aria-label={t("scopes")}
+            aria-pressed={ui.scopesOpen}
+            title={t("scopes")}
+            data-testid="toggle-scopes"
+            onClick={() => {
+              patchUi({ scopesOpen: !ui.scopesOpen });
+            }}
+          >
+            <Icon name="gauge" />
+          </button>
         </span>
       </div>
       <div
@@ -575,6 +588,7 @@ export function PreviewPanel() {
         {overlay}
         {drawingOverlay}
       </div>
+      {ui.scopesOpen && tick.hasClip && <ScopesPanel frameSeq={tick.frameSeq} />}
       <div className={cx(styles, baseStyles, "transport")}>
         <div className={cx(styles, baseStyles, "scrub")}>
           <span className={cx(styles, baseStyles, "mono time-now")}>

@@ -219,3 +219,26 @@ button.chip[aria-pressed="true"] {
   right: 0;
   top: 50%;
 }
+
+.scopes {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 18px;
+  border-top: 1px solid var(--border-subtle);
+  flex: none;
+}
+.scopes select {
+  height: 24px;
+  font-size: 11px;
+}
+.scope-image {
+  height: 144px;
+  width: auto;
+  max-width: 100%;
+  background: #000;
+  border: 1px solid var(--border-subtle);
+}
+.scope-image.vectorscope {
+  width: 144px;
+}

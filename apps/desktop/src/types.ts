@@ -111,6 +111,9 @@ export interface MediaAsset {
   audio_stream: { origin: string; stream_index: number } | null;
 }
 
+export type ScopeKind = "waveform" | "parade" | "histogram" | "vectorscope";
+export const SCOPE_KINDS: ScopeKind[] = ["waveform", "parade", "histogram", "vectorscope"];
+
 export type ColorTransfer = "Unspecified" | "Bt709" | "Srgb" | "Pq" | "Hlg" | "Other";
 export type HdrHandling = "Auto" | "ToneMap" | "TreatAsSdr";
 

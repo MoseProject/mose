@@ -31,6 +31,11 @@ export const ptBR = {
   layerTransformResizeHint:
     "Arraste para redimensionar a camada — efeito visível só em faixas de overlay.",
   layerTransformAnimatedHint: "Posição animada — edite pela lista de keyframes.",
+  scopes: "Monitores de cor",
+  scopeWaveform: "Forma de onda",
+  scopeParade: "Parada RGB",
+  scopeHistogram: "Histograma",
+  scopeVectorscope: "Vetorscópio",
   previewEmpty: "Nada na timeline nesta posição",
   previewRenderingCompound: "Renderizando clipe composto…",
   play: "Reproduzir",
