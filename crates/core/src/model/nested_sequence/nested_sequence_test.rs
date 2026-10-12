@@ -344,3 +344,91 @@ fn reuses_the_cached_render_when_the_nested_timeline_is_unchanged() {
 
     let _ = std::fs::remove_dir_all(&cache_dir);
 }
+
+#[test]
+fn a_cache_hit_does_not_probe_again_and_a_vanished_render_is_made_again() {
+    let path = fixture("video.mp4");
+    let asset = probe_media(&path)
+        .unwrap()
+        .into_media_asset(1, "video.mp4".to_string(), path);
+    let child = sequence(
+        2,
+        timeline_with(vec![video_track(1, vec![clip(1, 1, 0.0, 0.0, 0.3)])]),
+    );
+    let mut nested_clip = clip(10, 0, 0.0, 0.0, 0.3);
+    nested_clip.nested_sequence_id = Some(2);
+    let parent_timeline = timeline_with(vec![video_track(1, vec![nested_clip])]);
+    let proj = project(
+        vec![sequence(1, parent_timeline.clone()), child],
+        vec![asset],
+    );
+    let cache_dir = std::env::temp_dir().join(format!(
+        "oca_nested_sequence_test_cache_gone_{}",
+        std::process::id()
+    ));
+    let mut cache = HashMap::new();
+
+    let first =
+        materialize_nested_sequences(&proj, &parent_timeline, &cache_dir, &mut cache).unwrap();
+    // The asset of a hit is the one stored with the render, without opening the file: a changed
+    // value in the cache is what comes back.
+    cache.get_mut(&2).unwrap().asset.duration_secs = 123.0;
+    let hit =
+        materialize_nested_sequences(&proj, &parent_timeline, &cache_dir, &mut cache).unwrap();
+    assert_eq!(hit.get(&2).unwrap().duration_secs, 123.0);
+    assert_ne!(first.get(&2).unwrap().duration_secs, 123.0);
+
+    // The file is gone (a cleaned temp folder): the render is made again, not trusted.
+    std::fs::remove_file(&cache.get(&2).unwrap().rendered_path).unwrap();
+    let again =
+        materialize_nested_sequences(&proj, &parent_timeline, &cache_dir, &mut cache).unwrap();
+    assert_ne!(again.get(&2).unwrap().duration_secs, 123.0);
+    assert!(again.get(&2).unwrap().source_path.exists());
+
+    let _ = std::fs::remove_dir_all(&cache_dir);
+}
+
+/// How long a compound clip takes to be rendered, with an effect on its clips so that nothing is
+/// copied: `OCA_BENCH_VIDEO=clip.mp4 cargo test --release -p core --lib nested_render_cost -- --ignored --nocapture`
+#[test]
+#[ignore = "a measurement, not a check"]
+fn nested_render_cost() {
+    let Some(path) = std::env::var_os("OCA_BENCH_VIDEO").map(PathBuf::from) else {
+        eprintln!("set OCA_BENCH_VIDEO to a clip to run this");
+        return;
+    };
+    let probed = probe_media(&path).unwrap();
+    let asset = probed.into_media_asset(1, "bench.mp4".into(), path);
+    let mut inner = clip(1, 1, 0.0, 0.0, 10.0);
+    inner.brightness = 0.1;
+    let nested = sequence(2, timeline_with(vec![video_track(1, vec![inner])]));
+    let mut outer = clip(10, 1, 0.0, 0.0, 10.0);
+    outer.nested_sequence_id = Some(2);
+    let main = sequence(1, timeline_with(vec![video_track(1, vec![outer])]));
+    let mut proj = project(vec![main, nested], vec![asset]);
+    let dir = std::env::temp_dir().join("avcore_nested_cost");
+    let _ = std::fs::remove_dir_all(&dir);
+
+    let mut cache = HashMap::new();
+    let started = std::time::Instant::now();
+    let timeline = proj.sequences[0].timeline.clone();
+    materialize_nested_sequences(&proj, &timeline, &dir, &mut cache).unwrap();
+    eprintln!(
+        "first render of a 10 s compound clip: {:.2} s",
+        started.elapsed().as_secs_f64()
+    );
+    let started = std::time::Instant::now();
+    materialize_nested_sequences(&proj, &timeline, &dir, &mut cache).unwrap();
+    eprintln!(
+        "same content again (cached): {:.1} ms",
+        started.elapsed().as_secs_f64() * 1e3
+    );
+    proj.sequences[1].timeline.tracks[0].clips[0].brightness = 0.2;
+    let started = std::time::Instant::now();
+    materialize_nested_sequences(&proj, &timeline, &dir, &mut cache).unwrap();
+    eprintln!(
+        "after one edit inside it: {:.2} s",
+        started.elapsed().as_secs_f64()
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
