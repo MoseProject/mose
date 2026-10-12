@@ -104,7 +104,10 @@ pub use highlight_detection::{
 pub use keyframe::{Keyframe, Position};
 pub use loudness::{measure_loudness, LoudnessError};
 pub use lut::{Lut3D, LutParseError};
-pub use media::{LoudnessMetrics, MediaAsset, MediaKind};
+pub use media::{
+    AudioStreamInfo, ColorInfo, ColorMatrix, ColorPrimaries, ColorTransfer, HdrHandling,
+    LoudnessMetrics, MediaAsset, MediaKind, StreamInfo,
+};
 pub use motion_tracking::{
     rgba_to_gray, track_region, track_region_with_scores, tracked_positions_to_keyframes,
     GrayFrame, TrackResult, TrackedPosition,

@@ -42,6 +42,8 @@ use serde::Serialize;
 
 use crate::project::Project;
 
+use super::legacy_project::ProjectV4;
+
 /// Identifies an `.ocproj` file before we even try to gzip/msgpack-decode it, so a
 /// wrong-file/corrupt-file error says exactly that instead of surfacing an opaque gzip or
 /// msgpack failure.
@@ -61,9 +63,12 @@ const SEMANTIC_INDEX_MAGIC: &[u8; 4] = b"OCSI";
 /// The price is that the encoding is positional: any change to the fields of a type inside
 /// [`Project`] changes the bytes, so such a change must bump this version, and files from other
 /// versions are refused with a clear error rather than misread.
-const PROJECT_FORMAT_VERSION: u8 = 4;
-/// The previous project layout, still readable: it is the current one without the trailing
-/// `frame_rate: Option<FrameRate>`, so [`upgrade_v3`] only has to append the encoding of `None`.
+const PROJECT_FORMAT_VERSION: u8 = 5;
+/// The layout before the per-asset stream and HDR fields, still readable through
+/// `legacy_project::ProjectV4`.
+const PROJECT_FORMAT_VERSION_V4: u8 = 4;
+/// The layout before that: version 4 without the trailing `frame_rate: Option<FrameRate>`, so
+/// [`upgrade_v3`] only has to append the encoding of `None`.
 const PROJECT_FORMAT_VERSION_V3: u8 = 3;
 /// Postcard's encoding of `Option::None`.
 const POSTCARD_NONE: u8 = 0;
@@ -278,7 +283,13 @@ pub fn from_project_bytes(bytes: &[u8]) -> Result<Project, PersistError> {
         return Err(PersistError::Corrupt("bad magic bytes"));
     }
     let version = bytes[header];
-    if version != PROJECT_FORMAT_VERSION && version != PROJECT_FORMAT_VERSION_V3 {
+    if ![
+        PROJECT_FORMAT_VERSION,
+        PROJECT_FORMAT_VERSION_V4,
+        PROJECT_FORMAT_VERSION_V3,
+    ]
+    .contains(&version)
+    {
         return Err(PersistError::Corrupt("unsupported format version"));
     }
     let Some((size, compressed)) = bytes[header + 1..].split_first_chunk::<4>() else {
@@ -291,15 +302,19 @@ pub fn from_project_bytes(bytes: &[u8]) -> Result<Project, PersistError> {
     }
     let payload = lz4_flex::block::decompress(compressed, size as usize)
         .map_err(|_| PersistError::Corrupt("damaged compressed data"))?;
+    if version == PROJECT_FORMAT_VERSION {
+        return postcard::from_bytes(&payload).map_err(PersistError::Project);
+    }
     let payload = if version == PROJECT_FORMAT_VERSION_V3 {
         upgrade_v3(payload)
     } else {
         payload
     };
-    postcard::from_bytes(&payload).map_err(PersistError::Project)
+    let old: ProjectV4 = postcard::from_bytes(&payload).map_err(PersistError::Project)?;
+    Ok(old.into())
 }
 
-/// Turns a version-3 payload into a version-4 one. `Project::frame_rate` was added as the last
+/// Turns a version-3 payload into a version-4 one (read through `ProjectV4`). `Project::frame_rate` was added as the last
 /// field, so an older file is a complete current file minus that trailing `None`.
 fn upgrade_v3(mut payload: Vec<u8>) -> Vec<u8> {
     payload.push(POSTCARD_NONE);

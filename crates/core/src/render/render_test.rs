@@ -380,6 +380,9 @@ fn resolve_cost() {
             proxy_path: None,
             waveform_peaks: None,
             favorited: false,
+            streams: Default::default(),
+            hdr_handling: Default::default(),
+            audio_stream: None,
         })
         .collect();
     for (track_count, clips_per_track) in [(1usize, 400usize), (10, 400), (40, 400)] {

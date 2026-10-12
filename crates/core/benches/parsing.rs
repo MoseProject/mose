@@ -81,6 +81,9 @@ fn large_project(asset_count: usize, clips_per_track: usize) -> Project {
             proxy_path: None,
             waveform_peaks: None,
             favorited: false,
+            streams: Default::default(),
+            hdr_handling: Default::default(),
+            audio_stream: None,
         })
         .collect();
 
