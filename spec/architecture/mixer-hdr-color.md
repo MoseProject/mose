@@ -18,7 +18,8 @@ before any broader editor-parity argument.
 | CM-02 HDR to SDR | done for preview, proxies and export (single and layered); no UI to choose the handling yet (the field exists, default Auto) |
 | CM-03 output tagging | done: every export is tagged Rec.709 limited range and SD or full-range sources are converted to it |
 | MX-01 multi-stream audio | done as copies: each extra track is copied out as its own audio asset (see below); no per-clip stream selector |
-| CM-04, CM-05, CM-06, MX-00, MX-02, MX-03, MX-04 | not started |
+| MX-02 track strip | done for fader and pan per track (project format 6, preview and export, a mixer button in the track header); no per-track meter and no master fader yet |
+| CM-04, CM-05, CM-06, MX-00, MX-03, MX-04 | not started |
 
 Decisions taken while building:
 
@@ -30,6 +31,10 @@ Decisions taken while building:
   export code (four C pipelines), each extra track is copied out without decoding (`avbridge_remux_audio_stream`)
   into the project cache and imported as an ordinary audio asset that remembers its recording
   (`MediaAsset::audio_stream`). A lost copy is made again when the project loads.
+- Pan law: the side the pan moves away from falls off as a quarter sine, the other stays at unity, so the
+  centre changes nothing. One law in the model, the preview mixer and the export graph, pinned by a test.
+  The export normalizes the whole mix to its loudness target, so a fader changes a track relative to the others
+  there; the preview plays the absolute level.
 - Found on the way, all fixed: proxies failed for FLAC, Opus and PCM audio in Matroska; a failed proxy
   left a partial file that passed for a finished one; graph sources did not carry the decoder's matrix
   and range, so full-range footage was exported with shifted colours.
