@@ -1,4 +1,8 @@
-//! The project layout of file version 4, kept so such files still open. Version 5 added
+//! The project layouts of file versions 3 to 5, kept so such files still open.
+//!
+//! Version 6 added [`Track::mix`] inside every track, which moves every byte after the first
+//! track: version 5 and older are read as mirror types of the sequence, timeline and track and
+//! converted, with the new field neutral. Version 5 added
 //! [`MediaAsset::streams`], [`MediaAsset::hdr_handling`] and [`MediaAsset::audio_stream`] inside
 //! every asset, which moves every byte after the first asset: the old layout is read as these
 //! mirror types and converted, with the new fields at their defaults.
@@ -11,8 +15,115 @@ use serde::Deserialize;
 
 use crate::frame_rate::FrameRate;
 use crate::media::{HdrHandling, LoudnessMetrics, MediaAsset, MediaKind, StreamInfo};
-use crate::project::{PanelLayout, Project, Recency, Sequence};
+use crate::project::{PanelLayout, Project, Recency, Sequence, SequenceExportSettings};
 use crate::smart_bins::SmartBin;
+use crate::timeline::MulticamGroup;
+use crate::timeline::{
+    AudioRole, ClipInstance, Marker, ShapeClip, TextClip, Timeline, Track, TrackKind, TrackMix,
+};
+
+/// [`Project`] as version 5 wrote it (assets as now, tracks without a mix). Field order is the file
+/// layout: do not touch.
+#[derive(Deserialize)]
+pub(crate) struct ProjectV5 {
+    id: u64,
+    name: String,
+    last_edited: Recency,
+    summary: String,
+    media_library: Vec<MediaAsset>,
+    sequences: Vec<SequenceV5>,
+    active_sequence: usize,
+    panel_layout: Option<PanelLayout>,
+    smart_bins: Vec<SmartBin>,
+    recent_asset_ids: Vec<u64>,
+    frame_rate: Option<FrameRate>,
+}
+
+#[derive(Deserialize)]
+struct SequenceV5 {
+    id: u64,
+    name: String,
+    timeline: TimelineV5,
+    export_settings: SequenceExportSettings,
+}
+
+#[derive(Deserialize)]
+struct TimelineV5 {
+    tracks: Vec<TrackV5>,
+    playhead_secs: f64,
+    markers: Vec<Marker>,
+    multicam_groups: Vec<MulticamGroup>,
+}
+
+#[derive(Deserialize)]
+struct TrackV5 {
+    id: u64,
+    name: String,
+    kind: TrackKind,
+    clips: Vec<ClipInstance>,
+    text_clips: Vec<TextClip>,
+    shape_clips: Vec<ShapeClip>,
+    visible: bool,
+    audio_role: AudioRole,
+    muted: bool,
+    solo: bool,
+    color_label: Option<[u8; 3]>,
+    locked: bool,
+}
+
+impl From<SequenceV5> for Sequence {
+    fn from(old: SequenceV5) -> Self {
+        Sequence {
+            id: old.id,
+            name: old.name,
+            timeline: Timeline {
+                tracks: old
+                    .timeline
+                    .tracks
+                    .into_iter()
+                    .map(|track| Track {
+                        id: track.id,
+                        name: track.name,
+                        kind: track.kind,
+                        clips: track.clips,
+                        text_clips: track.text_clips,
+                        shape_clips: track.shape_clips,
+                        visible: track.visible,
+                        audio_role: track.audio_role,
+                        muted: track.muted,
+                        solo: track.solo,
+                        color_label: track.color_label,
+                        locked: track.locked,
+                        mix: TrackMix::default(),
+                    })
+                    .collect(),
+                playhead_secs: old.timeline.playhead_secs,
+                markers: old.timeline.markers,
+                multicam_groups: old.timeline.multicam_groups,
+            },
+            export_settings: old.export_settings,
+        }
+    }
+}
+
+impl From<ProjectV5> for Project {
+    fn from(old: ProjectV5) -> Self {
+        Project {
+            id: old.id,
+            name: old.name,
+            last_edited: old.last_edited,
+            summary: old.summary,
+            media_library: old.media_library,
+            sequences: old.sequences.into_iter().map(Into::into).collect(),
+            active_sequence: old.active_sequence,
+            file_path: None,
+            panel_layout: old.panel_layout,
+            smart_bins: old.smart_bins,
+            recent_asset_ids: old.recent_asset_ids,
+            frame_rate: old.frame_rate,
+        }
+    }
+}
 
 /// [`Project`] as version 4 wrote it. Field order is the file layout: do not touch.
 #[derive(Deserialize)]
@@ -22,7 +133,7 @@ pub(crate) struct ProjectV4 {
     last_edited: Recency,
     summary: String,
     media_library: Vec<MediaAssetV4>,
-    sequences: Vec<Sequence>,
+    sequences: Vec<SequenceV5>,
     active_sequence: usize,
     panel_layout: Option<PanelLayout>,
     smart_bins: Vec<SmartBin>,
@@ -82,7 +193,7 @@ impl From<ProjectV4> for Project {
             last_edited: old.last_edited,
             summary: old.summary,
             media_library: old.media_library.into_iter().map(Into::into).collect(),
-            sequences: old.sequences,
+            sequences: old.sequences.into_iter().map(Into::into).collect(),
             active_sequence: old.active_sequence,
             file_path: None,
             panel_layout: old.panel_layout,

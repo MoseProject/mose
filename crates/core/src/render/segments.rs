@@ -454,7 +454,8 @@ pub(crate) fn audio_segment(
         source_in_secs: clip.source_in_secs,
         source_out_secs: clip.source_out_secs,
         timeline_start_secs: clip.start_secs,
-        gain_db: clip.gain_db,
+        // The track's fader adds to the clip's own gain.
+        gain_db: clip.gain_db + track.mix.volume_db,
         // AudioSegment has no ramp field of its own — atempo takes one fixed parameter,
         // not a `t`-keyed expression, so a smooth per-sample tempo ramp isn't achievable
         // on the audio side in this FFmpeg build (same limitation
@@ -466,10 +467,18 @@ pub(crate) fn audio_segment(
             .speed_ramp_end_factor
             .map(|end| (clip.speed_factor + end) / 2.0)
             .unwrap_or(clip.speed_factor),
+        // A keyframed gain replaces `gain_db` with a linear expression, so the fader multiplies it.
         gain_keyframe_expr: keyframe::gain_filter_db_expr(
             &clip.gain_keyframes,
             clip.duration_secs(),
         )
+        .map(|expr| {
+            if track.mix.volume_db == 0.0 {
+                expr
+            } else {
+                format!("({expr})*{:.6}", track.mix.linear_gain())
+            }
+        })
         .unwrap_or_default(),
         duck_role: track.audio_role.to_duck_role_code(),
         voice_cleanup_enabled: clip.voice_cleanup_enabled,
@@ -479,7 +488,7 @@ pub(crate) fn audio_segment(
         voice_cleanup_ceiling_linear: clip.voice_cleanup_ceiling_linear,
         fade_in_secs: clip.fade_in_secs.max(track.dissolve_in_secs(clip) as f32),
         fade_out_secs: clip.fade_out_secs.max(track.dissolve_out_secs(clip) as f32),
-        pan: 0.0,
+        pan: track.mix.pan,
     }
 }
 
@@ -529,6 +538,10 @@ pub fn resolve_audio_segments(
         if !sequence.timeline.track_is_audible(track) {
             silenced_clips |= !track.clips.is_empty();
             continue;
+        }
+        // A fader or pan needs the mixed audio path: the one-pass export copies the source's audio.
+        if !track.mix.is_neutral() {
+            has_additional_contributor = true;
         }
         // Clips that overlap (a cross-dissolve) need the mixed audio path, which plays both.
         if track.overlap_lanes().values().any(|&lane| lane > 0) {

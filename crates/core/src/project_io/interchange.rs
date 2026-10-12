@@ -564,6 +564,7 @@ pub fn interchange_to_timeline(
             muted: false,
             solo: false,
             locked: false,
+            mix: Default::default(),
             color_label: None,
         });
     }

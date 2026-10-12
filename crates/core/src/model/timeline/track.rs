@@ -142,6 +142,78 @@ pub struct Track {
     /// unlocked.
     #[serde(default)]
     pub locked: bool,
+    /// This track's level and stereo balance, applied to every clip on it after the clips' own
+    /// gain. Neutral by default. **Keep this the last field**: the project file is positional.
+    #[serde(default)]
+    pub mix: TrackMix,
+}
+
+/// A track's fader and pan: what the mixer strip of the track controls.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct TrackMix {
+    /// Level in dB, [`TrackMix::MIN_VOLUME_DB`] to [`TrackMix::MAX_VOLUME_DB`]; `0.0` leaves the
+    /// clips as they are.
+    pub volume_db: f32,
+    /// Stereo balance, `-1.0` (left only) to `1.0` (right only); `0.0` is centred and untouched.
+    pub pan: f32,
+}
+
+impl Default for TrackMix {
+    fn default() -> Self {
+        Self {
+            volume_db: 0.0,
+            pan: 0.0,
+        }
+    }
+}
+
+impl TrackMix {
+    pub const MIN_VOLUME_DB: f32 = -60.0;
+    pub const MAX_VOLUME_DB: f32 = 12.0;
+
+    /// Whether the mix changes nothing (no gain, centred), so a track needs no mixing stage.
+    pub fn is_neutral(&self) -> bool {
+        self.volume_db == 0.0 && self.pan == 0.0
+    }
+
+    /// The same mix inside its limits; a value that is not a number becomes neutral.
+    pub fn clamped(self) -> Self {
+        let volume_db = if self.volume_db.is_finite() {
+            self.volume_db
+                .clamp(Self::MIN_VOLUME_DB, Self::MAX_VOLUME_DB)
+        } else {
+            0.0
+        };
+        let pan = if self.pan.is_finite() {
+            self.pan.clamp(-1.0, 1.0)
+        } else {
+            0.0
+        };
+        Self { volume_db, pan }
+    }
+
+    /// Linear multiplier of [`Self::volume_db`].
+    pub fn linear_gain(&self) -> f32 {
+        10f32.powf(self.volume_db / 20.0)
+    }
+
+    /// Left and right multipliers of the pan: the side the pan moves away from falls off as a
+    /// quarter sine, the other stays at unity, so a centred track is left alone. The same law the
+    /// export mix applies (`audio_mix.c`), so the preview matches it.
+    pub fn pan_gains(&self) -> (f32, f32) {
+        let pan = self.pan.clamp(-1.0, 1.0);
+        let left = if pan > 0.0 {
+            (pan * std::f32::consts::FRAC_PI_2).cos()
+        } else {
+            1.0
+        };
+        let right = if pan < 0.0 {
+            (-pan * std::f32::consts::FRAC_PI_2).cos()
+        } else {
+            1.0
+        };
+        (left, right)
+    }
 }
 
 impl Track {

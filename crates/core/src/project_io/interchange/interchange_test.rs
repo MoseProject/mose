@@ -109,6 +109,7 @@ fn track(id: u64, kind: TrackKind, clips: Vec<ClipInstance>) -> Track {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     }
 }
