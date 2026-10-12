@@ -17,6 +17,7 @@ import {
   xToTime,
   zoomAround,
 } from "../src/timelineGeometry";
+import { NEUTRAL_TRACK_MIX } from "../src/types";
 import type { ClipInstance, Marker, ShapeClip, TextClip, Track } from "../src/types";
 
 function clip(id: number, start: number, duration: number, speed = 1): ClipInstance {
@@ -79,7 +80,7 @@ function track(id: number, clips: ClipInstance[]): Track {
     solo: false,
     color_label: null,
     locked: false,
-    mix: { volume_db: 0, pan: 0 },
+    mix: NEUTRAL_TRACK_MIX,
   };
 }
 
