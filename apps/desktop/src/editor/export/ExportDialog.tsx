@@ -14,6 +14,7 @@ import {
   formatSize,
   MAX_MBPS,
   MIN_MBPS,
+  QUALITY_MBPS,
   RESOLUTION_HEIGHTS,
   summarize,
   type QualityChoice,
@@ -61,29 +62,44 @@ export function ExportDialog({ session }: { session: SessionView }) {
   const [fileName, setFileName] = useState(sequence.name);
   const [folder, setFolder] = useState("");
   const [aspect, setAspect] = useState<ExportAspectRatio>(settings.aspect_ratio);
-  const [quality, setQuality] = useState<QualityChoice>("source");
+  const [chosenQuality, setQuality] = useState<QualityChoice>("source");
   const [customMbps, setCustomMbps] = useState(10);
   const [maxHeight, setMaxHeight] = useState<number | null>(null);
   const [canvas, setCanvas] = useState<ExportCanvas | null>(null);
+  const [canvasLoaded, setCanvasLoaded] = useState(false);
+  const [lufsCustom, setLufsCustom] = useState(!LOUDNESS_PRESETS.includes(settings.target_lufs));
   const [lufs, setLufs] = useState(settings.target_lufs);
-  const [gpu, setGpu] = useState("auto");
   const [normalize, setNormalize] = useState(true);
   const [error, setError] = useState("");
   const measured = measuredLufs(session);
   const lufsValid = !normalize || (Number.isFinite(lufs) && lufs >= MIN_LUFS && lufs <= MAX_LUFS);
+  const emptyTimeline = canvasLoaded && canvas === null;
+  const ready = fileName.trim() !== "" && folder.trim() !== "" && !emptyTimeline;
+  // A fixed step above the bitrate the picture already has would only make the file bigger.
+  const sourceMbps = canvas
+    ? summarize(canvas, { maxHeight: maxHeight ?? undefined }).bitrateMbps
+    : null;
+  const stepDisabled = (value: QualityChoice) => {
+    return (
+      value !== "source" &&
+      value !== "custom" &&
+      sourceMbps !== null &&
+      QUALITY_MBPS[value] > sourceMbps
+    );
+  };
+  // A step the current picture size made too high falls back to the source quality.
+  const quality = stepDisabled(chosenQuality) ? "source" : chosenQuality;
   const bitrateValid = quality !== "custom" || customBitrateValid(customMbps);
   const options = exportOptions(quality, customMbps, maxHeight);
   const summary = canvas && bitrateValid ? summarize(canvas, options) : null;
+  const someStepDisabled = QUALITIES.some(([value]) => {
+    return stepDisabled(value);
+  });
 
   useEffect(() => {
     void run(api.getNormalizeAudio()).then((value) => {
       if (typeof value === "boolean") {
         setNormalize(value);
-      }
-    });
-    void run(api.getGpuEncoderPreference()).then((value) => {
-      if (value) {
-        setGpu(value);
       }
     });
     void run(api.getPrefs()).then((prefs) => {
@@ -101,11 +117,13 @@ export function ExportDialog({ session }: { session: SessionView }) {
       (value) => {
         if (!stale) {
           setCanvas(value);
+          setCanvasLoaded(true);
         }
       },
       () => {
         if (!stale) {
           setCanvas(null);
+          setCanvasLoaded(true);
         }
       },
     );
@@ -127,7 +145,7 @@ export function ExportDialog({ session }: { session: SessionView }) {
   };
 
   const start = async () => {
-    if (!lufsValid || !bitrateValid) {
+    if (!lufsValid || !bitrateValid || !ready) {
       return;
     }
     let target: { path: string; exists: boolean };
@@ -139,7 +157,6 @@ export function ExportDialog({ session }: { session: SessionView }) {
     }
     close();
     patchUi({ exportQueueOpen: true });
-    await run(api.setGpuEncoderPreference(gpu));
     await run(api.setNormalizeAudio(normalize));
     await run(api.setExportSettings(Number.isFinite(lufs) ? lufs : settings.target_lufs, aspect));
     const replace = target.exists
@@ -171,7 +188,7 @@ export function ExportDialog({ session }: { session: SessionView }) {
           </button>
           <button
             className={cx(styles, baseStyles, "primary")}
-            disabled={!lufsValid || !bitrateValid}
+            disabled={!lufsValid || !bitrateValid || !ready}
             onClick={() => {
               void start();
             }}
@@ -234,6 +251,7 @@ export function ExportDialog({ session }: { session: SessionView }) {
               <option
                 key={value}
                 value={value}
+                disabled={stepDisabled(value)}
               >
                 {t(label)}
               </option>
@@ -241,6 +259,9 @@ export function ExportDialog({ session }: { session: SessionView }) {
           })}
         </select>
       </label>
+      {someStepDisabled && (
+        <p className={cx(styles, baseStyles, "muted")}>{t("exportQualityAboveSource")}</p>
+      )}
       {quality === "custom" && (
         <label className={cx(styles, baseStyles, "dialog-field")}>
           <span>{t("exportBitrate")}</span>
@@ -327,9 +348,11 @@ export function ExportDialog({ session }: { session: SessionView }) {
         <label className={cx(styles, baseStyles, "dialog-field")}>
           <span>{t("loudnessTarget")}</span>
           <select
-            value={LOUDNESS_PRESETS.includes(lufs) ? String(lufs) : "custom"}
+            value={lufsCustom ? "custom" : String(lufs)}
             onChange={(e) => {
-              if (e.target.value !== "custom") {
+              const custom = e.target.value === "custom";
+              setLufsCustom(custom);
+              if (!custom) {
                 setLufs(Number(e.target.value));
               }
             }}
@@ -356,6 +379,7 @@ export function ExportDialog({ session }: { session: SessionView }) {
             step={0.5}
             value={Number.isFinite(lufs) ? lufs : ""}
             aria-invalid={!lufsValid}
+            disabled={!lufsCustom}
             onChange={(e) => {
               setLufs(e.target.value === "" ? Number.NaN : Number(e.target.value));
             }}
@@ -376,23 +400,6 @@ export function ExportDialog({ session }: { session: SessionView }) {
           </p>
         )}
       </fieldset>
-      <label className={cx(styles, baseStyles, "dialog-field")}>
-        <span>{t("gpuEncoder")}</span>
-        <select
-          value={gpu}
-          onChange={(e) => {
-            setGpu(e.target.value);
-          }}
-        >
-          <option value="auto">Auto</option>
-          <option value="cpu">CPU</option>
-          <option value="nvenc">NVENC</option>
-          <option value="quick_sync">Quick Sync</option>
-          <option value="amf">AMF</option>
-          <option value="vaapi">VAAPI</option>
-          <option value="video_toolbox">VideoToolbox</option>
-        </select>
-      </label>
       {summary && canvas && (
         <p
           className={cx(styles, baseStyles, "export-summary")}
@@ -405,7 +412,17 @@ export function ExportDialog({ session }: { session: SessionView }) {
           </span>
         </p>
       )}
-      <p className={cx(styles, baseStyles, "muted")}>{t("exportKeepsBitrate")}</p>
+      {emptyTimeline && (
+        <p
+          className={cx(styles, baseStyles, "dialog-error")}
+          role="alert"
+        >
+          {t("exportEmptyTimeline")}
+        </p>
+      )}
+      {!emptyTimeline && Object.keys(options).length === 0 && (
+        <p className={cx(styles, baseStyles, "muted")}>{t("exportKeepsBitrate")}</p>
+      )}
     </Dialog>
   );
 }

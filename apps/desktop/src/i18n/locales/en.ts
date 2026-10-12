@@ -358,6 +358,9 @@ export const en = {
   exportErrNoFolder: "Choose the folder to save in.",
   exportErrFolderMissing: "That folder does not exist.",
   exportErrResolution: "The resolution is too small.",
+  exportQualityAboveSource:
+    "Steps above the source bitrate are unavailable: they would only make the file bigger.",
+  exportEmptyTimeline: "Add clips to the timeline before exporting.",
   exportErrNoName: "Type a file name.",
   exportKeepsBitrate:
     "Same as source keeps the source bitrate and, for a plain cut, copies the picture without re-encoding it.",
