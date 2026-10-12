@@ -555,14 +555,14 @@ pub fn set_track_flags<R: Runtime>(
     })
 }
 
-/// Sets a track's fader (`volume_db`) and pan, both clamped to their limits. A rejected value
-/// (not a number) becomes neutral; a change to the same mix leaves no undo step.
+/// Sets a track's whole mixer strip (fader, pan, EQ, filters, compressor), every control clamped
+/// to its limits. A rejected value (not a number) becomes neutral; a change to the same mix leaves
+/// no undo step.
 #[tauri::command]
 pub fn set_track_mix<R: Runtime>(
     app: AppHandle<R>,
     track_id: u64,
-    volume_db: f32,
-    pan: f32,
+    mix: avcore::timeline::TrackMix,
 ) -> Result<(), String> {
     undoable(&app, |project| {
         let Some(track) = project
@@ -573,7 +573,7 @@ pub fn set_track_mix<R: Runtime>(
         else {
             return false;
         };
-        let mix = avcore::timeline::TrackMix { volume_db, pan }.clamped();
+        let mix = mix.clamped();
         let changed = track.mix != mix;
         track.mix = mix;
         changed
