@@ -2,11 +2,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "bridge.h"
+#include "bridge_internal.h"
 
 #include <math.h>
 #include <string.h>
 
 #include <libavcodec/avcodec.h>
+#include <libavfilter/avfilter.h>
+#include <libavfilter/buffersink.h>
+#include <libavfilter/buffersrc.h>
 #include <libavformat/avformat.h>
 #include <libavutil/hwcontext.h>
 #include <libavutil/imgutils.h>
@@ -40,7 +44,14 @@ struct AvbridgeDecodeSession {
     int sws_full_range;
     int sws_out_width;
     int sws_out_height;
-    /* Size frames are converted to (0: the decoded size). Set with avbridge_decode_set_output_size. */
+    /* HDR to SDR conversion, built when a frame tagged PQ or HLG arrives. Its key is what the
+       graph was built for; a different one rebuilds it. */
+    AVFilterGraph *tone_graph;
+    AVFilterContext *tone_source;
+    AVFilterContext *tone_sink;
+    int tone_key[7];
+    /* Size frames are converted to (0: the decoded size). Set with avbridge_decode_set_output_size.
+     */
     int out_width;
     int out_height;
     int stream_index;
@@ -50,6 +61,7 @@ struct AvbridgeDecodeSession {
 static void close_session(AvbridgeDecodeSession *session) {
     if (!session) return;
     sws_freeContext(session->sws);
+    avfilter_graph_free(&session->tone_graph);
     av_packet_free(&session->packet);
     av_frame_free(&session->transfer);
     av_frame_free(&session->latest);
@@ -287,11 +299,33 @@ DecodeStatus avbridge_decode_seek(AvbridgeDecodeSession *session, double timesta
     return DECODE_OK;
 }
 
+/* Converts an HDR `frame` to SDR RGBA at width x height through the shared tone map graph (see
+   avbridge_tone_map_graph). Returns 0, or -1 to fall back to the plain conversion. */
+static int tone_map_to_rgba(AvbridgeDecodeSession *session, const AVFrame *frame, int width,
+                            int height, uint8_t *dst_data[4], int dst_linesize[4]) {
+    if (avbridge_tone_map_graph(&session->tone_graph, &session->tone_source, &session->tone_sink,
+                                session->tone_key, frame, width, height, "rgba") < 0) {
+        return -1;
+    }
+    AVFrame *result = av_frame_alloc();
+    int status = -1;
+    if (result &&
+        avbridge_tone_map_run(session->tone_source, session->tone_sink, frame, result) >= 0 &&
+        result->width == width && result->height == height && result->format == AV_PIX_FMT_RGBA) {
+        av_image_copy(dst_data, dst_linesize, (const uint8_t **)result->data, result->linesize,
+                      AV_PIX_FMT_RGBA, width, height);
+        status = 0;
+    }
+    av_frame_free(&result);
+    return status;
+}
+
 static DecodeStatus copy_rgba(AvbridgeDecodeSession *session, AVFrame *frame,
                               DecodedRgbaFrame *out_frame, uint8_t *given, size_t given_cap) {
     int src_width = frame->width;
     int src_height = frame->height;
     if (src_width <= 0 || src_height <= 0) return DECODE_ERR_FRAME_SIZE;
+    avbridge_fill_missing_color(frame, session->format->streams[session->stream_index]->codecpar);
     /* A reduced output size is honoured only when it really is smaller. */
     int width = src_width;
     int height = src_height;
@@ -314,31 +348,35 @@ static DecodeStatus copy_rgba(AvbridgeDecodeSession *session, AVFrame *frame,
         if (!borrowed) av_free(pixels);
         return DECODE_ERR_FRAME_SIZE;
     }
-    enum AVColorSpace matrix = avbridge_resolve_colorspace(frame);
-    int full_range = avbridge_frame_is_full_range(frame);
-    if (!session->sws || session->sws_width != src_width || session->sws_height != src_height ||
-        session->sws_format != frame->format || session->sws_out_width != width ||
-        session->sws_out_height != height || session->sws_matrix != (int)matrix ||
-        session->sws_full_range != full_range) {
-        sws_freeContext(session->sws);
-        session->sws = threaded_sws(src_width, src_height, (enum AVPixelFormat)frame->format,
-                                    width, height, matrix, full_range);
-        session->sws_matrix = (int)matrix;
-        session->sws_full_range = full_range;
-        session->sws_width = src_width;
-        session->sws_height = src_height;
-        session->sws_format = frame->format;
-        session->sws_out_width = width;
-        session->sws_out_height = height;
-    }
-    if (!session->sws) {
-        if (!borrowed) av_free(pixels);
-        return DECODE_ERR_PIPELINE;
-    }
-    if (sws_scale(session->sws, (const uint8_t *const *)frame->data, frame->linesize, 0, src_height,
-                  dst_data, dst_linesize) != height) {
-        if (!borrowed) av_free(pixels);
-        return DECODE_ERR_PIPELINE;
+    int tone_mapped = avbridge_frame_is_hdr(frame) &&
+                      tone_map_to_rgba(session, frame, width, height, dst_data, dst_linesize) == 0;
+    if (!tone_mapped) {
+        enum AVColorSpace matrix = avbridge_resolve_colorspace(frame);
+        int full_range = avbridge_frame_is_full_range(frame);
+        if (!session->sws || session->sws_width != src_width || session->sws_height != src_height ||
+            session->sws_format != frame->format || session->sws_out_width != width ||
+            session->sws_out_height != height || session->sws_matrix != (int)matrix ||
+            session->sws_full_range != full_range) {
+            sws_freeContext(session->sws);
+            session->sws = threaded_sws(src_width, src_height, (enum AVPixelFormat)frame->format,
+                                        width, height, matrix, full_range);
+            session->sws_matrix = (int)matrix;
+            session->sws_full_range = full_range;
+            session->sws_width = src_width;
+            session->sws_height = src_height;
+            session->sws_format = frame->format;
+            session->sws_out_width = width;
+            session->sws_out_height = height;
+        }
+        if (!session->sws) {
+            if (!borrowed) av_free(pixels);
+            return DECODE_ERR_PIPELINE;
+        }
+        if (sws_scale(session->sws, (const uint8_t *const *)frame->data, frame->linesize, 0,
+                      src_height, dst_data, dst_linesize) != height) {
+            if (!borrowed) av_free(pixels);
+            return DECODE_ERR_PIPELINE;
+        }
     }
     /* swscale leaves the alpha of the last few pixels of a row unwritten when the width is not a
        multiple of 8 (a 854 pixel wide 480p proxy lost its right edge to transparency). Decoded
@@ -347,7 +385,8 @@ static DecodeStatus copy_rgba(AvbridgeDecodeSession *session, AVFrame *frame,
         int tail = width < 16 ? width : 16;
         for (int row = 0; row < height; row++) {
             uint8_t *end = pixels + (size_t)row * (size_t)stride + (size_t)(width - tail) * 4;
-            for (int i = 0; i < tail; i++) end[i * 4 + 3] = 255;
+            for (int i = 0; i < tail; i++)
+                end[i * 4 + 3] = 255;
         }
     }
     AVStream *stream = session->format->streams[session->stream_index];
