@@ -654,10 +654,28 @@ fn a_neutral_track_keeps_the_one_pass_audio_path() {
 }
 
 #[test]
+fn a_strip_alone_sends_the_track_through_the_mix_and_reaches_the_segment() {
+    let (sequence, media) = mix_fixture(crate::timeline::TrackMix {
+        eq_low_db: 4.0,
+        highpass_hz: 90.0,
+        comp_ratio: 3.0,
+        comp_threshold_db: -24.0,
+        ..Default::default()
+    });
+    let segments = resolve_audio_segments(&sequence, &media).unwrap();
+    assert_eq!(segments.len(), 1, "a strip needs the mix, not a copy");
+    let strip = &segments[0].strip;
+    assert_eq!(strip.eq_low_db, 4.0);
+    assert_eq!(strip.highpass_hz, 90.0);
+    assert_eq!((strip.comp_ratio, strip.comp_threshold_db), (3.0, -24.0));
+}
+
+#[test]
 fn a_fader_or_pan_sends_the_track_through_the_mix_with_its_level_added_to_the_clips() {
     let (sequence, media) = mix_fixture(crate::timeline::TrackMix {
         volume_db: -6.0,
         pan: 0.5,
+        ..Default::default()
     });
     let segments = resolve_audio_segments(&sequence, &media).unwrap();
     assert_eq!(segments.len(), 1, "the track is mixed, not copied");
@@ -671,6 +689,7 @@ fn a_fader_or_pan_sends_the_track_through_the_mix_with_its_level_added_to_the_cl
     let (sequence, media) = mix_fixture(crate::timeline::TrackMix {
         volume_db: 0.0,
         pan: -1.0,
+        ..Default::default()
     });
     assert_eq!(resolve_audio_segments(&sequence, &media).unwrap().len(), 1);
 }
@@ -680,6 +699,7 @@ fn the_fader_multiplies_a_keyframed_gain() {
     let (mut sequence, media) = mix_fixture(crate::timeline::TrackMix {
         volume_db: -6.0,
         pan: 0.0,
+        ..Default::default()
     });
     sequence.timeline.tracks[0].clips[0].gain_keyframes = vec![
         crate::Keyframe {
