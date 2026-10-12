@@ -22,6 +22,12 @@ vi.mock("../../src/ipc", () => {
         return { path: `${folder}/${name}.mp4`, exists: false };
       }),
       startExport: vi.fn().mockResolvedValue(1),
+      exportClipsTargets: vi.fn(async (ids: number[], folder: string, prefix: string) => {
+        return ids.map((id) => {
+          return { path: `${folder}/${prefix}${id}.mp4`, exists: false };
+        });
+      }),
+      startExportClips: vi.fn().mockResolvedValue([1, 2]),
     },
   };
 });
@@ -90,7 +96,7 @@ describe("ExportDialog", () => {
     render(<ExportDialog session={session({ aspect: "Portrait" })} />);
     expect(screen.queryByLabelText(t("aspectRatio"), { exact: false })).toBeNull();
     await waitFor(() => {
-      expect(api.exportCanvas).toHaveBeenCalledWith("Portrait");
+      expect(api.exportCanvas).toHaveBeenCalledWith("Portrait", undefined);
     });
   });
 
@@ -398,5 +404,87 @@ describe("ExportDialog", () => {
     expect(screen.getByTestId("export-summary").textContent).toContain("2560x1440");
     choose(t("exportResolution"), "720");
     expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  describe("for several clips", () => {
+    const many = () => {
+      return (
+        <ExportDialog
+          session={session()}
+          clipIds={[4, 7, 9]}
+        />
+      );
+    };
+
+    it("is titled with the number of videos and asks the canvas of those clips", async () => {
+      render(many());
+      expect(screen.getByRole("dialog").getAttribute("aria-labelledby")).toBeTruthy();
+      expect(screen.getByText(t("exportClipsTitle").replace("{n}", "3"))).toBeTruthy();
+      await waitFor(() => {
+        expect(api.exportCanvas).toHaveBeenCalledWith("Original", [4, 7, 9]);
+      });
+      await screen.findByTestId("export-summary");
+      expect(screen.getByTestId("export-summary").textContent).toContain(t("exportEstimateTotal"));
+    });
+
+    it("takes an optional prefix instead of a file name", async () => {
+      render(many());
+      const prefix = screen.getByLabelText(t("exportFilePrefix"), { exact: false });
+      expect((prefix as HTMLInputElement).value).toBe("");
+      expect(screen.queryByText(".mp4")).toBeNull();
+      // An empty prefix is fine: only the folder is needed.
+      await ready();
+    });
+
+    it("queues each clip with the prefix, and closes", async () => {
+      render(many());
+      await ready();
+      fireEvent.change(screen.getByLabelText(t("exportFilePrefix"), { exact: false }), {
+        target: { value: "Cut" },
+      });
+      choose(t("exportQuality"), "low");
+      fireEvent.click(screen.getByText(t("exportChooseFile")));
+      await waitFor(() => {
+        expect(api.startExportClips).toHaveBeenCalledWith([4, 7, 9], "D:/videos", "Cut", false, {
+          bitrateMbps: 4,
+        });
+      });
+      expect(api.startExport).not.toHaveBeenCalled();
+      expect(uiStore.get().exportDialogOpen).toBe(false);
+      expect(uiStore.get().exportClipIds).toBeNull();
+      expect(uiStore.get().exportQueueOpen).toBe(true);
+    });
+
+    it("asks once, with the count, before replacing files and can keep both", async () => {
+      vi.mocked(api.exportClipsTargets).mockResolvedValueOnce([
+        { path: "a.mp4", exists: true },
+        { path: "b.mp4", exists: true },
+        { path: "c.mp4", exists: false },
+      ]);
+      render(
+        <>
+          {many()}
+          <ConfirmHost />
+        </>,
+      );
+      await ready();
+      fireEvent.click(screen.getByText(t("exportChooseFile")));
+      expect(
+        await screen.findByText(t("exportOverwriteConfirmMany").replace("{n}", "2")),
+      ).toBeTruthy();
+      fireEvent.click(screen.getByText(t("confirmKeepBoth")));
+      await waitFor(() => {
+        expect(api.startExportClips).toHaveBeenCalledWith([4, 7, 9], "D:/videos", "", true, {});
+      });
+    });
+
+    it("says why when nothing can be exported, and keeps the dialog open", async () => {
+      vi.mocked(api.exportClipsTargets).mockRejectedValueOnce("noClips");
+      render(many());
+      await ready();
+      fireEvent.click(screen.getByText(t("exportChooseFile")));
+      expect((await screen.findByRole("alert")).textContent).toBe(t("exportNoClips"));
+      expect(api.startExportClips).not.toHaveBeenCalled();
+    });
   });
 });

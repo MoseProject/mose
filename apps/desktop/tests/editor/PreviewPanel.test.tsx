@@ -112,6 +112,7 @@ beforeEach(() => {
     drawingShapePoints: null,
     exportQueueOpen: false,
     exportDialogOpen: false,
+    exportClipIds: null,
     openDialogs: 0,
     markIn: null,
     markOut: null,

@@ -287,6 +287,7 @@ const resetUi = () => {
     drawingShapePoints: null,
     exportQueueOpen: false,
     exportDialogOpen: false,
+    exportClipIds: null,
     openDialogs: 0,
     markIn: null,
     markOut: null,
@@ -1147,6 +1148,35 @@ describe("context menus", () => {
     fireEvent.click(screen.getByText(t("cmdSplit"), { selector: "span" }));
     expect(calls.splitAtPlayhead).toHaveBeenCalledWith([1]);
     expect(document.querySelector(".context-menu")).toBeNull();
+  });
+
+  it("offers to export the clicked clip, or every selected video clip, as its own video", () => {
+    mount();
+    rightClick(200, ROW(0));
+    fireEvent.click(screen.getByText(t("exportClips"), { selector: "span" }));
+    expect(uiStore.get().exportClipIds).toEqual([1]);
+    expect(uiStore.get().exportDialogOpen).toBe(true);
+
+    // Clip 6 is on an audio track and clip 20 is a title: only video clips are exported.
+    act(() => {
+      uiStore.set({
+        ...uiStore.get(),
+        exportClipIds: null,
+        exportDialogOpen: false,
+        selectedClipIds: [1, 2, 6, 20],
+      });
+    });
+    rightClick(200, ROW(0));
+    fireEvent.click(
+      screen.getByText(t("exportClipsMany").replace("{n}", "2"), { selector: "span" }),
+    );
+    expect(uiStore.get().exportClipIds).toEqual([1, 2]);
+  });
+
+  it("offers no export for a title clip", () => {
+    mount();
+    rightClick(200, ROW(3));
+    expect(screen.queryByText(t("exportClips"), { selector: "span" })).toBeNull();
   });
 
   it("offers marker and range actions on the ruler", () => {
