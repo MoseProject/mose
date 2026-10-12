@@ -14,6 +14,27 @@ const LOUDNESS = [-14, -16, -23];
 const label = (job: ExportJobView) => {
   return typeof job.status === "string" ? job.status : Object.keys(job.status)[0];
 };
+/** The status as the user reads it, in the interface's language. */
+const statusText = (state: string) => {
+  switch (state) {
+    case "Queued":
+      return t("exportStatusQueued");
+    case "Rendering":
+      return t("exportStatusRendering");
+    case "Paused":
+      return t("exportStatusPaused");
+    case "Done":
+      return t("exportStatusDone");
+    case "Failed":
+      return t("exportStatusFailed");
+    default:
+      return state;
+  }
+};
+/** Why a failed job failed, when the backend said. */
+const failureMessage = (job: ExportJobView) => {
+  return typeof job.status === "object" && "Failed" in job.status ? job.status.Failed.message : "";
+};
 
 export function ExportPanel() {
   const jobs = useStore(exportsStore);
@@ -142,8 +163,17 @@ function Job({ job }: { job: ExportJobView }) {
     >
       <span>{job.title}</span>
       <span className={cx(styles, baseStyles, "muted")}>
-        {current} {job.percent > 0 && `${job.percent}%`}
+        {statusText(current)} {job.percent > 0 && current !== "Done" && `${job.percent}%`}
       </span>
+      {current === "Failed" && failureMessage(job) !== "" && (
+        <span
+          className={cx(styles, baseStyles, "muted")}
+          data-testid="export-failure"
+          title={failureMessage(job)}
+        >
+          {failureMessage(job)}
+        </span>
+      )}
       {current === "Done" && summary && (
         <span
           className={cx(styles, baseStyles, "muted")}

@@ -66,6 +66,19 @@ describe("ExportPanel", () => {
     expect(screen.getByText(/42%/)).toBeTruthy();
   });
 
+  it("names the status in the interface's language and shows why a job failed", () => {
+    exportsStore.set([
+      job({ id: 1, status: "Done", percent: 100 }),
+      job({ id: 2, status: { Failed: { message: "disk full" } } as ExportJobView["status"] }),
+      job({ id: 3, status: { Rendering: { percent: 5 } }, percent: 5 }),
+    ]);
+    render(<ExportPanel />);
+    expect(screen.getByText(t("exportStatusDone"))).toBeTruthy();
+    expect(screen.getByText(t("exportStatusFailed"))).toBeTruthy();
+    expect(screen.getByText(/5%/).textContent).toContain(t("exportStatusRendering"));
+    expect(screen.getByTestId("export-failure").textContent).toBe("disk full");
+  });
+
   it("renders a paused job with resume and cancel", () => {
     exportsStore.set([job({ status: { Paused: { percent: 10 } }, percent: 10 })]);
     render(<ExportPanel />);
