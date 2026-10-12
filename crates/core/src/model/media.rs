@@ -175,6 +175,12 @@ pub enum HdrHandling {
 }
 
 impl MediaAsset {
+    /// Whether this asset's preview proxy converts an HDR source to SDR: everything but the
+    /// "treat as SDR" choice does (a proxy of an SDR source is the same either way).
+    pub fn proxy_tone_maps_hdr(&self) -> bool {
+        self.hdr_handling != HdrHandling::TreatAsSdr
+    }
+
     /// Whether this source needs HDR to SDR conversion under its [`HdrHandling`].
     pub fn needs_tone_mapping(&self) -> bool {
         match self.hdr_handling {

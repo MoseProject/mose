@@ -179,3 +179,39 @@ fn the_proxy_of_an_hdr_clip_is_sdr_with_the_same_colour() {
         );
     }
 }
+
+#[test]
+fn a_treat_as_sdr_proxy_is_tagged_sdr_but_keeps_the_pixels_unconverted() {
+    let source = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/color/hdr10_pq.mkv");
+    let dir = std::env::temp_dir().join(format!("oca-proxy-asis-{}", std::process::id()));
+    let mapped = ensure_proxy_as(&source, &dir, PreviewQuality::Medium, true).expect("a proxy");
+    let as_is = ensure_proxy_as(&source, &dir, PreviewQuality::Medium, false).expect("a proxy");
+    assert_ne!(mapped, as_is, "the two choices must not share a file");
+    assert!(as_is.display().to_string().ends_with("_asis.mp4"));
+
+    let center = |path: &Path| {
+        let frame = crate::FrameSampler::open(path)
+            .expect("opens")
+            .sample(0.0, Duration::from_secs(5))
+            .expect("a frame");
+        let at = ((frame.height / 2 * frame.width + frame.width / 2) * 4) as usize;
+        [frame.rgba[at], frame.rgba[at + 1], frame.rgba[at + 2]]
+    };
+    let color = crate::probe_media(&as_is)
+        .expect("probes")
+        .streams
+        .color
+        .expect("a video proxy");
+    assert!(!color.is_hdr(), "the proxy is tagged HDR: {color:?}");
+    let converted = center(&mapped);
+    let untouched = center(&as_is);
+    let _ = fs::remove_dir_all(&dir);
+    let distance: i32 = (0..3)
+        .map(|c| (i32::from(converted[c]) - i32::from(untouched[c])).abs())
+        .sum();
+    assert!(
+        distance > 40,
+        "the unconverted proxy looks like the converted one: {converted:?} against {untouched:?}"
+    );
+}
