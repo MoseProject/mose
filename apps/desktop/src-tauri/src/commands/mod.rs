@@ -16,6 +16,7 @@ pub mod error_reporting;
 pub mod export;
 pub mod export_clips;
 pub mod highlight_detection;
+pub mod import_gate;
 pub mod markers;
 pub mod media;
 pub mod motion_tracking;
