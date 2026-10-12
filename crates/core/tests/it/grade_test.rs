@@ -5,8 +5,8 @@
 use std::process::Command;
 
 use avcore::graphics::lut::Lut3D;
-use avcore::{from_project_bytes, to_project_bytes};
 use avcore::timeline::{ClipInstance, Grade};
+use avcore::{from_project_bytes, to_project_bytes};
 
 fn luma(rgb: [f32; 3]) -> f32 {
     0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]

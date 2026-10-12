@@ -33,6 +33,9 @@ typedef struct {
     AVFilterContext *sink;
     int key[7];
     const AVCodecParameters *stream;
+    /* Nonzero leaves HDR pixels as they are: the proxy is tagged SDR but not converted (the
+       "treat as SDR" choice). */
+    int off;
 } ProxyToneMap;
 
 static int scale_video_frame(struct SwsContext *sws_ctx, ProxyToneMap *tone_map, AVFrame *src_frame,
@@ -41,7 +44,7 @@ static int scale_video_frame(struct SwsContext *sws_ctx, ProxyToneMap *tone_map,
     if (ret < 0) return ret;
 
     avbridge_fill_missing_color(src_frame, tone_map->stream);
-    if (avbridge_frame_is_hdr(src_frame)) {
+    if (!tone_map->off && avbridge_frame_is_hdr(src_frame)) {
         /* Tone mapped at the proxy size, so a proxy of HDR footage is plain SDR (Rec.709). */
         ret = avbridge_tone_map_graph(&tone_map->graph, &tone_map->source, &tone_map->sink,
                                       tone_map->key, src_frame, scaled_frame->width,
@@ -72,7 +75,8 @@ static void stamp_in_samples(AVFrame *frame, const AVCodecContext *decoder) {
     }
 }
 
-ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path, int target_height) {
+ProxyStatus avbridge_generate_proxy_ex(const char *in_path, const char *out_path, int target_height,
+                                       int tone_map_hdr) {
     AVFormatContext *in_ctx = NULL;
     AVFormatContext *out_ctx = NULL;
     AVCodecContext *vdec_ctx = NULL;
@@ -81,6 +85,7 @@ ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path, i
     AVCodecContext *aenc_ctx = NULL;
     struct SwsContext *sws_ctx = NULL;
     ProxyToneMap tone_map = {0};
+    tone_map.off = !tone_map_hdr;
     AudioFilterChain achain = {0};
     AVPacket *pkt = NULL;
     AVFrame *dec_frame = NULL;
@@ -454,4 +459,8 @@ cleanup:
     }
     avformat_close_input(&in_ctx);
     return status;
+}
+
+ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path, int target_height) {
+    return avbridge_generate_proxy_ex(in_path, out_path, target_height, 1);
 }

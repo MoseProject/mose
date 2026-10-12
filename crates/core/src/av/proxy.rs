@@ -119,7 +119,38 @@ pub fn ensure_proxy(
     proxy_dir: &Path,
     quality: PreviewQuality,
 ) -> Result<PathBuf, ProxyError> {
-    let proxy_path = proxy_path_for(source, proxy_dir, quality);
+    ensure_proxy_as(source, proxy_dir, quality, true)
+}
+
+/// The proxy of an HDR source that is left as it is (the "treat as SDR" choice) lives beside the
+/// converted one under its own name, so switching the choice never reuses the wrong file.
+pub fn proxy_path_for_handling(
+    source: &Path,
+    proxy_dir: &Path,
+    quality: PreviewQuality,
+    tone_map_hdr: bool,
+) -> PathBuf {
+    let path = proxy_path_for(source, proxy_dir, quality);
+    if tone_map_hdr {
+        return path;
+    }
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("clip")
+        .to_string();
+    path.with_file_name(format!("{stem}_asis.mp4"))
+}
+
+/// [`ensure_proxy`] choosing what happens to an HDR source: converted to SDR (`true`, what
+/// [`ensure_proxy`] does) or tagged SDR with its pixel values untouched (`false`).
+pub fn ensure_proxy_as(
+    source: &Path,
+    proxy_dir: &Path,
+    quality: PreviewQuality,
+    tone_map_hdr: bool,
+) -> Result<PathBuf, ProxyError> {
+    let proxy_path = proxy_path_for_handling(source, proxy_dir, quality, tone_map_hdr);
 
     if is_up_to_date(source, &proxy_path) {
         return Ok(proxy_path);
@@ -132,7 +163,7 @@ pub fn ensure_proxy(
     let mut partial_name = proxy_path.file_name().unwrap_or_default().to_os_string();
     partial_name.push(".partial.mp4");
     let partial = proxy_path.with_file_name(partial_name);
-    let generated = avbridge::generate_proxy(source, &partial, quality.height());
+    let generated = avbridge::generate_proxy_with(source, &partial, quality.height(), tone_map_hdr);
     if let Err(error) = generated {
         let _ = fs::remove_file(&partial);
         return Err(ProxyError::Bridge(error));

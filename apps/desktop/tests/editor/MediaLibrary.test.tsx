@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../src/i18n";
 import { answerConfirm, confirmStore, toastStore } from "../../src/notifications";
-import type { SessionView, YoutubeDownloadEvent } from "../../src/types";
+import type { MediaAsset, SessionView, YoutubeDownloadEvent } from "../../src/types";
 
 let emitDownload: (event: YoutubeDownloadEvent) => void = () => {};
 const stopListening = vi.fn();
@@ -21,6 +21,7 @@ vi.mock("../../src/ipc", () => {
       addAssetToTimeline: vi.fn().mockResolvedValue(undefined),
       transcribeAsset: vi.fn().mockResolvedValue(undefined),
       toggleFavorite: vi.fn().mockResolvedValue(undefined),
+      setHdrHandling: vi.fn().mockResolvedValue(undefined),
       removeAsset: vi.fn().mockResolvedValue(undefined),
     },
     onYoutubeDownload: vi.fn((handler: (event: YoutubeDownloadEvent) => void) => {
@@ -33,7 +34,7 @@ vi.mock("../../src/ipc", () => {
   };
 });
 
-const { MediaLibrary } = await import("../../src/editor/MediaLibrary");
+const { MediaLibrary, hdrItems } = await import("../../src/editor/MediaLibrary");
 const { api } = await import("../../src/ipc");
 const { assetDragStore, transcribingAssetIdStore } = await import("../../src/store");
 
@@ -599,5 +600,34 @@ describe("removing media from the library", () => {
         return toast.message === t("assetInUse");
       }),
     ).toBe(true);
+  });
+});
+
+describe("the HDR choice in the asset menu", () => {
+  const video = (hdr_handling: string) => {
+    return { id: 7, kind: "Video", hdr_handling } as unknown as MediaAsset;
+  };
+
+  it("offers the three choices for a video, the current one ticked, and sends the pick", () => {
+    const items = hdrItems(video("TreatAsSdr"));
+    expect(
+      items.map((item) => {
+        return item.label;
+      }),
+    ).toEqual([t("hdrAuto"), t("hdrToneMap"), `✓ ${t("hdrTreatAsSdr")}`]);
+    // Set apart from the entries above it, once.
+    expect(
+      items.map((item) => {
+        return item.separator;
+      }),
+    ).toEqual([true, false, false]);
+    items[1].onSelect();
+    expect(api.setHdrHandling).toHaveBeenLastCalledWith(7, "ToneMap");
+    items[0].onSelect();
+    expect(api.setHdrHandling).toHaveBeenLastCalledWith(7, "Auto");
+  });
+
+  it("offers nothing for audio", () => {
+    expect(hdrItems({ id: 1, kind: "Audio" } as unknown as MediaAsset)).toEqual([]);
   });
 });

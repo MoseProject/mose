@@ -13,6 +13,7 @@ import type {
   ExportOptions,
   ExportJobView,
   FrameRate,
+  HdrHandling,
   LayerTemplate,
   LibraryTrack,
   MarkerKind,
@@ -290,6 +291,9 @@ export const api = {
   },
   importMedia: (paths: string[]) => {
     return invoke<void>("import_media", { paths });
+  },
+  setHdrHandling: (assetId: number, handling: HdrHandling) => {
+    return invoke<void>("set_hdr_handling", { assetId, handling });
   },
   toggleFavorite: (assetId: number) => {
     return invoke<void>("toggle_favorite", { assetId });

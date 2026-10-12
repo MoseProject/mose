@@ -17,7 +17,7 @@ use std::ffi::{CString, NulError};
 use std::os::raw::c_int;
 use std::path::Path;
 
-use crate::ffi::avbridge_generate_proxy;
+use crate::ffi::avbridge_generate_proxy_ex;
 
 /// What [`generate_proxy`] failed on.
 #[derive(Debug, thiserror::Error)]
@@ -72,6 +72,18 @@ pub fn generate_proxy(
     out_path: &Path,
     target_height: u32,
 ) -> Result<(), ProxyError> {
+    generate_proxy_with(in_path, out_path, target_height, true)
+}
+
+/// [`generate_proxy`] choosing what happens to an HDR source: with `tone_map_hdr` it becomes an SDR
+/// proxy, without it the proxy is tagged SDR and the pixel values are left as they are (the
+/// "treat as SDR" choice).
+pub fn generate_proxy_with(
+    in_path: &Path,
+    out_path: &Path,
+    target_height: u32,
+    tone_map_hdr: bool,
+) -> Result<(), ProxyError> {
     let c_in =
         CString::new(in_path.to_string_lossy().as_bytes()).map_err(ProxyError::InvalidPath)?;
     let c_out =
@@ -80,8 +92,14 @@ pub fn generate_proxy(
     // SAFETY: c_in/c_out are valid NUL-terminated C strings for the duration of this call.
     // `bridge.c` frees the decoder/encoder/scaler/filter-graph contexts, output I/O, and
     // output context on every exit path.
-    let status =
-        unsafe { avbridge_generate_proxy(c_in.as_ptr(), c_out.as_ptr(), target_height as c_int) };
+    let status = unsafe {
+        avbridge_generate_proxy_ex(
+            c_in.as_ptr(),
+            c_out.as_ptr(),
+            target_height as c_int,
+            c_int::from(tone_map_hdr),
+        )
+    };
 
     generate_proxy_status(status)
 }

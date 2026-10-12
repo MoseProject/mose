@@ -220,10 +220,11 @@ unsafe extern "C" {
         out_json: *mut c_char,
         out_json_len: usize,
     ) -> c_int;
-    pub(crate) fn avbridge_generate_proxy(
+    pub(crate) fn avbridge_generate_proxy_ex(
         in_path: *const c_char,
         out_path: *const c_char,
         target_height: c_int,
+        tone_map_hdr: c_int,
     ) -> c_int;
     pub(crate) fn avbridge_generate_waveform(
         in_path: *const c_char,

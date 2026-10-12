@@ -126,7 +126,9 @@ pub use persistence::{
 };
 pub use probe::{probe_media, ProbeError, ProbedMedia};
 pub use project::{PanelLayout, Project, Recency, Sequence, SequenceExportSettings};
-pub use proxy::{ensure_proxy, PreviewQuality, ProxyError};
+pub use proxy::{
+    ensure_proxy, ensure_proxy_as, proxy_path_for_handling, PreviewQuality, ProxyError,
+};
 pub use render::{
     apply_export_aspect_ratio, render_audio_only, render_export, render_export_job,
     render_export_job_multi, render_export_job_multi_with_audio,
