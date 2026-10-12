@@ -524,6 +524,11 @@ export const ptBR = {
   exportOverwriteConfirm:
     "O arquivo já existe. Substituir? (Cancelar cria uma cópia com novo nome.)",
   noExports: "Nenhuma exportação nesta sessão.",
+  exportStatusQueued: "Na fila",
+  exportStatusRendering: "Exportando",
+  exportStatusPaused: "Pausada",
+  exportStatusDone: "Concluída",
+  exportStatusFailed: "Falhou",
   errorPrefix: "Erro",
   preferences: "Ajustes",
   language: "Idioma",
