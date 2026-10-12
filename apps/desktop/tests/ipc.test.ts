@@ -185,7 +185,27 @@ describe("export commands", () => {
 
   it("ask the canvas of an aspect ratio", async () => {
     await ipc.api.exportCanvas("Portrait");
-    expect(invoke).toHaveBeenLastCalledWith("export_canvas", { aspectRatio: "Portrait" });
+    expect(invoke).toHaveBeenLastCalledWith("export_canvas", {
+      aspectRatio: "Portrait",
+      clipIds: null,
+    });
+  });
+
+  it("ask the targets and start the export of several clips", async () => {
+    await ipc.api.exportClipsTargets([1, 2], "D:/out", "Cut");
+    expect(invoke).toHaveBeenLastCalledWith("export_clips_targets", {
+      clipIds: [1, 2],
+      folder: "D:/out",
+      prefix: "Cut",
+    });
+    await ipc.api.startExportClips([1, 2], "D:/out", "Cut", true, { bitrateMbps: 8 });
+    expect(invoke).toHaveBeenLastCalledWith("start_export_clips", {
+      clipIds: [1, 2],
+      folder: "D:/out",
+      prefix: "Cut",
+      rename: true,
+      options: { bitrateMbps: 8 },
+    });
   });
 });
 

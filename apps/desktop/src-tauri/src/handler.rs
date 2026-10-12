@@ -23,6 +23,8 @@ macro_rules! all_commands {
             $crate::commands::export::pick_export_path,
             $crate::commands::export::export_target,
             $crate::commands::export::export_canvas,
+            $crate::commands::export_clips::export_clips_targets,
+            $crate::commands::export_clips::start_export_clips,
             $crate::commands::export::start_export,
             $crate::commands::export::pause_export,
             $crate::commands::export::resume_export,

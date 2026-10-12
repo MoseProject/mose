@@ -614,8 +614,30 @@ export const api = {
   exportTarget: (folder: string, fileName: string) => {
     return invoke<{ path: string; exists: boolean }>("export_target", { folder, fileName });
   },
-  exportCanvas: (aspectRatio: ExportAspectRatio) => {
-    return invoke<ExportCanvas>("export_canvas", { aspectRatio });
+  exportCanvas: (aspectRatio: ExportAspectRatio, clipIds?: number[]) => {
+    return invoke<ExportCanvas>("export_canvas", { aspectRatio, clipIds: clipIds ?? null });
+  },
+  exportClipsTargets: (clipIds: number[], folder: string, prefix: string) => {
+    return invoke<{ path: string; exists: boolean }[]>("export_clips_targets", {
+      clipIds,
+      folder,
+      prefix,
+    });
+  },
+  startExportClips: (
+    clipIds: number[],
+    folder: string,
+    prefix: string,
+    rename: boolean,
+    options?: ExportOptions,
+  ) => {
+    return invoke<number[]>("start_export_clips", {
+      clipIds,
+      folder,
+      prefix,
+      rename,
+      options: options ?? null,
+    });
   },
   startExport: (path: string, rename: boolean, options?: ExportOptions) => {
     return invoke<number>("start_export", { path, rename, options: options ?? null });

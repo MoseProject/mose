@@ -369,6 +369,15 @@ export const ptBR = {
   exportUpscale: "ampliar",
   exportUpscaleNote:
     "Ampliar a imagem não acrescenta detalhe e deixa o arquivo maior. Ainda pode valer a pena em plataformas como o YouTube, que costuma processar 1440p ou mais com mais qualidade. A recomendação é o tamanho original; a decisão é sua.",
+  exportClipsTitle: "Exportar {n} vídeos",
+  exportFilePrefix: "Prefixo do nome",
+  exportEstimateTotal: "total ≈",
+  exportNoClips: "Selecione clipes de vídeo na linha do tempo para exportar.",
+  exportOverwriteConfirmMany:
+    "{n} arquivos já existem nessa pasta. Substituí-los, ou manter os dois e salvar os novos ao lado?",
+  exportClips: "Exportar clipe…",
+  exportClipsMany: "Exportar {n} clipes…",
+  exportFilePrefixPlaceholder: "Opcional, ex.: Melhores momentos",
   exportErrNoName: "Digite um nome de arquivo.",
   exportKeepsBitrate:
     "Igual à origem mantém o bitrate da fonte e, num corte simples, copia a imagem sem recodificar.",
