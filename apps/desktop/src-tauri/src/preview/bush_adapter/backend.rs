@@ -64,6 +64,24 @@ impl SourceResolver for AppResolver {
         preview_source_path(asset)
     }
 
+    fn graded_lut(&mut self, clip: &avcore::timeline::ClipInstance) -> Option<Arc<bush::Lut3D>> {
+        if clip.grade.is_neutral() {
+            return None;
+        }
+        // The key is the grade and the LUT it follows, so every clip with the same look shares
+        // one table.
+        let key = format!("grade:{:?}|{}", clip.grade, clip.lut_path);
+        self.luts
+            .entry(key)
+            .or_insert_with(|| {
+                let baked = clip.graded_lut()?;
+                bush::Lut3D::new(baked.size(), baked.entries().to_vec())
+                    .ok()
+                    .map(Arc::new)
+            })
+            .clone()
+    }
+
     fn lut(&mut self, path: &str) -> Option<Arc<bush::Lut3D>> {
         self.luts
             .entry(path.to_owned())

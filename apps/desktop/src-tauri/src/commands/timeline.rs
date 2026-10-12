@@ -41,6 +41,8 @@ pub struct ClipPatch {
     pub brightness: Option<f32>,
     pub contrast: Option<f32>,
     pub saturation: Option<f32>,
+    /// The whole colour grade; every control inside its limits.
+    pub grade: Option<avcore::timeline::Grade>,
     pub frozen: Option<bool>,
     pub flipped_h: Option<bool>,
     pub voice_cleanup_enabled: Option<bool>,
@@ -815,6 +817,9 @@ fn apply_patch(clip: &mut ClipInstance, patch: &ClipPatch) -> bool {
     }
     if let Some(brightness) = patch.brightness {
         clip.brightness = brightness.clamp(-1.0, 1.0);
+    }
+    if let Some(grade) = patch.grade {
+        clip.grade = grade.clamped();
     }
     if let Some(contrast) = patch.contrast {
         clip.contrast = contrast.clamp(0.0, 2.0);
