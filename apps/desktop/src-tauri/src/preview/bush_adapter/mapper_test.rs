@@ -900,3 +900,23 @@ fn the_audio_role_and_voice_cleanup_reach_the_preview_scene() {
     // Without the toggle there is no chain.
     assert!(placement(12).voice.is_neutral());
 }
+
+#[test]
+fn a_clips_grade_reaches_the_preview_as_one_baked_table() {
+    let (_, plain) = one_clip(clip(0.0, 0.0, 4.0));
+    assert!(
+        plain.placement.lut.is_none(),
+        "no grade, no LUT: nothing to apply"
+    );
+
+    let mut graded = clip(0.0, 0.0, 4.0);
+    graded.grade = avcore::timeline::Grade {
+        exposure: 1.0,
+        ..Default::default()
+    };
+    let (_, contributor) = one_clip(graded);
+    let lut = contributor.placement.lut.expect("a baked table");
+    // Bright mid-grey comes out brighter than it went in.
+    let out = lut.apply([0.4, 0.4, 0.4]);
+    assert!(out[0] > 0.5, "{out:?}");
+}
