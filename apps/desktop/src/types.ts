@@ -311,7 +311,17 @@ export interface Track {
   locked: boolean;
   muted: boolean;
   solo: boolean;
+  /** The track's fader (dB) and stereo balance (-1 left to 1 right). */
+  mix: TrackMix;
 }
+
+export interface TrackMix {
+  volume_db: number;
+  pan: number;
+}
+
+export const MIN_TRACK_VOLUME_DB = -60;
+export const MAX_TRACK_VOLUME_DB = 12;
 
 export interface Marker {
   id: number;
