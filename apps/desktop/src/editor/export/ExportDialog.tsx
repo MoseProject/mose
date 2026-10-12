@@ -20,12 +20,6 @@ import {
   type QualityChoice,
 } from "./exportPlan";
 
-const ASPECTS: [ExportAspectRatio, TextKey][] = [
-  ["Original", "aspectOriginal"],
-  ["Landscape", "aspectLandscape"],
-  ["Portrait", "aspectPortrait"],
-  ["Square", "aspectSquare"],
-];
 const QUALITIES: [QualityChoice, TextKey][] = [
   ["source", "exportQualitySource"],
   ["high", "exportQualityHigh"],
@@ -54,14 +48,15 @@ function measuredLufs(session: SessionView): number | null {
 }
 
 /** Export settings, the way an editor's export panel lays them out: where the file goes and what
- *  it is called, quality, size and aspect, audio loudness and encoder. Exporting queues the job
+ *  it is called, quality, size, audio loudness. Exporting queues the job
  *  directly, with no further file picker. */
 export function ExportDialog({ session }: { session: SessionView }) {
   const sequence = session.project.sequences[session.project.active_sequence];
   const settings = sequence.export_settings;
   const [fileName, setFileName] = useState(sequence.name);
   const [folder, setFolder] = useState("");
-  const [aspect, setAspect] = useState<ExportAspectRatio>(settings.aspect_ratio);
+  // The picture keeps the aspect ratio the project is set to; it is not chosen per export.
+  const aspect: ExportAspectRatio = settings.aspect_ratio;
   const [chosenQuality, setQuality] = useState<QualityChoice>("source");
   const [customMbps, setCustomMbps] = useState(10);
   const [maxHeight, setMaxHeight] = useState<number | null>(null);
@@ -313,26 +308,6 @@ export function ExportDialog({ session }: { session: SessionView }) {
           })}
         </select>
       </label>
-      <label className={cx(styles, baseStyles, "dialog-field")}>
-        <span>{t("aspectRatio")}</span>
-        <select
-          value={aspect}
-          onChange={(e) => {
-            setAspect(e.target.value as ExportAspectRatio);
-          }}
-        >
-          {ASPECTS.map(([value, label]) => {
-            return (
-              <option
-                key={value}
-                value={value}
-              >
-                {t(label)}
-              </option>
-            );
-          })}
-        </select>
-      </label>
       <label className={cx(styles, baseStyles, "dialog-check")}>
         <input
           type="checkbox"
@@ -373,22 +348,23 @@ export function ExportDialog({ session }: { session: SessionView }) {
             <option value="custom">{t("loudnessCustom")}</option>
           </select>
         </label>
-        <label className={cx(styles, baseStyles, "dialog-field")}>
-          <span>{t("loudnessCustom")}</span>
-          <input
-            type="number"
-            min={MIN_LUFS}
-            max={MAX_LUFS}
-            step={0.5}
-            value={Number.isFinite(lufs) ? lufs : ""}
-            aria-invalid={!lufsValid}
-            disabled={!lufsCustom}
-            onChange={(e) => {
-              setLufs(e.target.value === "" ? Number.NaN : Number(e.target.value));
-            }}
-          />
-          <span className={cx(styles, baseStyles, "muted")}>LUFS</span>
-        </label>
+        {lufsCustom && (
+          <label className={cx(styles, baseStyles, "dialog-field")}>
+            <span>{t("loudnessCustom")}</span>
+            <input
+              type="number"
+              min={MIN_LUFS}
+              max={MAX_LUFS}
+              step={0.5}
+              value={Number.isFinite(lufs) ? lufs : ""}
+              aria-invalid={!lufsValid}
+              onChange={(e) => {
+                setLufs(e.target.value === "" ? Number.NaN : Number(e.target.value));
+              }}
+            />
+            <span className={cx(styles, baseStyles, "muted")}>LUFS</span>
+          </label>
+        )}
         {!lufsValid && (
           <p
             className={cx(styles, baseStyles, "dialog-error")}
