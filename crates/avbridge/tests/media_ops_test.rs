@@ -273,7 +273,11 @@ fn extracts_one_audio_stream_as_its_own_file() {
     assert_eq!(info.audio_stream_count, 1);
     assert_eq!(info.kind, avbridge::StreamKind::Audio);
     assert_eq!(info.codec_name, "aac");
-    assert!((info.duration_secs - 0.4).abs() < 0.1, "{}", info.duration_secs);
+    assert!(
+        (info.duration_secs - 0.4).abs() < 0.1,
+        "{}",
+        info.duration_secs
+    );
 
     // The video stream and out-of-range indexes are refused.
     assert!(avbridge::extract_audio_stream(&source, &dir.join("video.mka"), 0).is_err());

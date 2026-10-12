@@ -268,9 +268,14 @@ int init_video_filter_chain(AVCodecContext *dec_ctx, const char *filter_descr,
         goto end;
     }
 
-    snprintf(args, sizeof(args), "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d",
-             dec_ctx->width, dec_ctx->height, dec_ctx->pix_fmt, dec_ctx->pkt_timebase.num,
-             dec_ctx->pkt_timebase.den, sar.num, sar.den);
+    /* The source says how its frames are to be read: without the matrix and range, filters that
+       look at the link instead of the frame (scale) treat full-range video as limited. */
+    snprintf(
+        args, sizeof(args),
+        "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d:colorspace=%d:range=%d",
+        dec_ctx->width, dec_ctx->height, dec_ctx->pix_fmt, dec_ctx->pkt_timebase.num,
+        dec_ctx->pkt_timebase.den, sar.num, sar.den, (int)dec_ctx->colorspace,
+        (int)dec_ctx->color_range);
 
     ret = avfilter_graph_create_filter(&chain->buffersrc_ctx, buffersrc, "in", args, NULL,
                                        chain->graph);

@@ -344,9 +344,12 @@ static int create_video_buffer_source(AVFilterGraph *graph, const char *name,
     AVRational sar = decoder->sample_aspect_ratio;
     char args[512];
     if (sar.num <= 0) sar = (AVRational){1, 1};
-    snprintf(args, sizeof(args), "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d",
-             decoder->width, decoder->height, decoder->pix_fmt, decoder->pkt_timebase.num,
-             decoder->pkt_timebase.den, sar.num, sar.den);
+    snprintf(
+        args, sizeof(args),
+        "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d:colorspace=%d:range=%d",
+        decoder->width, decoder->height, decoder->pix_fmt, decoder->pkt_timebase.num,
+        decoder->pkt_timebase.den, sar.num, sar.den, (int)decoder->colorspace,
+        (int)decoder->color_range);
     return avfilter_graph_create_filter(out_source, buffer_source, name, args, NULL, graph);
 }
 
