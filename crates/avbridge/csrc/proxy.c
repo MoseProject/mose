@@ -37,6 +37,16 @@ static int scale_video_frame(struct SwsContext *sws_ctx, AVFrame *src_frame, AVF
     return 0;
 }
 
+/* The audio graph counts in samples (time base 1/sample_rate) but a decoder stamps frames in the
+   stream's packet time base (1/1000 for Matroska): left alone, FLAC and Opus in an MKV reached the
+   AAC encoder with timestamps going backwards. */
+static void stamp_in_samples(AVFrame *frame, const AVCodecContext *decoder) {
+    if (frame->pts != AV_NOPTS_VALUE && decoder->pkt_timebase.num > 0 && frame->sample_rate > 0) {
+        frame->pts = av_rescale_q(frame->pts, decoder->pkt_timebase,
+                                  (AVRational){1, frame->sample_rate});
+    }
+}
+
 ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path, int target_height) {
     AVFormatContext *in_ctx = NULL;
     AVFormatContext *out_ctx = NULL;
@@ -131,6 +141,13 @@ ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path, i
         venc_ctx->width = dst_w;
         venc_ctx->height = dst_h;
         venc_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
+        /* The proxy keeps the source's YUV values, so it must say which matrix they use: a 480p
+           proxy of HD footage would otherwise be read as BT.601 (the rule for untagged SD). */
+        venc_ctx->colorspace = avbridge_resolve_colorspace_for(vdec_ctx->colorspace, src_w, src_h);
+        venc_ctx->color_range = vdec_ctx->color_range == AVCOL_RANGE_JPEG ? AVCOL_RANGE_JPEG
+                                                                           : AVCOL_RANGE_MPEG;
+        venc_ctx->color_primaries = vdec_ctx->color_primaries;
+        venc_ctx->color_trc = vdec_ctx->color_trc;
         AVRational frame_rate = in_ctx->streams[video_in_index]->avg_frame_rate;
         if (frame_rate.num <= 0 || frame_rate.den <= 0) {
             frame_rate = (AVRational){30, 1};
@@ -272,6 +289,8 @@ ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path, i
         goto cleanup_output_io;
     }
     scaled_frame->format = venc_ctx->pix_fmt;
+    scaled_frame->colorspace = venc_ctx->colorspace;
+    scaled_frame->color_range = venc_ctx->color_range;
     scaled_frame->width = venc_ctx->width;
     scaled_frame->height = venc_ctx->height;
     if (av_frame_get_buffer(scaled_frame, 0) < 0) {
@@ -317,6 +336,7 @@ ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path, i
                     status = PROXY_ERR_PIPELINE;
                     goto cleanup_output_io;
                 }
+                stamp_in_samples(dec_frame, adec_ctx);
                 if (filter_encode_write_frame(out_ctx, &achain, aenc_ctx, out_stream, dec_frame,
                                               filt_frame, enc_pkt) < 0) {
                     status = PROXY_ERR_PIPELINE;
@@ -351,6 +371,7 @@ ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path, i
         AVStream *out_stream = out_ctx->streams[audio_out_index];
         avcodec_send_packet(adec_ctx, NULL);
         while (avcodec_receive_frame(adec_ctx, dec_frame) >= 0) {
+            stamp_in_samples(dec_frame, adec_ctx);
             if (filter_encode_write_frame(out_ctx, &achain, aenc_ctx, out_stream, dec_frame,
                                           filt_frame, enc_pkt) < 0) {
                 status = PROXY_ERR_PIPELINE;

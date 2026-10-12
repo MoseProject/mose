@@ -75,6 +75,113 @@ pub struct MediaAsset {
     /// unfavorited.
     #[serde(default)]
     pub favorited: bool,
+    /// How the source's pixels and audio streams are described, read when it was imported.
+    #[serde(default)]
+    pub streams: StreamInfo,
+    /// What to do when this source is HDR (see [`HdrHandling`]); only matters for HDR video.
+    #[serde(default)]
+    pub hdr_handling: HdrHandling,
+    /// Which audio stream of `source_path` this asset plays, for an audio-only asset made from
+    /// one track of a multi-track recording; `None` plays the file's first audio stream.
+    #[serde(default)]
+    pub audio_stream: Option<u32>,
+}
+
+/// What a source file says about how to read its pixels and what audio it carries.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct StreamInfo {
+    /// `None` for audio-only files.
+    pub color: Option<ColorInfo>,
+    /// Every audio stream of the file, in stream order (the first eight at most).
+    pub audio: Vec<AudioStreamInfo>,
+}
+
+/// One audio stream of a source file.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AudioStreamInfo {
+    /// Index of the stream within the container, what an audio-only asset made from it stores
+    /// in [`MediaAsset::audio_stream`].
+    pub stream_index: u32,
+    pub channels: u32,
+    pub sample_rate_hz: u32,
+    pub codec: String,
+    /// The `title` tag (OBS names its tracks "Game", "Mic"), empty when absent.
+    pub title: String,
+    pub language: String,
+}
+
+/// How a video stream's pixels are meant to be read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ColorInfo {
+    /// Bits per colour component (8 for most footage, 10 for HDR captures).
+    pub bit_depth: u8,
+    pub matrix: ColorMatrix,
+    pub primaries: ColorPrimaries,
+    pub transfer: ColorTransfer,
+    pub full_range: bool,
+}
+
+impl ColorInfo {
+    /// Whether the transfer curve is one of the HDR ones (PQ or HLG).
+    pub fn is_hdr(&self) -> bool {
+        matches!(self.transfer, ColorTransfer::Pq | ColorTransfer::Hlg)
+    }
+}
+
+/// The YUV to RGB matrix a stream is tagged with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ColorMatrix {
+    Unspecified,
+    Bt601,
+    Bt709,
+    Bt2020,
+    Other,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ColorPrimaries {
+    Unspecified,
+    Bt601,
+    Bt709,
+    Bt2020,
+    Other,
+}
+
+/// The transfer curve of a stream.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ColorTransfer {
+    Unspecified,
+    Bt709,
+    Srgb,
+    /// SMPTE ST 2084, the HDR10 curve.
+    Pq,
+    /// ARIB STD-B67, the broadcast HDR curve.
+    Hlg,
+    Other,
+}
+
+/// What to do with an HDR source, chosen per asset. The project is Rec.709 SDR: an HDR source is
+/// converted into it unless the user says otherwise.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum HdrHandling {
+    /// Tone map when the source is HDR, leave SDR sources alone.
+    #[default]
+    Auto,
+    /// Tone map whatever the tags say (for a mistagged source).
+    ToneMap,
+    /// Read the pixels as SDR even when tagged HDR, the way every version before this one did.
+    TreatAsSdr,
+}
+
+impl MediaAsset {
+    /// Whether this source needs HDR to SDR conversion under its [`HdrHandling`].
+    pub fn needs_tone_mapping(&self) -> bool {
+        match self.hdr_handling {
+            HdrHandling::TreatAsSdr => false,
+            HdrHandling::ToneMap => self.kind == MediaKind::Video,
+            HdrHandling::Auto => self.streams.color.is_some_and(|color| color.is_hdr()),
+        }
+    }
 }
 
 fn default_has_audio() -> bool {

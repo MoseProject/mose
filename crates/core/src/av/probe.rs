@@ -18,7 +18,10 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::media::{MediaAsset, MediaKind};
+use crate::media::{
+    AudioStreamInfo, ColorInfo, ColorMatrix, ColorPrimaries, ColorTransfer, HdrHandling,
+    MediaAsset, MediaKind, StreamInfo,
+};
 
 #[derive(Debug)]
 pub enum ProbeError {
@@ -70,6 +73,8 @@ pub struct ProbedMedia {
     pub resolution: Option<(u32, u32)>,
     pub fps: Option<f32>,
     pub sample_rate_khz: Option<f32>,
+    /// Colour description and audio streams, as the file reports them.
+    pub streams: StreamInfo,
 }
 
 impl ProbedMedia {
@@ -96,6 +101,9 @@ impl ProbedMedia {
             // Computed by a separate pass — see `crate::waveform::generate_waveform`.
             waveform_peaks: None,
             favorited: false,
+            streams: self.streams,
+            hdr_handling: HdrHandling::default(),
+            audio_stream: None,
         }
     }
 }
@@ -120,5 +128,51 @@ pub fn probe_media(path: &Path) -> Result<ProbedMedia, ProbeError> {
         resolution: info.resolution,
         fps: info.fps,
         sample_rate_khz: info.sample_rate_hz.map(|hz| hz as f32 / 1000.0),
+        streams: StreamInfo {
+            color: info.color.map(color_info),
+            audio: info
+                .audio_streams
+                .into_iter()
+                .map(|stream| AudioStreamInfo {
+                    stream_index: stream.stream_index,
+                    channels: stream.channels,
+                    sample_rate_hz: stream.sample_rate_hz,
+                    codec: stream.codec_name,
+                    title: stream.title,
+                    language: stream.language,
+                })
+                .collect(),
+        },
     })
+}
+
+/// FFmpeg's colour enums (`AVColorSpace`, `AVColorPrimaries`, `AVColorTransferCharacteristic`)
+/// as the project's own.
+fn color_info(color: avbridge::ColorDescription) -> ColorInfo {
+    ColorInfo {
+        bit_depth: color.bit_depth.min(32) as u8,
+        matrix: match color.space {
+            1 => ColorMatrix::Bt709,
+            5 | 6 => ColorMatrix::Bt601,
+            9 | 10 => ColorMatrix::Bt2020,
+            0 | 2 => ColorMatrix::Unspecified,
+            _ => ColorMatrix::Other,
+        },
+        primaries: match color.primaries {
+            1 => ColorPrimaries::Bt709,
+            5 | 6 => ColorPrimaries::Bt601,
+            9 => ColorPrimaries::Bt2020,
+            0 | 2 => ColorPrimaries::Unspecified,
+            _ => ColorPrimaries::Other,
+        },
+        transfer: match color.transfer {
+            1 | 6 => ColorTransfer::Bt709,
+            13 => ColorTransfer::Srgb,
+            16 => ColorTransfer::Pq,
+            18 => ColorTransfer::Hlg,
+            0 | 2 => ColorTransfer::Unspecified,
+            _ => ColorTransfer::Other,
+        },
+        full_range: color.full_range,
+    }
 }

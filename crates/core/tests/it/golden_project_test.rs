@@ -93,6 +93,9 @@ fn project() -> Project {
         proxy_path: None,
         waveform_peaks: Some(vec![(-0.5, 0.5), (-0.25, 0.75)]),
         favorited: true,
+        streams: Default::default(),
+        hdr_handling: Default::default(),
+        audio_stream: None,
     };
     Project {
         id: 9,
@@ -155,5 +158,22 @@ fn saving_the_pinned_project_still_writes_the_pinned_bytes() {
         bytes,
         "the saved bytes changed: bump PROJECT_FORMAT_VERSION and keep reading the old layout, \
          then regenerate with OCA_UPDATE_GOLDEN=1"
+    );
+}
+
+/// The pinned file of layout version 4 (before per-asset stream and HDR fields) still opens, with
+/// the new fields at their defaults. Never regenerate this one: it is what old installs wrote.
+#[test]
+fn the_pinned_version_4_file_still_opens_with_default_stream_info() {
+    let bytes = std::fs::read(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/golden_v4.ocproj"),
+    )
+    .expect("tests/fixtures/golden_v4.ocproj");
+    assert_eq!(bytes[4], 4, "this fixture is a version 4 file");
+    let opened = from_project_bytes(&bytes).expect("a version 4 file opens");
+    assert_eq!(
+        opened,
+        project(),
+        "opens as the same project with default new fields"
     );
 }

@@ -52,6 +52,11 @@ int init_audio_filter_chain(AVCodecContext *dec_ctx, const AVCodec *encoder,
         goto end;
     }
 
+    /* PCM in Matroska has only a channel count ("2 channels"), which no encoder accepts: give it
+       the usual layout for that count. Decoded frames follow the decoder's layout. */
+    if (dec_ctx->ch_layout.order == AV_CHANNEL_ORDER_UNSPEC && dec_ctx->ch_layout.nb_channels > 0) {
+        av_channel_layout_default(&dec_ctx->ch_layout, dec_ctx->ch_layout.nb_channels);
+    }
     av_channel_layout_describe(&dec_ctx->ch_layout, chlayout_str, sizeof(chlayout_str));
     snprintf(args, sizeof(args), "time_base=1/%d:sample_rate=%d:sample_fmt=%s:channel_layout=%s",
              dec_ctx->sample_rate, dec_ctx->sample_rate,

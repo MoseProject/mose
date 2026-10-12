@@ -18,6 +18,7 @@ export const ptBR = {
   dropToImport: "Solte para importar",
   addToTimeline: "Adicionar à timeline",
   favorite: "Favorito",
+  hdrLabel: "HDR",
   analyzing: "analisando…",
   previewUnavailable: "Pré-visualização indisponível",
   colorAdjust: "Ajuste de cor",

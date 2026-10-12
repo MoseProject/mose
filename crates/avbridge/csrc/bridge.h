@@ -32,6 +32,8 @@ typedef enum {
     PROBE_ERR_NO_MEDIA_STREAM = 3,
 } ProbeStatus;
 
+#define PROBE_MAX_AUDIO_STREAMS 8
+
 typedef struct {
     /* 1 if the picked stream is video, 0 if audio. */
     int has_video;
@@ -50,6 +52,26 @@ typedef struct {
     int fps_den;
     /* 0 when has_video is 1 or the rate is unknown. */
     int sample_rate_hz;
+    /* Video colour description, all 0 (unspecified) when has_video is 0. The enums are FFmpeg's
+       own AVPixelFormat/AVColorSpace/AVColorPrimaries/AVColorTransferCharacteristic values;
+       `pixel_format` is -1 when unknown. `color_full_range` is 1 for full (JPEG) range. */
+    int pixel_format;
+    int bit_depth;
+    int color_space;
+    int color_primaries;
+    int color_transfer;
+    int color_full_range;
+    /* Every audio stream of the file, in stream order (at most PROBE_MAX_AUDIO_STREAMS are
+       described, `audio_stream_count` counts them all). */
+    int audio_stream_count;
+    struct {
+        int stream_index;
+        int channels;
+        int sample_rate_hz;
+        char codec_name[32];
+        char title[64];
+        char language[16];
+    } audio_streams[PROBE_MAX_AUDIO_STREAMS];
 } ProbeInfo;
 
 /* Probes the media file at `path` (UTF-8, NUL-terminated) and fills `out` on success.

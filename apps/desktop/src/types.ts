@@ -103,6 +103,37 @@ export interface MediaAsset {
   /** The asset has a coarse waveform; its peaks are fetched from `coarseWaveformUrl`. */
   has_waveform: boolean;
   favorited: boolean;
+  /** What the file says about its pixels and audio streams, read on import. */
+  streams: StreamInfo;
+  hdr_handling: HdrHandling;
+  /** The audio stream of the file this asset plays (a track of a multi-track recording), or null
+   *  for the file's first one. */
+  audio_stream: number | null;
+}
+
+export type ColorTransfer = "Unspecified" | "Bt709" | "Srgb" | "Pq" | "Hlg" | "Other";
+export type HdrHandling = "Auto" | "ToneMap" | "TreatAsSdr";
+
+export interface ColorInfo {
+  bit_depth: number;
+  matrix: "Unspecified" | "Bt601" | "Bt709" | "Bt2020" | "Other";
+  primaries: "Unspecified" | "Bt601" | "Bt709" | "Bt2020" | "Other";
+  transfer: ColorTransfer;
+  full_range: boolean;
+}
+
+export interface AudioStreamInfo {
+  stream_index: number;
+  channels: number;
+  sample_rate_hz: number;
+  codec: string;
+  title: string;
+  language: string;
+}
+
+export interface StreamInfo {
+  color: ColorInfo | null;
+  audio: AudioStreamInfo[];
 }
 
 export interface ClipInstance {

@@ -36,6 +36,8 @@ struct AvbridgeDecodeSession {
     int sws_width;
     int sws_height;
     int sws_format;
+    int sws_matrix;
+    int sws_full_range;
     int sws_out_width;
     int sws_out_height;
     /* Size frames are converted to (0: the decoded size). Set with avbridge_decode_set_output_size. */
@@ -111,7 +113,8 @@ static void enable_decoder_threads(AVCodecContext *decoder) {
 /* Colour conversion is a full-frame pass; slice-threaded swscale keeps it off the critical path
    for 1080p and larger frames. */
 static struct SwsContext *threaded_sws(int width, int height, enum AVPixelFormat format,
-                                       int out_width, int out_height) {
+                                       int out_width, int out_height, enum AVColorSpace matrix,
+                                       int full_range) {
     struct SwsContext *context = sws_alloc_context();
     if (!context) return NULL;
     av_opt_set_int(context, "srcw", width, 0);
@@ -128,6 +131,16 @@ static struct SwsContext *threaded_sws(int width, int height, enum AVPixelFormat
     if (sws_init_context(context, NULL, NULL) < 0) {
         sws_freeContext(context);
         return NULL;
+    }
+    /* swscale assumes BT.601 unless told otherwise, which shifts every HD (BT.709) colour. The
+       output is RGB, so only the source side of the matrix matters. */
+    const AVPixFmtDescriptor *descriptor = av_pix_fmt_desc_get(format);
+    if (descriptor && !(descriptor->flags & AV_PIX_FMT_FLAG_RGB)) {
+        /* SWS_CS_* share their numbering with AVCOL_SPC_* for every matrix resolved here. */
+        int source_matrix = matrix == AVCOL_SPC_BT2020_CL ? (int)AVCOL_SPC_BT2020_NCL : (int)matrix;
+        const int *coefficients = sws_getCoefficients(source_matrix);
+        sws_setColorspaceDetails(context, coefficients, full_range, coefficients, 1, 0, 1 << 16,
+                                 1 << 16);
     }
     return context;
 }
@@ -301,12 +314,17 @@ static DecodeStatus copy_rgba(AvbridgeDecodeSession *session, AVFrame *frame,
         if (!borrowed) av_free(pixels);
         return DECODE_ERR_FRAME_SIZE;
     }
+    enum AVColorSpace matrix = avbridge_resolve_colorspace(frame);
+    int full_range = avbridge_frame_is_full_range(frame);
     if (!session->sws || session->sws_width != src_width || session->sws_height != src_height ||
         session->sws_format != frame->format || session->sws_out_width != width ||
-        session->sws_out_height != height) {
+        session->sws_out_height != height || session->sws_matrix != (int)matrix ||
+        session->sws_full_range != full_range) {
         sws_freeContext(session->sws);
         session->sws = threaded_sws(src_width, src_height, (enum AVPixelFormat)frame->format,
-                                    width, height);
+                                    width, height, matrix, full_range);
+        session->sws_matrix = (int)matrix;
+        session->sws_full_range = full_range;
         session->sws_width = src_width;
         session->sws_height = src_height;
         session->sws_format = frame->format;

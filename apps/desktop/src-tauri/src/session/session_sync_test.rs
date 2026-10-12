@@ -186,6 +186,9 @@ pub(super) fn audio_asset(id: u64, peaks: Option<Vec<(f32, f32)>>) -> avcore::Me
         proxy_path: None,
         waveform_peaks: None,
         favorited: false,
+        streams: Default::default(),
+        hdr_handling: Default::default(),
+        audio_stream: None,
     };
     asset.waveform_peaks = peaks;
     asset

@@ -64,6 +64,70 @@ fn duration_label_delegates_to_format_timecode() {
         proxy_path: None,
         waveform_peaks: None,
         favorited: false,
+        streams: Default::default(),
+        hdr_handling: Default::default(),
+        audio_stream: None,
     };
     assert_eq!(asset.duration_label(), "02:14");
+}
+
+fn color_fixture(name: &str) -> std::path::PathBuf {
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(name)
+}
+
+#[test]
+fn an_imported_hdr_clip_knows_it_is_hdr_and_is_tone_mapped_by_default() {
+    use avcore::{ColorMatrix, ColorPrimaries, ColorTransfer, HdrHandling};
+
+    let probed = avcore::probe_media(&color_fixture("color/hdr10_pq.mkv")).unwrap();
+    let mut asset =
+        probed.into_media_asset(1, "hdr.mkv".into(), color_fixture("color/hdr10_pq.mkv"));
+    let color = asset.streams.color.expect("a video asset has colour info");
+    assert_eq!(color.bit_depth, 10);
+    assert_eq!(color.matrix, ColorMatrix::Bt2020);
+    assert_eq!(color.primaries, ColorPrimaries::Bt2020);
+    assert_eq!(color.transfer, ColorTransfer::Pq);
+    assert!(color.is_hdr());
+    assert!(asset.needs_tone_mapping());
+
+    asset.hdr_handling = HdrHandling::TreatAsSdr;
+    assert!(!asset.needs_tone_mapping(), "the user's escape hatch");
+}
+
+#[test]
+fn an_sdr_clip_is_never_tone_mapped_unless_asked() {
+    use avcore::HdrHandling;
+
+    let path = color_fixture("color/hd709_tagged.mkv");
+    let mut asset = avcore::probe_media(&path)
+        .unwrap()
+        .into_media_asset(1, "sdr.mkv".into(), path);
+    assert!(!asset.streams.color.unwrap().is_hdr());
+    assert!(!asset.needs_tone_mapping());
+    asset.hdr_handling = HdrHandling::ToneMap;
+    assert!(
+        asset.needs_tone_mapping(),
+        "a mistagged source can be forced"
+    );
+}
+
+#[test]
+fn an_imported_multitrack_recording_lists_its_tracks() {
+    let path = color_fixture("audio_codecs/obs_multitrack.mkv");
+    let asset = avcore::probe_media(&path)
+        .unwrap()
+        .into_media_asset(1, "obs.mkv".into(), path);
+    let titles: Vec<&str> = asset
+        .streams
+        .audio
+        .iter()
+        .map(|s| s.title.as_str())
+        .collect();
+    assert_eq!(titles, ["Game", "Mic", "Chat"]);
+    assert_eq!(
+        asset.audio_stream, None,
+        "the asset itself plays the first stream"
+    );
 }

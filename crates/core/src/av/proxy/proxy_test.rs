@@ -77,3 +77,76 @@ fn a_proxy_newer_than_its_source_is_up_to_date() {
     let _ = fs::remove_dir(&dir);
     assert!(result);
 }
+
+#[test]
+fn a_proxy_keeps_the_colour_of_hd_footage_even_though_it_is_small() {
+    // A 480p proxy of BT.709 footage must still be read as BT.709, not as SD (BT.601).
+    let source = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/color/hd709_untagged.mkv");
+    let dir = std::env::temp_dir().join(format!("oca-proxy-color-{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    let proxy = ensure_proxy(&source, &dir, PreviewQuality::Medium).expect("a proxy");
+    let frame = crate::FrameSampler::open(&proxy)
+        .expect("opens")
+        .sample(0.0, Duration::from_secs(5))
+        .expect("a frame");
+    let at = ((frame.height / 2 * frame.width + frame.width / 2) * 4) as usize;
+    let pixel = [frame.rgba[at], frame.rgba[at + 1], frame.rgba[at + 2]];
+    let _ = fs::remove_dir_all(&dir);
+    for (channel, expected) in [200i32, 60, 40].into_iter().enumerate() {
+        assert!(
+            (i32::from(pixel[channel]) - expected).abs() <= 6,
+            "the proxy shows {pixel:?}, the colour is 200, 60, 40"
+        );
+    }
+}
+
+fn audio_fixture(name: &str) -> std::path::PathBuf {
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/audio_codecs")
+        .join(name)
+}
+
+#[test]
+fn a_proxy_is_made_for_flac_opus_and_pcm_audio_in_matroska_and_keeps_its_length() {
+    // Matroska stamps audio in milliseconds, and PCM in it has no channel layout: each of these
+    // used to fail (timestamps going backwards, or an encoder refusing "2 channels").
+    for name in ["flac_in_mkv.mkv", "opus_in_mkv.mkv", "pcm_in_mkv.mkv"] {
+        let source = audio_fixture(name);
+        let dir =
+            std::env::temp_dir().join(format!("oca-proxy-audio-{name}-{}", std::process::id()));
+        let proxy = ensure_proxy(&source, &dir, PreviewQuality::Low)
+            .unwrap_or_else(|error| panic!("{name}: {error}"));
+        let made = crate::probe_media(&proxy).expect("the proxy probes");
+        let original = crate::probe_media(&source).expect("the source probes");
+        let _ = fs::remove_dir_all(&dir);
+        assert!(made.has_audio, "{name}: the proxy lost its audio");
+        assert!(
+            (made.duration_secs - original.duration_secs).abs() < 0.15,
+            "{name}: {} s became {} s",
+            original.duration_secs,
+            made.duration_secs
+        );
+    }
+}
+
+#[test]
+fn a_failed_proxy_leaves_nothing_behind_to_be_taken_for_a_good_one() {
+    let dir = std::env::temp_dir().join(format!("oca-proxy-failed-{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    let not_media = dir.join("clip.mp4");
+    fs::write(&not_media, b"this is not a video").unwrap();
+    let proxies = dir.join("proxies");
+
+    assert!(ensure_proxy(&not_media, &proxies, PreviewQuality::Medium).is_err());
+    let leftovers: Vec<_> = fs::read_dir(&proxies)
+        .map(|entries| entries.flatten().map(|e| e.file_name()).collect())
+        .unwrap_or_default();
+    let again = ensure_proxy(&not_media, &proxies, PreviewQuality::Medium);
+    let _ = fs::remove_dir_all(&dir);
+    assert!(leftovers.is_empty(), "left behind: {leftovers:?}");
+    assert!(
+        again.is_err(),
+        "the next call took a leftover for a finished proxy"
+    );
+}

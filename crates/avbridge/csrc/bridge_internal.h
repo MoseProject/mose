@@ -167,6 +167,17 @@ typedef struct {
 
 /* All defined in filters.c. */
 void free_audio_filter_chain(AudioFilterChain *chain);
+
+/* The YUV-to-RGB matrix to decode `frame` with: the one it is tagged with, or when untagged the
+   usual convention (BT.709 from 1280x720 up, BT.601 below). Returns an AVCOL_SPC_* value, never
+   AVCOL_SPC_UNSPECIFIED. */
+enum AVColorSpace avbridge_resolve_colorspace(const AVFrame *frame);
+
+/* The same rule for a stream: its tagged matrix (may be unspecified) and picture size. */
+enum AVColorSpace avbridge_resolve_colorspace_for(enum AVColorSpace tagged, int width, int height);
+
+/* Whether `frame` holds full-range (JPEG) YUV: tagged so, or one of the legacy yuvj formats. */
+int avbridge_frame_is_full_range(const AVFrame *frame);
 int init_audio_filter_chain(AVCodecContext *dec_ctx, const AVCodec *encoder,
                             const char *filter_descr, AudioFilterChain *chain);
 int encode_write_packet(AVFormatContext *out_ctx, AVCodecContext *enc_ctx, AVStream *out_stream,

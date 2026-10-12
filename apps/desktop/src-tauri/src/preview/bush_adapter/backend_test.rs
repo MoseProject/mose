@@ -39,6 +39,9 @@ fn asset(id: u64, kind: MediaKind, resolution: Option<(u32, u32)>, fps: Option<f
         proxy_path: None,
         waveform_peaks: None,
         favorited: false,
+        streams: Default::default(),
+        hdr_handling: Default::default(),
+        audio_stream: None,
     }
 }
 

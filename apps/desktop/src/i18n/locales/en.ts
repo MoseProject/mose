@@ -18,6 +18,7 @@ export const en = {
   dropToImport: "Drop to import",
   addToTimeline: "Add to timeline",
   favorite: "Favorite",
+  hdrLabel: "HDR",
   analyzing: "analyzing…",
   previewUnavailable: "Preview unavailable",
   colorAdjust: "Color adjust",

@@ -127,7 +127,20 @@ pub fn ensure_proxy(
 
     fs::create_dir_all(proxy_dir).map_err(ProxyError::Io)?;
 
-    avbridge::generate_proxy(source, &proxy_path, quality.height()).map_err(ProxyError::Bridge)?;
+    // Written beside the final name and moved into place when it is complete: a failed or
+    // interrupted run must not leave a half-written file that the next call takes for a fresh one.
+    let mut partial_name = proxy_path.file_name().unwrap_or_default().to_os_string();
+    partial_name.push(".partial.mp4");
+    let partial = proxy_path.with_file_name(partial_name);
+    let generated = avbridge::generate_proxy(source, &partial, quality.height());
+    if let Err(error) = generated {
+        let _ = fs::remove_file(&partial);
+        return Err(ProxyError::Bridge(error));
+    }
+    if let Err(error) = fs::rename(&partial, &proxy_path) {
+        let _ = fs::remove_file(&partial);
+        return Err(ProxyError::Io(error));
+    }
 
     Ok(proxy_path)
 }

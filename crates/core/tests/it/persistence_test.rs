@@ -151,6 +151,9 @@ fn fixture_project() -> Project {
             proxy_path: None,
             waveform_peaks: None,
             favorited: false,
+            streams: Default::default(),
+            hdr_handling: Default::default(),
+            audio_stream: None,
         }],
         sequences: vec![Sequence {
             id: 1,
@@ -845,8 +848,10 @@ fn the_project_layout_refuses_other_versions_and_damaged_input() {
 }
 
 /// A project file the way version 3 wrote it: the current encoding without the trailing
-/// `frame_rate: None`, under the old version byte.
+/// `frame_rate: None`, under the old version byte. Only exact for a project without media, since
+/// versions 3 and 4 wrote each asset with fewer fields than the current layout does.
 fn version_3_bytes(project: &Project) -> Vec<u8> {
+    assert!(project.media_library.is_empty());
     use avcore::persistence::to_project_bytes;
     let current = to_project_bytes(project).unwrap();
     let size = u32::from_le_bytes(current[5..9].try_into().unwrap()) as usize;
@@ -866,7 +871,8 @@ fn version_3_bytes(project: &Project) -> Vec<u8> {
 
 #[test]
 fn a_version_3_project_file_still_opens_with_no_frame_rate() {
-    let project = fixture_project();
+    let mut project = fixture_project();
+    project.media_library.clear();
     let opened = avcore::persistence::from_project_bytes(&version_3_bytes(&project)).unwrap();
     assert_eq!(opened, project);
     assert_eq!(opened.frame_rate, None);
@@ -888,7 +894,7 @@ fn a_frame_rate_survives_a_save_and_load() {
 #[test]
 fn other_project_format_versions_are_still_refused() {
     let mut bytes = avcore::persistence::to_project_bytes(&fixture_project()).unwrap();
-    for version in [0u8, 2, 5, 255] {
+    for version in [0u8, 2, 6, 255] {
         bytes[4] = version;
         assert!(
             matches!(
