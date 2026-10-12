@@ -37,6 +37,16 @@ static int scale_video_frame(struct SwsContext *sws_ctx, AVFrame *src_frame, AVF
     return 0;
 }
 
+/* The audio graph counts in samples (time base 1/sample_rate) but a decoder stamps frames in the
+   stream's packet time base (1/1000 for Matroska): left alone, FLAC and Opus in an MKV reached the
+   AAC encoder with timestamps going backwards. */
+static void stamp_in_samples(AVFrame *frame, const AVCodecContext *decoder) {
+    if (frame->pts != AV_NOPTS_VALUE && decoder->pkt_timebase.num > 0 && frame->sample_rate > 0) {
+        frame->pts = av_rescale_q(frame->pts, decoder->pkt_timebase,
+                                  (AVRational){1, frame->sample_rate});
+    }
+}
+
 ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path, int target_height) {
     AVFormatContext *in_ctx = NULL;
     AVFormatContext *out_ctx = NULL;
@@ -326,6 +336,7 @@ ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path, i
                     status = PROXY_ERR_PIPELINE;
                     goto cleanup_output_io;
                 }
+                stamp_in_samples(dec_frame, adec_ctx);
                 if (filter_encode_write_frame(out_ctx, &achain, aenc_ctx, out_stream, dec_frame,
                                               filt_frame, enc_pkt) < 0) {
                     status = PROXY_ERR_PIPELINE;
@@ -360,6 +371,7 @@ ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path, i
         AVStream *out_stream = out_ctx->streams[audio_out_index];
         avcodec_send_packet(adec_ctx, NULL);
         while (avcodec_receive_frame(adec_ctx, dec_frame) >= 0) {
+            stamp_in_samples(dec_frame, adec_ctx);
             if (filter_encode_write_frame(out_ctx, &achain, aenc_ctx, out_stream, dec_frame,
                                           filt_frame, enc_pkt) < 0) {
                 status = PROXY_ERR_PIPELINE;
