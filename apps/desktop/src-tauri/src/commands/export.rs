@@ -35,11 +35,23 @@ pub async fn pick_export_path<R: Runtime>(
     )
 }
 
+/// The extensions an export may be written with: video, then the audio-only formats.
+const EXPORT_EXTENSIONS: [&str; 5] = ["mp4", "wav", "flac", "mp3", "opus"];
+
 /// The file an export dialog's folder and name field point at: the folder must exist, the name
-/// loses anything a file name cannot hold and gains `.mp4`. Errors are codes the webview
-/// translates (`noFolder`, `folderMissing`, `noName`).
+/// loses anything a file name cannot hold and gains `extension` (`mp4` by default). Errors are
+/// codes the webview translates (`noFolder`, `folderMissing`, `noName`, `badExtension`).
 #[tauri::command]
-pub fn export_target(folder: String, file_name: String) -> Result<ExportTarget, String> {
+pub fn export_target(
+    folder: String,
+    file_name: String,
+    extension: Option<String>,
+) -> Result<ExportTarget, String> {
+    let extension = match extension.as_deref() {
+        None => "mp4",
+        Some(ext) if EXPORT_EXTENSIONS.contains(&ext) => ext,
+        Some(_) => return Err("badExtension".to_string()),
+    };
     if folder.trim().is_empty() {
         return Err("noFolder".to_string());
     }
@@ -51,7 +63,7 @@ pub fn export_target(folder: String, file_name: String) -> Result<ExportTarget, 
     if name.is_empty() {
         return Err("noName".to_string());
     }
-    let path = folder.join(format!("{name}.mp4"));
+    let path = folder.join(format!("{name}.{extension}"));
     Ok(ExportTarget {
         exists: path.exists(),
         path: path.display().to_string(),
@@ -59,7 +71,7 @@ pub fn export_target(folder: String, file_name: String) -> Result<ExportTarget, 
 }
 
 /// A file name stem with path separators and the characters Windows forbids replaced, and no
-/// trailing dots, spaces or `.mp4`.
+/// trailing dots, spaces or export extension.
 pub(crate) fn sanitize_file_name(raw: &str) -> String {
     let cleaned: String = raw
         .trim()
@@ -71,7 +83,13 @@ pub(crate) fn sanitize_file_name(raw: &str) -> String {
         })
         .collect();
     let stem = match cleaned.rsplit_once('.') {
-        Some((stem, ext)) if ext.eq_ignore_ascii_case("mp4") => stem,
+        Some((stem, ext))
+            if EXPORT_EXTENSIONS
+                .iter()
+                .any(|known| ext.eq_ignore_ascii_case(known)) =>
+        {
+            stem
+        }
         _ => cleaned.as_str(),
     };
     stem.trim_end_matches(['.', ' ']).to_string()
