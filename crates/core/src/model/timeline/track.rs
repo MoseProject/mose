@@ -846,6 +846,72 @@ impl Track {
         }
     }
 
+    /// Whether `next` carries on from the end of `prev` without a jump: the same asset, touching
+    /// on the timeline, the source resuming where it stopped at the same plain speed. A split
+    /// leaves two such clips, and their join needs no fade.
+    fn continues(prev: &ClipInstance, next: &ClipInstance) -> bool {
+        const TOLERANCE_SECS: f64 = 1e-3;
+        prev.resolved_asset_id() == next.resolved_asset_id()
+            && prev.nested_sequence_id == next.nested_sequence_id
+            && prev.speed_ramp_end_factor.is_none()
+            && next.speed_ramp_end_factor.is_none()
+            && (prev.speed_factor - next.speed_factor).abs() < 1e-6
+            && (prev.start_secs + prev.duration_secs() - next.start_secs).abs() < TOLERANCE_SECS
+            && (prev.source_out_secs - next.source_in_secs).abs() < TOLERANCE_SECS
+    }
+
+    /// Whether the audio of `clip` meets another clip's at `at_secs` (its start or end) with a
+    /// jump in the sound: the clips touch but do not continue each other.
+    fn audio_cut_at(&self, clip: &ClipInstance, at_start: bool) -> bool {
+        const TOLERANCE_SECS: f64 = 1e-3;
+        self.clips.iter().any(|other| {
+            if other.id == clip.id {
+                return false;
+            }
+            if at_start {
+                (other.start_secs + other.duration_secs() - clip.start_secs).abs() < TOLERANCE_SECS
+                    && !Self::continues(other, clip)
+            } else {
+                (clip.start_secs + clip.duration_secs() - other.start_secs).abs() < TOLERANCE_SECS
+                    && !Self::continues(clip, other)
+            }
+        })
+    }
+
+    /// Whether `clip`'s sound is cut hard against a neighbour on either side, which the mix
+    /// smooths with a short fade ([`Self::AUDIO_DECLICK_SECS`]).
+    pub fn audio_has_hard_cut(&self, clip: &ClipInstance) -> bool {
+        self.audio_cut_at(clip, true) || self.audio_cut_at(clip, false)
+    }
+
+    /// Length of the short fade that keeps a hard cut between two clips from clicking.
+    pub const AUDIO_DECLICK_SECS: f32 = 0.010;
+
+    /// The fade-in of `clip`'s audio: its own fade handle, a dissolve into it, or the declick
+    /// where it is cut hard against the clip before it, whichever is longest.
+    pub fn audio_fade_in_secs(&self, clip: &ClipInstance) -> f32 {
+        let declick = if self.audio_cut_at(clip, true) {
+            Self::AUDIO_DECLICK_SECS
+        } else {
+            0.0
+        };
+        clip.fade_in_secs
+            .max(self.dissolve_in_secs(clip) as f32)
+            .max(declick)
+    }
+
+    /// The fade-out of `clip`'s audio, by the same rule as [`Self::audio_fade_in_secs`].
+    pub fn audio_fade_out_secs(&self, clip: &ClipInstance) -> f32 {
+        let declick = if self.audio_cut_at(clip, false) {
+            Self::AUDIO_DECLICK_SECS
+        } else {
+            0.0
+        };
+        clip.fade_out_secs
+            .max(self.dissolve_out_secs(clip) as f32)
+            .max(declick)
+    }
+
     /// The fade-out of `clip`'s audio under a later clip's dissolve: how long the next dissolving
     /// clip overlaps its tail (cut to that clip's transition duration). `0.0` when none does.
     pub fn dissolve_out_secs(&self, clip: &ClipInstance) -> f64 {
