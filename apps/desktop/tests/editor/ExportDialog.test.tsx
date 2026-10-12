@@ -31,6 +31,11 @@ vi.mock("../../src/ipc", () => {
 const { ExportDialog } = await import("../../src/editor/export/ExportDialog");
 const { api } = await import("../../src/ipc");
 
+/** Picks `value` in the dropdown labelled `label`. */
+const choose = (label: string, value: string) => {
+  fireEvent.change(screen.getByLabelText(label, { exact: false }), { target: { value } });
+};
+
 const session = (overrides: { aspect?: string; lufs?: number; loudness?: number | null } = {}) => {
   return {
     project: {
@@ -69,12 +74,11 @@ afterEach(() => {
 describe("ExportDialog", () => {
   it("starts from the sequence's own settings", () => {
     render(<ExportDialog session={session({ aspect: "Portrait", lufs: -16 })} />);
-    expect(
-      screen.getByRole("radio", { name: t("aspectPortrait") }).getAttribute("aria-checked"),
-    ).toBe("true");
-    expect(screen.getByRole("radio", { name: "-16 LUFS" }).getAttribute("aria-checked")).toBe(
-      "true",
-    );
+    const value = (label: string) => {
+      return (screen.getByLabelText(label, { exact: false }) as HTMLSelectElement).value;
+    };
+    expect(value(t("aspectRatio"))).toBe("Portrait");
+    expect(value(t("loudnessTarget"))).toBe("-16");
     expect((screen.getByRole("spinbutton") as HTMLInputElement).value).toBe("-16");
   });
 
@@ -122,12 +126,18 @@ describe("ExportDialog", () => {
     const summary = await screen.findByTestId("export-summary");
     expect(summary.textContent).toContain("1920x1080");
     expect(summary.textContent).toContain("16.0 Mbps");
-    fireEvent.click(screen.getByRole("radio", { name: t("exportQualityLow") }));
-    fireEvent.click(screen.getByRole("radio", { name: "720p" }));
+    choose(t("exportQuality"), "low");
+    choose(t("exportResolution"), "720");
     expect(screen.getByTestId("export-summary").textContent).toContain("1280x720");
     expect(screen.getByTestId("export-summary").textContent).toContain("4.0 Mbps");
     // 1080p is the original here, so it is not offered as a lower resolution.
-    expect(screen.queryByRole("radio", { name: "1080p" })).toBeNull();
+    const heights = [
+      ...(screen.getByLabelText(t("exportResolution"), { exact: false }) as HTMLSelectElement)
+        .options,
+    ].map((option) => {
+      return option.value;
+    });
+    expect(heights).not.toContain("1080");
   });
 
   it("saves the chosen settings, opens the queue and queues the file with its options", async () => {
@@ -140,10 +150,10 @@ describe("ExportDialog", () => {
     fireEvent.change(screen.getByLabelText(t("exportFileName"), { exact: false }), {
       target: { value: "final" },
     });
-    fireEvent.click(screen.getByRole("radio", { name: t("aspectSquare") }));
-    fireEvent.click(screen.getByRole("radio", { name: "-23 LUFS" }));
-    fireEvent.click(screen.getByRole("radio", { name: t("exportQualityMedium") }));
-    fireEvent.click(screen.getByRole("radio", { name: "720p" }));
+    choose(t("aspectRatio"), "Square");
+    choose(t("loudnessTarget"), "-23");
+    choose(t("exportQuality"), "medium");
+    choose(t("exportResolution"), "720");
     fireEvent.click(screen.getByText(t("exportChooseFile")));
     await waitFor(() => {
       expect(api.startExport).toHaveBeenCalledTimes(1);
@@ -208,7 +218,7 @@ describe("ExportDialog", () => {
 
   it("rejects a custom bitrate out of range", () => {
     render(<ExportDialog session={session()} />);
-    fireEvent.click(screen.getByRole("radio", { name: t("exportQualityCustom") }));
+    choose(t("exportQuality"), "custom");
     fireEvent.change(screen.getByLabelText(t("exportBitrate"), { exact: false }), {
       target: { value: "900" },
     });
