@@ -388,6 +388,86 @@ fn a_cache_hit_does_not_probe_again_and_a_vanished_render_is_made_again() {
     let _ = std::fs::remove_dir_all(&cache_dir);
 }
 
+#[test]
+fn a_change_deep_inside_makes_every_render_above_it_stale_until_it_is_made_again() {
+    let path = fixture("video.mp4");
+    let asset = probe_media(&path)
+        .unwrap()
+        .into_media_asset(1, "video.mp4".to_string(), path);
+    // Parent -> compound clip 2 -> compound clip 3 -> the media.
+    let grandchild = sequence(
+        3,
+        timeline_with(vec![video_track(1, vec![clip(1, 1, 0.0, 0.0, 0.6)])]),
+    );
+    let mut into_grandchild = clip(2, 0, 0.0, 0.0, 0.6);
+    into_grandchild.nested_sequence_id = Some(3);
+    let child = sequence(
+        2,
+        timeline_with(vec![video_track(1, vec![into_grandchild])]),
+    );
+    let mut into_child = clip(10, 0, 0.0, 0.0, 0.6);
+    into_child.nested_sequence_id = Some(2);
+    let parent_timeline = timeline_with(vec![video_track(1, vec![into_child])]);
+    let mut proj = project(
+        vec![sequence(1, parent_timeline.clone()), child, grandchild],
+        vec![asset],
+    );
+    let cache_dir = std::env::temp_dir().join(format!(
+        "oca_nested_sequence_test_deep_{}",
+        std::process::id()
+    ));
+    let mut cache = HashMap::new();
+
+    assert!(!nested_sequences_are_current(
+        &proj,
+        &parent_timeline,
+        &cache
+    ));
+    let first =
+        materialize_nested_sequences(&proj, &parent_timeline, &cache_dir, &mut cache).unwrap();
+    assert!(nested_sequences_are_current(
+        &proj,
+        &parent_timeline,
+        &cache
+    ));
+    let child_length = first.get(&2).unwrap().duration_secs;
+
+    // Shorten the clip at the bottom: nothing about sequence 2 itself changed, but its render did.
+    proj.sequences[2].timeline.tracks[0].clips[0].source_out_secs = 0.3;
+    assert!(!nested_sequences_are_current(
+        &proj,
+        &parent_timeline,
+        &cache
+    ));
+    // Until it is rendered again, the previous renders are what there is to show.
+    let stale = cached_nested_assets(&proj, &parent_timeline, &cache);
+    assert_eq!(stale.len(), 2);
+    assert_eq!(stale.get(&2).unwrap().duration_secs, child_length);
+
+    let second =
+        materialize_nested_sequences(&proj, &parent_timeline, &cache_dir, &mut cache).unwrap();
+    assert!(nested_sequences_are_current(
+        &proj,
+        &parent_timeline,
+        &cache
+    ));
+    assert!(
+        second.get(&2).unwrap().duration_secs < child_length,
+        "the render of sequence 2 was made again after the change below it"
+    );
+
+    // A render whose file vanished is not offered, and is not current.
+    std::fs::remove_file(&cache.get(&3).unwrap().rendered_path).unwrap();
+    assert!(!nested_sequences_are_current(
+        &proj,
+        &parent_timeline,
+        &cache
+    ));
+    assert!(!cached_nested_assets(&proj, &parent_timeline, &cache).contains_key(&3));
+
+    let _ = std::fs::remove_dir_all(&cache_dir);
+}
+
 /// How long a compound clip takes to be rendered, with an effect on its clips so that nothing is
 /// copied: `OCA_BENCH_VIDEO=clip.mp4 cargo test --release -p core --lib nested_render_cost -- --ignored --nocapture`
 #[test]
