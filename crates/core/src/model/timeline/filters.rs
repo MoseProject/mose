@@ -177,12 +177,12 @@ impl ClipInstance {
                 "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131:0".to_string(),
             ),
         }
-        if self.has_lut() {
+        if let Some(path) = self.render_lut_path() {
             // Forward slashes even on Windows sidesteps avfilter's own backslash-escaping rules
             // inside a quoted option value (ffmpeg accepts `/`-separated paths on any platform);
             // a literal single quote in the path (the one character `'...'` quoting can't pass
             // through unescaped) is escaped avfilter-style.
-            let escaped = self.lut_path.replace('\\', "/").replace('\'', "'\\''");
+            let escaped = path.replace('\\', "/").replace('\'', "'\\''");
             stages.push(format!("lut3d=file='{escaped}'"));
         }
         if self.is_chroma_keyed() {

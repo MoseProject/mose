@@ -116,6 +116,21 @@ impl Lut3D {
         Ok(Self { size, data })
     }
 
+    /// A table from its entries, red varying fastest. `None` unless there are `size^3` of them.
+    pub fn new(size: usize, data: Vec<[f32; 3]>) -> Option<Self> {
+        let expected = size.checked_mul(size)?.checked_mul(size)?;
+        (size >= 2 && data.len() == expected).then_some(Self { size, data })
+    }
+
+    /// The table as the text of a `.cube` file, which `lut3d` reads.
+    pub fn to_cube(&self) -> String {
+        let mut text = format!("TITLE \"oca grade\"\nLUT_3D_SIZE {}\n", self.size);
+        for [r, g, b] in &self.data {
+            text.push_str(&format!("{r:.6} {g:.6} {b:.6}\n"));
+        }
+        text
+    }
+
     /// Reads and parses `path`. Errors the same way [`std::fs::read_to_string`]/[`Self::parse`]
     /// would (I/O failure surfaces as a generic parse-shaped error via [`LutParseError::
     /// MissingSize`] — the caller only needs "did this work," not to distinguish the two).

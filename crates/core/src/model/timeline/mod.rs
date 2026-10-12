@@ -17,6 +17,7 @@ mod clip;
 mod effects;
 mod filters;
 mod formatting;
+mod grade;
 mod marker;
 mod shape_clip;
 mod text_clip;
@@ -29,6 +30,7 @@ use serde::{Deserialize, Serialize};
 pub use clip::ClipInstance;
 pub use effects::{BlendMode, ColorFilter, MaskShape, TransitionType};
 pub use formatting::{ClipFormatting, LayerTemplate};
+pub use grade::{Grade, GRADE_LUT_SIZE, MAX_EXPOSURE_STOPS};
 pub use marker::{Marker, MarkerKind};
 pub use shape_clip::{ShapeClip, ShapeKind, ShapePreset};
 pub use text_clip::{

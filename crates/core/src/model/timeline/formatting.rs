@@ -73,6 +73,9 @@ pub struct ClipFormatting {
     pub crop_h_keyframes: Vec<Keyframe<f32>>,
     pub deflicker_enabled: bool,
     pub lut_path: String,
+    /// The colour grade; `#[serde(default)]` so saved layer templates without one load neutral.
+    #[serde(default)]
+    pub grade: super::grade::Grade,
     pub layer_scale_x: f32,
     pub layer_scale_y: f32,
     pub stabilization_intensity: f32,
@@ -147,6 +150,7 @@ impl ClipInstance {
             crop_h_keyframes: self.crop_h_keyframes.clone(),
             deflicker_enabled: self.deflicker_enabled,
             lut_path: self.lut_path.clone(),
+            grade: self.grade,
             layer_scale_x: self.layer_scale_x,
             layer_scale_y: self.layer_scale_y,
             stabilization_intensity: self.stabilization_intensity,
@@ -204,6 +208,7 @@ impl ClipInstance {
         self.crop_h_keyframes = f.crop_h_keyframes.clone();
         self.deflicker_enabled = f.deflicker_enabled;
         self.lut_path = f.lut_path.clone();
+        self.grade = f.grade;
         self.layer_scale_x = f.layer_scale_x;
         self.layer_scale_y = f.layer_scale_y;
         self.stabilization_intensity = f.stabilization_intensity;

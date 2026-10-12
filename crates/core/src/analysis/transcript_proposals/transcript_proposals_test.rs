@@ -104,6 +104,7 @@ fn test_clip(
         privacy_blur_seed_vertices: Vec::new(),
         privacy_blur_seed_center_x_frac: 0.0,
         privacy_blur_seed_center_y_frac: 0.0,
+        grade: Default::default(),
     }
 }
 

@@ -565,6 +565,11 @@ pub struct ClipInstance {
     pub privacy_blur_seed_center_x_frac: f32,
     #[serde(default)]
     pub privacy_blur_seed_center_y_frac: f32,
+    /// The clip's colour grade (exposure, temperature, tint, lift/gamma/gain, shadows and
+    /// highlights), baked into a lookup table for the preview and the export. Neutral by default.
+    /// **Keep this the last field**: the project file is positional.
+    #[serde(default)]
+    pub grade: super::grade::Grade,
 }
 
 fn default_privacy_blur_sigma() -> f32 {
@@ -700,6 +705,7 @@ impl ClipInstance {
             privacy_blur_seed_vertices: Vec::new(),
             privacy_blur_seed_center_x_frac: 0.0,
             privacy_blur_seed_center_y_frac: 0.0,
+            grade: super::grade::Grade::default(),
         }
     }
 
@@ -780,6 +786,42 @@ impl ClipInstance {
     /// `true` if a 3D LUT ([`ClipInstance::lut_path`]) is applied.
     pub fn has_lut(&self) -> bool {
         !self.lut_path.is_empty()
+    }
+
+    /// The table the preview applies for this clip: its own LUT with the grade baked after it, or
+    /// `None` when the grade is neutral (then the clip's LUT, if any, is used as it is).
+    pub fn graded_lut(&self) -> Option<crate::graphics::lut::Lut3D> {
+        if self.grade.is_neutral() {
+            return None;
+        }
+        let base = if self.has_lut() {
+            crate::graphics::lut::Lut3D::load(std::path::Path::new(&self.lut_path)).ok()
+        } else {
+            None
+        };
+        Some(self.grade.clamped().bake(base.as_ref()))
+    }
+
+    /// The `.cube` file the export's `lut3d` stage reads for this clip: the clip's own LUT as it is
+    /// when the grade is neutral, otherwise a baked table (the LUT, then the grade) written once
+    /// to the temp folder under a name made from its contents. `None` when there is no LUT and no
+    /// grade, or when the baked table cannot be written (the clip then exports ungraded).
+    pub fn render_lut_path(&self) -> Option<String> {
+        let Some(table) = self.graded_lut() else {
+            return self.has_lut().then(|| self.lut_path.clone());
+        };
+        use std::hash::{Hash, Hasher};
+        let text = table.to_cube();
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        text.hash(&mut hasher);
+        let path = std::env::temp_dir().join(format!("oca-grade-{:016x}.cube", hasher.finish()));
+        if !path.exists() {
+            // Written aside and renamed, so a parallel export never reads a half-written file.
+            let partial = path.with_extension(format!("{}.part", std::process::id()));
+            std::fs::write(&partial, &text).ok()?;
+            std::fs::rename(&partial, &path).ok()?;
+        }
+        Some(path.display().to_string())
     }
 
     /// `true` if this block's layer footprint ([`ClipInstance::layer_scale_x`]/`_y`) differs
