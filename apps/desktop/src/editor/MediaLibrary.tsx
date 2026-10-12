@@ -4,14 +4,14 @@ import baseStyles from "../styles/base.module.css";
 import styles from "./library/library.module.css";
 import { Suspense, useCallback, useState } from "react";
 import { lazyNamed } from "../lazy";
-import { t } from "../i18n";
+import { t, type TextKey } from "../i18n";
 import { Icon } from "./chrome/Icon";
-import { ContextMenu } from "./chrome/ContextMenu";
+import { ContextMenu, type ContextMenuItem } from "./chrome/ContextMenu";
 import { Menu } from "./chrome/Menu";
 import { api } from "../ipc";
 import { askConfirm, pushToast } from "../notifications";
 import { run } from "../store";
-import type { MediaAsset, SessionView } from "../types";
+import type { HdrHandling, MediaAsset, SessionView } from "../types";
 import { AssetRow } from "./library/AssetRow";
 
 // Not on screen until the "more sources" menu is opened, or the Effects tab chosen.
@@ -67,6 +67,28 @@ const TABS: [
   ["recent", "libraryTabRecent"],
   ["effects", "libraryTabEffects"],
 ];
+
+const HDR_CHOICES: [HdrHandling, TextKey][] = [
+  ["Auto", "hdrAuto"],
+  ["ToneMap", "hdrToneMap"],
+  ["TreatAsSdr", "hdrTreatAsSdr"],
+];
+
+/** The menu entries that choose what happens to an HDR source, the current one ticked. Video only. */
+export function hdrItems(asset: MediaAsset): ContextMenuItem[] {
+  if (asset.kind !== "Video") {
+    return [];
+  }
+  return HDR_CHOICES.map(([value, label], index) => {
+    return {
+      label: `${asset.hdr_handling === value ? "✓ " : ""}${t(label)}`,
+      separator: index === 0,
+      onSelect: () => {
+        void run(api.setHdrHandling(asset.id, value));
+      },
+    };
+  });
+}
 
 export function MediaLibrary({ session }: { session: SessionView }) {
   const [tab, setTab] = useState<LibraryTab>("media");
@@ -256,6 +278,7 @@ export function MediaLibrary({ session }: { session: SessionView }) {
                 void run(api.transcribeAsset(menu.asset.id));
               },
             },
+            ...hdrItems(menu.asset),
             {
               label: t("removeFromLibrary"),
               separator: true,
