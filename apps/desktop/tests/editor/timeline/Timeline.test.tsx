@@ -248,6 +248,7 @@ const tick = (overrides: Partial<PreviewTick> = {}): PreviewTick => {
     peakL: 0,
     peakR: 0,
     momentaryLufs: null,
+    renderingCompound: false,
     ...overrides,
   };
 };

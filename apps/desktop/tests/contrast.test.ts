@@ -23,7 +23,9 @@ function luminance(hex: string): number {
 }
 
 function contrast(a: string, b: string): number {
-  const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => {
+    return y - x;
+  });
   return (light + 0.05) / (dark + 0.05);
 }
 
