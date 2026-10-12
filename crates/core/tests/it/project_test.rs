@@ -110,6 +110,7 @@ fn compound_video_track(id: u64, clips: Vec<ClipInstance>) -> Track {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     }
 }
@@ -412,6 +413,7 @@ fn create_compound_clip_is_a_no_op_off_a_video_track() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     project.sequences[0].timeline.tracks = vec![audio_track];

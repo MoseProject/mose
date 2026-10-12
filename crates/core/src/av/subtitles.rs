@@ -126,6 +126,7 @@ mod tests {
                 muted: false,
                 solo: false,
                 locked: false,
+                mix: Default::default(),
                 color_label: None,
             }],
             playhead_secs: 0.0,
@@ -203,6 +204,7 @@ mod tests {
             muted: false,
             solo: false,
             locked: false,
+            mix: Default::default(),
             color_label: None,
         });
 

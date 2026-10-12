@@ -409,6 +409,9 @@ export const api = {
       audioRole: flags.audioRole ?? null,
     });
   },
+  setTrackMix: (trackId: number, volumeDb: number, pan: number) => {
+    return invoke<void>("set_track_mix", { trackId, volumeDb, pan });
+  },
   getKeybindings: () => {
     return invoke<Record<string, string[]>>("get_keybindings");
   },

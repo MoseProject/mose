@@ -87,6 +87,7 @@ macro_rules! all_commands {
             $crate::commands::timeline::update_clip,
             $crate::commands::timeline::add_track,
             $crate::commands::timeline::set_track_flags,
+            $crate::commands::timeline::set_track_mix,
             $crate::commands::timeline::merge_clips_into_composite,
             $crate::commands::timeline::create_compound_clip,
             $crate::commands::timeline::insert_sequence_as_compound_clip,

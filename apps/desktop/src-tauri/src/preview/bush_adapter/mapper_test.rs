@@ -65,6 +65,7 @@ fn track(id: u64, kind: TrackKind, clips: Vec<ClipInstance>) -> Track {
         solo: false,
         color_label: None,
         locked: false,
+        mix: Default::default(),
     }
 }
 
@@ -144,6 +145,40 @@ fn audio_tracks_are_audible_only_and_layers_follow_track_order() {
     assert!(by_id(10).visible);
     assert!(!by_id(11).visible && by_id(11).audible);
     assert!(by_id(12).layer > by_id(10).layer);
+}
+
+#[test]
+fn a_tracks_fader_and_pan_reach_its_clips_in_the_preview() {
+    let mut louder = track(1, TrackKind::Video, vec![clip(0.0, 0.0, 4.0)]);
+    louder.mix = avcore::timeline::TrackMix {
+        volume_db: -6.0,
+        pan: 0.5,
+    };
+    let mapped = map_with(vec![louder], Vec::new());
+    let placement = &mapped.scene.contributors()[0].placement;
+    assert!((placement.track_gain - 0.501_187).abs() < 1e-5);
+    assert_eq!(placement.pan, 0.5);
+
+    // A neutral track leaves both alone.
+    let (_, plain) = one_clip(clip(0.0, 0.0, 4.0));
+    assert_eq!(
+        (plain.placement.track_gain, plain.placement.pan),
+        (1.0, 0.0)
+    );
+}
+
+#[test]
+fn the_preview_and_the_export_pan_with_the_same_law() {
+    // The export mix (audio_mix.c) and the model use one law; the preview mixer must too.
+    for step in -20..=20 {
+        let pan = step as f32 / 20.0;
+        let model = avcore::timeline::TrackMix {
+            volume_db: 0.0,
+            pan,
+        }
+        .pan_gains();
+        assert_eq!(bush::pan_gains(pan), model, "pan {pan}");
+    }
 }
 
 #[test]

@@ -113,6 +113,7 @@ fn video_track(clips: Vec<crate::timeline::ClipInstance>) -> Track {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     }
 }

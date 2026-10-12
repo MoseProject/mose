@@ -30,6 +30,7 @@ const makeTrack = (id: number, name: string, kind: Track["kind"], clips: ClipIns
     locked: false,
     muted: false,
     solo: false,
+    mix: { volume_db: 0, pan: 0 },
   };
 };
 

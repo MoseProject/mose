@@ -282,10 +282,13 @@ pub fn map_timeline(
                 continue;
             };
             let overlay = first_video_track.is_some_and(|first| index != first);
-            let Some(mapped) = map_clip(clip, canvas, overlay, resolver, &mut approximations)
+            let Some(mut mapped) = map_clip(clip, canvas, overlay, resolver, &mut approximations)
             else {
                 continue;
             };
+            // The track's fader and pan, on top of the clip's own gain.
+            mapped.placement.track_gain = track.mix.linear_gain();
+            mapped.placement.pan = track.mix.pan;
             contributors.push(Contributor {
                 id: ContributorId(clip.id),
                 // A clip overlapping an earlier one (a cross-dissolve) sits one layer above the

@@ -19,6 +19,7 @@ fn track(id: u64, clips: usize) -> Track {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     }
 }
@@ -131,6 +132,10 @@ fn track_flags_sequence_and_project_fields_round_trip() {
     let mut next = prev.clone();
     next.name = "Renamed".into();
     next.timeline_mut().tracks[0].muted = true;
+    next.timeline_mut().tracks[0].mix = avcore::timeline::TrackMix {
+        volume_db: -9.0,
+        pan: 0.4,
+    };
     next.timeline_mut().tracks[1].name = "Voice".into();
     next.timeline_mut().playhead_secs = 12.5;
     next.active_sequence_mut().name = "Cut".into();

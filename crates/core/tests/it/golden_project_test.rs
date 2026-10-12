@@ -58,6 +58,7 @@ fn project() -> Project {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let mut video = track(1, "V1", TrackKind::Video);
@@ -176,4 +177,22 @@ fn the_pinned_version_4_file_still_opens_with_default_stream_info() {
         project(),
         "opens as the same project with default new fields"
     );
+}
+
+/// The pinned file of layout version 5 (before the per-track mix) still opens with neutral mixes.
+/// Never regenerate this one either.
+#[test]
+fn the_pinned_version_5_file_still_opens_with_neutral_track_mixes() {
+    let bytes = std::fs::read(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/golden_v5.ocproj"),
+    )
+    .expect("tests/fixtures/golden_v5.ocproj");
+    assert_eq!(bytes[4], 5, "this fixture is a version 5 file");
+    let opened = from_project_bytes(&bytes).expect("a version 5 file opens");
+    assert_eq!(opened, project());
+    assert!(opened
+        .sequences
+        .iter()
+        .flat_map(|s| &s.timeline.tracks)
+        .all(|track| track.mix.is_neutral()));
 }

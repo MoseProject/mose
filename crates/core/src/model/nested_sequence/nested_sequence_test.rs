@@ -122,6 +122,7 @@ fn video_track(id: u64, clips: Vec<ClipInstance>) -> Track {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     }
 }

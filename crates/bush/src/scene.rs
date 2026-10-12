@@ -100,6 +100,13 @@ pub struct Placement {
     pub effects: LayerEffects,
     /// Linear audio gain for audible contributors, `0.0..=4.0`.
     pub gain: f32,
+    /// The contributor's track fader, a linear multiplier applied on top of [`Self::gain`] or of
+    /// an animated gain, `1.0` leaving it as it is.
+    pub track_gain: f32,
+    /// Stereo balance of the contributor's track, `-1.0` (left only) to `1.0` (right only); `0.0`
+    /// is centred and leaves the audio untouched. The side the pan moves away from falls off as a
+    /// quarter sine, the other stays at unity (the export mix applies the same law).
+    pub pan: f32,
     /// Keyframed overrides of opacity, position, scale and rotation, relative to the
     /// contributor's timeline start.
     pub animation: Animation,
@@ -145,6 +152,8 @@ impl Default for Placement {
             blend: BlendMode::Normal,
             effects: LayerEffects::default(),
             gain: 1.0,
+            track_gain: 1.0,
+            pan: 0.0,
             animation: Animation::default(),
             fade: Fade::default(),
             lut: None,

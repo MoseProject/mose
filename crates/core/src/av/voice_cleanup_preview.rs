@@ -113,6 +113,7 @@ fn preview_segment(
         voice_cleanup_ceiling_linear: params.ceiling_linear,
         fade_in_secs: 0.0,
         fade_out_secs: 0.0,
+        pan: 0.0,
     }
 }
 

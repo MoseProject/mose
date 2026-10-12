@@ -34,7 +34,7 @@ pub use shape_clip::{ShapeClip, ShapeKind, ShapePreset};
 pub use text_clip::{
     TextAlign, TextClip, TextDirection, TextFontFamily, TextFontStyle, WordTiming,
 };
-pub use track::{AudioRole, Track, TrackKind};
+pub use track::{AudioRole, Track, TrackKind, TrackMix};
 
 /// A project's full set of tracks plus the current playhead position.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -163,6 +163,7 @@ impl Timeline {
             muted: false,
             solo: false,
             locked: false,
+            mix: Default::default(),
             color_label: None,
         });
         self.tracks.len() - 1

@@ -203,6 +203,7 @@ fn track_edits_refuse_unknown_clips() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     assert!(track.text_clip_mut(99).is_none());

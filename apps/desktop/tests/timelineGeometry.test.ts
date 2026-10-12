@@ -79,6 +79,7 @@ function track(id: number, clips: ClipInstance[]): Track {
     solo: false,
     color_label: null,
     locked: false,
+    mix: { volume_db: 0, pan: 0 },
   };
 }
 

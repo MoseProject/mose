@@ -81,6 +81,7 @@ fn audio_segment() -> avbridge::AudioSegment {
         voice_cleanup_ceiling_linear: 0.95,
         fade_in_secs: 0.0,
         fade_out_secs: 0.0,
+        pan: 0.0,
     }
 }
 
@@ -405,6 +406,7 @@ fn resolve_cost() {
                 muted: false,
                 solo: false,
                 locked: false,
+                mix: Default::default(),
                 color_label: None,
             })
             .collect();
@@ -496,6 +498,7 @@ fn exported_file_on_tracks(
                     muted: false,
                     solo: false,
                     locked: false,
+                    mix: Default::default(),
                     color_label: None,
                 })
                 .collect(),
@@ -600,5 +603,97 @@ fn a_clip_set_to_treat_as_sdr_keeps_the_old_washed_out_look() {
     assert!(
         (i32::from(pixel[0]) - 200).abs() > 40,
         "treated as SDR it should look different, got {pixel:?}"
+    );
+}
+
+/// A sequence with one video track holding the colour fixture's clip, for the mix tests.
+fn mix_fixture(mix: crate::timeline::TrackMix) -> (crate::Sequence, Vec<crate::MediaAsset>) {
+    use crate::timeline::{AudioRole, ClipInstance, Timeline, Track, TrackKind};
+    let source = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/color/hd709_untagged.mkv");
+    let asset = crate::probe_media(&source)
+        .expect("probes")
+        .into_media_asset(1, "clip.mkv".into(), source);
+    let mut clip = ClipInstance::new(1, 1, 0.0, 0.0, 0.4);
+    clip.gain_db = -2.0;
+    let sequence = crate::Sequence {
+        id: 1,
+        name: "s".into(),
+        timeline: Timeline {
+            tracks: vec![Track {
+                id: 1,
+                name: "V1".into(),
+                kind: TrackKind::Video,
+                clips: vec![clip],
+                text_clips: vec![],
+                shape_clips: vec![],
+                visible: true,
+                audio_role: AudioRole::Unspecified,
+                muted: false,
+                solo: false,
+                locked: false,
+                color_label: None,
+                mix,
+            }],
+            playhead_secs: 0.0,
+            markers: vec![],
+            multicam_groups: vec![],
+        },
+        export_settings: Default::default(),
+    };
+    (sequence, vec![asset])
+}
+
+#[test]
+fn a_neutral_track_keeps_the_one_pass_audio_path() {
+    let (sequence, media) = mix_fixture(crate::timeline::TrackMix::default());
+    assert!(resolve_audio_segments(&sequence, &media)
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
+fn a_fader_or_pan_sends_the_track_through_the_mix_with_its_level_added_to_the_clips() {
+    let (sequence, media) = mix_fixture(crate::timeline::TrackMix {
+        volume_db: -6.0,
+        pan: 0.5,
+    });
+    let segments = resolve_audio_segments(&sequence, &media).unwrap();
+    assert_eq!(segments.len(), 1, "the track is mixed, not copied");
+    assert!(
+        (segments[0].gain_db - (-8.0)).abs() < 1e-6,
+        "-2 dB clip and -6 dB fader"
+    );
+    assert_eq!(segments[0].pan, 0.5);
+
+    // A pan alone also needs the mix.
+    let (sequence, media) = mix_fixture(crate::timeline::TrackMix {
+        volume_db: 0.0,
+        pan: -1.0,
+    });
+    assert_eq!(resolve_audio_segments(&sequence, &media).unwrap().len(), 1);
+}
+
+#[test]
+fn the_fader_multiplies_a_keyframed_gain() {
+    let (mut sequence, media) = mix_fixture(crate::timeline::TrackMix {
+        volume_db: -6.0,
+        pan: 0.0,
+    });
+    sequence.timeline.tracks[0].clips[0].gain_keyframes = vec![
+        crate::Keyframe {
+            time_fraction: 0.0,
+            value: 0.0,
+        },
+        crate::Keyframe {
+            time_fraction: 1.0,
+            value: -12.0,
+        },
+    ];
+    let segments = resolve_audio_segments(&sequence, &media).unwrap();
+    let expr = &segments[0].gain_keyframe_expr;
+    assert!(
+        expr.starts_with('(') && expr.contains(")*0.501187"),
+        "{expr}"
     );
 }

@@ -153,7 +153,7 @@ pub use text_to_speech::{
 pub use timeline::{
     AudioRole, ClipFormatting, ClipInstance, LayerTemplate, Marker, MarkerKind, ShapeClip,
     ShapeKind, TextAlign, TextClip, TextDirection, TextFontFamily, TextFontStyle, Timeline, Track,
-    TrackKind,
+    TrackKind, TrackMix,
 };
 pub use timeline_window::extract_timeline_window;
 pub use transcribe::{transcribe, TranscribeError, TranscribeOutcome, TranscribeSegment};

@@ -189,11 +189,33 @@ static int build_mix_graph(const AudioSegment *segments, const uint8_t *valid, i
                 goto fail;
         }
 
+        /* Stereo balance: the side the pan moves away from falls off as a quarter sine, the other
+           side stays at unity, so a centred branch is left alone. */
+        AVFilterContext *pan_tail = voice_cleanup_tail;
+        if (seg->pan != 0.0f) {
+            double pan = fmax(-1.0, fmin(1.0, (double)seg->pan));
+            double left = pan > 0.0 ? cos(pan * M_PI / 2.0) : 1.0;
+            double right = pan < 0.0 ? cos(-pan * M_PI / 2.0) : 1.0;
+            AVFilterContext *to_stereo = NULL, *pan_filter = NULL;
+            /* A mono source is placed in the stereo field first. */
+            snprintf(name, sizeof(name), "pan_stereo_%d", branch);
+            if ((ret = create_filter(graph, &to_stereo, "aformat", name,
+                                     "channel_layouts=stereo")) < 0)
+                goto fail;
+            snprintf(name, sizeof(name), "pan_%d", branch);
+            snprintf(args, sizeof(args), "stereo|c0=%.6f*c0|c1=%.6f*c1", left, right);
+            if ((ret = create_filter(graph, &pan_filter, "pan", name, args)) < 0) goto fail;
+            if ((ret = avfilter_link(voice_cleanup_tail, 0, to_stereo, 0)) < 0 ||
+                (ret = avfilter_link(to_stereo, 0, pan_filter, 0)) < 0)
+                goto fail;
+            pan_tail = pan_filter;
+        }
+
         if ((ret = avfilter_link(movie, 0, trim, 0)) < 0 ||
             (ret = avfilter_link(trim, 0, pts, 0)) < 0 ||
             (ret = avfilter_link(pts, 0, tempo, 0)) < 0 ||
             (ret = avfilter_link(tempo, 0, volume, 0)) < 0 ||
-            (ret = avfilter_link(voice_cleanup_tail, 0, delay, 0)) < 0)
+            (ret = avfilter_link(pan_tail, 0, delay, 0)) < 0)
             goto fail;
 
         branch_ctx[branch] = delay;

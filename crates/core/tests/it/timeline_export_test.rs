@@ -155,6 +155,7 @@ fn renders_two_clips_with_different_effects_as_one_concatenated_export() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let sequence = sequence_with(vec![track]);
@@ -203,6 +204,7 @@ fn frozen_clip_still_exports_its_full_timeline_duration() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let sequence = sequence_with(vec![track]);
@@ -265,6 +267,7 @@ fn rejects_a_clip_with_a_missing_asset() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let sequence = sequence_with(vec![track]);
@@ -303,6 +306,7 @@ fn cancelling_mid_timeline_export_reports_cancelled() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let sequence = sequence_with(vec![track]);
@@ -351,6 +355,7 @@ fn deflicker_exports_without_error() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let sequence = sequence_with(vec![track]);
@@ -415,6 +420,7 @@ fn colour_and_blur_effects_export_with_the_filters_the_build_has() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let sequence = sequence_with(vec![track]);
@@ -454,6 +460,7 @@ fn word_highlight_text_overlay_exports_without_error() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let text_track = Track {
@@ -505,6 +512,7 @@ fn word_highlight_text_overlay_exports_without_error() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let sequence = sequence_with(vec![video_track, text_track]);
@@ -552,6 +560,7 @@ fn fade_transition_exports_without_error() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let sequence = sequence_with(vec![track]);
@@ -599,6 +608,7 @@ fn slide_transition_exports_without_error() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let sequence = sequence_with(vec![track]);
@@ -646,6 +656,7 @@ fn zoom_transition_exports_without_error() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let sequence = sequence_with(vec![track]);
@@ -708,6 +719,7 @@ fn animated_scale_keyframes_export_without_error() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let sequence = sequence_with(vec![track]);
@@ -763,6 +775,7 @@ fn animated_rotation_keyframes_export_without_error() {
         muted: false,
         solo: false,
         locked: false,
+        mix: Default::default(),
         color_label: None,
     };
     let sequence = sequence_with(vec![track]);

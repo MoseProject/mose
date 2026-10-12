@@ -625,6 +625,39 @@ mod commands {
     }
 
     #[test]
+    fn a_track_mix_is_clamped_and_changing_nothing_leaves_no_undo_step() {
+        let h = setup();
+        add_track(h.handle(), TrackKind::Audio).unwrap();
+        let id = timeline(&h).tracks[0].id;
+        assert!(timeline(&h).tracks[0].mix.is_neutral());
+
+        set_track_mix(h.handle(), id, -6.0, 0.25).unwrap();
+        assert_eq!(timeline(&h).tracks[0].mix.volume_db, -6.0);
+        assert_eq!(timeline(&h).tracks[0].mix.pan, 0.25);
+
+        // Out of range and not-a-number values are brought inside the limits.
+        set_track_mix(h.handle(), id, 400.0, -7.0).unwrap();
+        let mix = timeline(&h).tracks[0].mix;
+        assert_eq!(
+            (mix.volume_db, mix.pan),
+            (avcore::timeline::TrackMix::MAX_VOLUME_DB, -1.0)
+        );
+        set_track_mix(h.handle(), id, f32::NAN, f32::NAN).unwrap();
+        assert!(timeline(&h).tracks[0].mix.is_neutral());
+
+        // The same mix again, and an unknown track, record nothing.
+        set_track_mix(h.handle(), id, -3.0, 0.0).unwrap();
+        let events = h.count_session_events();
+        set_track_mix(h.handle(), id, -3.0, 0.0).unwrap();
+        set_track_mix(h.handle(), 999, -3.0, 0.0).unwrap();
+        assert_eq!(events.load(Ordering::SeqCst), 0);
+
+        // One drag is one undo step.
+        crate::commands::undo(h.handle()).unwrap();
+        assert!(timeline(&h).tracks[0].mix.is_neutral());
+    }
+
+    #[test]
     fn mute_solo_and_the_audio_role_are_saved_as_one_undo_step() {
         let h = setup();
         add_track(h.handle(), TrackKind::Audio).unwrap();

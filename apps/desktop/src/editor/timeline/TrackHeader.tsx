@@ -7,6 +7,7 @@ import { Icon } from "../chrome/Icon";
 import { run } from "../../store";
 import { TRACK_HEIGHT } from "../../timelineGeometry";
 import { memo } from "react";
+import { TrackMixButton } from "./TrackMixButton";
 import { type AudioRole, type Track } from "../../types";
 
 const AUDIO_ROLES: [AudioRole, TextKey][] = [
@@ -58,6 +59,7 @@ export const TrackHeader = memo(function TrackHeader({
         >
           <Icon name={track.locked ? "lock" : "unlock"} />
         </button>
+        {carriesAudio && <TrackMixButton track={track} />}
       </div>
       {carriesAudio && (
         <div className={cx(styles, baseStyles, "track-header-row")}>
