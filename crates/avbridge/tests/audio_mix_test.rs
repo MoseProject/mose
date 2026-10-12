@@ -732,3 +732,31 @@ fn the_mix_is_written_as_wav_flac_mp3_and_opus_and_decodes_back_to_the_same_tone
         let _ = std::fs::remove_file(&out);
     }
 }
+
+/// The ducked music plays to its own end, not to the end of the commentary that ducks it.
+#[test]
+fn ducked_music_is_not_cut_short_when_the_commentary_ends() {
+    let music = sine_wav(220.0, 1.0);
+    let voice = sine_wav(1000.0, 0.3);
+    let mut music_segment = AudioSegment::plain(music, 0.0, 1.0, 0.0);
+    music_segment.duck_role = 2;
+    let mut voice_segment = AudioSegment::plain(voice, 0.0, 0.3, 0.0);
+    voice_segment.duck_role = 1;
+    let out = std::env::temp_dir().join("avbridge_duck_length.m4a");
+    let _ = std::fs::remove_file(&out);
+    let outcome = mix_audio_timeline(
+        &[music_segment, voice_segment],
+        1.0,
+        &out,
+        f32::NAN,
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+    assert_eq!(outcome, AudioMixOutcome::Completed);
+    let length = avbridge::probe(&out).unwrap().duration_secs;
+    let _ = std::fs::remove_file(&out);
+    assert!(
+        length > 0.9,
+        "the mix ended after {length} s of a 1 s music track"
+    );
+}
