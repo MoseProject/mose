@@ -23,7 +23,8 @@ before any broader editor-parity argument.
 | MX-03 EQ and dynamics | done for a per-track strip: high-pass, low-pass, three-band EQ and a compressor (project format 7, v3 to v6 files still open), in the preview and the export, controls in the track mix panel; no gate, no presets, no per-clip strip |
 | MX-04 crossfades and audio-only export | done: a 10 ms declick fade at hard cuts (export and preview), audio fades now also play in the preview, and an audio-only export as WAV 24-bit, FLAC, MP3 or Opus from the export dialog; the declick length is fixed, not adjustable |
 | MX-00 preview equals export for audio | done for sidechain ducking and voice cleanup: the preview ducks `Music` tracks under `Mic` tracks and runs the cleanup chain per clip; a probe renders the same project through both (ducking within 2 dB at every point, voice cleanup within 1.5 dB); the denoise is approximated by a gate |
-| CM-04, CM-05 | not started |
+| CM-05 grading tools | done for a static per-clip grade: exposure, temperature, tint, shadows, highlights and lift/gamma/gain per channel (project format 8, v3 to v7 files still open), baked into one 33-point lookup table that both the preview and the export's `lut3d` apply; inspector section "Color grade". No curves, no keyframes, no hue control, no presets yet |
+| CM-04 | not started |
 
 Decisions taken while building:
 
@@ -46,6 +47,12 @@ Decisions taken while building:
   `afftdn` has no cheap equivalent: a gate 10 dB above the expected noise floor that lowers what is under it by 12 dB
   stands in for it. Found by the probe: the export cut ducked music short at the end of the commentary (the sidechain
   input ended, and so did the output); the trigger is now padded with silence.
+- Grade through a baked LUT, not per-tool filters: every tool is a per-pixel colour function, so one `Grade::apply`
+  bakes into a 33^3 table (after the clip's own LUT when it has one) and the preview and the export both apply it
+  through their existing LUT stage. One formula, one table, so the two cannot drift. Measured against the real
+  `lut3d` filter on a 24^3 colour chart: worst difference 1.4 levels over four grades (limit 2). The cost is that
+  a grade is static (no keyframes, a table cannot follow time) and that the tools are simple closed formulas, not
+  the exact `colorbalance`/`curves` filters of the spec.
 - Strip stages run after the pan, in the order high-pass, low-pass, low shelf (120 Hz), mid bell (1 kHz, Q 1),
   high shelf (6 kHz), compressor (attack 10 ms, release 250 ms, soft knee), the same filters as the export graph
   and the same corner frequencies. A probe renders the same tones through the preview strip and through the export

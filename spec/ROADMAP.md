@@ -2954,7 +2954,7 @@ Plan, findings and acceptance criteria: [architecture/mixer-hdr-color.md](archit
 33. `[x]` **CM-00 SDR decode uses the wrong matrix** (fixed, see the status table). Measured: BT.709 footage shows as
     186, 46, 41 instead of 200, 60, 40 in the preview (BT.601 matrix). First slice, small fix.
 34. `[~]` CM-01 colour metadata, CM-02 HDR to SDR, CM-03 output tagging and CM-06 scopes are done;
-    CM-04 10-bit/HDR output and CM-05 grading tools are not.
+    CM-05 grading tools are done as a static baked-LUT grade (no curves, no keyframes); CM-04 10-bit/HDR output is not.
 35. `[~]` MX-01 multi-stream audio, MX-02 per-track fader and pan, MX-03 per-track EQ, filters and
     compressor, MX-04 declick at cuts and audio-only export, and MX-00 preview ducking and
     voice cleanup matching the export are done (a gate, strip presets, per-clip strips and an
