@@ -867,6 +867,9 @@ impl ClipInstance {
     /// would put `new_start_secs` or the resulting `source_in_secs` below zero, or shrink the
     /// clip below `min_duration_secs`.
     pub fn trim_start(&mut self, new_start_secs: f64, min_duration_secs: f64) -> bool {
+        if !new_start_secs.is_finite() || !min_duration_secs.is_finite() {
+            return false;
+        }
         let timeline_delta = new_start_secs - self.start_secs;
         let new_source_in_secs = self.source_in_secs + timeline_delta * self.speed_factor as f64;
         let new_source_duration = self.source_out_secs - new_source_in_secs;
@@ -892,6 +895,9 @@ impl ClipInstance {
         min_duration_secs: f64,
         max_source_out_secs: Option<f64>,
     ) -> bool {
+        if !new_end_secs.is_finite() || !min_duration_secs.is_finite() {
+            return false;
+        }
         let new_timeline_duration = new_end_secs - self.start_secs;
         let new_source_out_secs =
             self.source_in_secs + new_timeline_duration * self.speed_factor as f64;
@@ -914,6 +920,9 @@ impl ClipInstance {
     /// `max_source_out_secs` is known — the source asset's own duration) `source_out_secs`
     /// past the end of the actual source media.
     pub fn slip(&mut self, delta_secs: f64, max_source_out_secs: Option<f64>) -> bool {
+        if !delta_secs.is_finite() || delta_secs == 0.0 {
+            return false;
+        }
         let new_source_in_secs = self.source_in_secs + delta_secs;
         let new_source_out_secs = self.source_out_secs + delta_secs;
         if new_source_in_secs < 0.0 {

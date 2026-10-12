@@ -161,6 +161,9 @@ impl Track {
     /// `at_secs`, with `new_clip_id` and the rest of the original's source range, is inserted
     /// right after it. No-op (`false`) if no clip on this track covers `at_secs`.
     pub fn split_clip_at(&mut self, at_secs: f64, new_clip_id: u64) -> bool {
+        if !at_secs.is_finite() {
+            return false;
+        }
         let Some(index) = self.clips.iter().position(|c| c.contains(at_secs)) else {
             return false;
         };
@@ -376,7 +379,7 @@ impl Track {
     /// above) — dragging one clip onto another just lets them overlap for now. No-op
     /// (`false`) if the clip isn't on this track or `new_start_secs` is negative.
     pub fn move_clip(&mut self, clip_id: u64, new_start_secs: f64) -> bool {
-        if new_start_secs < 0.0 {
+        if !new_start_secs.is_finite() || new_start_secs < 0.0 {
             return false;
         }
         let Some(clip) = self.clip_mut(clip_id) else {
@@ -530,7 +533,7 @@ impl Track {
         min_duration_secs: f64,
         prev_max_source_out_secs: Option<f64>,
     ) -> bool {
-        if new_start_secs < 0.0 {
+        if !new_start_secs.is_finite() || new_start_secs < 0.0 {
             return false;
         }
         let Some(index) = self.clips.iter().position(|c| c.id == clip_id) else {
@@ -760,17 +763,18 @@ impl Track {
     /// clip starting at or after `end_secs` shifts left by the removed span. Only `self.clips`
     /// is affected, matching [`Self::ripple_trim_start`]/[`Self::ripple_trim_end`]'s existing
     /// scope (text/shape overlay tracks are never video/audio tracks, so this never applies to
-    /// them). No-op (`false`, `next_clip_id` untouched) if `end_secs <= start_secs`.
+    /// them). No-op (`false`, `next_clip_id` untouched) if `end_secs <= start_secs`; also `false` when the range held nothing to remove or move.
     pub fn ripple_delete_range(
         &mut self,
         start_secs: f64,
         end_secs: f64,
         next_clip_id: &mut u64,
     ) -> bool {
-        if end_secs <= start_secs {
+        if !start_secs.is_finite() || !end_secs.is_finite() || end_secs <= start_secs {
             return false;
         }
 
+        let before = self.clips.clone();
         if self.split_clip_at(start_secs, *next_clip_id) {
             *next_clip_id += 1;
         }
@@ -789,7 +793,8 @@ impl Track {
                 clip.start_secs = (clip.start_secs - removed_span).max(0.0);
             }
         }
-        true
+        // A range with no clip in it and none after it changes nothing: no edit to report.
+        self.clips != before
     }
 
     /// Removes the timeline range `[start_secs, end_secs)` from this track and leaves the gap
@@ -797,9 +802,10 @@ impl Track {
     /// are split the same way (consuming ids from `next_clip_id`), clips fully inside the range
     /// are dropped, and nothing moves. No-op (`false`) if `end_secs <= start_secs`.
     pub fn lift_range(&mut self, start_secs: f64, end_secs: f64, next_clip_id: &mut u64) -> bool {
-        if end_secs <= start_secs {
+        if !start_secs.is_finite() || !end_secs.is_finite() || end_secs <= start_secs {
             return false;
         }
+        let before = self.clips.clone();
         if self.split_clip_at(start_secs, *next_clip_id) {
             *next_clip_id += 1;
         }
@@ -811,7 +817,7 @@ impl Track {
             let c_end = c.start_secs + c.duration_secs();
             !(c.start_secs >= start_secs - EPSILON && c_end <= end_secs + EPSILON)
         });
-        true
+        self.clips != before
     }
 
     /// The position, in seconds, where this track's last clip ends. `0.0` for an empty track —

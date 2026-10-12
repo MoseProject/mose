@@ -2560,7 +2560,10 @@ fn lifting_any_range_removes_exactly_what_it_covers_and_moves_nothing_else() {
             .collect();
         let mut next_id = 100;
 
-        assert!(track.lift_range(a, b, &mut next_id));
+        let clips_before = track.clips.clone();
+        let changed = track.lift_range(a, b, &mut next_id);
+        // The result says whether anything was removed or moved, no more and no less.
+        assert_eq!(changed, track.clips != clips_before);
 
         let after_total = total_secs(&track);
         assert!(
@@ -2595,7 +2598,10 @@ fn rippling_any_range_out_keeps_a_contiguous_track_contiguous() {
         let inside = covered(&track, a, b);
         let mut next_id = 100;
 
-        assert!(track.ripple_delete_range(a, b, &mut next_id));
+        let clips_before = track.clips.clone();
+        let changed = track.ripple_delete_range(a, b, &mut next_id);
+        // The result says whether anything was removed or moved, no more and no less.
+        assert_eq!(changed, track.clips != clips_before);
 
         assert!(
             (before_total - inside - total_secs(&track)).abs() < 1e-9,
@@ -2632,7 +2638,10 @@ fn range_edits_hold_for_clips_at_other_speeds() {
         let inside = covered(&track, a, b);
         let mut next_id = 100;
 
-        assert!(track.lift_range(a, b, &mut next_id));
+        let clips_before = track.clips.clone();
+        let changed = track.lift_range(a, b, &mut next_id);
+        // The result says whether anything was removed or moved, no more and no less.
+        assert_eq!(changed, track.clips != clips_before);
 
         assert!(
             (before_total - inside - total_secs(&track)).abs() < 1e-6,
