@@ -9,8 +9,6 @@ import type { SessionView } from "../../src/types";
 vi.mock("../../src/ipc", () => {
   return {
     api: {
-      getGpuEncoderPreference: vi.fn().mockResolvedValue("auto"),
-      setGpuEncoderPreference: vi.fn().mockResolvedValue(undefined),
       getNormalizeAudio: vi.fn().mockResolvedValue(true),
       setNormalizeAudio: vi.fn().mockResolvedValue(undefined),
       setExportSettings: vi.fn().mockResolvedValue(undefined),
@@ -30,6 +28,13 @@ vi.mock("../../src/ipc", () => {
 
 const { ExportDialog } = await import("../../src/editor/export/ExportDialog");
 const { api } = await import("../../src/ipc");
+
+/** Waits for the stored folder to arrive, which is what enables Export. */
+const ready = async () => {
+  await waitFor(() => {
+    expect((screen.getByText(t("exportChooseFile")) as HTMLButtonElement).disabled).toBe(false);
+  });
+};
 
 /** Picks `value` in the dropdown labelled `label`. */
 const choose = (label: string, value: string) => {
@@ -63,7 +68,6 @@ const session = (overrides: { aspect?: string; lufs?: number; loudness?: number 
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(api.getGpuEncoderPreference).mockResolvedValue("auto");
   vi.mocked(api.getNormalizeAudio).mockResolvedValue(true);
   uiStore.set({ ...uiStore.get(), exportDialogOpen: true, exportQueueOpen: false });
 });
@@ -90,12 +94,9 @@ describe("ExportDialog", () => {
     expect(screen.queryByText(t("loudnessMeasured"), { exact: false })).toBeNull();
   });
 
-  it("adopts the stored encoder preference", async () => {
-    vi.mocked(api.getGpuEncoderPreference).mockResolvedValue("nvenc");
+  it("does not offer the encoder choice, which lives in the preferences", () => {
     render(<ExportDialog session={session()} />);
-    await waitFor(() => {
-      expect((screen.getByLabelText(t("gpuEncoder")) as HTMLSelectElement).value).toBe("nvenc");
-    });
+    expect(screen.queryByLabelText(t("gpuEncoder"), { exact: false })).toBeNull();
   });
 
   it("starts with the sequence name and the stored output folder", async () => {
@@ -140,6 +141,20 @@ describe("ExportDialog", () => {
     expect(heights).not.toContain("1080");
   });
 
+  it("falls back to the source quality when a smaller picture makes the chosen step too high", async () => {
+    render(<ExportDialog session={session()} />);
+    const quality = (await screen.findByLabelText(t("exportQuality"), {
+      exact: false,
+    })) as HTMLSelectElement;
+    choose(t("exportQuality"), "medium");
+    expect(quality.value).toBe("medium");
+    // 720p carries about 7.1 Mbps of the source's 16, so an 8 Mbps step no longer makes sense.
+    choose(t("exportResolution"), "720");
+    await waitFor(() => {
+      expect(quality.value).toBe("source");
+    });
+  });
+
   it("saves the chosen settings, opens the queue and queues the file with its options", async () => {
     render(<ExportDialog session={session()} />);
     await waitFor(() => {
@@ -152,7 +167,7 @@ describe("ExportDialog", () => {
     });
     choose(t("aspectRatio"), "Square");
     choose(t("loudnessTarget"), "-23");
-    choose(t("exportQuality"), "medium");
+    choose(t("exportQuality"), "low");
     choose(t("exportResolution"), "720");
     fireEvent.click(screen.getByText(t("exportChooseFile")));
     await waitFor(() => {
@@ -160,11 +175,10 @@ describe("ExportDialog", () => {
     });
     expect(api.exportTarget).toHaveBeenCalledWith("D:/videos", "final");
     expect(api.startExport).toHaveBeenCalledWith("D:/videos/final.mp4", false, {
-      bitrateMbps: 8,
+      bitrateMbps: 4,
       maxHeight: 720,
     });
     expect(api.setExportSettings).toHaveBeenCalledWith(-23, "Square");
-    expect(api.setGpuEncoderPreference).toHaveBeenCalledWith("auto");
     expect(api.setNormalizeAudio).toHaveBeenCalledWith(true);
     expect(uiStore.get().exportDialogOpen).toBe(false);
     expect(uiStore.get().exportQueueOpen).toBe(true);
@@ -210,6 +224,7 @@ describe("ExportDialog", () => {
   it("keeps the dialog open and says why when the folder or name is refused", async () => {
     vi.mocked(api.exportTarget).mockRejectedValueOnce("folderMissing");
     render(<ExportDialog session={session()} />);
+    await ready();
     fireEvent.click(screen.getByText(t("exportChooseFile")));
     expect((await screen.findByRole("alert")).textContent).toBe(t("exportErrFolderMissing"));
     expect(uiStore.get().exportDialogOpen).toBe(true);
@@ -237,7 +252,9 @@ describe("ExportDialog", () => {
     await waitFor(() => {
       expect(box.checked).toBe(false);
     });
+    choose(t("loudnessTarget"), "custom");
     fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "" } });
+    await ready();
     fireEvent.click(screen.getByText(t("exportChooseFile")));
     await waitFor(() => {
       expect(api.startExport).toHaveBeenCalledTimes(1);
@@ -248,7 +265,11 @@ describe("ExportDialog", () => {
 
   it("accepts a custom loudness target and rejects one out of range", async () => {
     render(<ExportDialog session={session()} />);
-    const input = screen.getByRole("spinbutton");
+    const input = screen.getByRole("spinbutton") as HTMLInputElement;
+    // Only the "custom" choice makes the field editable.
+    expect(input.disabled).toBe(true);
+    choose(t("loudnessTarget"), "custom");
+    expect(input.disabled).toBe(false);
     fireEvent.change(input, { target: { value: "-3" } });
     expect(screen.getByRole("alert").textContent).toBe(t("loudnessRange"));
     expect((screen.getByText(t("exportChooseFile")) as HTMLButtonElement).disabled).toBe(true);
@@ -256,6 +277,7 @@ describe("ExportDialog", () => {
     expect((screen.getByText(t("exportChooseFile")) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(input, { target: { value: "-20.5" } });
     expect(screen.queryByRole("alert")).toBeNull();
+    await ready();
     fireEvent.click(screen.getByText(t("exportChooseFile")));
     await waitFor(() => {
       expect(api.setExportSettings).toHaveBeenCalledWith(-20.5, "Original");
@@ -270,5 +292,57 @@ describe("ExportDialog", () => {
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     expect(uiStore.get().exportDialogOpen).toBe(false);
     expect(api.startExport).not.toHaveBeenCalled();
+  });
+
+  it("keeps Export off until there is a folder and a name", async () => {
+    vi.mocked(api.getPrefs).mockResolvedValueOnce({ outputFolder: "" } as never);
+    render(<ExportDialog session={session()} />);
+    const button = screen.getByText(t("exportChooseFile")) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText(t("exportFolder")), { target: { value: "D:/out" } });
+    expect(button.disabled).toBe(false);
+    fireEvent.change(screen.getByLabelText(t("exportFileName"), { exact: false }), {
+      target: { value: "  " },
+    });
+    expect(button.disabled).toBe(true);
+  });
+
+  it("refuses to export an empty timeline and says so", async () => {
+    vi.mocked(api.exportCanvas).mockRejectedValue("nothing to export");
+    render(<ExportDialog session={session()} />);
+    expect((await screen.findByRole("alert")).textContent).toBe(t("exportEmptyTimeline"));
+    expect((screen.getByText(t("exportChooseFile")) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("disables quality steps above the source bitrate, and falls back from one chosen", async () => {
+    vi.mocked(api.exportCanvas).mockResolvedValue({
+      width: 1920,
+      height: 1080,
+      bitrateMbps: 6,
+      durationSecs: 60,
+    });
+    render(<ExportDialog session={session()} />);
+    const select = (await screen.findByLabelText(t("exportQuality"), {
+      exact: false,
+    })) as HTMLSelectElement;
+    await waitFor(() => {
+      expect(screen.getByText(t("exportQualityAboveSource"))).toBeTruthy();
+    });
+    const disabled = [...select.options]
+      .filter((option) => {
+        return option.disabled;
+      })
+      .map((option) => {
+        return option.value;
+      });
+    expect(disabled).toEqual(["high", "medium"]);
+  });
+
+  it("shows the copy hint only while nothing asks for a different bitrate or size", async () => {
+    render(<ExportDialog session={session()} />);
+    await screen.findByTestId("export-summary");
+    expect(screen.queryByText(t("exportKeepsBitrate"))).toBeTruthy();
+    choose(t("exportQuality"), "low");
+    expect(screen.queryByText(t("exportKeepsBitrate"))).toBeNull();
   });
 });
