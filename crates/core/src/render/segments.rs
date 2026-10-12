@@ -15,7 +15,7 @@
 use super::errors::RenderError;
 use crate::export::ExportAspectRatio;
 use crate::keyframe;
-use crate::media::{ColorTransfer, MediaAsset};
+use crate::media::{ColorMatrix, ColorTransfer, MediaAsset};
 use crate::project::Sequence;
 use crate::timeline::{ClipInstance, TrackKind};
 use avbridge::Canvas;
@@ -125,9 +125,38 @@ pub(crate) fn hdr_tone_map_filter(asset: &MediaAsset) -> Option<String> {
     ))
 }
 
-/// `video_filter` with the asset's HDR conversion in front of it, if it needs one.
+/// The conversion that brings an SDR asset's YUV values to Rec.709 limited range, the one every
+/// export is tagged with, or `None` when it already is (or nothing is known about it: assets
+/// imported before the colour description existed). A clip is read with the matrix it is tagged
+/// with, or by its size when untagged (BT.709 from 1280x720 up, BT.601 below), the rule the
+/// preview uses (`avbridge_resolve_colorspace`), so what is shown is what is exported.
+pub(crate) fn sdr_normalize_filter(asset: &MediaAsset) -> Option<String> {
+    if asset.needs_tone_mapping() {
+        return None;
+    }
+    let color = asset.streams.color?;
+    let matrix = match color.matrix {
+        ColorMatrix::Bt709 => "bt709",
+        ColorMatrix::Bt601 => "bt601",
+        ColorMatrix::Bt2020 => "bt2020",
+        ColorMatrix::Unspecified | ColorMatrix::Other => match asset.resolution {
+            Some((width, height)) if width >= 1280 || height >= 720 => "bt709",
+            _ => "bt601",
+        },
+    };
+    if matrix == "bt709" && !color.full_range {
+        return None;
+    }
+    let range = if color.full_range { "pc" } else { "tv" };
+    Some(format!(
+        "scale=in_color_matrix={matrix}:in_range={range}:out_color_matrix=bt709:out_range=tv"
+    ))
+}
+
+/// `video_filter` with the asset's colour conversion to Rec.709 SDR in front of it: tone mapping
+/// for HDR, a matrix and range conversion for SDR that is not Rec.709 limited range.
 fn with_tone_mapping(asset: &MediaAsset, video_filter: String) -> String {
-    match hdr_tone_map_filter(asset) {
+    match hdr_tone_map_filter(asset).or_else(|| sdr_normalize_filter(asset)) {
         Some(tone_map) if video_filter.is_empty() => tone_map,
         Some(tone_map) => format!("{tone_map},{video_filter}"),
         None => video_filter,

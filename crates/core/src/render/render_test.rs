@@ -447,6 +447,26 @@ fn exported_centre_pixel_on_tracks(
     tracks: u64,
     change: impl FnOnce(&mut crate::MediaAsset),
 ) -> [u8; 3] {
+    let output = exported_file_on_tracks(fixture, tracks, change);
+    let frame = crate::FrameSampler::open(&output)
+        .expect("opens the export")
+        .sample(0.0, std::time::Duration::from_secs(5))
+        .expect("a frame");
+    let _ = std::fs::remove_file(&output);
+    let at = ((frame.height / 2 * frame.width + frame.width / 2) * 4) as usize;
+    [frame.rgba[at], frame.rgba[at + 1], frame.rgba[at + 2]]
+}
+
+/// The exported file of `fixture`, for the caller to read and delete.
+fn exported_file(fixture: &str) -> std::path::PathBuf {
+    exported_file_on_tracks(fixture, 1, |_| {})
+}
+
+fn exported_file_on_tracks(
+    fixture: &str,
+    tracks: u64,
+    change: impl FnOnce(&mut crate::MediaAsset),
+) -> std::path::PathBuf {
     use crate::timeline::{AudioRole, ClipInstance, Timeline, Track, TrackKind};
     use crate::Sequence;
     use std::sync::atomic::AtomicBool;
@@ -507,13 +527,7 @@ fn exported_centre_pixel_on_tracks(
     .expect("exports");
     assert!(matches!(outcome, RenderOutcome::Completed));
 
-    let frame = crate::FrameSampler::open(&output)
-        .expect("opens the export")
-        .sample(0.0, Duration::from_secs(5))
-        .expect("a frame");
-    let _ = std::fs::remove_file(&output);
-    let at = ((frame.height / 2 * frame.width + frame.width / 2) * 4) as usize;
-    [frame.rgba[at], frame.rgba[at + 1], frame.rgba[at + 2]]
+    output
 }
 
 fn assert_pixel_near(pixel: [u8; 3], expected: [i32; 3], tolerance: i32, what: &str) {
@@ -536,6 +550,39 @@ fn an_exported_hd_clip_keeps_its_colour() {
 fn an_exported_hdr_clip_is_tone_mapped_to_the_same_sdr_colour() {
     let pixel = exported_centre_pixel("hdr10_pq.mkv", |_| {});
     assert_pixel_near(pixel, [200, 60, 40], 10, "an HDR clip");
+}
+
+#[test]
+fn exported_sd_and_full_range_clips_keep_their_colour_in_rec709() {
+    // 601 SD and full-range HD are converted to the Rec.709 limited range the export is tagged
+    // with: without it the player would read their YUV with the wrong matrix or range.
+    assert_pixel_near(
+        exported_centre_pixel("sd601_untagged.mkv", |_| {}),
+        [200, 60, 40],
+        8,
+        "an SD 601 clip",
+    );
+    assert_pixel_near(
+        exported_centre_pixel("hd709_fullrange.mkv", |_| {}),
+        [200, 60, 40],
+        8,
+        "a full-range clip",
+    );
+}
+
+#[test]
+fn an_export_says_it_is_rec709_limited_range() {
+    for fixture in ["sd601_untagged.mkv", "hd709_untagged.mkv", "hdr10_pq.mkv"] {
+        let output = exported_file(fixture);
+        let info = avbridge::probe(&output).expect("the export probes");
+        let _ = std::fs::remove_file(&output);
+        let color = info.color.expect("a video export");
+        assert_eq!(color.space, 1, "{fixture}: the matrix (AVCOL_SPC_BT709)");
+        assert_eq!(color.primaries, 1, "{fixture}: the primaries");
+        assert_eq!(color.transfer, 1, "{fixture}: the transfer");
+        assert!(!color.full_range, "{fixture}: limited range");
+        assert_eq!(color.bit_depth, 8, "{fixture}");
+    }
 }
 
 #[test]
