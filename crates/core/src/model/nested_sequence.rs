@@ -76,6 +76,9 @@ pub fn cache_dir_for_project(project: &Project) -> PathBuf {
 pub struct NestedSequenceCache {
     pub timeline: Timeline,
     pub rendered_path: PathBuf,
+    /// The rendered file as an asset, probed once when it was rendered: a cache hit then costs a
+    /// timeline comparison and a `stat`, not a probe of the file on every edit.
+    pub asset: MediaAsset,
 }
 
 /// Renders every nested-sequence clip ([`crate::timeline::ClipInstance::nested_sequence_id`])
@@ -135,11 +138,8 @@ fn materialize_inner(
             .ok_or(RenderError::MissingNestedSequence)?;
 
         if let Some(cached) = cache.get(&nested_id) {
-            if cached.timeline == nested_sequence.timeline {
-                assets.insert(
-                    nested_id,
-                    synthetic_asset(nested_id, &cached.rendered_path)?,
-                );
+            if cached.timeline == nested_sequence.timeline && cached.rendered_path.exists() {
+                assets.insert(nested_id, cached.asset.clone());
                 continue;
             }
         }
@@ -160,12 +160,14 @@ fn materialize_inner(
         visiting.remove(&nested_id);
 
         let rendered_path = render_nested_sequence(project, nested_sequence, cache_dir, assets)?;
-        assets.insert(nested_id, synthetic_asset(nested_id, &rendered_path)?);
+        let asset = synthetic_asset(nested_id, &rendered_path)?;
+        assets.insert(nested_id, asset.clone());
         cache.insert(
             nested_id,
             NestedSequenceCache {
                 timeline: nested_sequence.timeline.clone(),
                 rendered_path,
+                asset,
             },
         );
     }
@@ -198,7 +200,9 @@ fn render_nested_sequence(
         &audio_segments,
         canvas,
         &output,
-        sequence.export_settings.target_lufs,
+        // The loudness is set once, by the export or the preview that uses this file: a second
+        // pass here would normalize the sound twice, and cost the time of a loudness analysis.
+        crate::render::NO_NORMALIZATION,
         avbridge::GpuEncoderPreference::Auto,
         &text_segments,
         &shape_segments,
