@@ -295,7 +295,10 @@ export function ExportDialog({ session }: { session: SessionView }) {
             setMaxHeight(e.target.value === "source" ? null : Number(e.target.value));
           }}
         >
-          <option value="source">{t("exportResolutionSource")}</option>
+          <option value="source">
+            {t("exportResolutionSource")}
+            {canvas ? ` (${canvas.width}x${canvas.height})` : ""}
+          </option>
           {RESOLUTION_HEIGHTS.filter((h) => {
             return canvas === null || h < canvas.height;
           }).map((height) => {
