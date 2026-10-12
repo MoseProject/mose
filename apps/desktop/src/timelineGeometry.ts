@@ -171,6 +171,9 @@ const MIN_TICK_SPACING_PX = 80;
 
 /** Labelled ruler tick times covering `[scrollSecs, scrollSecs + width / pxPerSec]`. */
 export function rulerTicks(pxPerSec: number, scrollSecs: number, width: number): number[] {
+  if (!(pxPerSec > 0) || !Number.isFinite(scrollSecs) || !Number.isFinite(width)) {
+    return [];
+  }
   const step =
     TICK_STEPS.find((s) => {
       return s * pxPerSec >= MIN_TICK_SPACING_PX;
@@ -186,6 +189,9 @@ export function rulerTicks(pxPerSec: number, scrollSecs: number, width: number):
 
 /** Ruler label: `m:ss`, switching to `h:mm:ss` from one hour. */
 export function rulerLabel(secs: number): string {
+  // Rounded to the hundredth first, so a time just under a second shows the next second rather
+  // than a fraction of "100".
+  secs = Math.round(secs * 100) / 100;
   const whole = Math.floor(secs);
   const hours = Math.floor(whole / 3600);
   const minutes = Math.floor((whole % 3600) / 60);
