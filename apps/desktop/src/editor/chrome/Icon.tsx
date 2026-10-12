@@ -10,6 +10,7 @@ import {
   Box,
   ChevronDown,
   ChevronLeft,
+  Info,
   ChevronRight,
   ChevronsLeft,
   ChevronsLeftRight,
@@ -56,6 +57,7 @@ import {
 
 const ICONS = {
   star: Star,
+  info: Info,
   flag: Flag,
   document: FileText,
   skipBack: SkipBack,
