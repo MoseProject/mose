@@ -31,6 +31,7 @@ export const ptBR = {
     "Arraste para redimensionar a camada — efeito visível só em faixas de overlay.",
   layerTransformAnimatedHint: "Posição animada — edite pela lista de keyframes.",
   previewEmpty: "Nada na timeline nesta posição",
+  previewRenderingCompound: "Renderizando clipe composto…",
   play: "Reproduzir",
   pause: "Pausar",
   stepBack: "Quadro anterior",

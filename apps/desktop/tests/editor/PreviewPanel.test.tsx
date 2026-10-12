@@ -74,6 +74,7 @@ const tick = (overrides: Partial<PreviewTick> = {}): PreviewTick => {
     peakL: 0,
     peakR: 0,
     momentaryLufs: null,
+    renderingCompound: false,
     ...overrides,
   };
 };
@@ -144,6 +145,18 @@ describe("preview panel", () => {
     mount();
     expect(screen.getByText(t("previewUnavailable")).getAttribute("title")).toBe("decode failed");
     expect(monitor().querySelector("img")).toBeNull();
+  });
+
+  it("tells the user a compound clip is rendering, only while it is", () => {
+    previewStore.set(tick({ renderingCompound: true }));
+    mount();
+    expect(screen.getByTestId("rendering-compound").textContent).toBe(
+      t("previewRenderingCompound"),
+    );
+    cleanup();
+    previewStore.set(tick({ renderingCompound: false }));
+    mount();
+    expect(screen.queryByTestId("rendering-compound")).toBeNull();
   });
 
   it("shows the current frame", () => {

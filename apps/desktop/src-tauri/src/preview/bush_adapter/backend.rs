@@ -218,6 +218,7 @@ pub(crate) fn run_with_audio<R: Runtime>(
     // The project the scene was last built from.
     let mut shown: Option<Arc<avcore::Project>> = None;
     let mut nested = NestedRenderer::default();
+    let mut rendering_compound = false;
     let mut player: Option<Player> = None;
     let mut canvas = DEFAULT_CANVAS;
     let mut audio: Option<Box<dyn AudioOutput>> = None;
@@ -514,6 +515,11 @@ pub(crate) fn run_with_audio<R: Runtime>(
             dirty = true;
         }
 
+        if nested.is_running() != rendering_compound {
+            rendering_compound = !rendering_compound;
+            dirty = true;
+        }
+
         if dirty && (!playing || last_tick.elapsed() >= TICK_INTERVAL) {
             let (peak_l, peak_r) = audio
                 .as_ref()
@@ -533,6 +539,7 @@ pub(crate) fn run_with_audio<R: Runtime>(
                 peak_l,
                 peak_r,
                 momentary_lufs: lufs,
+                rendering_compound,
             };
             if let Err(error) = app.emit(PREVIEW_TICK, tick) {
                 tracing::warn!(%error, "failed to emit preview tick");

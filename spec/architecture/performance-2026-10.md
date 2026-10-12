@@ -189,4 +189,3 @@ project is switched.
 - Hardware decode and encode (NVENC, Quick Sync, AMF) and GPU compositing: need a machine with a GPU.
 - Dynamic preview quality for many effect layers: changes what the user sees, needs a decision.
 - Zoom transition through `zoompan` needs the clip split in two graph segments.
-- The white label on the cyan primary buttons has a 2.4:1 contrast ratio.

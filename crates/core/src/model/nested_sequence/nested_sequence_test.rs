@@ -226,6 +226,29 @@ fn detects_an_indirect_nesting_cycle() {
 }
 
 #[test]
+fn the_cheap_checks_terminate_on_a_nesting_cycle() {
+    // 1 nests 2 and 2 nests 1: the preview asks these on every edit, before any render could
+    // report the cycle, so they must not loop on it.
+    let mut c1 = clip(1, 0, 0.0, 0.0, 1.0);
+    c1.nested_sequence_id = Some(2);
+    let seq1_timeline = timeline_with(vec![video_track(1, vec![c1])]);
+    let mut c2 = clip(2, 0, 0.0, 0.0, 1.0);
+    c2.nested_sequence_id = Some(1);
+    let seq2_timeline = timeline_with(vec![video_track(1, vec![c2])]);
+    let proj = project(
+        vec![
+            sequence(1, seq1_timeline.clone()),
+            sequence(2, seq2_timeline),
+        ],
+        vec![],
+    );
+    let cache = HashMap::new();
+
+    assert!(!nested_sequences_are_current(&proj, &seq1_timeline, &cache));
+    assert!(cached_nested_assets(&proj, &seq1_timeline, &cache).is_empty());
+}
+
+#[test]
 fn renders_a_real_nested_sequence_to_a_probeable_synthetic_asset() {
     let path = fixture("video.mp4");
     let asset = probe_media(&path)

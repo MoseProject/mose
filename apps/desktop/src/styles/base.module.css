@@ -22,6 +22,8 @@
   --accent: #20b9c3;
   --accent-hover: #2bc7d1;
   --accent-active: #0f7f86;
+  /* Text on an accent fill: white on this cyan is only 2.4:1, this is 7.7:1. */
+  --on-accent: #06161a;
   --accent-tint: rgba(32, 185, 195, 0.1);
   --icon-default: #9aa7ac;
   --icon-hover: #e3e8e9;
@@ -83,7 +85,7 @@ button:disabled {
 button.primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 button.primary:hover:not(:disabled) {

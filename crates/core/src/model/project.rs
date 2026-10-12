@@ -415,6 +415,34 @@ impl Project {
         Some(new_sequence_id)
     }
 
+    /// Whether sequence `outer` holds `inner` as a compound clip, directly or through other
+    /// compound clips. Inserting `outer` into `inner` would then close a cycle.
+    pub fn sequence_nests(&self, outer: u64, inner: u64) -> bool {
+        let mut pending = vec![outer];
+        let mut seen = std::collections::HashSet::new();
+        while let Some(id) = pending.pop() {
+            if !seen.insert(id) {
+                continue;
+            }
+            let Some(sequence) = self.sequences.iter().find(|s| s.id == id) else {
+                continue;
+            };
+            for nested in sequence
+                .timeline
+                .tracks
+                .iter()
+                .flat_map(|track| &track.clips)
+                .filter_map(|clip| clip.nested_sequence_id)
+            {
+                if nested == inner {
+                    return true;
+                }
+                pending.push(nested);
+            }
+        }
+        false
+    }
+
     /// Inserts an existing `Sequence` (elsewhere in this project) as a compound clip onto the
     /// active sequence's timeline — the "drag an existing sequence tab onto another timeline as
     /// a nested clip" direction, a secondary entry point distinct from
@@ -429,11 +457,12 @@ impl Project {
     /// [`crate::nested_sequence::materialize_nested_sequences`]).
     ///
     /// Returns `false` (no-op) if `sequence_id` doesn't exist in this project, is the active
-    /// sequence itself (the trivial direct self-nesting cycle — a deeper indirect cycle is
-    /// instead caught gracefully at render/materialize time by `nested_sequence`'s own cycle
-    /// detection), or is itself empty (`Timeline::duration_secs() == 0.0`).
+    /// sequence itself or already holds it as a compound clip (a nesting cycle, direct or
+    /// through other compound clips), or is itself empty (`Timeline::duration_secs() == 0.0`).
     pub fn insert_sequence_as_compound_clip(&mut self, sequence_id: u64) -> bool {
-        if self.active_sequence().id == sequence_id {
+        if self.active_sequence().id == sequence_id
+            || self.sequence_nests(sequence_id, self.active_sequence().id)
+        {
             return false;
         }
         let duration_secs = match self.sequences.iter().find(|s| s.id == sequence_id) {

@@ -563,6 +563,15 @@ export function PreviewPanel() {
           </div>
         )}
         {body}
+        {tick.hasClip && tick.renderingCompound && (
+          <span
+            className={cx(styles, baseStyles, "rendering-note")}
+            role="status"
+            data-testid="rendering-compound"
+          >
+            {t("previewRenderingCompound")}
+          </span>
+        )}
         {overlay}
         {drawingOverlay}
       </div>

@@ -150,7 +150,11 @@ for (let i = 0; i < 45; i++) {
       const cs = getComputedStyle(el);
       const outlined = cs.outlineStyle !== "none" && parseFloat(cs.outlineWidth) > 0;
       const shadow = cs.boxShadow !== "none";
-      return `${el.tagName.toLowerCase()} "${(el.getAttribute("aria-label") || el.textContent || el.getAttribute("title") || "").trim().slice(0, 22)}" ${outlined || shadow ? "ok" : "NO-FOCUS-RING"}`;
+      // A field wrapped in a box (the media search) shows its ring on the wrapper.
+      const wrapper = el.parentElement ? getComputedStyle(el.parentElement) : null;
+      const wrapped =
+        wrapper && wrapper.outlineStyle !== "none" && parseFloat(wrapper.outlineWidth) > 0;
+      return `${el.tagName.toLowerCase()} "${(el.getAttribute("aria-label") || el.textContent || el.getAttribute("title") || "").trim().slice(0, 22)}" ${outlined || shadow || wrapped ? "ok" : "NO-FOCUS-RING"}`;
     }),
   );
 }
