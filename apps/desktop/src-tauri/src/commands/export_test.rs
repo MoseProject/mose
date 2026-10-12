@@ -265,6 +265,7 @@ fn a_custom_bitrate_and_height_reach_the_queued_job_and_forbid_the_copy() {
     let options = crate::export::ExportOptions {
         bitrate_mbps: Some(2.0),
         max_height: Some(144),
+        normalize: None,
     };
     start_export(
         h.handle(),
@@ -290,6 +291,7 @@ fn an_unusable_bitrate_is_refused_before_anything_is_queued() {
         let options = crate::export::ExportOptions {
             bitrate_mbps: Some(mbps),
             max_height: None,
+            normalize: None,
         };
         let result = start_export(
             h.handle(),
@@ -311,6 +313,7 @@ fn a_larger_height_exports_the_picture_scaled_up() {
     let options = crate::export::ExportOptions {
         bitrate_mbps: None,
         max_height: Some(original.height + 144),
+        normalize: None,
     };
     start_export(
         h.handle(),
