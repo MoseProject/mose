@@ -22,7 +22,8 @@ before any broader editor-parity argument.
 | CM-06 scopes | done: waveform, RGB parade, histogram and vectorscope with reference lines, a strip under the monitor, drawn on request from the frame on screen at a small size (the Tauri shell had no scopes at all before) |
 | MX-03 EQ and dynamics | done for a per-track strip: high-pass, low-pass, three-band EQ and a compressor (project format 7, v3 to v6 files still open), in the preview and the export, controls in the track mix panel; no gate, no presets, no per-clip strip |
 | MX-04 crossfades and audio-only export | done: a 10 ms declick fade at hard cuts (export and preview), audio fades now also play in the preview, and an audio-only export as WAV 24-bit, FLAC, MP3 or Opus from the export dialog; the declick length is fixed, not adjustable |
-| CM-04, CM-05, MX-00 | not started |
+| MX-00 preview equals export for audio | done for sidechain ducking and voice cleanup: the preview ducks `Music` tracks under `Mic` tracks and runs the cleanup chain per clip; a probe renders the same project through both (ducking within 2 dB at every point, voice cleanup within 1.5 dB); the denoise is approximated by a gate |
+| CM-04, CM-05 | not started |
 
 Decisions taken while building:
 
@@ -38,6 +39,13 @@ Decisions taken while building:
   centre changes nothing. One law in the model, the preview mixer and the export graph, pinned by a test.
   The export normalizes the whole mix to its loudness target, so a fader changes a track relative to the others
   there; the preview plays the absolute level.
+- Ducking and cleanup in the preview (`bush::strip`, `Placement::duck`/`voice`): the music is lowered by a
+  compressor keyed on the summed commentary (threshold 0.05 linear, ratio 8, RMS), a trigger counts while it is in
+  the scene so the music recovers over the release instead of at once, and the followers use 0.35 of the millisecond
+  settings, the scale that best fits the export (the filters follow the level faster than their settings say).
+  `afftdn` has no cheap equivalent: a gate 10 dB above the expected noise floor that lowers what is under it by 12 dB
+  stands in for it. Found by the probe: the export cut ducked music short at the end of the commentary (the sidechain
+  input ended, and so did the output); the trigger is now padded with silence.
 - Strip stages run after the pan, in the order high-pass, low-pass, low shelf (120 Hz), mid bell (1 kHz, Q 1),
   high shelf (6 kHz), compressor (attack 10 ms, release 250 ms, soft knee), the same filters as the export graph
   and the same corner frequencies. A probe renders the same tones through the preview strip and through the export

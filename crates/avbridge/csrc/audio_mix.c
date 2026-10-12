@@ -385,8 +385,17 @@ static int build_mix_graph(const AudioSegment *segments, const uint8_t *valid, i
             av_free(trigger_split);
             goto fail;
         }
+        /* The sidechain input ends with the commentary, and the compressor would end its output
+           with it, cutting the music short. Padding the trigger with silence keeps the music
+           going to its own end; the final trim bounds the whole mix. */
+        AVFilterContext *trigger_pad = NULL;
+        if ((ret = create_filter(graph, &trigger_pad, "apad", "trigger_pad", NULL)) < 0 ||
+            (ret = avfilter_link(trigger_source, 0, trigger_pad, 0)) < 0) {
+            av_free(trigger_split);
+            goto fail;
+        }
         if ((ret = avfilter_link(music_source, 0, duck, 0)) < 0 ||
-            (ret = avfilter_link(trigger_source, 0, duck, 1)) < 0) {
+            (ret = avfilter_link(trigger_pad, 0, duck, 1)) < 0) {
             av_free(trigger_split);
             goto fail;
         }

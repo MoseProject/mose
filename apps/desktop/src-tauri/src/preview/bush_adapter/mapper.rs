@@ -289,6 +289,14 @@ pub fn map_timeline(
             // The track's fader, pan and strip, on top of the clip's own gain.
             mapped.placement.track_gain = track.mix.linear_gain();
             mapped.placement.pan = track.mix.pan;
+            mapped.placement.duck = match track.audio_role.to_duck_role_code() {
+                1 => bush::DuckRole::Trigger,
+                2 => bush::DuckRole::Target,
+                _ => bush::DuckRole::None,
+            };
+            if clip.voice_cleanup_enabled {
+                mapped.placement.voice = voice_cleanup_strip(clip);
+            }
             // The sound fades like the export's mix: handles, a dissolve and the declick at a cut.
             let audio_duration = clip.duration_secs();
             mapped.placement.audio_fade = bush::Fade {
@@ -303,6 +311,7 @@ pub fn map_timeline(
                 lowpass_hz: track.mix.lowpass_hz,
                 comp_threshold_db: track.mix.comp_threshold_db,
                 comp_ratio: track.mix.comp_ratio,
+                ..bush::Strip::default()
             };
             contributors.push(Contributor {
                 id: ContributorId(clip.id),
@@ -704,3 +713,18 @@ fn blend_of(mode: CoreBlend) -> BlendMode {
 #[cfg(test)]
 #[path = "mapper_test.rs"]
 mod tests;
+
+/// The export's voice cleanup chain (80 Hz high-pass, denoise, compressor with 1.5 makeup,
+/// limiter) as a preview strip. `afftdn` has no cheap equivalent, so a gate 10 dB above the
+/// expected noise floor that lowers what is under it by 12 dB stands in for it.
+fn voice_cleanup_strip(clip: &ClipInstance) -> bush::Strip {
+    bush::Strip {
+        highpass_hz: 80.0,
+        gate_floor_db: (clip.voice_cleanup_noise_floor_db + 10.0).min(-1.0),
+        comp_threshold_db: clip.voice_cleanup_compressor_threshold_db,
+        comp_ratio: clip.voice_cleanup_compressor_ratio,
+        comp_makeup: 1.5,
+        limit: clip.voice_cleanup_ceiling_linear,
+        ..bush::Strip::default()
+    }
+}

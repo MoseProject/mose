@@ -113,6 +113,11 @@ pub struct Placement {
     /// Fade-in and fade-out of the contributor's sound (clip fade handles, a dissolve, the
     /// declick at a hard cut), linear over its timeline length like the export's `afade`.
     pub audio_fade: Fade,
+    /// The voice cleanup chain (high-pass, gate, compressor, limiter) as a strip; neutral when the
+    /// clip has none. Runs before the pan, as in the export mix.
+    pub voice: crate::strip::Strip,
+    /// Role in sidechain ducking: a [`DuckRole::Trigger`] lowers every [`DuckRole::Target`].
+    pub duck: DuckRole,
     /// Keyframed overrides of opacity, position, scale and rotation, relative to the
     /// contributor's timeline start.
     pub animation: Animation,
@@ -144,6 +149,17 @@ pub struct Placement {
     pub privacy_blur: Option<PrivacyBlur>,
 }
 
+/// A contributor's part in sidechain ducking (the commentary lowers the music).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DuckRole {
+    #[default]
+    None,
+    /// Its level controls the ducking.
+    Trigger,
+    /// Ducked while a trigger is loud.
+    Target,
+}
+
 impl Default for Placement {
     fn default() -> Self {
         Self {
@@ -162,6 +178,8 @@ impl Default for Placement {
             pan: 0.0,
             strip: crate::strip::Strip::default(),
             audio_fade: Fade::default(),
+            voice: crate::strip::Strip::default(),
+            duck: DuckRole::None,
             animation: Animation::default(),
             fade: Fade::default(),
             lut: None,
