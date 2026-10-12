@@ -279,6 +279,7 @@ fn audio_segment(path: PathBuf) -> avbridge::AudioSegment {
         voice_cleanup_ceiling_linear: 0.95,
         fade_in_secs: 0.0,
         fade_out_secs: 0.0,
+        pan: 0.0,
     }
 }
 

@@ -479,6 +479,7 @@ pub(crate) fn audio_segment(
         voice_cleanup_ceiling_linear: clip.voice_cleanup_ceiling_linear,
         fade_in_secs: clip.fade_in_secs.max(track.dissolve_in_secs(clip) as f32),
         fade_out_secs: clip.fade_out_secs.max(track.dissolve_out_secs(clip) as f32),
+        pan: 0.0,
     }
 }
 
