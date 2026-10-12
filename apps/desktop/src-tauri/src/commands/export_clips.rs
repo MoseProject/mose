@@ -103,7 +103,7 @@ pub fn export_clips_targets(
 /// titles and shapes of other tracks. With `rename`, a file that already exists is kept and its
 /// export goes to the next free `<stem> (n)` sibling. Everything is prepared before anything is
 /// queued, so a failure leaves the queue as it was. Returns the job ids in timeline order.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn start_export_clips<R: Runtime>(
     app: AppHandle<R>,
     clip_ids: Vec<u64>,

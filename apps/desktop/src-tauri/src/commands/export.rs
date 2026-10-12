@@ -136,8 +136,9 @@ pub fn export_canvas(
 
 /// Queues the active sequence for export to `path`. With `rename`, an existing file is kept and
 /// the output goes to the next free `<stem> (n)` sibling instead of overwriting it. `options`
-/// carries the dialog's bitrate and resolution ceiling.
-#[tauri::command]
+/// carries the dialog's bitrate and resolution ceiling. Off the main thread: a compound clip has
+/// its nested sequence rendered first, which can take seconds.
+#[tauri::command(async)]
 pub fn start_export<R: Runtime>(
     app: AppHandle<R>,
     path: String,
