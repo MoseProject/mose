@@ -61,3 +61,29 @@
   color: var(--success);
   text-align: right;
 }
+
+/* One column for the labels, so the controls of a group line up. */
+.settings-group > label:not(:global(.check)) {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+.settings-group > label > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.settings-group > label > span input[type="number"] {
+  width: 80px;
+  min-width: 0;
+  flex: none;
+}
+.settings-group > label:global(.check) {
+  justify-content: flex-start;
+}
+.settings-group > label:global(.check) input[type="checkbox"] {
+  flex: none;
+  width: auto;
+  margin: 0;
+}
