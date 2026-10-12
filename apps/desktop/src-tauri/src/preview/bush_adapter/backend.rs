@@ -22,9 +22,6 @@ use std::sync::mpsc::{self, RecvTimeoutError, TryRecvError};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use avcore::nested_sequence::{
-    cache_dir_for_project, materialize_nested_sequences, NestedSequenceCache,
-};
 use avcore::timeline::{Timeline, TrackKind};
 use avcore::{Lut3D as CoreLut, MediaAsset, MediaKind};
 use bush::{
@@ -35,6 +32,7 @@ use tauri::{AppHandle, Emitter, Runtime};
 
 use super::audio::{open_default_device, AudioOutput, OpenAudio};
 use super::mapper::{map_timeline, Approximation, OverlayCache, SourceResolver};
+use super::nested_render::NestedRenderer;
 use crate::frames::{encode_jpeg_rgba, PREVIEW_MAX_DIM, PREVIEW_MIN_DIM};
 use crate::preview_engine::{
     preview_source_path, Command, LatestFrame, PreviewTick, FALLBACK_FPS, POLL_INTERVAL,
@@ -219,7 +217,7 @@ pub(crate) fn run_with_audio<R: Runtime>(
     let mut media: Vec<MediaAsset> = Vec::new();
     // The project the scene was last built from.
     let mut shown: Option<Arc<avcore::Project>> = None;
-    let mut nested_cache: HashMap<u64, NestedSequenceCache> = HashMap::new();
+    let mut nested = NestedRenderer::default();
     let mut player: Option<Player> = None;
     let mut canvas = DEFAULT_CANVAS;
     let mut audio: Option<Box<dyn AudioOutput>> = None;
@@ -265,6 +263,7 @@ pub(crate) fn run_with_audio<R: Runtime>(
             // out of deep sleep).
             let in_flight = dirty
                 || outstanding_since.is_some()
+                || nested.is_running()
                 || encoding_since.is_some_and(|since| since.elapsed() < OUTSTANDING_TIMEOUT);
             let wait = if in_flight { POLL_INTERVAL } else { IDLE_WAIT };
             match rx.recv_timeout(wait) {
@@ -291,18 +290,8 @@ pub(crate) fn run_with_audio<R: Runtime>(
                     timeline = next.timeline().clone();
                     shown = Some(Arc::clone(&next));
                     media = next.media_library.clone();
-                    let cache_dir = cache_dir_for_project(&next);
-                    match materialize_nested_sequences(
-                        &next,
-                        &timeline,
-                        &cache_dir,
-                        &mut nested_cache,
-                    ) {
-                        Ok(nested_assets) => media.extend(nested_assets.into_values()),
-                        Err(error) => {
-                            tracing::warn!(%error, "failed to materialize nested sequence for preview");
-                        }
-                    }
+                    // Compound clips show their latest finished render while a new one is made.
+                    media.extend(nested.assets_for(&next, &timeline).into_values());
                     rebuild = true;
                 }
                 Command::MaxDim(requested) => {
@@ -367,6 +356,15 @@ pub(crate) fn run_with_audio<R: Runtime>(
             }
         }
 
+        if nested.poll() {
+            // A compound clip finished rendering: show it.
+            if let Some(shown) = &shown {
+                timeline = shown.timeline().clone();
+                media = shown.media_library.clone();
+                media.extend(nested.assets_for(shown, &timeline).into_values());
+                rebuild = true;
+            }
+        }
         if let Some(player) = player.as_ref() {
             player
                 .engine()
