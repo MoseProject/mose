@@ -9,6 +9,7 @@
 //! instead of pushing bytes through JSON IPC.
 //!
 //! - `/frame/<seq>` -- the latest preview frame (`seq` is only a cache buster).
+//! - `/scope/<waveform|parade|histogram|vectorscope>/<seq>` -- a colour scope of that frame.
 //! - `/thumb/<asset_id>` -- a media-library poster frame, extracted once and cached.
 //! - `/thumb/<asset_id>/<millis>` -- the frame of an asset at that source time (timeline strips).
 //! - `/wave/<asset_id>/coarse` -- the overview waveform stored with the project, same layout.
@@ -24,6 +25,7 @@ use tauri::http::{header, Response, StatusCode};
 use tauri::{AppHandle, Manager, Runtime};
 
 use crate::frames::{POSTER_MAX_DIM, THUMBNAIL_MAX_DIM};
+use crate::scope_image;
 use crate::state::{lock_or_recover, AppState};
 use crate::tile_workers::TileWorkers;
 
@@ -87,6 +89,24 @@ pub(crate) fn handle_with<R: Runtime>(
         (Some("frame"), _) => {
             let frame = app.state::<AppState>().preview.latest_frame();
             respond(jpeg_or_not_found(frame));
+        }
+        (Some("scope"), Some(rest)) => {
+            // `scope/<kind>/<seq>`: a colour scope of the frame being shown (`seq` is a cache
+            // buster, as for the frame). Drawn on a worker thread: it decodes the frame.
+            let Some(kind) = rest.split('/').next().and_then(scope_image::parse_kind) else {
+                respond(not_found());
+                return;
+            };
+            let Some(frame) = app.state::<AppState>().preview.latest_frame() else {
+                respond(not_found());
+                return;
+            };
+            std::thread::spawn(move || {
+                respond(bytes_or_not_found(
+                    scope_image::render(kind, &frame).map(Arc::new),
+                    "image/jpeg",
+                ));
+            });
         }
         (Some("wave"), Some(rest)) => {
             let mut ids = rest.splitn(2, '/');
@@ -472,3 +492,7 @@ mod tests {
         assert!(entries.is_empty());
     }
 }
+
+#[cfg(test)]
+#[path = "protocol_test.rs"]
+mod route_tests;
