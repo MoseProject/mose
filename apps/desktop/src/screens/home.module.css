@@ -225,6 +225,8 @@
   gap: 8px;
 }
 .project-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 48px;
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;

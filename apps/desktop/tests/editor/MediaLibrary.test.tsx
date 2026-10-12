@@ -223,10 +223,17 @@ describe("asset dragging", () => {
   });
 });
 
+/** An entry of the "more sources" menu, which is built (and its code fetched) when the menu is
+ *  first opened. */
+const entry = async (label: string) => {
+  fireEvent.click(screen.getByLabelText(t("moreSources")));
+  return screen.findByText(label);
+};
+
 describe("text to speech", () => {
-  it("generates speech from trimmed non-empty text and closes", () => {
+  it("generates speech from trimmed non-empty text and closes", async () => {
     render(<MediaLibrary session={sessionWith([])} />);
-    fireEvent.click(screen.getByText(t("ttsButton")));
+    fireEvent.click(await entry(t("ttsButton")));
     const generate = screen.getByText(t("ttsGenerate")) as HTMLButtonElement;
     expect(generate.disabled).toBe(true);
     fireEvent.change(screen.getByPlaceholderText(t("ttsPlaceholder")), {
@@ -237,13 +244,13 @@ describe("text to speech", () => {
     expect(screen.queryByRole("heading")).toBeNull();
   });
 
-  it("closes from Cancel and from the backdrop", () => {
+  it("closes from Cancel and from the backdrop", async () => {
     const { container } = render(<MediaLibrary session={sessionWith([])} />);
-    fireEvent.click(screen.getByText(t("ttsButton")));
+    fireEvent.click(await entry(t("ttsButton")));
     fireEvent.click(screen.getByText(t("cancel")));
     expect(screen.queryByRole("heading")).toBeNull();
 
-    fireEvent.click(screen.getByText(t("ttsButton")));
+    fireEvent.click(await entry(t("ttsButton")));
     fireEvent.click(container.querySelector(".modal-overlay")!);
     expect(screen.queryByRole("heading")).toBeNull();
   });
@@ -252,12 +259,12 @@ describe("text to speech", () => {
 describe("sound library", () => {
   it("explains an empty library and toggles closed", async () => {
     const { container } = render(<MediaLibrary session={sessionWith([])} />);
-    fireEvent.click(screen.getByText(t("soundLibrary")));
+    fireEvent.click(await entry(t("soundLibrary")));
     expect(await screen.findByText(t("soundLibraryEmpty"))).toBeTruthy();
     fireEvent.click(container.querySelector(".modal-overlay")!);
     expect(screen.queryByText(t("soundLibraryEmpty"))).toBeNull();
 
-    fireEvent.click(screen.getByText(t("soundLibrary")));
+    fireEvent.click(await entry(t("soundLibrary")));
     await screen.findByText(t("soundLibraryEmpty"));
     fireEvent.click(screen.getAllByText(t("soundLibrary"))[0]);
     expect(screen.queryByText(t("soundLibraryEmpty"))).toBeNull();
@@ -269,7 +276,7 @@ describe("sound library", () => {
       { name: "Theme", path: "C:/s/theme.mp3", durationSecs: 61, category: "music" },
     ]);
     render(<MediaLibrary session={sessionWith([])} />);
-    fireEvent.click(screen.getByText(t("soundLibrary")));
+    fireEvent.click(await entry(t("soundLibrary")));
     expect(await screen.findByText(/🔊 Boom/)).toBeTruthy();
     expect(screen.getByText(/🎵 Theme/)).toBeTruthy();
 
@@ -282,7 +289,7 @@ describe("sound library", () => {
   it("treats a failed listing as empty", async () => {
     vi.mocked(api.listSoundLibrary).mockRejectedValue(new Error("no folder"));
     render(<MediaLibrary session={sessionWith([])} />);
-    fireEvent.click(screen.getByText(t("soundLibrary")));
+    fireEvent.click(await entry(t("soundLibrary")));
     expect(await screen.findByText(t("soundLibraryEmpty"))).toBeTruthy();
   });
 });
@@ -290,7 +297,7 @@ describe("sound library", () => {
 describe("YouTube download", () => {
   const open = async () => {
     const view = render(<MediaLibrary session={sessionWith([])} />);
-    fireEvent.click(screen.getByText(t("youtubeDownload")));
+    fireEvent.click(await entry(t("youtubeDownload")));
     await waitFor(() => {
       return expect(api.isYtDlpAvailable).toHaveBeenCalled();
     });
@@ -394,7 +401,7 @@ describe("YouTube download", () => {
     fireEvent.click(screen.getByText(t("cancel")));
     expect(screen.queryByPlaceholderText(t("youtubeDownloadUrlHint"))).toBeNull();
 
-    fireEvent.click(screen.getByText(t("youtubeDownload")));
+    fireEvent.click(await entry(t("youtubeDownload")));
     fireEvent.click(container.querySelector(".modal-overlay")!);
     expect(screen.queryByPlaceholderText(t("youtubeDownloadUrlHint"))).toBeNull();
   });

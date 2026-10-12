@@ -1,7 +1,7 @@
 import { cx } from "../../cx";
 import baseStyles from "../../styles/base.module.css";
 import styles from "./inspector.module.css";
-import { type ReactNode, useRef, useState } from "react";
+import { createContext, type ReactNode, useContext, useRef, useState } from "react";
 import { Icon } from "../chrome/Icon";
 import { useDraft } from "../../hooks/useDraft";
 import { t } from "../../i18n";
@@ -14,6 +14,11 @@ import { rememberSection, sectionOverride } from "./memory";
  *  recompute their own default-open state fresh, same per-clip behavior egui's
  *  `default_open` argument has. */
 export type InspectorGroup = "inspector" | "effects" | "audio";
+
+/** The inspector tab on show. A section of another tab keeps only its header: its body is not
+ *  built until its tab is on show. `"all"` builds every body whether or not its section is open
+ *  or on show, for tests that drive controls without clicking through tabs and sections. */
+export const InspectorTabContext = createContext<InspectorGroup | "all" | null>(null);
 
 /** State of a section's keyframe diamond. */
 export interface SectionKeyframe {
@@ -77,6 +82,11 @@ export function Section({
     return sectionOverride(memoryKey) ?? defaultOpen;
   });
   const lastOpen = useRef(initial);
+  // The body is built the first time the section is open (and its tab is on show), then kept:
+  // a closed section, or one on another tab, costs its header and nothing else.
+  const [everOpened, setEverOpened] = useState(initial);
+  const tab = useContext(InspectorTabContext);
+  const bodyBuilt = tab === "all" || (everOpened && (tab === null || tab === group));
   return (
     <details
       className={cx(styles, baseStyles, "property-section")}
@@ -89,6 +99,9 @@ export function Section({
         if (open !== lastOpen.current) {
           lastOpen.current = open;
           rememberSection(memoryKey, open);
+        }
+        if (open) {
+          setEverOpened(true);
         }
       }}
     >
@@ -116,7 +129,9 @@ export function Section({
           </button>
         )}
       </summary>
-      <div className={cx(styles, baseStyles, "property-section-body")}>{children}</div>
+      <div className={cx(styles, baseStyles, "property-section-body")}>
+        {bodyBuilt ? children : null}
+      </div>
     </details>
   );
 }

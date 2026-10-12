@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../src/i18n";
+import { withAllSections } from "../../support/inspectorTabs";
 import { makeSession } from "../../support/testSupport";
 import type { ClipInstance, SessionView } from "../../../src/types";
 
@@ -42,6 +43,10 @@ vi.mock("../../../src/editor/inspector/ShapeInspector", () => {
 });
 
 const { Inspector, Section, Slider } = await import("../../../src/editor/inspector/Inspector");
+// The parts the inspector fetches when first shown, loaded now so that they arrive at once.
+await import("../../../src/editor/inspector/AiActionsSection");
+await import("../../../src/editor/inspector/TextInspector");
+await import("../../../src/editor/inspector/ShapeInspector");
 const { api } = await import("../../../src/ipc");
 const { patchUi, previewStore } = await import("../../../src/store");
 
@@ -117,6 +122,15 @@ const range = (label: string) => {
 const lastPatch = () => {
   return vi.mocked(api.updateClip).mock.calls.at(-1)![1];
 };
+/** Lets the lazily fetched parts of the inspector (text and shape inspectors, the Effects
+ *  sections) arrive. */
+const settled = () => {
+  return act(async () => {
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+  });
+};
 const sectionOf = (label: string) => {
   return screen.getByText(label, { selector: "summary > span" }).closest("details")!;
 };
@@ -138,13 +152,13 @@ afterEach(() => {
 describe("inspector selection", () => {
   it("asks for a selection when nothing is selected, or more than one clip", () => {
     patchUi({ selectedClipIds: [] });
-    render(<Inspector session={sessionFor()} />);
+    render(withAllSections(<Inspector session={sessionFor()} />));
     expect(screen.getByText(t("noClipSelected"))).toBeTruthy();
     cleanup();
   });
 
   it("shows the source asset of a selected media clip", () => {
-    render(<Inspector session={sessionFor()} />);
+    render(withAllSections(<Inspector session={sessionFor()} />));
     expect(screen.getByTestId("inspector-clip")).toBeTruthy();
     expect(screen.getByText(/gameplay\.mp4/)).toBeTruthy();
   });
@@ -152,18 +166,20 @@ describe("inspector selection", () => {
   it("falls back to a dash when the asset is gone", () => {
     const view = sessionFor();
     view.project.media_library = [];
-    render(<Inspector session={view} />);
+    render(withAllSections(<Inspector session={view} />));
     expect(screen.getByText("—")).toBeTruthy();
   });
 
-  it("hands text and shape overlays to their own inspectors", () => {
+  it("hands text and shape overlays to their own inspectors", async () => {
     patchUi({ selectedClipIds: [20] });
-    render(<Inspector session={sessionFor()} />);
+    render(withAllSections(<Inspector session={sessionFor()} />));
+    await settled();
     expect(screen.getByText("text-inspector-20")).toBeTruthy();
     cleanup();
 
     patchUi({ selectedClipIds: [30] });
-    render(<Inspector session={sessionFor()} />);
+    render(withAllSections(<Inspector session={sessionFor()} />));
+    await settled();
     expect(screen.getByText("shape-inspector-30")).toBeTruthy();
   });
 });
@@ -246,8 +262,9 @@ describe("slider and section", () => {
 });
 
 describe("clip controls", () => {
-  it("opens a section only when its property is not at the default", () => {
-    render(<Inspector session={sessionFor()} />);
+  it("opens a section only when its property is not at the default", async () => {
+    render(withAllSections(<Inspector session={sessionFor()} />));
+    await settled();
     for (const label of ["speed", "colorAdjust", "crop", "mask", "transition", "keyframes"]) {
       expect(sectionOf(t(label as never)).open).toBe(false);
     }
@@ -255,18 +272,21 @@ describe("clip controls", () => {
     cleanup();
 
     render(
-      <Inspector
-        session={sessionFor({
-          gain_db: 3,
-          speed_factor: 2,
-          brightness: 0.1,
-          crop_w: 0.5,
-          mask_shape: "Circle",
-          transition_in: "Fade",
-          gain_keyframes: [{ time_fraction: 0, value: 1 }],
-        })}
-      />,
+      withAllSections(
+        <Inspector
+          session={sessionFor({
+            gain_db: 3,
+            speed_factor: 2,
+            brightness: 0.1,
+            crop_w: 0.5,
+            mask_shape: "Circle",
+            transition_in: "Fade",
+            gain_keyframes: [{ time_fraction: 0, value: 1 }],
+          })}
+        />,
+      ),
     );
+    await settled();
     expect((screen.getByTestId("section-gain") as HTMLDetailsElement).open).toBe(true);
     for (const label of ["speed", "colorAdjust", "crop", "mask", "transition", "keyframes"]) {
       expect(sectionOf(t(label as never)).open).toBe(true);
@@ -274,22 +294,22 @@ describe("clip controls", () => {
   });
 
   it("opens the color section for contrast or saturation changes alone", () => {
-    render(<Inspector session={sessionFor({ contrast: 1.2 })} />);
+    render(withAllSections(<Inspector session={sessionFor({ contrast: 1.2 })} />));
     expect(sectionOf(t("colorAdjust")).open).toBe(true);
     cleanup();
-    render(<Inspector session={sessionFor({ saturation: 0.5 })} />);
+    render(withAllSections(<Inspector session={sessionFor({ saturation: 0.5 })} />));
     expect(sectionOf(t("colorAdjust")).open).toBe(true);
   });
 
   it("opens the crop section for any single crop edge", () => {
     for (const edge of [{ crop_x: 0.1 }, { crop_y: 0.1 }, { crop_h: 0.5 }]) {
-      render(<Inspector session={sessionFor(edge)} />);
+      render(withAllSections(<Inspector session={sessionFor(edge)} />));
       expect(sectionOf(t("crop")).open).toBe(true);
       cleanup();
     }
   });
 
-  it("opens the keyframes section for keyframes on each property", () => {
+  it("opens the keyframes section for keyframes on each property", async () => {
     const key = [{ time_fraction: 0, value: 1 }];
     const props = [
       "position_keyframes",
@@ -305,14 +325,15 @@ describe("clip controls", () => {
       "crop_h_keyframes",
     ];
     for (const prop of props) {
-      render(<Inspector session={sessionFor({ [prop]: key })} />);
+      render(withAllSections(<Inspector session={sessionFor({ [prop]: key })} />));
+      await settled();
       expect(sectionOf(t("keyframes")).open).toBe(true);
       cleanup();
     }
   });
 
   it("commits audio, speed, color and crop sliders", () => {
-    render(<Inspector session={sessionFor()} />);
+    render(withAllSections(<Inspector session={sessionFor()} />));
     slide(t("gain"), 6);
     expect(lastPatch()).toEqual({ gainDb: 6 });
     slide(t("speed"), 2);
@@ -334,15 +355,15 @@ describe("clip controls", () => {
   });
 
   it("formats the gain with an explicit sign", () => {
-    render(<Inspector session={sessionFor({ gain_db: 3 })} />);
+    render(withAllSections(<Inspector session={sessionFor({ gain_db: 3 })} />));
     expect(screen.getByText("+3.0 dB")).toBeTruthy();
     cleanup();
-    render(<Inspector session={sessionFor({ gain_db: -3 })} />);
+    render(withAllSections(<Inspector session={sessionFor({ gain_db: -3 })} />));
     expect(screen.getByText("-3.0 dB")).toBeTruthy();
   });
 
   it("applies the two speed ramps and resets the crop", () => {
-    render(<Inspector session={sessionFor()} />);
+    render(withAllSections(<Inspector session={sessionFor()} />));
     fireEvent.click(screen.getByText(t("speedRampSlowToFast")));
     expect(api.applySpeedRampToClip).toHaveBeenLastCalledWith(7, 0.5, 2.0, 4);
     fireEvent.click(screen.getByText(t("speedRampFastToSlow")));
@@ -361,7 +382,7 @@ describe("clip controls", () => {
   });
 
   it("toggles freeze, flip and voice cleanup", () => {
-    render(<Inspector session={sessionFor()} />);
+    render(withAllSections(<Inspector session={sessionFor()} />));
     fireEvent.click(screen.getByLabelText(t("freeze")));
     expect(lastPatch()).toEqual({ frozen: true });
     fireEvent.click(screen.getByLabelText(t("flip")));
@@ -370,8 +391,9 @@ describe("clip controls", () => {
     expect(lastPatch()).toEqual({ voiceCleanupEnabled: true });
   });
 
-  it("changes the mask, with a corner radius only for rounded rectangles", () => {
-    render(<Inspector session={sessionFor()} />);
+  it("changes the mask, with a corner radius only for rounded rectangles", async () => {
+    render(withAllSections(<Inspector session={sessionFor()} />));
+    await settled();
     expect(screen.queryByText(t("maskCornerRadius"))).toBeNull();
     fireEvent.change(field(t("mask")).querySelector("select")!, {
       target: { value: "Circle" },
@@ -379,13 +401,14 @@ describe("clip controls", () => {
     expect(lastPatch()).toEqual({ maskShape: "Circle" });
     cleanup();
 
-    render(<Inspector session={sessionFor({ mask_shape: "RoundedRect" })} />);
+    render(withAllSections(<Inspector session={sessionFor({ mask_shape: "RoundedRect" })} />));
     slide(t("maskCornerRadius"), 0.5);
     expect(lastPatch()).toEqual({ maskCornerRadius: 0.5 });
   });
 
-  it("changes the transition, with a duration only once one is chosen", () => {
-    render(<Inspector session={sessionFor()} />);
+  it("changes the transition, with a duration only once one is chosen", async () => {
+    render(withAllSections(<Inspector session={sessionFor()} />));
+    await settled();
     expect(screen.queryByText(t("transitionDuration"))).toBeNull();
     fireEvent.change(field(t("transition")).querySelector("select")!, {
       target: { value: "Slide" },
@@ -393,21 +416,23 @@ describe("clip controls", () => {
     expect(lastPatch()).toEqual({ transitionIn: "Slide" });
     cleanup();
 
-    render(<Inspector session={sessionFor({ transition_in: "Fade" })} />);
+    render(withAllSections(<Inspector session={sessionFor({ transition_in: "Fade" })} />));
     slide(t("transitionDuration"), 1.5);
     expect(lastPatch()).toEqual({ transitionDurationSecs: 1.5 });
   });
 
-  it("changes the blend mode", () => {
-    render(<Inspector session={sessionFor()} />);
+  it("changes the blend mode", async () => {
+    render(withAllSections(<Inspector session={sessionFor()} />));
+    await settled();
     fireEvent.change(field(t("blendMode")).querySelector("select")!, {
       target: { value: "Multiply" },
     });
     expect(lastPatch()).toEqual({ blendMode: "Multiply" });
   });
 
-  it("adds a keyframe to every animatable property", () => {
-    render(<Inspector session={sessionFor()} />);
+  it("adds a keyframe to every animatable property", async () => {
+    render(withAllSections(<Inspector session={sessionFor()} />));
+    await settled();
     const adds = screen.getAllByText(t("addKeyframe"));
     const expected: Record<string, unknown>[] = [
       { positionKeyframes: [{ time_fraction: 1, value: { x: 0, y: 0 } }] },
@@ -436,8 +461,9 @@ describe("clip controls", () => {
     });
   });
 
-  it("runs the AI actions with the chosen region", () => {
-    render(<Inspector session={sessionFor()} />);
+  it("runs the AI actions with the chosen region", async () => {
+    render(withAllSections(<Inspector session={sessionFor()} />));
+    await settled();
     const edit = (title: string, value: string) => {
       return fireEvent.change(screen.getByTitle(t(title as never)), { target: { value } });
     };
@@ -461,7 +487,7 @@ describe("clip controls", () => {
 
 describe("inspector tabs", () => {
   it("groups the clip's sections under Inspector, Effects and Audio", () => {
-    const { container } = render(<Inspector session={sessionFor()} />);
+    const { container } = render(withAllSections(<Inspector session={sessionFor()} />));
     const body = container.querySelector(".inspector-body")!;
     expect(body.getAttribute("data-tab")).toBe("inspector");
     fireEvent.click(screen.getByRole("tab", { name: t("inspectorEffects") }));
@@ -477,7 +503,7 @@ describe("inspector tabs", () => {
 
   it("offers only the Inspector tab for text and shape overlays", () => {
     patchUi({ selectedClipIds: [20] });
-    render(<Inspector session={sessionFor()} />);
+    render(withAllSections(<Inspector session={sessionFor()} />));
     expect(screen.getAllByRole("tab")).toHaveLength(1);
   });
 });
@@ -500,7 +526,7 @@ describe("transform section", () => {
   });
 
   it("commits an edited position on blur as one keyframe, in canvas fractions", () => {
-    render(<Inspector session={sessionFor()} />);
+    render(withAllSections(<Inspector session={sessionFor()} />));
     const x = screen.getByLabelText(t("positionX"));
     fireEvent.change(x, { target: { value: "768" } });
     expect(api.updateClip).not.toHaveBeenCalled();
@@ -511,7 +537,7 @@ describe("transform section", () => {
   });
 
   it("keeps a typed position within one canvas of the frame", () => {
-    render(<Inspector session={sessionFor()} />);
+    render(withAllSections(<Inspector session={sessionFor()} />));
     const x = screen.getByLabelText(t("positionX"));
     fireEvent.change(x, { target: { value: "999999" } });
     fireEvent.blur(x);
@@ -527,7 +553,7 @@ describe("transform section", () => {
   });
 
   it("scales both axes together and never below 1 percent", () => {
-    render(<Inspector session={sessionFor()} />);
+    render(withAllSections(<Inspector session={sessionFor()} />));
     const scale = screen.getByLabelText(t("scale"));
     fireEvent.change(scale, { target: { value: "150" } });
     fireEvent.keyDown(scale, { key: "Enter" });
@@ -539,7 +565,7 @@ describe("transform section", () => {
   });
 
   it("commits a rotation and ignores an empty or unchanged field", () => {
-    render(<Inspector session={sessionFor()} />);
+    render(withAllSections(<Inspector session={sessionFor()} />));
     const rotation = screen.getByLabelText(t("rotation")) as HTMLInputElement;
     fireEvent.change(rotation, { target: { value: "45" } });
     fireEvent.blur(rotation);
@@ -567,7 +593,7 @@ describe("transform section", () => {
   });
 
   it("resets position, scale and rotation from the section header", () => {
-    render(<Inspector session={sessionFor({ layer_scale_x: 2 })} />);
+    render(withAllSections(<Inspector session={sessionFor({ layer_scale_x: 2 })} />));
     fireEvent.click(screen.getByLabelText(t("resetSection") + ": " + t("transform")));
     expect(lastPatch()).toEqual({
       positionKeyframes: [],
@@ -611,8 +637,9 @@ describe("section resets", () => {
       "transition",
       { transitionIn: "None", transitionDurationSecs: 0.5, fadeInSecs: 0, fadeOutSecs: 0 },
     ],
-  ])("restores %s to its defaults without toggling the section", (key, patch) => {
-    render(<Inspector session={sessionFor()} />);
+  ])("restores %s to its defaults without toggling the section", async (key, patch) => {
+    render(withAllSections(<Inspector session={sessionFor()} />));
+    await settled();
     const label = t(key as never);
     const section = sectionOf(label);
     const wasOpen = section.open;
@@ -623,8 +650,9 @@ describe("section resets", () => {
 });
 
 describe("inspector grouping and selection", () => {
-  it("puts voice cleanup under Audio and freeze/flip under Inspector", () => {
-    const { container } = render(<Inspector session={sessionFor()} />);
+  it("puts voice cleanup under Audio and freeze/flip under Inspector", async () => {
+    const { container } = render(withAllSections(<Inspector session={sessionFor()} />));
+    await settled();
     const group = (text: string) => {
       return screen.getByText(text).closest("[data-group]")!.getAttribute("data-group");
     };
@@ -641,7 +669,7 @@ describe("inspector grouping and selection", () => {
   it("says how many clips are selected and offers the group actions", () => {
     patchUi({ selectedClipIds: [7, 20] });
     vi.mocked(api.mergeClipsIntoComposite).mockClear();
-    render(<Inspector session={sessionFor()} />);
+    render(withAllSections(<Inspector session={sessionFor()} />));
     expect(screen.getByTestId("inspector-multi").textContent).toContain("2 " + t("clipsSelected"));
     fireEvent.click(screen.getByText(t("mergeComposite")));
     fireEvent.click(screen.getByText(t("compoundClip")));
@@ -665,13 +693,13 @@ describe("keyframe diamond", () => {
 
   it("is disabled while the playhead is outside the clip", () => {
     atSecs(20);
-    render(<Inspector session={sessionFor(placed)} />);
+    render(withAllSections(<Inspector session={sessionFor(placed)} />));
     expect(diamond(t("gain")).disabled).toBe(true);
   });
 
   it("adds a gain keyframe at the playhead carrying the current gain", () => {
     atSecs(5);
-    render(<Inspector session={sessionFor({ ...placed, gain_db: 3 })} />);
+    render(withAllSections(<Inspector session={sessionFor({ ...placed, gain_db: 3 })} />));
     fireEvent.click(diamond(t("gain")));
     expect(lastPatch()).toEqual({ gainKeyframes: [{ time_fraction: 0.5, value: 3 }] });
   });
@@ -696,7 +724,7 @@ describe("keyframe diamond", () => {
 
   it("keys position and rotation together from the transform section", () => {
     atSecs(2.5);
-    render(<Inspector session={sessionFor(placed)} />);
+    render(withAllSections(<Inspector session={sessionFor(placed)} />));
     fireEvent.click(diamond(t("transform")));
     expect(lastPatch()).toEqual({
       positionKeyframes: [{ time_fraction: 0.25, value: { x: 0, y: 0 } }],
@@ -706,7 +734,7 @@ describe("keyframe diamond", () => {
 
   it("keys brightness, contrast and saturation together from the color section", () => {
     atSecs(10);
-    render(<Inspector session={sessionFor({ ...placed, contrast: 1.2 })} />);
+    render(withAllSections(<Inspector session={sessionFor({ ...placed, contrast: 1.2 })} />));
     fireEvent.click(diamond(t("colorAdjust")));
     expect(lastPatch()).toEqual({
       brightnessKeyframes: [{ time_fraction: 1, value: 0 }],
@@ -727,21 +755,21 @@ describe("keyframe diamond on a single property", () => {
 
   it("keys only the property whose diamond is pressed", () => {
     atSecs(5);
-    render(<Inspector session={sessionFor({ ...placed, contrast: 1.2 })} />);
+    render(withAllSections(<Inspector session={sessionFor({ ...placed, contrast: 1.2 })} />));
     fireEvent.click(rowDiamond(t("contrast")));
     expect(lastPatch()).toEqual({ contrastKeyframes: [{ time_fraction: 0.5, value: 1.2 }] });
   });
 
   it("keys one crop edge on its own", () => {
     atSecs(10);
-    render(<Inspector session={sessionFor({ ...placed, crop_w: 0.8 })} />);
+    render(withAllSections(<Inspector session={sessionFor({ ...placed, crop_w: 0.8 })} />));
     fireEvent.click(rowDiamond("w"));
     expect(lastPatch()).toEqual({ cropWKeyframes: [{ time_fraction: 1, value: 0.8 }] });
   });
 
   it("keys position and rotation from their own rows", () => {
     atSecs(2.5);
-    render(<Inspector session={sessionFor(placed)} />);
+    render(withAllSections(<Inspector session={sessionFor(placed)} />));
     fireEvent.click(rowDiamond(t("position")));
     expect(lastPatch()).toEqual({
       positionKeyframes: [{ time_fraction: 0.25, value: { x: 0, y: 0 } }],
@@ -753,15 +781,17 @@ describe("keyframe diamond on a single property", () => {
   it("removes the keyframe under the playhead and shows it pressed", () => {
     atSecs(5);
     render(
-      <Inspector
-        session={sessionFor({
-          ...placed,
-          saturation_keyframes: [
-            { time_fraction: 0.5, value: 1.5 },
-            { time_fraction: 1, value: 0.5 },
-          ],
-        })}
-      />,
+      withAllSections(
+        <Inspector
+          session={sessionFor({
+            ...placed,
+            saturation_keyframes: [
+              { time_fraction: 0.5, value: 1.5 },
+              { time_fraction: 1, value: 0.5 },
+            ],
+          })}
+        />,
+      ),
     );
     expect(rowDiamond(t("saturation")).getAttribute("aria-pressed")).toBe("true");
     expect(rowDiamond(t("contrast")).getAttribute("aria-pressed")).toBe("false");
@@ -772,15 +802,17 @@ describe("keyframe diamond on a single property", () => {
   it("shows the value at the playhead and edits a keyframe there while the property is animated", () => {
     atSecs(5);
     render(
-      <Inspector
-        session={sessionFor({
-          ...placed,
-          brightness_keyframes: [
-            { time_fraction: 0, value: 0 },
-            { time_fraction: 1, value: 0.5 },
-          ],
-        })}
-      />,
+      withAllSections(
+        <Inspector
+          session={sessionFor({
+            ...placed,
+            brightness_keyframes: [
+              { time_fraction: 0, value: 0 },
+              { time_fraction: 1, value: 0.5 },
+            ],
+          })}
+        />,
+      ),
     );
     expect(range(t("brightness")).value).toBe("0.25");
     fireEvent.change(range(t("brightness")), { target: { value: "0.4" } });
@@ -796,7 +828,7 @@ describe("keyframe diamond on a single property", () => {
 
   it("edits the plain value while the property has no keyframes", () => {
     atSecs(5);
-    render(<Inspector session={sessionFor(placed)} />);
+    render(withAllSections(<Inspector session={sessionFor(placed)} />));
     fireEvent.change(range(t("brightness")), { target: { value: "0.3" } });
     fireEvent.pointerUp(range(t("brightness")));
     expect(lastPatch()).toEqual({ brightness: 0.3 });
@@ -804,7 +836,7 @@ describe("keyframe diamond on a single property", () => {
 
   it("disables the row diamonds while the playhead is outside the clip", () => {
     atSecs(20);
-    render(<Inspector session={sessionFor(placed)} />);
+    render(withAllSections(<Inspector session={sessionFor(placed)} />));
     expect(rowDiamond(t("brightness")).disabled).toBe(true);
     expect(rowDiamond("x").disabled).toBe(true);
   });
@@ -850,5 +882,55 @@ describe("inspector memory", () => {
     ).toBe("true");
     get.mockRestore();
     set.mockRestore();
+  });
+});
+
+describe("what is built only when it is on show", () => {
+  const sliderLabels = () => {
+    return screen.queryAllByText(t("gain"), { selector: "label, span" });
+  };
+
+  it("builds no body for a section of another tab, until that tab is shown", () => {
+    // An open section (the clip has a gain) on the audio tab, while the inspector tab is on show.
+    render(<Inspector session={sessionFor({ gain_db: 3 })} />);
+    const gain = screen.getByTestId("section-gain") as HTMLDetailsElement;
+    expect(gain.open).toBe(true);
+    expect(gain.querySelector('input[type="range"]')).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: t("inspectorAudio") }));
+    expect(gain.querySelector('input[type="range"]')).not.toBeNull();
+    expect(sliderLabels().length).toBeGreaterThan(0);
+  });
+
+  it("builds a closed section's body when it is first opened, and keeps it", () => {
+    render(<Inspector session={sessionFor()} />);
+    const crop = sectionOf(t("crop"));
+    expect(crop.open).toBe(false);
+    expect(crop.querySelector('input[type="range"]')).toBeNull();
+    crop.open = true;
+    fireEvent(crop, new Event("toggle"));
+    expect(crop.querySelectorAll('input[type="range"]').length).toBeGreaterThan(0);
+    crop.open = false;
+    fireEvent(crop, new Event("toggle"));
+    expect(crop.querySelectorAll('input[type="range"]').length).toBeGreaterThan(0);
+  });
+
+  it("builds every body when a test or tool asks for all of them", () => {
+    render(withAllSections(<Inspector session={sessionFor()} />));
+    expect(sectionOf(t("crop")).querySelector('input[type="range"]')).not.toBeNull();
+    expect(
+      (screen.getByTestId("section-gain") as HTMLElement).querySelector('input[type="range"]'),
+    ).not.toBeNull();
+  });
+});
+
+describe("the AI actions are fetched with the Effects tab", () => {
+  it("keeps them out until the Effects tab is shown, while the Inspector tab keeps its sections", async () => {
+    render(<Inspector session={sessionFor()} />);
+    await settled();
+    expect(screen.getByTestId("section-mask")).toBeTruthy();
+    expect(screen.queryByText(t("aiActions"), { selector: "summary > span" })).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: t("inspectorEffects") }));
+    await settled();
+    expect(screen.getByText(t("aiActions"), { selector: "summary > span" })).toBeTruthy();
   });
 });

@@ -86,6 +86,26 @@ now joins touching clips into runs above 300 clips, the clip list is memoized an
 project clone is 0.4 ms, the diff after one move 1.7 ms, scene mapping 1.1 ms; the full JSON
 snapshot (first load only) is 50 ms. JS heap: 35 MB (48 clips), 55 MB (6000 clips).
 
+### What is built and fetched only when shown
+
+Entry chunk 271 -> 235 KB (gzip 85 -> 73), Editor chunk 124 -> 95 KB (gzip 33 -> 27); the rest is
+split into chunks of 1 to 6 KB that arrive when first needed.
+
+- An inspector section builds its body when it is first opened and its tab is on show (a closed
+  section, or one on another tab, costs its header only). The text and shape inspectors and the AI
+  actions (Effects tab) are chunks of their own.
+- Menu entries that bring a dialog (layer templates, transcript, silence review, sound library,
+  YouTube download, text to speech) are built, and their code fetched, when their menu first
+  opens (`Menu deferred`); the effects browser when its tab is chosen.
+- Only the language in use is loaded (`loadLocale`, about 7 to 8 KB gzip each).
+- The Editor is fetched while the home screen is idle and the export dialog as the pointer or focus
+  reaches its button (`chunks.ts`); a lazy component then renders at once.
+- Media thumbnails are `loading="lazy"` (a library of hundreds of files no longer asks for every
+  thumbnail at once), and library cards, queue jobs, shortcut rows and project rows use
+  `content-visibility: auto` so what is scrolled out of sight is neither laid out nor painted.
+- `visual/lazy-loading.visual.ts` watches the module requests: an open project fetches none of the
+  on-demand code, and each piece arrives with its trigger.
+
 ## Tools
 
 | what | how |

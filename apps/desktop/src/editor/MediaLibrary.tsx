@@ -2,7 +2,8 @@ import editorStyles from "../screens/editor.module.css";
 import { cx } from "../cx";
 import baseStyles from "../styles/base.module.css";
 import styles from "./library/library.module.css";
-import { useCallback, useState } from "react";
+import { Suspense, useCallback, useState } from "react";
+import { lazyNamed } from "../lazy";
 import { t } from "../i18n";
 import { Icon } from "./chrome/Icon";
 import { ContextMenu } from "./chrome/ContextMenu";
@@ -11,11 +12,21 @@ import { api } from "../ipc";
 import { askConfirm, pushToast } from "../notifications";
 import { run } from "../store";
 import type { MediaAsset, SessionView } from "../types";
-import { YoutubeDownloadButton } from "./library/YoutubeDownloadButton";
-import { SoundLibraryButton } from "./library/SoundLibraryButton";
-import { TtsButton } from "./library/TtsButton";
 import { AssetRow } from "./library/AssetRow";
-import { EffectsBrowser } from "./library/EffectsBrowser";
+
+// Not on screen until the "more sources" menu is opened, or the Effects tab chosen.
+const YoutubeDownloadButton = lazyNamed(() => {
+  return import("./library/YoutubeDownloadButton");
+}, "YoutubeDownloadButton");
+const SoundLibraryButton = lazyNamed(() => {
+  return import("./library/SoundLibraryButton");
+}, "SoundLibraryButton");
+const TtsButton = lazyNamed(() => {
+  return import("./library/TtsButton");
+}, "TtsButton");
+const EffectsBrowser = lazyNamed(() => {
+  return import("./library/EffectsBrowser");
+}, "EffectsBrowser");
 
 /** Whether any clip in any sequence plays `assetId`. */
 function assetInUse(session: SessionView, assetId: number): boolean {
@@ -118,7 +129,9 @@ export function MediaLibrary({ session }: { session: SessionView }) {
         })}
       </div>
       {tab === "effects" ? (
-        <EffectsBrowser session={session} />
+        <Suspense fallback={null}>
+          <EffectsBrowser session={session} />
+        </Suspense>
       ) : (
         <>
           <div className={cx(styles, baseStyles, "search-row")}>
@@ -191,10 +204,13 @@ export function MediaLibrary({ session }: { session: SessionView }) {
                 />
               }
               ariaLabel={t("moreSources")}
+              deferred
             >
-              <TtsButton />
-              <SoundLibraryButton />
-              <YoutubeDownloadButton />
+              <Suspense fallback={null}>
+                <TtsButton />
+                <SoundLibraryButton />
+                <YoutubeDownloadButton />
+              </Suspense>
             </Menu>
           </div>
           <div className={cx(styles, baseStyles, `asset-list ${view}`)}>

@@ -1,11 +1,23 @@
 import { useMemo, useSyncExternalStore } from "react";
-import { en } from "./i18n/locales/en";
-import { ptBR } from "./i18n/locales/pt-BR";
+import type { en } from "./i18n/locales/en";
 
 export type Locale = "pt-BR" | "en";
 export type TextKey = keyof typeof en;
 
-const translations: Record<Locale, Record<TextKey, string>> = { "pt-BR": ptBR, en };
+/** Only the language in use is fetched (about 12 KB of text each): the other one arrives if the
+ *  user switches. */
+const translations: Partial<Record<Locale, Record<TextKey, string>>> = {};
+
+/** Fetches the texts of `locale` (once); `t` can answer in it afterwards. */
+export async function loadLocale(locale: Locale): Promise<void> {
+  if (translations[locale]) {
+    return;
+  }
+  translations[locale] =
+    locale === "en"
+      ? (await import("./i18n/locales/en")).en
+      : (await import("./i18n/locales/pt-BR")).ptBR;
+}
 
 export function detectLocale(): Locale {
   return navigator.language.toLowerCase().startsWith("pt") ? "pt-BR" : "en";
@@ -13,8 +25,24 @@ export function detectLocale(): Locale {
 
 let current: Locale = typeof navigator === "undefined" ? "en" : detectLocale();
 const localeListeners = new Set<() => void>();
+// The language the machine asks for is there before anything is drawn.
+await loadLocale(current);
 
+/** Switches the language: at once when its texts are loaded, otherwise when they have arrived. */
 export function setLocale(locale: Locale) {
+  if (current === locale) {
+    return;
+  }
+  if (!translations[locale]) {
+    void loadLocale(locale).then(() => {
+      applyLocale(locale);
+    });
+    return;
+  }
+  applyLocale(locale);
+}
+
+function applyLocale(locale: Locale) {
   if (current === locale) {
     return;
   }
@@ -43,7 +71,7 @@ export function localeSnapshot() {
 }
 
 export function gettext(key: TextKey): string {
-  return translations[current][key];
+  return translations[current]?.[key] ?? key;
 }
 
 export const t = gettext;

@@ -111,6 +111,8 @@
 }
 
 .job {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 36px;
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 2px 8px;

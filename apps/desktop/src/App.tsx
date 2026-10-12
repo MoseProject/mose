@@ -1,7 +1,18 @@
 import { cx } from "./cx";
 import baseStyles from "./styles/base.module.css";
 import styles from "./App.module.css";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import {
+  loadCommandPalette,
+  loadEditor,
+  loadExportDialog,
+  loadExportPanel,
+  loadPrefs,
+  loadShortcutsDialog,
+  loadWatchFolder,
+  whenIdle,
+} from "./chunks";
+import { lazyNamed } from "./lazy";
 import { useI18n } from "./i18n";
 import { COMMANDS } from "./commands";
 import { listenForControlRequests } from "./control";
@@ -16,34 +27,13 @@ import { api, onCloseRequested } from "./ipc";
 import { askChoice, askConfirm } from "./notifications";
 import { connect, patchUi, run, sessionStore, uiStore, useStore } from "./store";
 
-const Editor = lazy(async () => {
-  const module = await import("./screens/Editor");
-  return { default: module.Editor };
-});
-const ExportDialog = lazy(async () => {
-  const module = await import("@components/export/ExportDialog");
-  return { default: module.ExportDialog };
-});
-const ExportPanel = lazy(async () => {
-  const module = await import("@components/export/ExportPanel");
-  return { default: module.ExportPanel };
-});
-const Prefs = lazy(async () => {
-  const module = await import("./screens/Prefs");
-  return { default: module.Prefs };
-});
-const ShortcutsDialog = lazy(async () => {
-  const module = await import("@components/chrome/ShortcutsDialog");
-  return { default: module.ShortcutsDialog };
-});
-const WatchFolder = lazy(async () => {
-  const module = await import("./screens/WatchFolder");
-  return { default: module.WatchFolder };
-});
-const CommandPalette = lazy(async () => {
-  const module = await import("@components/chrome/CommandPalette");
-  return { default: module.CommandPalette };
-});
+const Editor = lazyNamed(loadEditor, "Editor");
+const ExportDialog = lazyNamed(loadExportDialog, "ExportDialog");
+const ExportPanel = lazyNamed(loadExportPanel, "ExportPanel");
+const Prefs = lazyNamed(loadPrefs, "Prefs");
+const ShortcutsDialog = lazyNamed(loadShortcutsDialog, "ShortcutsDialog");
+const WatchFolder = lazyNamed(loadWatchFolder, "WatchFolder");
+const CommandPalette = lazyNamed(loadCommandPalette, "CommandPalette");
 
 export function App() {
   const session = useStore(sessionStore);
@@ -66,6 +56,14 @@ export function App() {
           }),
         ),
       );
+    });
+  }, []);
+
+  // The Editor is what follows the home screen: it is fetched while the app sits idle, so opening a
+  // project does not wait for it.
+  useEffect(() => {
+    return whenIdle(() => {
+      void loadEditor();
     });
   }, []);
 

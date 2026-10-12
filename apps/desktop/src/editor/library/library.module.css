@@ -33,6 +33,9 @@
   gap: 3px;
   min-width: 0;
   cursor: grab;
+  /* A card scrolled out of sight is not laid out or painted until it nears the view. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 96px;
 }
 
 .thumb-wrap {

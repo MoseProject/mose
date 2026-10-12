@@ -265,6 +265,11 @@ const ptr = (type: string, x: number, y: number, init: MouseEventInit = {}) => {
 const button = (label: string) => {
   return screen.getByText(label, { selector: "button" }) as HTMLButtonElement;
 };
+/** Opens the toolbar menus whose entries are built when they first open. */
+const openToolbarMenus = () => {
+  fireEvent.click(screen.getByText(t("menuClip")));
+  fireEvent.click(screen.getByText(t("menuAnalyze")));
+};
 const titled = (title: string) => {
   return screen.getByTitle(title) as HTMLButtonElement;
 };
@@ -511,6 +516,7 @@ describe("timeline painting", () => {
 describe("toolbar", () => {
   it("disables selection-bound actions until enough clips are selected", () => {
     mount();
+    openToolbarMenus();
     for (const label of [
       t("delete"),
       t("rippleDelete"),
@@ -536,6 +542,7 @@ describe("toolbar", () => {
   it("runs the editing commands on the selection", () => {
     uiStore.set({ ...uiStore.get(), selectedClipIds: [1, 2] });
     mount();
+    openToolbarMenus();
     fireEvent.click(button(t("delete")));
     expect(calls.deleteClips).toHaveBeenCalledWith([1, 2], false);
     fireEvent.click(button(t("rippleDelete")));
@@ -551,6 +558,7 @@ describe("toolbar", () => {
   it("detects scene cuts for a single selected clip", () => {
     uiStore.set({ ...uiStore.get(), selectedClipIds: [2] });
     mount();
+    openToolbarMenus();
     fireEvent.click(button(t("detectChapters")));
     expect(calls.detectSceneCutsForClip).toHaveBeenCalledWith(2);
   });
