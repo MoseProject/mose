@@ -507,6 +507,12 @@ typedef enum {
    a video-only input produces a video-only proxy, no error. */
 ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path, int target_height);
 
+/* The same, choosing what happens to an HDR source: nonzero tone_map_hdr converts it to SDR (what
+   avbridge_generate_proxy does), zero tags the proxy SDR and leaves the pixel values as they are.
+ */
+ProxyStatus avbridge_generate_proxy_ex(const char *in_path, const char *out_path, int target_height,
+                                       int tone_map_hdr);
+
 typedef enum {
     WAVEFORM_OK = 0,
     WAVEFORM_ERR_OPEN_INPUT = 1,
