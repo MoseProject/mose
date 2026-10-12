@@ -237,6 +237,11 @@ pub struct ExportJob {
     /// on the established behavior.
     #[serde(default = "default_allow_copy")]
     pub allow_copy: bool,
+    /// Whether this job may normalize its loudness (when the app setting allows it). False when
+    /// the sound was already normalized on the clips. `#[serde(default = ...)]` keeps older saved
+    /// queues on the established behavior.
+    #[serde(default = "default_allow_copy")]
+    pub normalize: bool,
     pub output_path: String,
     pub status: ExportJobStatus,
 }
