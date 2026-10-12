@@ -510,3 +510,60 @@ fn a_mixer_strip_is_neutral_by_default_and_every_control_stays_inside_its_limits
     .clamped();
     assert!(broken.is_neutral());
 }
+
+#[test]
+fn a_hard_cut_gets_a_declick_fade_and_a_split_does_not() {
+    let mut track = empty_track();
+    // Two clips of one asset split from a single take: the source carries on across the join.
+    let first = ClipInstance::new(1, 5, 0.0, 10.0, 12.0);
+    let second = ClipInstance::new(2, 5, 2.0, 12.0, 14.0);
+    // A jump cut: the same asset, but the source skips ahead.
+    let jump = ClipInstance::new(3, 5, 4.0, 20.0, 22.0);
+    // A different asset straight after.
+    let other = ClipInstance::new(4, 6, 6.0, 0.0, 2.0);
+    // A clip with a gap before it.
+    let apart = ClipInstance::new(5, 5, 9.0, 0.0, 1.0);
+    track.clips = vec![first, second, jump, other, apart];
+    let clips = track.clips.clone();
+    let declick = Track::AUDIO_DECLICK_SECS;
+
+    assert_eq!(
+        track.audio_fade_in_secs(&clips[0]),
+        0.0,
+        "nothing before it"
+    );
+    assert_eq!(
+        track.audio_fade_out_secs(&clips[0]),
+        0.0,
+        "a split is seamless"
+    );
+    assert_eq!(track.audio_fade_in_secs(&clips[1]), 0.0);
+    assert_eq!(
+        track.audio_fade_out_secs(&clips[1]),
+        declick,
+        "the jump follows"
+    );
+    assert_eq!(track.audio_fade_in_secs(&clips[2]), declick);
+    assert_eq!(
+        track.audio_fade_out_secs(&clips[2]),
+        declick,
+        "another asset follows"
+    );
+    assert_eq!(track.audio_fade_in_secs(&clips[3]), declick);
+    assert_eq!(
+        track.audio_fade_out_secs(&clips[3]),
+        0.0,
+        "a gap follows, no neighbour to meet"
+    );
+    assert_eq!(track.audio_fade_in_secs(&clips[4]), 0.0);
+
+    assert!(!track.audio_has_hard_cut(&clips[0]));
+    assert!(track.audio_has_hard_cut(&clips[1]));
+    assert!(track.audio_has_hard_cut(&clips[2]));
+    assert!(!track.audio_has_hard_cut(&clips[4]));
+
+    // A longer fade handle wins over the declick.
+    track.clips[2].fade_in_secs = 0.5;
+    let longer = track.clips[2].clone();
+    assert_eq!(track.audio_fade_in_secs(&longer), 0.5);
+}

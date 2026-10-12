@@ -671,6 +671,39 @@ fn a_strip_alone_sends_the_track_through_the_mix_and_reaches_the_segment() {
 }
 
 #[test]
+fn a_hard_cut_takes_the_mix_path_with_a_declick_and_a_split_stays_on_the_one_pass_copy() {
+    use crate::timeline::ClipInstance;
+    // A neutral track with one clip copies the source audio: no segments.
+    let (mut sequence, media) = mix_fixture(Default::default());
+    assert!(resolve_audio_segments(&sequence, &media)
+        .unwrap()
+        .is_empty());
+
+    // A second clip that carries the source on from where the first stopped is a split.
+    sequence.timeline.tracks[0]
+        .clips
+        .push(ClipInstance::new(2, 1, 0.4, 0.4, 0.8));
+    assert!(resolve_audio_segments(&sequence, &media)
+        .unwrap()
+        .is_empty());
+
+    // One that jumps elsewhere in the source is a hard cut.
+    sequence.timeline.tracks[0].clips[1].source_in_secs = 0.0;
+    sequence.timeline.tracks[0].clips[1].source_out_secs = 0.4;
+    let segments = resolve_audio_segments(&sequence, &media).unwrap();
+    assert_eq!(segments.len(), 2, "the cut needs the mix");
+    let declick = crate::timeline::Track::AUDIO_DECLICK_SECS;
+    assert_eq!(
+        (segments[0].fade_in_secs, segments[0].fade_out_secs),
+        (0.0, declick)
+    );
+    assert_eq!(
+        (segments[1].fade_in_secs, segments[1].fade_out_secs),
+        (declick, 0.0)
+    );
+}
+
+#[test]
 fn a_fader_or_pan_sends_the_track_through_the_mix_with_its_level_added_to_the_clips() {
     let (sequence, media) = mix_fixture(crate::timeline::TrackMix {
         volume_db: -6.0,

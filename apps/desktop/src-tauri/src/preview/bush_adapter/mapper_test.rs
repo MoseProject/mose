@@ -826,3 +826,32 @@ fn transitions_that_collide_with_other_animation_are_ignored() {
         .contains(&Approximation::TransitionIgnored));
     assert!(contributor.placement.animation.scale_x.is_some());
 }
+
+#[test]
+fn the_preview_fades_clip_sound_at_hard_cuts_and_handles_but_not_at_a_split() {
+    let declick = f64::from(avcore::timeline::Track::AUDIO_DECLICK_SECS);
+    let mut first = ClipInstance::new(10, 1, 0.0, 0.0, 4.0);
+    // A split: the source carries on, so no fade at the join.
+    let second = ClipInstance::new(11, 1, 4.0, 4.0, 8.0);
+    // A jump cut straight after it.
+    let mut third = ClipInstance::new(12, 1, 8.0, 20.0, 24.0);
+    first.fade_in_secs = 0.5;
+    third.fade_out_secs = 1.0;
+    let mapped = map_with(
+        vec![track(1, TrackKind::Video, vec![first, second, third])],
+        Vec::new(),
+    );
+    let fade = |id: u64| {
+        mapped
+            .scene
+            .contributors()
+            .iter()
+            .find(|c| c.id.0 == id)
+            .unwrap()
+            .placement
+            .audio_fade
+    };
+    assert_eq!((fade(10).in_secs, fade(10).out_secs), (0.5, 0.0));
+    assert_eq!((fade(11).in_secs, fade(11).out_secs), (0.0, declick));
+    assert_eq!((fade(12).in_secs, fade(12).out_secs), (declick, 1.0));
+}

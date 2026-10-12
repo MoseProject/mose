@@ -753,3 +753,43 @@ fn the_fader_also_scales_an_animated_gain() {
     });
     assert!((halved - plain * 0.5).abs() < 1e-4, "{halved} vs {plain}");
 }
+
+#[test]
+fn an_audio_fade_ramps_the_sound_in_and_out_like_the_export() {
+    // The clip helper plays the first 0.9 s of the fixture.
+    let length = 0.9;
+    let fade = bush::Fade {
+        in_secs: 0.1,
+        out_secs: 0.1,
+    };
+    let render = |placement: Placement, start: u64, frames: usize| {
+        let mut renderer = renderer();
+        let scene = scene(vec![clip(1, true, placement)]);
+        renderer
+            .render(&scene, start, frames, &AtomicBool::new(false))
+            .unwrap()
+            .unwrap()
+            .samples()
+            .to_vec()
+    };
+    let plain = Placement::default();
+    let faded = Placement {
+        audio_fade: fade,
+        ..plain.clone()
+    };
+    let end = (length * f64::from(RATE)) as u64;
+    for start in [0, end - 4096] {
+        let reference = render(plain.clone(), start, 4096);
+        let ramped = render(faded.clone(), start, 4096);
+        for (index, (a, b)) in reference.iter().zip(&ramped).enumerate() {
+            let local = (start + index as u64) as f64 / f64::from(RATE);
+            let factor = fade.factor_at(local, Some(length));
+            assert!((a * factor - b).abs() < 1e-5, "frame {} of {start}", index);
+        }
+    }
+    // Silent at the very start, full level in the middle.
+    let start = render(faded.clone(), 0, 64);
+    assert!(peak(&start) < 0.01);
+    let middle = render(faded.clone(), end / 2, 512);
+    assert_eq!(middle, render(plain, end / 2, 512));
+}
