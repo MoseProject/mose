@@ -66,7 +66,7 @@ test.describe("with motion", () => {
 
 test.describe("with reduced motion", () => {
   test("a dialog opens and closes without any motion", async ({ page }) => {
-    const overlay = dialog.locator("xpath=..");
+    const dialog = await openDialog(page, false);
     await dialog.getByRole("button", { name: "Cancelar" }).click();
     await expect(exportDialog(page)).toHaveCount(0, { timeout: 100 });
   });
