@@ -14,6 +14,7 @@
 
 //! Reading and producing media: probing, proxies, loudness, waveforms, sampling frames and download.
 
+pub mod audio_stream;
 pub mod frame_sampler;
 pub mod loudness;
 pub mod probe;

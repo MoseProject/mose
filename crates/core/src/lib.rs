@@ -42,8 +42,8 @@ pub use analysis::{
 };
 use analysis::{onnx_models, whisper_model};
 pub use av::{
-    frame_sampler, loudness, probe, proxy, sound_library, subtitles, voice_cleanup_preview,
-    waveform, youtube_download,
+    audio_stream, frame_sampler, loudness, probe, proxy, sound_library, subtitles,
+    voice_cleanup_preview, waveform, youtube_download,
 };
 pub use graphics::{
     blend_mode, font_catalog, lut, motion_template, overlay_render, scopes, shape_render,
@@ -60,6 +60,9 @@ pub use project_io::{
     watched_folder,
 };
 
+pub use audio_stream::{
+    audio_stream_file_path, ensure_audio_stream_file, AudioStreamError, AudioStreamSource,
+};
 pub use auto_reframe::{
     compute_reframe_crop, detect_faces, main_subject_center, CropRect, FaceBox, ReframeError,
 };
