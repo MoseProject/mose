@@ -1,6 +1,6 @@
 //! Playback cost as layers pile up: N copies of one clip stacked on the canvas, optionally with
 //! an effect on each. Run: `cargo run --release -p bush --example layers_probe -- clip.mp4 N
-//! [plain|colour|blur|mask|rotate] [width height frames]`.
+//! [plain|colour|colour-fade|blur|mask|rotate|fade] [width height frames]`.
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -51,7 +51,7 @@ fn main() {
                 ..Placement::default()
             };
             match effect.as_str() {
-                "colour" | "colour-solid" => {
+                "colour" | "colour-solid" | "colour-fade" => {
                     placement.effects = LayerEffects {
                         brightness: 0.1,
                         contrast: 1.2,
