@@ -48,6 +48,9 @@ const asset = (overrides: Record<string, unknown> = {}) => {
     fps: 59.94,
     loudness: { integrated_lufs: -18.04 },
     has_audio: true,
+    streams: { color: null, audio: [] },
+    hdr_handling: "Auto",
+    audio_stream: null,
     favorited: false,
     ...overrides,
   };
@@ -118,6 +121,27 @@ describe("media library", () => {
     expect(screen.getByTitle(t("favorite")).querySelector("svg")?.getAttribute("fill")).toBe(
       "currentColor",
     );
+  });
+
+  it("marks HDR video in its details and nothing else", () => {
+    const color = (transfer: string) => {
+      return {
+        bit_depth: 10,
+        matrix: "Bt2020",
+        primaries: "Bt2020",
+        transfer,
+        full_range: false,
+      };
+    };
+    render(
+      <MediaLibrary
+        session={sessionWith([
+          asset({ id: 1, file_name: "hdr.mkv", streams: { color: color("Pq"), audio: [] } }),
+          asset({ id: 2, file_name: "sdr.mp4", streams: { color: color("Bt709"), audio: [] } }),
+        ])}
+      />,
+    );
+    expect(screen.getAllByText(new RegExp(`${t("hdrLabel")}`))).toHaveLength(1);
   });
 
   it("transcribes assets with audio, locking the button while one runs", () => {

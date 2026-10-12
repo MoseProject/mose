@@ -9,6 +9,12 @@ import { assetDragStore, run, transcribingAssetIdStore, useStore } from "../../s
 import type { MediaAsset } from "../../types";
 import { trackPointerDrag } from "./pointerDrag";
 
+/** Whether the asset is HDR video (PQ or HLG), which the editor converts to SDR. */
+function isHdr(asset: MediaAsset): boolean {
+  const transfer = asset.streams?.color?.transfer;
+  return transfer === "Pq" || transfer === "Hlg";
+}
+
 /** Memoized: the library re-renders with every zoom and scroll of the timeline. */
 export const AssetRow = memo(function AssetRow({
   asset,
@@ -39,6 +45,7 @@ export const AssetRow = memo(function AssetRow({
   const meta = [
     asset.resolution ? `${asset.resolution[0]}×${asset.resolution[1]}` : null,
     asset.fps ? `${asset.fps.toFixed(0)} fps` : null,
+    isHdr(asset) ? t("hdrLabel") : null,
     asset.loudness ? `${asset.loudness.integrated_lufs.toFixed(1)} LUFS` : t("analyzing"),
   ]
     .filter(Boolean)
