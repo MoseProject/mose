@@ -50,6 +50,9 @@ For the standalone replacement of GStreamer preview playback (done, GStreamer re
 It intentionally stops before any `core` or UI integration. Current status, verification
 and measured numbers: **[matrix/bush.md](matrix/bush.md)**.
 
+For export, preview and editor UI performance (what changed, measurements, how to rerun them, what
+is left), read **[architecture/performance-2026-10.md](architecture/performance-2026-10.md)**.
+
 Do not read every file here for one task. Read `matrix/changelog.md` only when you need the
 historical "why was it built this way" detail (verification caveats, real bugs found, empirical
 discoveries) — it's a narrative log of already-completed work, not a task list.
@@ -75,6 +78,7 @@ spec/
 │   └── changelog.md                  (large historical log — read only for "why", not "what's next")
 └── architecture/                     ← HOW to build it (principles, not per-feature status)
     ├── tauri-migration.md            (egui -> Tauri + React: decisions, parity, remaining gaps)
+    ├── performance-2026-10.md        (export/preview/UI performance work, measurements, tools)
     ├── differentiators.md            (D1-D7: the proposed differentiator feature specs)
     ├── competitive-feature-plan.md   (CF-01-CF-10: next competitive implementation plan)
     ├── monetization-and-licensing.md (MON-01: Free/Pro subscription and GPL model)
