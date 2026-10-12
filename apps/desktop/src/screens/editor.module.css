@@ -2,11 +2,11 @@
 .editor {
   display: grid;
   grid-template-columns:
-    57px min(var(--library-width, 340px), 28vw) 6px minmax(0, 1fr) 6px
+    57px min(var(--library-width, 340px), 28vw) 1px minmax(0, 1fr) 1px
     min(var(--inspector-width, 296px), 26vw) 84px;
   /* The timeline is as tall as the user set, but never so tall that the preview loses its
-     200 px or the page grows past the window (top bar 50 + status bar 24 + gap 6 = 80). */
-  grid-template-rows: minmax(200px, 1fr) 6px min(var(--timeline-height, 300px), calc(100vh - 380px));
+     200 px or the page grows past the window (top bar 50 + status bar 24 + splitter 1 = 75, with room to spare). */
+  grid-template-rows: minmax(200px, 1fr) 1px min(var(--timeline-height, 300px), calc(100vh - 380px));
   min-height: 0;
   background: var(--bg-workspace);
 }
@@ -23,7 +23,6 @@
 .editor .library {
   grid-row: 1;
   grid-column: 2;
-  border-right: 1px solid var(--border-subtle);
 }
 
 .editor .preview {
@@ -35,7 +34,6 @@
 .editor .inspector {
   grid-row: 1;
   grid-column: 6;
-  border-left: 1px solid var(--border-subtle);
 }
 
 .editor .splitter {
@@ -45,6 +43,23 @@
   background: var(--border-subtle);
 }
 
+/* The line is one pixel; the grab area around it is wider so it is still easy to hit. */
+.editor .splitter,
+.panel-splitter {
+  position: relative;
+}
+.editor .splitter::after {
+  content: "";
+  position: absolute;
+  inset: -3px 0;
+  z-index: 2;
+}
+.panel-splitter::after {
+  content: "";
+  position: absolute;
+  inset: 0 -3px;
+  z-index: 2;
+}
 .editor .splitter:hover {
   background: var(--accent-active);
 }
