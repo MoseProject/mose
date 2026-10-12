@@ -107,6 +107,9 @@ pub struct Placement {
     /// is centred and leaves the audio untouched. The side the pan moves away from falls off as a
     /// quarter sine, the other stays at unity (the export mix applies the same law).
     pub pan: f32,
+    /// Tone and dynamics of the contributor's track (EQ, filters, compressor), applied after the
+    /// pan; the export mix runs the same chain.
+    pub strip: crate::strip::Strip,
     /// Keyframed overrides of opacity, position, scale and rotation, relative to the
     /// contributor's timeline start.
     pub animation: Animation,
@@ -154,6 +157,7 @@ impl Default for Placement {
             gain: 1.0,
             track_gain: 1.0,
             pan: 0.0,
+            strip: crate::strip::Strip::default(),
             animation: Animation::default(),
             fade: Fade::default(),
             lut: None,
