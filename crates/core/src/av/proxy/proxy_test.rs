@@ -150,3 +150,32 @@ fn a_failed_proxy_leaves_nothing_behind_to_be_taken_for_a_good_one() {
         "the next call took a leftover for a finished proxy"
     );
 }
+
+#[test]
+fn the_proxy_of_an_hdr_clip_is_sdr_with_the_same_colour() {
+    // 10-bit PQ BT.2020 in, plain Rec.709 8-bit out: scrubbing never needs the tone mapping.
+    let source = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/color/hdr10_pq.mkv");
+    let dir = std::env::temp_dir().join(format!("oca-proxy-hdr-{}", std::process::id()));
+    let proxy = ensure_proxy(&source, &dir, PreviewQuality::Medium).expect("a proxy");
+    let color = crate::probe_media(&proxy)
+        .expect("probes")
+        .streams
+        .color
+        .expect("a video proxy");
+    assert!(!color.is_hdr(), "the proxy is still HDR: {color:?}");
+    assert_eq!(color.bit_depth, 8);
+    let frame = crate::FrameSampler::open(&proxy)
+        .expect("opens")
+        .sample(0.0, Duration::from_secs(5))
+        .expect("a frame");
+    let at = ((frame.height / 2 * frame.width + frame.width / 2) * 4) as usize;
+    let pixel = [frame.rgba[at], frame.rgba[at + 1], frame.rgba[at + 2]];
+    let _ = fs::remove_dir_all(&dir);
+    for (channel, expected) in [200i32, 60, 40].into_iter().enumerate() {
+        assert!(
+            (i32::from(pixel[channel]) - expected).abs() <= 12,
+            "the proxy shows {pixel:?}, the colour is 200, 60, 40"
+        );
+    }
+}

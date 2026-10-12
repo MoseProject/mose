@@ -206,3 +206,15 @@ fn full_range_footage_is_not_stretched_a_second_time() {
         "hd709_fullrange.mkv",
     );
 }
+
+#[test]
+fn hdr_footage_is_tone_mapped_to_sdr_in_the_preview() {
+    // The fixture is the colour 200, 60, 40 stored as 10-bit PQ BT.2020. Decoded as SDR it shows
+    // 120, 81, 60: the washed-out look of every HDR capture.
+    assert_close(
+        centre_pixel(&color_fixture("hdr10_pq.mkv")),
+        FIXTURE_COLOR,
+        8,
+        "hdr10_pq.mkv",
+    );
+}

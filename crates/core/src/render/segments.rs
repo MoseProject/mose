@@ -15,7 +15,7 @@
 use super::errors::RenderError;
 use crate::export::ExportAspectRatio;
 use crate::keyframe;
-use crate::media::MediaAsset;
+use crate::media::{ColorTransfer, MediaAsset};
 use crate::project::Sequence;
 use crate::timeline::{ClipInstance, TrackKind};
 use avbridge::Canvas;
@@ -83,6 +83,54 @@ pub(crate) fn clip_segment_duration_secs(segment: &avbridge::ClipSegment) -> f64
             1.0
         };
         source_duration / speed
+    }
+}
+
+/// Reference white the HDR to SDR conversion maps to SDR white: 203 nits, the level ITU-R
+/// BT.2408 recommends for HDR graphics and game capture.
+const HDR_REFERENCE_WHITE_NITS: u32 = 203;
+/// Brightest HDR level kept distinct, in multiples of the reference white (about 1000 nits):
+/// above it the curve clips.
+const HDR_TONE_MAP_PEAK: f32 = 5.0;
+/// Where the curve starts to roll highlights off, as a fraction of SDR white. Everything below
+/// it is left exactly as it is, which keeps ordinary SDR-range colours unchanged.
+const HDR_TONE_MAP_KNEE: f32 = 0.5;
+
+/// The filters that turn an HDR source into Rec.709 SDR, or `None` when the asset does not need
+/// it ([`MediaAsset::needs_tone_mapping`]). Goes in front of the clip's own filters, so every
+/// effect after it sees SDR. The conversion is explicit about what the source is (PQ or HLG,
+/// BT.2020, its range) instead of trusting frame tags, so a source forced to "Tone map" works
+/// untagged too. Mobius with a knee, not Hable: Hable darkens SDR-range content (a 200,60,40
+/// colour came out 129,39,25), Mobius leaves it alone (199,60,39) and still rolls off real HDR
+/// highlights.
+pub(crate) fn hdr_tone_map_filter(asset: &MediaAsset) -> Option<String> {
+    if !asset.needs_tone_mapping() {
+        return None;
+    }
+    let color = asset.streams.color;
+    let transfer = match color.map(|c| c.transfer) {
+        Some(ColorTransfer::Hlg) => "arib-std-b67",
+        _ => "smpte2084",
+    };
+    let range = if color.is_some_and(|c| c.full_range) {
+        "pc"
+    } else {
+        "tv"
+    };
+    Some(format!(
+        "zscale=tin={transfer}:min=2020_ncl:pin=2020:rin={range}:t=linear:npl={HDR_REFERENCE_WHITE_NITS},\
+         format=gbrpf32le,zscale=p=bt709,\
+         tonemap=mobius:param={HDR_TONE_MAP_KNEE}:peak={HDR_TONE_MAP_PEAK}:desat=2,\
+         zscale=t=bt709:m=bt709:r=tv,format=yuv420p"
+    ))
+}
+
+/// `video_filter` with the asset's HDR conversion in front of it, if it needs one.
+fn with_tone_mapping(asset: &MediaAsset, video_filter: String) -> String {
+    match hdr_tone_map_filter(asset) {
+        Some(tone_map) if video_filter.is_empty() => tone_map,
+        Some(tone_map) => format!("{tone_map},{video_filter}"),
+        None => video_filter,
     }
 }
 
@@ -157,6 +205,7 @@ pub fn resolve_timeline_segments(
         let (fps_num, fps_den) = fps_to_rational(fps);
         let (video_filter, position_x_expr, position_y_expr) =
             resolve_clip_filters(clip, fps_num, fps_den, duration_secs, false, true);
+        let video_filter = with_tone_mapping(asset, video_filter);
         segments.push(avbridge::ClipSegment {
             source_path: asset.source_path.clone(),
             source_in_secs: clip.source_in_secs,
@@ -282,6 +331,7 @@ pub fn resolve_timeline_segments_multi(
                     is_overlay,
                     single_graph,
                 );
+                let video_filter = with_tone_mapping(asset, video_filter);
                 // Same overlay-only gate resolve_clip_filters' resize stage above uses (see its
                 // doc comment) — a track-0/background clip's alpha has no compositing stage to
                 // survive into (build_vfilter_descr's immediate format=yuv420p conform discards
