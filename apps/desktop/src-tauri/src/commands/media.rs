@@ -96,7 +96,14 @@ fn import_paths<R: Runtime>(app: &AppHandle<R>, paths: Vec<PathBuf>) {
     }
 }
 
-fn import_one<R: Runtime>(app: &AppHandle<R>, path: &Path, epoch: u64, proxy_dir: &Path) {
+/// Imports one file and returns the id of its asset, or `None` when it could not be read (or the
+/// project was replaced meanwhile).
+fn import_one<R: Runtime>(
+    app: &AppHandle<R>,
+    path: &Path,
+    epoch: u64,
+    proxy_dir: &Path,
+) -> Option<u64> {
     let probed = match avcore::probe_media(path) {
         Ok(probed) => probed,
         Err(error) => {
@@ -106,7 +113,7 @@ fn import_one<R: Runtime>(app: &AppHandle<R>, path: &Path, epoch: u64, proxy_dir
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default();
             let _ = app.emit(IMPORT_FAILED_EVENT, ImportFailedPayload { file_name });
-            return;
+            return None;
         }
     };
     let file_name = path
@@ -114,6 +121,7 @@ fn import_one<R: Runtime>(app: &AppHandle<R>, path: &Path, epoch: u64, proxy_dir
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
 
+    let audio_streams = probed.streams.audio.clone();
     let Some((asset_id, kind)) = with_current_project(app, epoch, |session| {
         let id = session.allocate_asset_id();
         let asset = probed.into_media_asset(id, file_name, path.to_path_buf());
@@ -122,8 +130,14 @@ fn import_one<R: Runtime>(app: &AppHandle<R>, path: &Path, epoch: u64, proxy_dir
         session.dirty = true;
         (id, kind)
     }) else {
-        return;
+        return None;
     };
+
+    // A recording with several audio tracks (OBS: game, microphone, chat) gets one audio asset per
+    // track after the first, which stays with the video.
+    if audio_streams.len() > 1 {
+        import_extra_tracks(app, path, audio_streams, epoch, proxy_dir);
+    }
 
     // Cheapest and most visible first, each result published as soon as it exists: on a
     // multi-hour recording the proxy encode takes far longer than everything else together, and
@@ -152,6 +166,57 @@ fn import_one<R: Runtime>(app: &AppHandle<R>, path: &Path, epoch: u64, proxy_dir
             .ok();
         update_asset(app, epoch, asset_id, |asset| asset.proxy_path = proxy_path);
     }
+    Some(asset_id)
+}
+
+/// Copies every audio track of `path` after the first out as a file of its own and imports each as
+/// an audio asset named after the track. Runs on one background thread, a track at a time: each
+/// copy reads the whole recording.
+fn import_extra_tracks<R: Runtime>(
+    app: &AppHandle<R>,
+    path: &Path,
+    audio_streams: Vec<avcore::AudioStreamInfo>,
+    epoch: u64,
+    proxy_dir: &Path,
+) {
+    let app = app.clone();
+    let origin = path.to_path_buf();
+    let proxy_dir = proxy_dir.to_path_buf();
+    std::thread::spawn(move || {
+        let stem = origin
+            .file_stem()
+            .map(|stem| stem.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        for (position, stream) in audio_streams.iter().enumerate().skip(1) {
+            let copy = {
+                let _turn = import_gate::analysis_gate().enter();
+                avcore::ensure_audio_stream_file(&origin, stream.stream_index, &proxy_dir)
+            };
+            let copy = match copy {
+                Ok(copy) => copy,
+                Err(error) => {
+                    tracing::warn!(%error, track = stream.stream_index, "failed to copy an audio track");
+                    continue;
+                }
+            };
+            let Some(asset_id) = import_one(&app, &copy, epoch, &proxy_dir) else {
+                continue;
+            };
+            let label = if stream.title.is_empty() {
+                format!("Track {}", position + 1)
+            } else {
+                stream.title.clone()
+            };
+            let source = avcore::AudioStreamSource {
+                origin: origin.clone(),
+                stream_index: stream.stream_index,
+            };
+            update_asset(&app, epoch, asset_id, |asset| {
+                asset.file_name = format!("{stem} - {label}");
+                asset.audio_stream = Some(source);
+            });
+        }
+    });
 }
 
 fn update_asset<R: Runtime>(
@@ -175,6 +240,7 @@ fn update_asset<R: Runtime>(
 /// Re-attaches editing proxies after a project load. `ensure_proxy` returns an existing cache
 /// entry without re-encoding, so this is cheap for media proxied before.
 pub fn rehydrate_proxies<R: Runtime>(app: &AppHandle<R>, epoch: u64) {
+    rehydrate_audio_tracks(app, epoch);
     let (sources, proxy_dir) = {
         let state = app.state::<AppState>();
         let session = state.session();
@@ -211,6 +277,53 @@ pub fn rehydrate_proxies<R: Runtime>(app: &AppHandle<R>, epoch: u64) {
                     .find(|a| a.id == asset_id)
                 {
                     asset.proxy_path = Some(proxy);
+                }
+            });
+            if applied.is_none() {
+                return;
+            }
+        }
+    });
+}
+
+/// Makes again the audio-track copies a loaded project lost (a cleared cache, another machine):
+/// each asset made from a track of a recording whose own file is gone is copied out of the
+/// recording again and pointed at the new file.
+fn rehydrate_audio_tracks<R: Runtime>(app: &AppHandle<R>, epoch: u64) {
+    let (lost, proxy_dir) = {
+        let state = app.state::<AppState>();
+        let session = state.session();
+        let lost: Vec<(u64, avcore::AudioStreamSource)> = session
+            .project
+            .media_library
+            .iter()
+            .filter_map(|asset| {
+                let source = asset.audio_stream.clone()?;
+                (!asset.source_path.exists() && source.origin.exists())
+                    .then_some((asset.id, source))
+            })
+            .collect();
+        (lost, avcore::proxy::cache_dir_for_project(&session.project))
+    };
+    if lost.is_empty() {
+        return;
+    }
+    let app = app.clone();
+    std::thread::spawn(move || {
+        for (asset_id, source) in lost {
+            let Ok(copy) =
+                avcore::ensure_audio_stream_file(&source.origin, source.stream_index, &proxy_dir)
+            else {
+                continue;
+            };
+            let applied = with_current_project(&app, epoch, |session| {
+                if let Some(asset) = session
+                    .project
+                    .media_library
+                    .iter_mut()
+                    .find(|a| a.id == asset_id)
+                {
+                    asset.source_path = copy;
                 }
             });
             if applied.is_none() {
