@@ -112,6 +112,82 @@ pub fn materialize_nested_sequences(
     Ok(assets)
 }
 
+fn nested_ids_of(timeline: &Timeline) -> Vec<u64> {
+    timeline
+        .tracks
+        .iter()
+        .flat_map(|t| &t.clips)
+        .filter_map(|c| c.nested_sequence_id)
+        .collect()
+}
+
+/// Whether the cache holds a render of every compound clip under `timeline` that still matches
+/// what is in the project: each nested sequence unchanged since its render, the file there, and
+/// nothing nested inside it changed either. Cheap: comparisons and `stat`s, no rendering.
+pub fn nested_sequences_are_current(
+    project: &Project,
+    timeline: &Timeline,
+    cache: &HashMap<u64, NestedSequenceCache>,
+) -> bool {
+    fn current(
+        project: &Project,
+        timeline: &Timeline,
+        cache: &HashMap<u64, NestedSequenceCache>,
+        visiting: &mut HashSet<u64>,
+    ) -> bool {
+        nested_ids_of(timeline).into_iter().all(|id| {
+            let Some(sequence) = project.sequences.iter().find(|s| s.id == id) else {
+                return false;
+            };
+            let Some(cached) = cache.get(&id) else {
+                return false;
+            };
+            if !visiting.insert(id) {
+                return false;
+            }
+            let ok = cached.timeline == sequence.timeline
+                && cached.rendered_path.exists()
+                && current(project, &sequence.timeline, cache, visiting);
+            visiting.remove(&id);
+            ok
+        })
+    }
+    current(project, timeline, cache, &mut HashSet::new())
+}
+
+/// The assets of the renders the cache holds for the compound clips under `timeline`, current or
+/// not (a render whose file is gone is left out): what a preview shows while a fresh render is
+/// being made in the background.
+pub fn cached_nested_assets(
+    project: &Project,
+    timeline: &Timeline,
+    cache: &HashMap<u64, NestedSequenceCache>,
+) -> HashMap<u64, MediaAsset> {
+    fn collect(
+        project: &Project,
+        timeline: &Timeline,
+        cache: &HashMap<u64, NestedSequenceCache>,
+        assets: &mut HashMap<u64, MediaAsset>,
+    ) {
+        for id in nested_ids_of(timeline) {
+            if assets.contains_key(&id) {
+                continue;
+            }
+            if let Some(cached) = cache.get(&id).filter(|c| c.rendered_path.exists()) {
+                assets.insert(id, cached.asset.clone());
+            }
+            if let Some(sequence) = project.sequences.iter().find(|s| s.id == id) {
+                collect(project, &sequence.timeline, cache, assets);
+            }
+        }
+    }
+    let mut assets = HashMap::new();
+    collect(project, timeline, cache, &mut assets);
+    assets
+}
+
+/// Renders what is stale under `timeline`; true when anything at or below this level had to be
+/// rendered again (so whatever is rendered from it is stale too).
 fn materialize_inner(
     project: &Project,
     timeline: &Timeline,
@@ -119,15 +195,9 @@ fn materialize_inner(
     cache: &mut HashMap<u64, NestedSequenceCache>,
     visiting: &mut HashSet<u64>,
     assets: &mut HashMap<u64, MediaAsset>,
-) -> Result<(), RenderError> {
-    let nested_ids: Vec<u64> = timeline
-        .tracks
-        .iter()
-        .flat_map(|t| &t.clips)
-        .filter_map(|c| c.nested_sequence_id)
-        .collect();
-
-    for nested_id in nested_ids {
+) -> Result<bool, RenderError> {
+    let mut rendered_any = false;
+    for nested_id in nested_ids_of(timeline) {
         if assets.contains_key(&nested_id) {
             continue;
         }
@@ -137,19 +207,12 @@ fn materialize_inner(
             .find(|s| s.id == nested_id)
             .ok_or(RenderError::MissingNestedSequence)?;
 
-        if let Some(cached) = cache.get(&nested_id) {
-            if cached.timeline == nested_sequence.timeline && cached.rendered_path.exists() {
-                assets.insert(nested_id, cached.asset.clone());
-                continue;
-            }
-        }
-
         if !visiting.insert(nested_id) {
             return Err(RenderError::CyclicNestedSequence);
         }
-        // Recurse first -- the nested sequence's own nested clips need materializing before it
-        // can be rendered itself.
-        materialize_inner(
+        // Whatever is nested inside it comes first: it has to be there to render this one, and a
+        // change down there makes this render stale even when this sequence itself is untouched.
+        let below_changed = materialize_inner(
             project,
             &nested_sequence.timeline,
             cache_dir,
@@ -158,6 +221,15 @@ fn materialize_inner(
             assets,
         )?;
         visiting.remove(&nested_id);
+
+        if !below_changed {
+            if let Some(cached) = cache.get(&nested_id) {
+                if cached.timeline == nested_sequence.timeline && cached.rendered_path.exists() {
+                    assets.insert(nested_id, cached.asset.clone());
+                    continue;
+                }
+            }
+        }
 
         let rendered_path = render_nested_sequence(project, nested_sequence, cache_dir, assets)?;
         let asset = synthetic_asset(nested_id, &rendered_path)?;
@@ -170,8 +242,9 @@ fn materialize_inner(
                 asset,
             },
         );
+        rendered_any = true;
     }
-    Ok(())
+    Ok(rendered_any)
 }
 
 /// Renders `sequence` (whose own nested clips are already resolved in `already_materialized`)
