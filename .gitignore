@@ -24,3 +24,5 @@ e2e/__pycache__
 # Python bytecode from the e2e suites
 __pycache__/
 *.pyc
+/apps/desktop/test-results/
+/apps/desktop/playwright-report/
