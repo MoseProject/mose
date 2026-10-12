@@ -62,7 +62,7 @@ impl Default for ExportSettings {
     }
 }
 /// What the export dialog asks beyond the sequence's own settings: a video bitrate and a
-/// ceiling for the picture height. Both `None` keeps the source-matched defaults.
+/// picture height (smaller or larger than the sequence's: a larger one scales the picture up). Both `None` keeps the source-matched defaults.
 #[derive(Debug, Clone, Copy, Default, PartialEq, serde::Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ExportOptions {
@@ -83,19 +83,21 @@ impl ExportOptions {
                 return Err("invalidBitrate".to_string());
             }
         }
-        if self.max_height.is_some_and(|height| height < 144) {
+        if self
+            .max_height
+            .is_some_and(|height| !(144..=4320).contains(&height))
+        {
             return Err("invalidResolution".to_string());
         }
         Ok(())
     }
 
     /// `canvas` with the options applied. A lower height scales the width along (kept even for
-    /// the encoder) and, unless a bitrate was asked for, the bitrate with the pixel count. The
-    /// height never goes above the canvas's own.
+    /// the encoder) and, unless a bitrate was asked for, the bitrate with the pixel count.
     pub fn apply(&self, canvas: Canvas) -> Canvas {
         let mut out = canvas;
         if let Some(height) = self.max_height {
-            if height < canvas.height {
+            if height != canvas.height {
                 let width = (u64::from(canvas.width) * u64::from(height) / u64::from(canvas.height))
                     as u32
                     & !1;
