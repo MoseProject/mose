@@ -16,6 +16,7 @@ pub mod error_reporting;
 pub mod export;
 pub mod export_clips;
 pub mod highlight_detection;
+pub mod import_gate;
 pub mod markers;
 pub mod media;
 pub mod motion_tracking;
@@ -240,11 +241,28 @@ pub async fn save_project<R: Runtime>(app: AppHandle<R>, save_as: bool) -> Resul
         },
     };
     let playhead = app.state::<AppState>().preview.playhead();
-    with_session(&app, |session| {
+    // The file is written from a copy, outside the session lock: encoding and flushing it to disk
+    // can take a while, and edits (and the preview) must not wait for that.
+    let (snapshot, edits_at_copy, epoch) = {
+        let state = app.state::<AppState>();
+        let mut session = state.session();
         session.project.timeline_mut().playhead_secs = playhead;
-        avcore::save_project_to_file(&session.project, &path).map_err(|e| e.to_string())?;
-        session.project.file_path = Some(path.clone());
-        session.dirty = false;
+        (
+            session.project.clone(),
+            state.edits.seq(),
+            session.project_epoch,
+        )
+    };
+    avcore::save_project_to_file(&snapshot, &path).map_err(|e| e.to_string())?;
+    with_session(&app, |session| {
+        // Another project may have been opened meanwhile; this one is then none of its business.
+        if session.project_epoch == epoch {
+            session.project.file_path = Some(path.clone());
+            // Edits made while the file was written are not in it: the project stays unsaved.
+            if app.state::<AppState>().edits.seq() == edits_at_copy {
+                session.dirty = false;
+            }
+        }
         Ok(true)
     })?;
     note_recent_project(&app, &path);

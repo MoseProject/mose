@@ -33,11 +33,16 @@ const IDLE: Duration = Duration::from_millis(300);
 
 /// A decode slower than this is given up on and reported as a miss.
 const SAMPLE_DEADLINE: Duration = Duration::from_millis(800);
+/// What a strip tile may spend decoding forward from a key frame; see [`TileWorkers::extract_tile`].
+pub(crate) const TILE_BUDGET: Duration = Duration::from_millis(40);
 
 struct Job {
     source: PathBuf,
     at_secs: f64,
     max_dim: u32,
+    /// How long decoding forward may go on before the newest frame so far will do (a timeline
+    /// tile); `None` for the exact frame (a poster).
+    budget: Option<Duration>,
     reply: Sender<Option<Vec<u8>>>,
 }
 
@@ -76,11 +81,30 @@ impl TileWorkers {
     /// The JPEG of `source` at `at_secs`, at most `max_dim` on its longest side, once a worker
     /// is free to decode it.
     pub fn extract(&self, source: &Path, at_secs: f64, max_dim: u32) -> Option<Vec<u8>> {
+        self.queue(source, at_secs, max_dim, None)
+    }
+
+    /// [`Self::extract`] for a small strip tile: in a file with a long GOP, the frame decoded
+    /// within [`TILE_BUDGET`] stands in for the exact one, instead of waiting for the whole GOP
+    /// (a thumbnail of a 100-frame GOP took 170 ms, and could fail outright on a busy machine).
+    /// Once the editing proxy exists the tiles come from it, exactly.
+    pub fn extract_tile(&self, source: &Path, at_secs: f64, max_dim: u32) -> Option<Vec<u8>> {
+        self.queue(source, at_secs, max_dim, Some(TILE_BUDGET))
+    }
+
+    fn queue(
+        &self,
+        source: &Path,
+        at_secs: f64,
+        max_dim: u32,
+        budget: Option<Duration>,
+    ) -> Option<Vec<u8>> {
         let (reply, answer) = channel();
         lock_or_recover(&self.shared.queue).jobs.push_back(Job {
             source: source.to_path_buf(),
             at_secs,
             max_dim,
+            budget,
             reply,
         });
         self.shared.wake.notify_one();
@@ -134,7 +158,7 @@ fn serve(open: &mut Option<(PathBuf, FrameSampler)>, job: &Job) -> Option<Vec<u8
             .map(|sampler| (job.source.clone(), sampler));
     }
     let (_, sampler) = open.as_ref()?;
-    let frame = sampler.sample(job.at_secs, SAMPLE_DEADLINE);
+    let frame = sampler.sample_small(job.at_secs, SAMPLE_DEADLINE, job.max_dim, job.budget);
     if frame.is_none() {
         // A decoder that failed or ran late may be stuck mid-GOP; start over next time.
         *open = None;
@@ -145,3 +169,58 @@ fn serve(open: &mut Option<(PathBuf, FrameSampler)>, job: &Job) -> Option<Vec<u8
 #[cfg(test)]
 #[path = "tile_workers_test.rs"]
 mod tests;
+
+#[cfg(test)]
+mod thumbnail_cost {
+    use super::*;
+
+    /// What a timeline strip costs: thumbnails of one file at increasing and at random times.
+    /// `OCA_BENCH_VIDEO=clip.mp4 cargo test --release -p desktop thumbnail_cost -- --ignored --nocapture`
+    #[test]
+    #[ignore = "a measurement, not a check"]
+    fn thumbnail_cost() {
+        let Some(path) = std::env::var_os("OCA_BENCH_VIDEO").map(PathBuf::from) else {
+            eprintln!("set OCA_BENCH_VIDEO to a clip to run this");
+            return;
+        };
+        let workers = TileWorkers::new(1);
+        let duration = avcore::probe_media(&path).map_or(10.0, |probed| probed.duration_secs);
+        let mut report = |label: &str, times: Vec<f64>| {
+            let mut ms: Vec<f64> = times
+                .into_iter()
+                .map(|at| {
+                    let started = std::time::Instant::now();
+                    let jpeg = workers.extract_tile(&path, at, 160);
+                    assert!(jpeg.is_some());
+                    started.elapsed().as_secs_f64() * 1000.0
+                })
+                .collect();
+            ms.sort_by(f64::total_cmp);
+            eprintln!(
+                "{label}: p50 {:.1} ms, p95 {:.1} ms, max {:.1} ms",
+                ms[ms.len() / 2],
+                ms[(ms.len() as f64 * 0.95) as usize],
+                ms[ms.len() - 1]
+            );
+        };
+        let steps = 40;
+        report(
+            "40 thumbnails in order",
+            (0..steps)
+                .map(|i| duration * f64::from(i) / f64::from(steps))
+                .collect(),
+        );
+        let mut state = 0x9E37_79B9_u64;
+        report(
+            "40 thumbnails at random",
+            (0..steps)
+                .map(|_| {
+                    state = state
+                        .wrapping_mul(6_364_136_223_846_793_005)
+                        .wrapping_add(1_442_695_040_888_963_407);
+                    duration * ((state >> 33) as f64 / f64::from(1u32 << 31))
+                })
+                .collect(),
+        );
+    }
+}

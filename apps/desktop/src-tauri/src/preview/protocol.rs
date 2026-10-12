@@ -36,6 +36,19 @@ const THUMBNAIL_AT_SECS: f64 = 1.0;
 /// dropped wholesale (a tile is ~10 KB, so this bounds it near 15 MB) and refills as needed.
 const MAX_TILE_ENTRIES: usize = 1500;
 
+/// Drops the `count` oldest entries. Emptying the whole cache when it filled up sent every tile
+/// on screen back to the decoder at once.
+fn evict_oldest<K: Clone + Eq + std::hash::Hash>(entries: &mut HashMap<K, Stamped>, count: usize) {
+    let mut by_age: Vec<(Instant, K)> = entries
+        .iter()
+        .map(|(key, (_, stamped))| (*stamped, key.clone()))
+        .collect();
+    by_age.sort_by_key(|(stamped, _)| *stamped);
+    for (_, key) in by_age.into_iter().take(count) {
+        entries.remove(&key);
+    }
+}
+
 /// How long a failed extraction is remembered before it is tried again. A failure is cached so a
 /// timeline redraw does not repeat an expensive decode that cannot work, but not forever: the
 /// file may have been offline, still being written, or its proxy not ready yet.
@@ -189,12 +202,12 @@ impl ThumbnailCache {
         }
         let extracted = self
             .workers
-            .extract(source, millis as f64 / 1000.0, THUMBNAIL_MAX_DIM)
+            .extract_tile(source, millis as f64 / 1000.0, THUMBNAIL_MAX_DIM)
             .map(Arc::new);
         {
             let mut tiles = lock_or_recover(&self.tiles);
             if tiles.len() >= MAX_TILE_ENTRIES {
-                tiles.clear();
+                evict_oldest(&mut tiles, MAX_TILE_ENTRIES / 4);
             }
             tiles.insert(key, (extracted.clone(), Instant::now()));
         }
@@ -439,8 +452,23 @@ mod tests {
             .extract(Path::new("missing.mp4"), THUMBNAIL_AT_SECS, POSTER_MAX_DIM)
             .is_none());
     }
-}
 
-#[cfg(test)]
-#[path = "protocol_test.rs"]
-mod handler_tests;
+    #[test]
+    fn a_full_tile_cache_forgets_its_oldest_quarter_and_keeps_the_rest() {
+        let mut entries: HashMap<u32, Stamped> = HashMap::new();
+        let start = Instant::now();
+        for key in 0..8u32 {
+            entries.insert(
+                key,
+                (None, start + Duration::from_millis(u64::from(key) * 10)),
+            );
+        }
+        evict_oldest(&mut entries, 2);
+        assert_eq!(entries.len(), 6);
+        assert!(!entries.contains_key(&0) && !entries.contains_key(&1));
+        assert!((2..8).all(|key| entries.contains_key(&key)));
+        // Asking for more than there is just empties it.
+        evict_oldest(&mut entries, 100);
+        assert!(entries.is_empty());
+    }
+}

@@ -319,3 +319,28 @@ mod keybindings {
         assert!(get_keybindings(state).is_empty());
     }
 }
+
+#[test]
+fn a_recent_projects_summary_is_remembered_and_follows_the_file_when_it_changes() {
+    let h = harness();
+    let file = path_in(&h.dir, "kept.ocproj");
+    save_named(&file, "First");
+    h.prefs().view.recent_project_paths = vec![file.display().to_string()];
+
+    assert_eq!(get_recent_projects(h.state())[0].name, "First");
+    assert!(
+        crate::commands::prefs::summary_cache()
+            .lock()
+            .unwrap()
+            .contains_key(&file),
+        "the summary stays for the next time the list is asked for"
+    );
+    assert_eq!(get_recent_projects(h.state())[0].name, "First");
+
+    // The same project saved again under another name: the file differs, so the summary does.
+    save_named(&file, "Second name, longer");
+    assert_eq!(
+        get_recent_projects(h.state())[0].name,
+        "Second name, longer"
+    );
+}

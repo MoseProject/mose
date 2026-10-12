@@ -15,7 +15,7 @@ use avcore::{MediaKind, PreviewQuality};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
-use super::with_session;
+use super::{import_gate, with_session};
 use crate::state::{publish, AppState, Session};
 
 /// Emitted when a file could not be read as media, so the import does not fail in silence.
@@ -128,19 +128,25 @@ fn import_one<R: Runtime>(app: &AppHandle<R>, path: &Path, epoch: u64, proxy_dir
     // Cheapest and most visible first, each result published as soon as it exists: on a
     // multi-hour recording the proxy encode takes far longer than everything else together, and
     // the timeline's waveform used to wait behind it.
-    let waveform_peaks = avcore::generate_waveform(path)
-        .inspect_err(|error| tracing::warn!(%error, "failed to compute waveform"))
-        .ok();
-    update_asset(app, epoch, asset_id, |asset| {
-        asset.waveform_peaks = waveform_peaks
-    });
+    // Many files imported together take turns (see `import_gate`): their audio passes a few at a
+    // time, then their proxies a few at a time, in the order they were imported.
+    {
+        let _turn = import_gate::analysis_gate().enter();
+        let waveform_peaks = avcore::generate_waveform(path)
+            .inspect_err(|error| tracing::warn!(%error, "failed to compute waveform"))
+            .ok();
+        update_asset(app, epoch, asset_id, |asset| {
+            asset.waveform_peaks = waveform_peaks
+        });
 
-    let loudness = avcore::measure_loudness(path)
-        .inspect_err(|error| tracing::warn!(%error, "failed to measure loudness"))
-        .ok();
-    update_asset(app, epoch, asset_id, |asset| asset.loudness = loudness);
+        let loudness = avcore::measure_loudness(path)
+            .inspect_err(|error| tracing::warn!(%error, "failed to measure loudness"))
+            .ok();
+        update_asset(app, epoch, asset_id, |asset| asset.loudness = loudness);
+    }
 
     if kind == MediaKind::Video {
+        let _turn = import_gate::proxy_gate().enter();
         let proxy_path = avcore::ensure_proxy(path, proxy_dir, PreviewQuality::default())
             .inspect_err(|error| tracing::warn!(%error, "failed to generate proxy"))
             .ok();

@@ -151,6 +151,16 @@ fn stress() {
         ms("save to bytes", 3, || {
             std::hint::black_box(avcore::to_project_bytes(&project).unwrap());
         });
+        let file = std::env::temp_dir().join(format!("stress-{tracks}.ocproj"));
+        avcore::save_project_to_file(&project, &file).unwrap();
+        ms("load the saved file", 3, || {
+            std::hint::black_box(avcore::load_project_from_file(&file).unwrap());
+        });
+        eprintln!(
+            "  (the file is {} KB)",
+            std::fs::metadata(&file).unwrap().len() / 1024
+        );
+        let _ = std::fs::remove_file(&file);
         let mut cache = OverlayCache::default();
         ms("map the timeline to a scene", 3, || {
             std::hint::black_box(

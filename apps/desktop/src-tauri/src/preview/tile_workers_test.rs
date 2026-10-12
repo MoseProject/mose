@@ -64,3 +64,17 @@ fn dropping_the_pool_stops_its_threads() {
     }
     assert_eq!(Arc::strong_count(&shared), 1);
 }
+
+#[test]
+fn a_strip_tile_is_a_small_jpeg_and_the_exact_extract_still_works_after_it() {
+    let workers = TileWorkers::new(1);
+    let tile = workers
+        .extract_tile(&fixture(), 0.8, THUMBNAIL_MAX_DIM)
+        .expect("a tile");
+    assert_eq!(&tile[..2], &[0xFF, 0xD8]);
+    let image = image::load_from_memory(&tile).unwrap();
+    assert!(image.width().max(image.height()) <= THUMBNAIL_MAX_DIM);
+    assert!(workers
+        .extract(&fixture(), 0.8, THUMBNAIL_MAX_DIM)
+        .is_some());
+}

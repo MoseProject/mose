@@ -43,6 +43,13 @@ pub struct SampledFrame {
     pub rgba: Vec<u8>,
 }
 
+/// What a sample is allowed to leave out.
+#[derive(Clone, Copy, Default)]
+struct SampleOptions {
+    max_dim: Option<u32>,
+    budget: Option<Duration>,
+}
+
 /// Why a file could not be opened for sampling.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SamplerError(pub String);
@@ -79,14 +86,59 @@ impl FrameSampler {
     /// a slow or missing sample by shrinking its result rather than failing the whole run over
     /// one frame, so that is this primitive's own contract.
     pub fn sample(&self, at_secs: f64, deadline: Duration) -> Option<SampledFrame> {
+        self.sample_with(at_secs, deadline, SampleOptions::default())
+    }
+
+    /// [`Self::sample`] for a picture that will be shown small: the frame is converted at most
+    /// `max_dim` on its longest side (never larger than the source), and, with `budget`, decoding
+    /// forward stops once the budget is spent and the newest frame decoded by then is returned,
+    /// which can be some frames before `at_secs` in a file with a long GOP. A thumbnail asked
+    /// this way never waits for a whole GOP and never fails for taking too long.
+    pub fn sample_small(
+        &self,
+        at_secs: f64,
+        deadline: Duration,
+        max_dim: u32,
+        budget: Option<Duration>,
+    ) -> Option<SampledFrame> {
+        self.sample_with(
+            at_secs,
+            deadline,
+            SampleOptions {
+                max_dim: Some(max_dim),
+                budget,
+            },
+        )
+    }
+
+    fn sample_with(
+        &self,
+        at_secs: f64,
+        deadline: Duration,
+        options: SampleOptions,
+    ) -> Option<SampledFrame> {
         let started = Instant::now();
         let never_cancelled = AtomicBool::new(false);
-        let frame = self
-            .source
-            .lock()
-            .ok()?
-            .frame_at(at_secs.max(0.0), &never_cancelled)
-            .ok()??;
+        let frame = {
+            let mut source = self.source.lock().ok()?;
+            // The decoder sizes a frame to cover the box it is given; one side of 1 makes the long
+            // side the one that is limited.
+            let info = source.info();
+            source.set_output_limit(options.max_dim.map(|dim| {
+                if info.width >= info.height {
+                    (dim, 1)
+                } else {
+                    (1, dim)
+                }
+            }));
+            match options.budget {
+                Some(budget) => {
+                    source.frame_at_by(at_secs.max(0.0), &never_cancelled, Instant::now() + budget)
+                }
+                None => source.frame_at(at_secs.max(0.0), &never_cancelled),
+            }
+            .ok()??
+        };
         if started.elapsed() > deadline {
             return None;
         }

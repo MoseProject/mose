@@ -1,6 +1,8 @@
 //! Preferences, recent-project and recovery commands.
 
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 use avcore::{ClipFormatting, ClipInstance, LayerTemplate, TrackKind};
 use serde::Serialize;
@@ -48,23 +50,62 @@ pub fn set_prefs<R: Runtime>(app: AppHandle<R>, prefs: PrefsView) -> Result<(), 
     Ok(())
 }
 
-#[tauri::command]
+/// What the home screen shows of a project file, kept per file so that the list is not decoded
+/// again every time it is asked for: a recent list of ten big projects was ten full loads, twice
+/// at startup, on the main thread.
+#[derive(Clone)]
+struct ProjectSummary {
+    name: String,
+    sequence_count: usize,
+    media_count: usize,
+    duration_secs: f64,
+}
+
+/// Summaries by file, valid while the file's modification time and size are what they were.
+type SummaryCache = Mutex<HashMap<PathBuf, ((u64, u64), ProjectSummary)>>;
+
+fn summary_cache() -> &'static SummaryCache {
+    static CACHE: OnceLock<SummaryCache> = OnceLock::new();
+    CACHE.get_or_init(Mutex::default)
+}
+
+fn project_summary(path: &Path, stamp: (u64, u64)) -> Option<ProjectSummary> {
+    if let Some((cached, summary)) = crate::state::lock_or_recover(summary_cache()).get(path) {
+        if *cached == stamp {
+            return Some(summary.clone());
+        }
+    }
+    let project = avcore::load_project_from_file(path).ok()?;
+    let summary = ProjectSummary {
+        sequence_count: project.sequences.len(),
+        media_count: project.media_library.len(),
+        duration_secs: project.timeline().duration_secs(),
+        name: project.name,
+    };
+    crate::state::lock_or_recover(summary_cache())
+        .insert(path.to_path_buf(), (stamp, summary.clone()));
+    Some(summary)
+}
+
+/// Off the main thread, and without holding the preferences while the files are read.
+#[tauri::command(async)]
 pub fn get_recent_projects(state: State<'_, AppState>) -> Vec<RecentProject> {
-    state
-        .prefs()
-        .view
-        .recent_project_paths
+    let paths = state.prefs().view.recent_project_paths.clone();
+    paths
         .iter()
         .filter_map(|path| {
             let path = PathBuf::from(path);
             let metadata = std::fs::metadata(&path).ok()?;
-            let modified_unix_secs = metadata
+            let modified = metadata
                 .modified()
                 .ok()?
                 .duration_since(std::time::UNIX_EPOCH)
-                .ok()?
-                .as_secs();
-            let project = avcore::load_project_from_file(&path).ok()?;
+                .ok()?;
+            let modified_unix_secs = modified.as_secs();
+            // Down to the nanosecond: a rewrite of the same size within the same second must not
+            // be mistaken for the file that was summarized.
+            let stamp = (modified.as_nanos() as u64, metadata.len());
+            let summary = project_summary(&path, stamp)?;
             Some(RecentProject {
                 autosave_path: autosave::is_newer(&path).map(|path| path.display().to_string()),
                 folder: path
@@ -72,10 +113,10 @@ pub fn get_recent_projects(state: State<'_, AppState>) -> Vec<RecentProject> {
                     .map(|folder| folder.display().to_string())
                     .unwrap_or_default(),
                 path: path.display().to_string(),
-                sequence_count: project.sequences.len(),
-                media_count: project.media_library.len(),
-                duration_secs: project.timeline().duration_secs(),
-                name: project.name,
+                sequence_count: summary.sequence_count,
+                media_count: summary.media_count,
+                duration_secs: summary.duration_secs,
+                name: summary.name,
                 modified_unix_secs,
             })
         })
