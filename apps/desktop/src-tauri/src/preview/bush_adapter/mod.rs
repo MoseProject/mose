@@ -17,6 +17,7 @@
 mod audio;
 mod backend;
 mod mapper;
+mod nested_render;
 #[cfg(test)]
 mod stress_test;
 

@@ -141,6 +141,32 @@ Not changed: the per-GOP cost of exact seeks (see the seek budget above), proxy 
 bound), and the AI analyses, whose compute (silence, scenes, highlights) is small next to decoding
 the frames they sample; the ONNX and Whisper models are not available here to time.
 
+## Backend, third round: compound clips
+
+A compound clip (nested sequence) is rendered to a file by the full export pipeline. Any edit
+inside it used to freeze the preview thread for the whole render (7.9 s for 10 s of video, 4 vCPU).
+
+- The render no longer normalizes loudness (the parent export does): 7.9 s to 7.1 s.
+- The probed asset is cached with the render, so a cache hit probes nothing.
+- Bug: a change inside a compound clip's own compound clip left the render above it stale. Staleness
+  now propagates up through every level.
+- The preview renders in the background (`bush_adapter/nested_render.rs`) while the previous render
+  stays on screen; only the newest request waits (latest wins). A process-wide lock keeps the preview
+  and an export from writing the same render file.
+
+Measured and not changed, with the reason:
+
+- Waveform and loudness as one audio pass: each costs about 0.03 s per 10 s of media warm, in the
+  background; not worth new C code.
+- `waveform_peaks` behind an `Arc`: 16 KB per asset (2000 buckets), 1.6 MB per clone at 100 assets.
+- Undo memory: already capped by `CLIP_BUDGET` (about 100 MB); sharing tracks would be a large refactor.
+- Proxy at 30 fps: the proxy keeps the source rate for frame-accurate cuts and is decode bound.
+- File system events instead of polling for the watch folder: needs a new dependency, not verifiable here.
+
+Known gaps: export and preview keep separate nested caches (a compound clip can be rendered twice),
+there is no UI indicator while a compound clip renders, and the nested cache is not cleared when the
+project is switched.
+
 ## Tools
 
 | what | how |
