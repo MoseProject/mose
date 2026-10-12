@@ -3,6 +3,7 @@
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::time::Instant;
 
 use avbridge::{Advance, DecodeError, DecodePolicy, DecodeSession, FrameSlot};
 
@@ -42,6 +43,8 @@ pub struct DecodeSource {
     pending_timestamp: Option<f64>,
     /// The size frames are converted to when the layer needs fewer pixels than the source has.
     output: Option<(u32, u32)>,
+    /// Whether the last [`DecodeSource::frame_at_by`] ran out of time before the target.
+    approximate: bool,
 }
 
 /// Decode failure or invalid native frame data rejected at Bush's boundary.
@@ -86,6 +89,7 @@ impl DecodeSource {
                 hardware: info.hardware,
             },
             current: None,
+            approximate: false,
             pending_timestamp: None,
             output: None,
         })
@@ -181,6 +185,37 @@ impl DecodeSource {
         cancel: &AtomicBool,
         max_frames: u32,
     ) -> Result<Option<Arc<VideoFrame>>, DecodeSourceError> {
+        self.frame_at_inner(target_secs, cancel, max_frames, None)
+    }
+
+    /// [`Self::frame_at`] that stops decoding forward at `deadline`: past it, the newest frame
+    /// decoded so far (never later than the target) is presented, even if it is some frames
+    /// before the target. [`Self::last_frame_was_approximate`] says whether that happened.
+    /// Scrubbing a long-GOP file uses this to answer within a budget; the next, exact request
+    /// carries on decoding from where this one stopped.
+    pub fn frame_at_by(
+        &mut self,
+        target_secs: f64,
+        cancel: &AtomicBool,
+        deadline: Instant,
+    ) -> Result<Option<Arc<VideoFrame>>, DecodeSourceError> {
+        self.frame_at_inner(target_secs, cancel, MAX_SEEK_SEARCH_FRAMES, Some(deadline))
+    }
+
+    /// Whether the last frame returned by [`Self::frame_at_by`] stopped short of the target
+    /// because the deadline passed.
+    pub const fn last_frame_was_approximate(&self) -> bool {
+        self.approximate
+    }
+
+    fn frame_at_inner(
+        &mut self,
+        target_secs: f64,
+        cancel: &AtomicBool,
+        max_frames: u32,
+        deadline: Option<Instant>,
+    ) -> Result<Option<Arc<VideoFrame>>, DecodeSourceError> {
+        self.approximate = false;
         let continues_forward = self.current.as_ref().is_some_and(|current| {
             let ahead = target_secs - current.timestamp_secs();
             (-TIMESTAMP_EPSILON_SECS..=FORWARD_WINDOW_SECS).contains(&ahead)
@@ -225,6 +260,12 @@ impl DecodeSource {
             // A candidate: leave it unconverted and look at the next frame.
             self.pending_timestamp = None;
             newest_is_candidate = true;
+            if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                // Out of time: present the newest candidate. Decoding resumes after it.
+                self.current = self.take(FrameSlot::Newest)?;
+                self.approximate = true;
+                return Ok(self.current.clone());
+            }
         }
         Err(DecodeSourceError::SeekSearchLimit { limit: max_frames })
     }
