@@ -214,6 +214,21 @@ impl AudioRenderer {
                 }
                 None => placement.gain,
             };
+            if placement.audio_fade != crate::Fade::default() {
+                let duration = contributor.timeline_duration_secs();
+                let first_local = overlap_start as f64 / rate - placement.timeline_start_secs;
+                let channels = usize::from(self.channels).max(1);
+                for (index, frame) in samples.chunks_exact_mut(channels).enumerate() {
+                    let factor = placement
+                        .audio_fade
+                        .factor_at(first_local + index as f64 / rate, duration);
+                    if factor < 1.0 {
+                        for sample in frame {
+                            *sample *= factor;
+                        }
+                    }
+                }
+            }
             apply_pan(&mut samples, usize::from(self.channels), placement.pan);
             let mut mix_gain = static_gain * placement.track_gain;
             if !placement.strip.is_neutral() {

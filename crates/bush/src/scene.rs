@@ -110,6 +110,9 @@ pub struct Placement {
     /// Tone and dynamics of the contributor's track (EQ, filters, compressor), applied after the
     /// pan; the export mix runs the same chain.
     pub strip: crate::strip::Strip,
+    /// Fade-in and fade-out of the contributor's sound (clip fade handles, a dissolve, the
+    /// declick at a hard cut), linear over its timeline length like the export's `afade`.
+    pub audio_fade: Fade,
     /// Keyframed overrides of opacity, position, scale and rotation, relative to the
     /// contributor's timeline start.
     pub animation: Animation,
@@ -158,6 +161,7 @@ impl Default for Placement {
             track_gain: 1.0,
             pan: 0.0,
             strip: crate::strip::Strip::default(),
+            audio_fade: Fade::default(),
             animation: Animation::default(),
             fade: Fade::default(),
             lut: None,
@@ -256,6 +260,7 @@ impl Placement {
             || !(0.0..=4.0).contains(&self.gain)
             || !self.animation.is_valid()
             || !self.fade.is_valid()
+            || !self.audio_fade.is_valid()
             || !(0.0..=crate::MAX_BLUR_SIGMA).contains(&self.blur_sigma)
             || !(0.0..=4.0).contains(&self.sharpen)
             || !(0.0..=1.0).contains(&self.glitch)
