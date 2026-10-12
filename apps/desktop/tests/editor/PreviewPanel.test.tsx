@@ -13,6 +13,7 @@ vi.mock("../../src/ipc", () => {
       addTextClip: vi.fn().mockResolvedValue(9),
       step: vi.fn().mockResolvedValue(undefined),
       seek: vi.fn().mockResolvedValue(undefined),
+      setScrubbing: vi.fn().mockResolvedValue(undefined),
       setPlaying: vi.fn().mockResolvedValue(undefined),
     },
     frameUrl: (seq: number) => {
@@ -162,6 +163,11 @@ describe("preview panel", () => {
     expect(Number(scrubber.value)).toBe(3);
     fireEvent.change(scrubber, { target: { value: "7" } });
     expect(api.seek).toHaveBeenCalledWith(7);
+    // Dragging the slider is a scrub too: on while the pointer is down, off on release or blur.
+    fireEvent.pointerDown(scrubber);
+    expect(api.setScrubbing).toHaveBeenLastCalledWith(true);
+    fireEvent.pointerUp(scrubber);
+    expect(api.setScrubbing).toHaveBeenLastCalledWith(false);
   });
 
   it("has a zero length without a session", () => {
