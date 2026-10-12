@@ -77,3 +77,26 @@ fn a_proxy_newer_than_its_source_is_up_to_date() {
     let _ = fs::remove_dir(&dir);
     assert!(result);
 }
+
+#[test]
+fn a_proxy_keeps_the_colour_of_hd_footage_even_though_it_is_small() {
+    // A 480p proxy of BT.709 footage must still be read as BT.709, not as SD (BT.601).
+    let source = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/color/hd709_untagged.mkv");
+    let dir = std::env::temp_dir().join(format!("oca-proxy-color-{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    let proxy = ensure_proxy(&source, &dir, PreviewQuality::Medium).expect("a proxy");
+    let frame = crate::FrameSampler::open(&proxy)
+        .expect("opens")
+        .sample(0.0, Duration::from_secs(5))
+        .expect("a frame");
+    let at = ((frame.height / 2 * frame.width + frame.width / 2) * 4) as usize;
+    let pixel = [frame.rgba[at], frame.rgba[at + 1], frame.rgba[at + 2]];
+    let _ = fs::remove_dir_all(&dir);
+    for (channel, expected) in [200i32, 60, 40].into_iter().enumerate() {
+        assert!(
+            (i32::from(pixel[channel]) - expected).abs() <= 6,
+            "the proxy shows {pixel:?}, the colour is 200, 60, 40"
+        );
+    }
+}

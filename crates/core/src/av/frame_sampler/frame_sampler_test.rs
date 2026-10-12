@@ -150,3 +150,59 @@ fn color_probe() {
         );
     }
 }
+
+fn color_fixture(name: &str) -> std::path::PathBuf {
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/color")
+        .join(name)
+}
+
+/// The centre pixel of the first frame of `path`.
+fn centre_pixel(path: &std::path::Path) -> [u8; 3] {
+    let frame = FrameSampler::open(path)
+        .expect("opens")
+        .sample(0.0, Duration::from_secs(5))
+        .expect("a frame");
+    let at = ((frame.height / 2 * frame.width + frame.width / 2) * 4) as usize;
+    [frame.rgba[at], frame.rgba[at + 1], frame.rgba[at + 2]]
+}
+
+fn assert_close(actual: [u8; 3], expected: [u8; 3], tolerance: i32, what: &str) {
+    for channel in 0..3 {
+        assert!(
+            (i32::from(actual[channel]) - i32::from(expected[channel])).abs() <= tolerance,
+            "{what}: decoded {actual:?}, the colour is {expected:?}"
+        );
+    }
+}
+
+/// Every fixture holds the sRGB colour 200, 60, 40, encoded to YUV with the named matrix.
+const FIXTURE_COLOR: [u8; 3] = [200, 60, 40];
+
+#[test]
+fn hd_footage_is_decoded_with_the_bt709_matrix_tagged_or_not() {
+    // Decoding BT.709 YUV as BT.601 gives 186, 46, 41: the colour of every HD clip was off.
+    for name in ["hd709_tagged.mkv", "hd709_untagged.mkv"] {
+        assert_close(centre_pixel(&color_fixture(name)), FIXTURE_COLOR, 3, name);
+    }
+}
+
+#[test]
+fn untagged_sd_footage_is_decoded_with_the_bt601_matrix() {
+    assert_close(
+        centre_pixel(&color_fixture("sd601_untagged.mkv")),
+        FIXTURE_COLOR,
+        3,
+        "sd601_untagged.mkv",
+    );
+}
+
+#[test]
+fn full_range_footage_is_not_stretched_a_second_time() {
+    assert_close(
+        centre_pixel(&color_fixture("hd709_fullrange.mkv")),
+        FIXTURE_COLOR,
+        3,
+        "hd709_fullrange.mkv",
+    );
+}

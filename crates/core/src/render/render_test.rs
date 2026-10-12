@@ -429,3 +429,73 @@ fn resolve_cost() {
         );
     }
 }
+
+/// What an export does to a flat colour clip (sRGB 200, 60, 40 stored as BT.709 YUV): the file it
+/// writes, decoded the way the preview decodes it, must show the same colour.
+#[test]
+fn an_exported_hd_clip_keeps_its_colour() {
+    use crate::timeline::{AudioRole, ClipInstance, Timeline, Track, TrackKind};
+    use crate::Sequence;
+    use std::sync::atomic::AtomicBool;
+    use std::time::Duration;
+
+    let source = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/color/hd709_untagged.mkv");
+    let asset = crate::probe_media(&source)
+        .expect("probes")
+        .into_media_asset(1, "hd709_untagged.mkv".into(), source);
+    let sequence = Sequence {
+        id: 1,
+        name: "s".into(),
+        timeline: Timeline {
+            tracks: vec![Track {
+                id: 1,
+                name: "V1".into(),
+                kind: TrackKind::Video,
+                clips: vec![ClipInstance::new(1, 1, 0.0, 0.0, 0.4)],
+                text_clips: vec![],
+                shape_clips: vec![],
+                visible: true,
+                audio_role: AudioRole::Unspecified,
+                muted: false,
+                solo: false,
+                locked: false,
+                color_label: None,
+            }],
+            playhead_secs: 0.0,
+            markers: vec![],
+            multicam_groups: vec![],
+        },
+        export_settings: Default::default(),
+    };
+    let (segments, canvas) = resolve_timeline_segments(&sequence, &[asset]).unwrap();
+    let output = std::env::temp_dir().join(format!("oca-export-color-{}.mp4", std::process::id()));
+    let outcome = render_export_job(
+        &segments,
+        canvas,
+        &output,
+        -14.0,
+        avbridge::GpuEncoderPreference::Cpu,
+        &[],
+        &[],
+        &[],
+        &AtomicBool::new(false),
+        |_| {},
+    )
+    .expect("exports");
+    assert!(matches!(outcome, RenderOutcome::Completed));
+
+    let frame = crate::FrameSampler::open(&output)
+        .expect("opens the export")
+        .sample(0.0, Duration::from_secs(5))
+        .expect("a frame");
+    let _ = std::fs::remove_file(&output);
+    let at = ((frame.height / 2 * frame.width + frame.width / 2) * 4) as usize;
+    let pixel = [frame.rgba[at], frame.rgba[at + 1], frame.rgba[at + 2]];
+    for (channel, expected) in [200i32, 60, 40].into_iter().enumerate() {
+        assert!(
+            (i32::from(pixel[channel]) - expected).abs() <= 8,
+            "the export shows {pixel:?}, the colour is 200, 60, 40"
+        );
+    }
+}
