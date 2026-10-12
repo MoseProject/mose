@@ -1,6 +1,7 @@
 //! Sequential playback cost per frame, software against hardware decode. Release builds only.
 //! Run: `cargo run --release -p bush --example playback_probe -- <video> [width height frames]`.
-//! Set `PROBE_DECODE=hardware` for `DecodePolicy::HardwareWithFallback`.
+//! Set `PROBE_DECODE=hardware` for `DecodePolicy::HardwareWithFallback`, `PROBE_TRACE=1` to list
+//! the frames that took more than twice the median.
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -77,6 +78,18 @@ fn main() {
         }
     }
     let total = started.elapsed().as_secs_f64();
+    if std::env::var("PROBE_TRACE").is_ok() {
+        // The frames well over the median, by index: a pattern here (every GOP, every N frames)
+        // points at the cause; scattered ones at the machine.
+        let mut ordered = per_frame.clone();
+        ordered.sort_by(f64::total_cmp);
+        let limit = (ordered[ordered.len() / 2] * 2.0).max(20.0);
+        for (index, ms) in per_frame.iter().enumerate() {
+            if *ms > limit {
+                println!("frame {:>4}: {:.1} ms", index + 1, ms);
+            }
+        }
+    }
     per_frame.sort_by(f64::total_cmp);
     let pick = |q: f64| per_frame[((per_frame.len() - 1) as f64 * q) as usize];
     println!(
