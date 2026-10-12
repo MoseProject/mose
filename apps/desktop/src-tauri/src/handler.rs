@@ -58,6 +58,7 @@ macro_rules! all_commands {
             $crate::commands::media::import_media_dialog,
             $crate::commands::media::import_media,
             $crate::commands::media::toggle_favorite,
+            $crate::commands::media::set_hdr_handling,
             $crate::close_guard::quit_app,
             $crate::commands::media::remove_asset,
             $crate::commands::markers::add_marker,

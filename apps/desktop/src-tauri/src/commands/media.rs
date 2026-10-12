@@ -63,6 +63,56 @@ pub fn toggle_favorite<R: Runtime>(app: AppHandle<R>, asset_id: u64) -> Result<(
     })
 }
 
+/// Chooses what happens to an HDR source (`HdrHandling`): converted to SDR when tagged HDR, always
+/// converted, or read as SDR. The export follows it at once; the preview proxy is made again for
+/// the new choice on a background thread and swapped in when it is ready. A video asset only.
+#[tauri::command]
+pub fn set_hdr_handling<R: Runtime>(
+    app: AppHandle<R>,
+    asset_id: u64,
+    handling: avcore::HdrHandling,
+) -> Result<(), String> {
+    let (epoch, proxy_dir, source, tone_map_before, tone_map_after) =
+        with_session(&app, |session| {
+            let epoch = session.project_epoch;
+            let proxy_dir = avcore::proxy::cache_dir_for_project(&session.project);
+            let Some(asset) = session
+                .project
+                .media_library
+                .iter_mut()
+                .find(|asset| asset.id == asset_id)
+            else {
+                return Err("assetMissing".to_string());
+            };
+            if asset.kind != MediaKind::Video {
+                return Err("notVideo".to_string());
+            }
+            let before = asset.proxy_tone_maps_hdr();
+            if asset.hdr_handling != handling {
+                asset.hdr_handling = handling;
+                session.dirty = true;
+            }
+            let after = asset.proxy_tone_maps_hdr();
+            Ok((epoch, proxy_dir, asset.source_path.clone(), before, after))
+        })?;
+    if tone_map_before != tone_map_after && source.exists() {
+        std::thread::spawn(move || {
+            let Ok(proxy) = avcore::ensure_proxy_as(
+                &source,
+                &proxy_dir,
+                PreviewQuality::default(),
+                tone_map_after,
+            ) else {
+                return;
+            };
+            update_asset(&app, epoch, asset_id, |asset| {
+                asset.proxy_path = Some(proxy)
+            });
+        });
+    }
+    Ok(())
+}
+
 /// Removes an asset from the media library. Refused with `assetInUse` while any clip still
 /// plays it, so the timeline never ends up with a dangling reference.
 #[tauri::command]
@@ -244,12 +294,12 @@ pub fn rehydrate_proxies<R: Runtime>(app: &AppHandle<R>, epoch: u64) {
     let (sources, proxy_dir) = {
         let state = app.state::<AppState>();
         let session = state.session();
-        let sources: Vec<(u64, PathBuf)> = session
+        let sources: Vec<(u64, PathBuf, bool)> = session
             .project
             .media_library
             .iter()
             .filter(|a| a.kind == MediaKind::Video && a.proxy_path.is_none())
-            .map(|a| (a.id, a.source_path.clone()))
+            .map(|a| (a.id, a.source_path.clone(), a.proxy_tone_maps_hdr()))
             .collect();
         (
             sources,
@@ -261,12 +311,16 @@ pub fn rehydrate_proxies<R: Runtime>(app: &AppHandle<R>, epoch: u64) {
     }
     let app = app.clone();
     std::thread::spawn(move || {
-        for (asset_id, source) in sources {
+        for (asset_id, source, tone_map_hdr) in sources {
             if !source.exists() {
                 continue;
             }
-            let Ok(proxy) = avcore::ensure_proxy(&source, &proxy_dir, PreviewQuality::default())
-            else {
+            let Ok(proxy) = avcore::ensure_proxy_as(
+                &source,
+                &proxy_dir,
+                PreviewQuality::default(),
+                tone_map_hdr,
+            ) else {
                 continue;
             };
             let applied = with_current_project(&app, epoch, |session| {
