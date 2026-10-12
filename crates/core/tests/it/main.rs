@@ -19,6 +19,7 @@ mod error_reporting_test;
 mod export_perf_test;
 mod frame_sampler_test;
 mod golden_project_test;
+mod grade_test;
 mod import_perf_test;
 mod loudness_test;
 mod lut_test;
