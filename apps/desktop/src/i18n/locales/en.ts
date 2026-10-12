@@ -361,6 +361,10 @@ export const en = {
   exportQualityAboveSource:
     "Steps above the source bitrate are unavailable: they would only make the file bigger.",
   exportEmptyTimeline: "Add clips to the timeline before exporting.",
+  exportRecommended: "recommended",
+  exportUpscale: "upscale",
+  exportUpscaleNote:
+    "Scaling the picture up adds no detail and makes the file larger. It can still help for a platform such as YouTube, which tends to process 1440p and above at higher quality. The original size is the recommendation; the choice is yours.",
   exportErrNoName: "Type a file name.",
   exportKeepsBitrate:
     "Same as source keeps the source bitrate and, for a plain cut, copies the picture without re-encoding it.",

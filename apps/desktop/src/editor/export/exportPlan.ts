@@ -8,12 +8,17 @@ export const QUALITY_MBPS: Record<Exclude<QualityChoice, "source" | "custom">, n
   medium: 8,
   low: 4,
 };
-/** Picture heights offered below the original one. */
+/** Picture heights offered besides the original one; those above it scale the picture up. */
 export const RESOLUTION_HEIGHTS = [2160, 1440, 1080, 720, 480];
 export const MIN_MBPS = 0.5;
 export const MAX_MBPS = 200;
 /** The stereo AAC track every export carries, in Mbps. */
 const AUDIO_MBPS = 0.192;
+
+/** Whether `maxHeight` asks for a larger picture than the sequence's. */
+export function isUpscale(canvas: ExportCanvas | null, maxHeight: number | null): boolean {
+  return canvas !== null && maxHeight !== null && maxHeight > canvas.height;
+}
 
 export function customBitrateValid(mbps: number): boolean {
   return Number.isFinite(mbps) && mbps >= MIN_MBPS && mbps <= MAX_MBPS;
@@ -44,12 +49,11 @@ export interface ExportSummary {
   sizeMb: number;
 }
 
-/** What the export will produce: the same arithmetic the backend applies (height never above the
- *  canvas's, width kept even, source bitrate scaled with the pixel count unless one was asked
+/** What the export will produce: the same arithmetic the backend applies (width kept even, source bitrate scaled with the pixel count unless one was asked
  *  for), and a size from bitrate times length. */
 export function summarize(canvas: ExportCanvas, options: ExportOptions): ExportSummary {
   let { width, height, bitrateMbps } = canvas;
-  if (options.maxHeight !== undefined && options.maxHeight < canvas.height) {
+  if (options.maxHeight !== undefined && options.maxHeight !== canvas.height) {
     width = Math.max(2, Math.floor((canvas.width * options.maxHeight) / canvas.height / 2) * 2);
     height = Math.floor(options.maxHeight / 2) * 2;
     bitrateMbps = (canvas.bitrateMbps * (width * height)) / (canvas.width * canvas.height);

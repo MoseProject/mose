@@ -10,6 +10,7 @@ import type { ExportAspectRatio, ExportCanvas, SessionView } from "../../types";
 import { Dialog } from "../chrome/Dialog";
 import {
   customBitrateValid,
+  isUpscale,
   exportOptions,
   formatSize,
   MAX_MBPS,
@@ -292,22 +293,25 @@ export function ExportDialog({ session }: { session: SessionView }) {
         >
           <option value="source">
             {t("exportResolutionSource")}
-            {canvas ? ` (${canvas.width}x${canvas.height})` : ""}
+            {canvas ? ` (${canvas.width}x${canvas.height}) · ${t("exportRecommended")}` : ""}
           </option>
           {RESOLUTION_HEIGHTS.filter((h) => {
-            return canvas === null || h < canvas.height;
+            return canvas === null || h !== canvas.height;
           }).map((height) => {
             return (
               <option
                 key={height}
                 value={height}
               >
-                {height}p
+                {height}p{canvas && height > canvas.height ? ` · ${t("exportUpscale")}` : ""}
               </option>
             );
           })}
         </select>
       </label>
+      {isUpscale(canvas, maxHeight) && (
+        <p className={cx(styles, baseStyles, "muted")}>{t("exportUpscaleNote")}</p>
+      )}
       <label className={cx(styles, baseStyles, "dialog-check")}>
         <input
           type="checkbox"
