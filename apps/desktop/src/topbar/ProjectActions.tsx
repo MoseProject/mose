@@ -68,6 +68,7 @@ export function ProjectActions({
       </button>
       <button
         data-testid="export-queue-toggle"
+        data-fly-target="export-queue"
         className={cx(styles, baseStyles, "icon " + (exportQueueOpen ? "active" : ""))}
         aria-label={t("exportQueue")}
         title={t("exportQueue")}

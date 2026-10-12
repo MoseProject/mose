@@ -69,6 +69,8 @@ export type ExportAspectRatio = "Original" | "Landscape" | "Portrait" | "Square"
 export interface ExportOptions {
   bitrateMbps?: number;
   maxHeight?: number;
+  /** `false` exports without normalizing the loudness; absent follows the app setting. */
+  normalize?: boolean;
 }
 /** Size, source-matched bitrate and length an export would have before any option. */
 export interface ExportCanvas {

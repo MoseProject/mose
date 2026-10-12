@@ -378,6 +378,13 @@ export const ptBR = {
   exportClips: "Exportar clipe…",
   exportClipsMany: "Exportar {n} clipes…",
   exportFilePrefixPlaceholder: "Opcional, ex.: Melhores momentos",
+  normalizeAlready:
+    "Os clipes já estão normalizados em cerca de {lufs} LUFS, então a exportação não normaliza de novo. Marque para normalizar mesmo assim.",
+  exportExistsOne: "Já existe um arquivo com esse nome nessa pasta.",
+  exportExistsMany: "{n} desses arquivos já existem nessa pasta.",
+  exportIfExists: "Se já existir",
+  exportKeepBoth: "Salvar com outro nome",
+  exportReplace: "Substituir",
   exportErrNoName: "Digite um nome de arquivo.",
   exportKeepsBitrate:
     "Igual à origem mantém o bitrate da fonte e, num corte simples, copia a imagem sem recodificar.",

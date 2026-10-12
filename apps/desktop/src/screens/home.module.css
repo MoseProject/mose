@@ -27,6 +27,26 @@
   align-items: center;
   justify-content: center;
   z-index: 10;
+  animation: dialog-fade-in 160ms ease-out;
+  transition: opacity 160ms ease-in;
+}
+.modal-overlay.leaving {
+  opacity: 0;
+  pointer-events: none;
+}
+.modal-overlay.flying {
+  transition-duration: 450ms;
+}
+@keyframes dialog-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes dialog-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
 }
 .modal {
   width: min(420px, 90vw);
@@ -36,6 +56,17 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 16px;
+  animation: dialog-pop-in 160ms ease-out;
+}
+.modal-overlay.flying .modal {
+  transition: transform 450ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal-overlay,
+  .modal {
+    animation: none;
+    transition: none;
+  }
 }
 .modal h3 {
   margin-top: 0;
