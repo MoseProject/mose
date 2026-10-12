@@ -24,8 +24,11 @@ export { Section, Slider };
 import { ColorSection } from "./ColorSection";
 import { CropSection } from "./CropSection";
 import { GainSection } from "./GainSection";
+import { KeyframesSection } from "./KeyframesSection";
+import { MaskSection } from "./MaskSection";
 import { SpeedSection } from "./SpeedSection";
 import { TransformSection } from "./TransformSection";
+import { TransitionSection } from "./TransitionSection";
 
 // Code that only a text or shape clip, or the Effects tab, needs: fetched when first shown.
 const TextInspector = lazyNamed(() => {
@@ -34,9 +37,9 @@ const TextInspector = lazyNamed(() => {
 const ShapeInspector = lazyNamed(() => {
   return import("./ShapeInspector");
 }, "ShapeInspector");
-const EffectsSections = lazyNamed(() => {
-  return import("./EffectsSections");
-}, "EffectsSections");
+const AiActionsSection = lazyNamed(() => {
+  return import("./AiActionsSection");
+}, "AiActionsSection");
 
 export function Inspector({ session }: { session: SessionView }) {
   const { selectedClipIds } = useStore(uiStore);
@@ -223,12 +226,21 @@ function ClipControls({
         commit={commit}
         fraction={fraction}
       />
+      <MaskSection
+        clip={clip}
+        commit={commit}
+      />
+      <TransitionSection
+        clip={clip}
+        commit={commit}
+      />
+      <KeyframesSection
+        clip={clip}
+        commit={commit}
+      />
       {(tab === "effects" || tab === "all") && (
         <Suspense fallback={null}>
-          <EffectsSections
-            clip={clip}
-            commit={commit}
-          />
+          <AiActionsSection clip={clip} />
         </Suspense>
       )}
     </>

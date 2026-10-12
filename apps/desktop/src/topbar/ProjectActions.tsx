@@ -1,3 +1,4 @@
+import { loadExportDialog } from "../chunks";
 import { cx } from "../cx";
 import baseStyles from "../styles/base.module.css";
 import styles from "./topbar.module.css";
@@ -88,6 +89,13 @@ export function ProjectActions({
       <button
         data-testid="export"
         className={cx(styles, baseStyles, "primary export")}
+        // The dialog's code is fetched as the pointer or focus arrives, ahead of the click.
+        onPointerEnter={() => {
+          void loadExportDialog();
+        }}
+        onFocus={() => {
+          void loadExportDialog();
+        }}
         title={withShortcut(t("export"), "export")}
         onClick={() => {
           patchUi({ exportDialogOpen: true });

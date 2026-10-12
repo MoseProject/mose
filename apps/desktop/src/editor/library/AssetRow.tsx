@@ -125,6 +125,9 @@ export const AssetRow = memo(function AssetRow({
                 className={cx(styles, baseStyles, "thumb")}
                 src={thumbnailUrl(asset.id)}
                 alt=""
+                // Fetched when the card nears the view, not for every media file at once.
+                loading="lazy"
+                decoding="async"
                 draggable={false}
                 onError={() => {
                   return setThumbFailed(true);

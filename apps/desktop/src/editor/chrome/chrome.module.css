@@ -180,6 +180,8 @@ button.danger {
   margin: 0;
 }
 .shortcut-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 32px;
   display: flex;
   justify-content: space-between;
   gap: 12px;
