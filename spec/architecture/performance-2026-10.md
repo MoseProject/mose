@@ -88,7 +88,7 @@ snapshot (first load only) is 50 ms. JS heap: 35 MB (48 clips), 55 MB (6000 clip
 
 ### What is built and fetched only when shown
 
-Entry chunk 271 -> 235 KB (gzip 85 -> 73), Editor chunk 124 -> 93 KB (gzip 33 -> 27); the rest is
+Entry chunk 271 -> 235 KB (gzip 85 -> 73), Editor chunk 124 -> 95 KB (gzip 33 -> 27); the rest is
 split into chunks of 1 to 6 KB that arrive when first needed.
 
 - An inspector section builds its body when it is first opened and its tab is on show (a closed
