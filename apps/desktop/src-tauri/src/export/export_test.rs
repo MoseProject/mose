@@ -509,16 +509,14 @@ fn a_lower_height_scales_width_and_bitrate_with_the_pixels() {
 }
 
 #[test]
-fn a_height_above_the_canvas_never_upscales() {
+fn a_height_above_the_canvas_scales_up_with_the_pixels() {
     let applied = ExportOptions {
         bitrate_mbps: None,
         max_height: Some(2160),
     }
     .apply(canvas_1080p());
-    assert_eq!(
-        (applied.width, applied.height, applied.bit_rate_bps),
-        (1920, 1080, 16_000_000)
-    );
+    assert_eq!((applied.width, applied.height), (3840, 2160));
+    assert_eq!(applied.bit_rate_bps, 64_000_000);
 }
 
 #[test]
@@ -544,5 +542,6 @@ fn bitrates_and_heights_outside_what_the_encoder_takes_are_refused() {
     assert!(bad(Some(0.1), None).is_err());
     assert!(bad(Some(f32::INFINITY), None).is_err());
     assert!(bad(None, Some(100)).is_err());
+    assert!(bad(None, Some(5000)).is_err());
     assert!(bad(Some(8.0), Some(720)).is_ok());
 }

@@ -301,3 +301,32 @@ fn an_unusable_bitrate_is_refused_before_anything_is_queued() {
     }
     assert!(list_exports(h.state()).is_empty());
 }
+
+#[test]
+fn a_larger_height_exports_the_picture_scaled_up() {
+    let h = harness();
+    h.add_fixture_clip();
+    let original = export_canvas(h.state(), avcore::ExportAspectRatio::Original).unwrap();
+    let output = path_in(&h.dir, "up.mp4");
+    let options = crate::export::ExportOptions {
+        bitrate_mbps: None,
+        max_height: Some(original.height + 144),
+    };
+    start_export(
+        h.handle(),
+        output.display().to_string(),
+        false,
+        Some(options),
+    )
+    .unwrap();
+    wait_exports(&h);
+    assert_eq!(
+        h.state().exports.snapshot()[0].status,
+        ExportJobStatus::Done
+    );
+    let probed = avcore::probe_media(&output).unwrap();
+    assert_eq!(
+        probed.resolution.map(|(_, height)| height),
+        Some((original.height + 144) & !1)
+    );
+}

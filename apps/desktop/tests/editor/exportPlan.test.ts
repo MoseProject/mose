@@ -3,6 +3,7 @@ import {
   customBitrateValid,
   exportOptions,
   formatSize,
+  isUpscale,
   summarize,
 } from "../../src/editor/export/exportPlan";
 
@@ -32,11 +33,13 @@ describe("export plan", () => {
     expect(s.sizeMb).toBeCloseTo(121.44, 1);
   });
 
-  it("scales width and bitrate with a lower height, and never upscales", () => {
+  it("scales width and bitrate with a lower height, and scales up on a larger height", () => {
     const small = summarize(canvas, { maxHeight: 720 });
     expect([small.width, small.height]).toEqual([1280, 720]);
     expect(small.bitrateMbps).toBeCloseTo(7.11, 2);
-    const same = summarize(canvas, { maxHeight: 2160 });
+    const up = summarize(canvas, { maxHeight: 2160 });
+    expect([up.width, up.height, up.bitrateMbps]).toEqual([3840, 2160, 64]);
+    const same = summarize(canvas, { maxHeight: 1080 });
     expect([same.width, same.height, same.bitrateMbps]).toEqual([1920, 1080, 16]);
   });
 
@@ -48,5 +51,12 @@ describe("export plan", () => {
     expect(formatSize(0.2)).toBe("1 MB");
     expect(formatSize(850.4)).toBe("850 MB");
     expect(formatSize(1536)).toBe("1.5 GB");
+  });
+
+  it("tells an upscale from a smaller or unknown size", () => {
+    expect(isUpscale(canvas, 1440)).toBe(true);
+    expect(isUpscale(canvas, 720)).toBe(false);
+    expect(isUpscale(canvas, null)).toBe(false);
+    expect(isUpscale(null, 1440)).toBe(false);
   });
 });

@@ -365,6 +365,10 @@ export const ptBR = {
   exportQualityAboveSource:
     "Etapas acima do bitrate da origem ficam indisponíveis: só deixariam o arquivo maior.",
   exportEmptyTimeline: "Adicione clipes à linha do tempo antes de exportar.",
+  exportRecommended: "recomendado",
+  exportUpscale: "ampliar",
+  exportUpscaleNote:
+    "Ampliar a imagem não acrescenta detalhe e deixa o arquivo maior. Ainda pode valer a pena em plataformas como o YouTube, que costuma processar 1440p ou mais com mais qualidade. A recomendação é o tamanho original; a decisão é sua.",
   exportErrNoName: "Digite um nome de arquivo.",
   exportKeepsBitrate:
     "Igual à origem mantém o bitrate da fonte e, num corte simples, copia a imagem sem recodificar.",

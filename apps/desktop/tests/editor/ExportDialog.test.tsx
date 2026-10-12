@@ -155,6 +155,7 @@ describe("ExportDialog", () => {
       return option.value;
     });
     expect(heights).not.toContain("1080");
+    expect(heights).toContain("1440");
   });
 
   it("falls back to the source quality when a smaller picture makes the chosen step too high", async () => {
@@ -360,13 +361,38 @@ describe("ExportDialog", () => {
     expect(screen.queryByText(t("exportKeepsBitrate"))).toBeNull();
   });
 
-  it("names the original resolution, which is also the largest one offered", async () => {
+  it("names the original resolution as the recommendation", async () => {
     render(<ExportDialog session={session()} />);
     const select = screen.getByLabelText(t("exportResolution"), {
       exact: false,
     }) as HTMLSelectElement;
     await waitFor(() => {
-      expect(select.options[0].textContent).toBe(`${t("exportResolutionSource")} (1920x1080)`);
+      expect(select.options[0].textContent).toBe(
+        `${t("exportResolutionSource")} (1920x1080) · ${t("exportRecommended")}`,
+      );
     });
+  });
+
+  it("offers larger sizes as an upscale and explains it only once one is chosen", async () => {
+    render(<ExportDialog session={session()} />);
+    const select = screen.getByLabelText(t("exportResolution"), {
+      exact: false,
+    }) as HTMLSelectElement;
+    await waitFor(() => {
+      expect(select.options.length).toBeGreaterThan(1);
+    });
+    const label = (value: string) => {
+      return [...select.options].find((option) => {
+        return option.value === value;
+      })?.textContent;
+    };
+    expect(label("1440")).toBe(`1440p · ${t("exportUpscale")}`);
+    expect(label("720")).toBe("720p");
+    expect(screen.queryByText(t("exportUpscaleNote"))).toBeNull();
+    choose(t("exportResolution"), "1440");
+    expect(screen.getByText(t("exportUpscaleNote"))).toBeTruthy();
+    expect(screen.getByTestId("export-summary").textContent).toContain("2560x1440");
+    choose(t("exportResolution"), "720");
+    expect(screen.queryByText(t("exportUpscaleNote"))).toBeNull();
   });
 });
