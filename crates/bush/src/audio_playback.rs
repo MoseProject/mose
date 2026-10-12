@@ -10,7 +10,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
 use crate::k_weighting::{self, KWeighting};
-use crate::strip::StripBank;
+use crate::strip::{DuckState, StripBank};
+use crate::DuckRole;
 use crate::{
     AudioBlock, AudioBlockError, AudioMixer, AudioSink, AudioSource, AudioSourceError,
     ContributorContent, ContributorId, MixError, MixInput, SceneSnapshot, SinkError, TimeStretcher,
@@ -63,6 +64,9 @@ pub struct AudioRenderer {
     stretchers: HashMap<ContributorId, StretchState>,
     /// Filter and compressor memory of the contributors with a mixer strip.
     strips: StripBank,
+    /// The voice cleanup chain's memory, kept apart from the strip's.
+    voices: StripBank,
+    duck: DuckState,
 }
 
 #[derive(Debug)]
@@ -91,6 +95,8 @@ impl AudioRenderer {
             sources: Vec::new(),
             stretchers: HashMap::new(),
             strips: StripBank::default(),
+            voices: StripBank::default(),
+            duck: DuckState::default(),
         })
     }
 
@@ -115,7 +121,8 @@ impl AudioRenderer {
             start_frame as f64 / rate,
             vec![0.0; frames * usize::from(self.channels)],
         )?;
-        let mut parts: Vec<(AudioBlock, f32)> = Vec::new();
+        // Each part: samples, the frame they start at, the level to mix them at and the duck role.
+        let mut parts: Vec<(Vec<f32>, u64, f32, DuckRole)> = Vec::new();
 
         for contributor in scene.audible_contributors() {
             let ContributorContent::Media(source) = &contributor.content else {
@@ -136,6 +143,7 @@ impl AudioRenderer {
             if overlap_start >= overlap_end {
                 self.stretchers.remove(&contributor.id);
                 self.strips.forget(contributor.id);
+                self.voices.forget(contributor.id);
                 continue;
             }
             let length = (overlap_end - overlap_start) as usize;
@@ -229,6 +237,18 @@ impl AudioRenderer {
                     }
                 }
             }
+            if placement.voice.is_neutral() {
+                self.voices.forget(contributor.id);
+            } else {
+                self.voices.process(
+                    contributor.id,
+                    self.sample_rate,
+                    usize::from(self.channels),
+                    overlap_start,
+                    &mut samples,
+                    placement.voice,
+                );
+            }
             apply_pan(&mut samples, usize::from(self.channels), placement.pan);
             let mut mix_gain = static_gain * placement.track_gain;
             if !placement.strip.is_neutral() {
@@ -249,27 +269,85 @@ impl AudioRenderer {
             } else {
                 self.strips.forget(contributor.id);
             }
+            parts.push((samples, overlap_start, mix_gain, placement.duck));
+        }
+
+        // A trigger counts while it is in the scene, also in a window where it is silent, so the
+        // music recovers over the release time instead of at once.
+        let triggered = scene
+            .audible_contributors()
+            .any(|c| c.placement.duck == DuckRole::Trigger);
+        self.apply_ducking(&mut parts, start_frame, frames, triggered);
+
+        let mut blocks = Vec::with_capacity(parts.len());
+        for (samples, first_frame, gain, _) in parts {
             // Re-time from source time to timeline time so the mixer aligns it.
             let aligned = AudioBlock::new(
                 self.sample_rate,
                 self.channels,
-                overlap_start as f64 / rate,
+                first_frame as f64 / rate,
                 samples,
             )?;
-            parts.push((aligned, mix_gain));
+            blocks.push((aligned, gain));
         }
-
         let mut inputs = vec![MixInput {
             block: &base,
             gain: 1.0,
             muted: false,
         }];
-        inputs.extend(parts.iter().map(|(block, gain)| MixInput {
+        inputs.extend(blocks.iter().map(|(block, gain)| MixInput {
             block,
             gain: *gain,
             muted: false,
         }));
         Ok(Some(self.mixer.mix(&inputs)?))
+    }
+
+    /// Lowers every [`DuckRole::Target`] part by the gain a compressor keyed on the summed
+    /// [`DuckRole::Trigger`] parts makes, as the export's sidechain does. The parts' own levels are
+    /// applied first, so the detector hears what the mix does.
+    fn apply_ducking(
+        &mut self,
+        parts: &mut [(Vec<f32>, u64, f32, DuckRole)],
+        start_frame: u64,
+        frames: usize,
+        triggered: bool,
+    ) {
+        let channels = usize::from(self.channels).max(1);
+        let has = |role: DuckRole, parts: &[(Vec<f32>, u64, f32, DuckRole)]| {
+            parts.iter().any(|part| part.3 == role)
+        };
+        if !triggered || !has(DuckRole::Target, parts) {
+            self.duck = DuckState::default();
+            return;
+        }
+        let mut trigger = vec![0.0_f32; frames * channels];
+        for (samples, first_frame, gain, role) in parts.iter() {
+            if *role != DuckRole::Trigger {
+                continue;
+            }
+            let offset = (*first_frame - start_frame) as usize * channels;
+            for (slot, sample) in trigger[offset..].iter_mut().zip(samples) {
+                *slot += sample * gain;
+            }
+        }
+        if self.duck.next_frame != start_frame {
+            self.duck = DuckState::default();
+        }
+        let gains = self.duck.gains(&trigger, channels, self.sample_rate);
+        self.duck.next_frame = start_frame + frames as u64;
+        for (samples, first_frame, _, role) in parts.iter_mut() {
+            if *role != DuckRole::Target {
+                continue;
+            }
+            let offset = (*first_frame - start_frame) as usize;
+            for (index, frame) in samples.chunks_exact_mut(channels).enumerate() {
+                let duck = gains[offset + index];
+                for sample in frame {
+                    *sample *= duck;
+                }
+            }
+        }
     }
 
     fn open_source(&mut self, path: &Path, version: u64) -> Result<usize, AudioRenderError> {

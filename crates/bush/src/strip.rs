@@ -12,8 +12,13 @@ const HIGH_SHELF_HZ: f64 = 6_000.0;
 const SHELF_Q: f64 = 0.5;
 const BELL_Q: f64 = 1.0;
 const PASS_Q: f64 = std::f64::consts::FRAC_1_SQRT_2;
-const ATTACK_SECS: f64 = 0.010;
-const RELEASE_SECS: f64 = 0.250;
+/// `acompressor` and `sidechaincompress` follow the level faster than their millisecond settings
+/// say (their per-sample coefficient is about four times larger). 0.35 of the setting is the
+/// scale that best fits the export's ducking, measured by `tests/duck_parity_test.rs`: the music
+/// recovers within 1.6 dB of the export at every point after the commentary ends.
+const TIME_CONSTANT_SCALE: f64 = 0.35;
+const ATTACK_SECS: f64 = 0.010 * TIME_CONSTANT_SCALE;
+const RELEASE_SECS: f64 = 0.250 * TIME_CONSTANT_SCALE;
 /// The compressor's soft knee, 2.82843 linear (about 9 dB) as `acompressor`'s default.
 const KNEE_DB: f64 = 9.03;
 
@@ -29,7 +34,17 @@ pub struct Strip {
     pub comp_threshold_db: f32,
     /// `1.0` or less is off.
     pub comp_ratio: f32,
+    /// Linear gain after the compressor; `1.0` adds none.
+    pub comp_makeup: f32,
+    /// Downward gate: below this level in dB the signal is lowered by [`GATE_REDUCTION_DB`], an
+    /// approximation of the export's `afftdn` denoise. `0.0` is off.
+    pub gate_floor_db: f32,
+    /// Hard ceiling on the output, linear; `0.0` is off.
+    pub limit: f32,
 }
+
+/// How far the gate lowers what is under its floor, the amount `afftdn` removes by default.
+pub const GATE_REDUCTION_DB: f64 = 12.0;
 
 impl Default for Strip {
     fn default() -> Self {
@@ -41,6 +56,9 @@ impl Default for Strip {
             lowpass_hz: 0.0,
             comp_threshold_db: -18.0,
             comp_ratio: 1.0,
+            comp_makeup: 1.0,
+            gate_floor_db: 0.0,
+            limit: 0.0,
         }
     }
 }
@@ -53,6 +71,8 @@ impl Strip {
             && self.highpass_hz <= 0.0
             && self.lowpass_hz <= 0.0
             && self.comp_ratio <= 1.0
+            && self.gate_floor_db >= 0.0
+            && self.limit <= 0.0
     }
 }
 
@@ -262,16 +282,22 @@ impl StripState {
                 }
                 *sample = x as f32;
             }
-            if strip.comp_ratio > 1.0 {
-                let gain = self.compressor_gain(frame, strip);
+            if strip.gate_floor_db < 0.0 || strip.comp_ratio > 1.0 {
+                let gain = self.dynamics_gain(frame, strip);
                 for sample in frame.iter_mut() {
                     *sample *= gain;
+                }
+            }
+            if strip.limit > 0.0 {
+                for sample in frame.iter_mut() {
+                    *sample = sample.clamp(-strip.limit, strip.limit);
                 }
             }
         }
     }
 
-    fn compressor_gain(&mut self, frame: &[f32], strip: Strip) -> f32 {
+    /// Gate and compressor gain for one frame, from the one level follower.
+    fn dynamics_gain(&mut self, frame: &[f32], strip: Strip) -> f32 {
         let power = frame
             .iter()
             .map(|s| f64::from(*s) * f64::from(*s))
@@ -286,17 +312,70 @@ impl StripState {
         };
         self.mean_square = coefficient * self.mean_square + (1.0 - coefficient) * power;
         let level_db = 10.0 * self.mean_square.max(1e-12).log10();
-        let threshold = f64::from(strip.comp_threshold_db);
-        let ratio = f64::from(strip.comp_ratio);
-        let over = level_db - threshold;
-        let output_db = if 2.0 * over < -KNEE_DB {
-            level_db
-        } else if 2.0 * over.abs() <= KNEE_DB {
-            level_db + (1.0 / ratio - 1.0) * (over + KNEE_DB / 2.0).powi(2) / (2.0 * KNEE_DB)
-        } else {
-            threshold + over / ratio
-        };
-        10f64.powf((output_db - level_db) / 20.0) as f32
+        let mut gain_db = 0.0;
+        if strip.gate_floor_db < 0.0 && level_db < f64::from(strip.gate_floor_db) {
+            gain_db -= GATE_REDUCTION_DB;
+        }
+        if strip.comp_ratio <= 1.0 {
+            return 10f64.powf(gain_db / 20.0) as f32;
+        }
+        gain_db += compression_db(
+            level_db,
+            f64::from(strip.comp_threshold_db),
+            f64::from(strip.comp_ratio),
+        );
+        (10f64.powf(gain_db / 20.0) * f64::from(strip.comp_makeup.max(0.0))) as f32
+    }
+}
+
+/// The gain change in dB a soft-knee compressor makes at `level_db`.
+fn compression_db(level_db: f64, threshold_db: f64, ratio: f64) -> f64 {
+    let over = level_db - threshold_db;
+    let output_db = if 2.0 * over < -KNEE_DB {
+        level_db
+    } else if 2.0 * over.abs() <= KNEE_DB {
+        level_db + (1.0 / ratio - 1.0) * (over + KNEE_DB / 2.0).powi(2) / (2.0 * KNEE_DB)
+    } else {
+        threshold_db + over / ratio
+    };
+    output_db - level_db
+}
+
+/// Sidechain ducking, as the export's `sidechaincompress` is set: threshold 0.05 linear, ratio 8,
+/// attack 5 ms, release 250 ms, RMS detection averaged over the channels.
+#[derive(Debug, Clone, Default)]
+pub struct DuckState {
+    mean_square: f64,
+    /// Timeline frame the next window must start at for the follower to be continuous.
+    pub next_frame: u64,
+}
+
+const DUCK_THRESHOLD_DB: f64 = -26.020_599_913_279_625;
+const DUCK_RATIO: f64 = 8.0;
+const DUCK_ATTACK_SECS: f64 = 0.005 * TIME_CONSTANT_SCALE;
+const DUCK_RELEASE_SECS: f64 = RELEASE_SECS;
+
+impl DuckState {
+    /// One gain per frame of `trigger` (interleaved), to multiply the ducked signal by.
+    pub fn gains(&mut self, trigger: &[f32], channels: usize, rate: u32) -> Vec<f32> {
+        let rate = f64::from(rate);
+        let attack = (-1.0 / (DUCK_ATTACK_SECS * rate)).exp();
+        let release = (-1.0 / (DUCK_RELEASE_SECS * rate)).exp();
+        trigger
+            .chunks_exact(channels.max(1))
+            .map(|frame| {
+                let power =
+                    frame.iter().map(|s| f64::from(*s).powi(2)).sum::<f64>() / frame.len() as f64;
+                let coefficient = if power > self.mean_square {
+                    attack
+                } else {
+                    release
+                };
+                self.mean_square = coefficient * self.mean_square + (1.0 - coefficient) * power;
+                let level_db = 10.0 * self.mean_square.max(1e-12).log10();
+                10f64.powf(compression_db(level_db, DUCK_THRESHOLD_DB, DUCK_RATIO) / 20.0) as f32
+            })
+            .collect()
     }
 }
 

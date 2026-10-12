@@ -78,7 +78,7 @@ pub use preview_worker::{
     PreviewCommand, PreviewWorker, WorkerFailure, WorkerOperation, WorkerSubmitError,
 };
 pub use scene::{
-    Contributor, ContributorContent, ContributorId, MatteSource, MediaSource, Placement,
+    Contributor, ContributorContent, ContributorId, DuckRole, MatteSource, MediaSource, Placement,
     PrivacyBlur, RasterOverlay, SceneError, SceneSnapshot, SourceRange,
 };
 pub use scene_scheduler::{SceneScheduler, ScheduleError, ScheduledScene, Submission};
@@ -87,7 +87,7 @@ pub use source_variants::{
     PreviewQuality, SourceVariant, SourceVariantError, SourceVariantKind, SourceVariants,
 };
 pub use stabilizer::{Stabilizer, STABILIZE_ZOOM};
-pub use strip::{Strip, StripBank, StripState};
+pub use strip::{DuckState, Strip, StripBank, StripState};
 pub use time_stretch::{TimeStretcher, MAX_SPEED, MIN_SPEED};
 pub use transport::{PlaybackState, Transport, TransportError};
 pub use video_frame::{PixelFormat, VideoFrame, VideoFrameError};
