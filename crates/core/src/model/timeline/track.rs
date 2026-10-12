@@ -148,7 +148,8 @@ pub struct Track {
     pub mix: TrackMix,
 }
 
-/// A track's fader and pan: what the mixer strip of the track controls.
+/// A track's mixer strip: fader, pan, tone and compressor. Neutral by default. **Fields are
+/// positional in the project file**: a new one is a format change.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct TrackMix {
     /// Level in dB, [`TrackMix::MIN_VOLUME_DB`] to [`TrackMix::MAX_VOLUME_DB`]; `0.0` leaves the
@@ -156,6 +157,16 @@ pub struct TrackMix {
     pub volume_db: f32,
     /// Stereo balance, `-1.0` (left only) to `1.0` (right only); `0.0` is centred and untouched.
     pub pan: f32,
+    /// Gain of the low shelf (120 Hz), the mid bell (1 kHz) and the high shelf (6 kHz), in dB.
+    pub eq_low_db: f32,
+    pub eq_mid_db: f32,
+    pub eq_high_db: f32,
+    /// High-pass and low-pass corners in Hz; `0.0` leaves that end open.
+    pub highpass_hz: f32,
+    pub lowpass_hz: f32,
+    /// Compressor threshold in dB and ratio; a ratio of `1.0` is off.
+    pub comp_threshold_db: f32,
+    pub comp_ratio: f32,
 }
 
 impl Default for TrackMix {
@@ -163,6 +174,13 @@ impl Default for TrackMix {
         Self {
             volume_db: 0.0,
             pan: 0.0,
+            eq_low_db: 0.0,
+            eq_mid_db: 0.0,
+            eq_high_db: 0.0,
+            highpass_hz: 0.0,
+            lowpass_hz: 0.0,
+            comp_threshold_db: -18.0,
+            comp_ratio: 1.0,
         }
     }
 }
@@ -170,26 +188,85 @@ impl Default for TrackMix {
 impl TrackMix {
     pub const MIN_VOLUME_DB: f32 = -60.0;
     pub const MAX_VOLUME_DB: f32 = 12.0;
+    pub const MAX_EQ_DB: f32 = 15.0;
+    pub const MIN_HIGHPASS_HZ: f32 = 20.0;
+    pub const MAX_HIGHPASS_HZ: f32 = 2_000.0;
+    pub const MIN_LOWPASS_HZ: f32 = 500.0;
+    pub const MAX_LOWPASS_HZ: f32 = 20_000.0;
+    pub const MIN_COMP_THRESHOLD_DB: f32 = -60.0;
+    pub const MAX_COMP_RATIO: f32 = 20.0;
 
-    /// Whether the mix changes nothing (no gain, centred), so a track needs no mixing stage.
+    /// Whether the mix changes nothing (no gain, centred, flat tone, no compressor), so a track
+    /// needs no mixing stage.
     pub fn is_neutral(&self) -> bool {
-        self.volume_db == 0.0 && self.pan == 0.0
+        self.volume_db == 0.0 && self.pan == 0.0 && self.strip_is_neutral()
+    }
+
+    /// Whether the tone and dynamics are untouched (the fader and pan may not be).
+    pub fn strip_is_neutral(&self) -> bool {
+        self.eq_low_db == 0.0
+            && self.eq_mid_db == 0.0
+            && self.eq_high_db == 0.0
+            && self.highpass_hz == 0.0
+            && self.lowpass_hz == 0.0
+            && self.comp_ratio <= 1.0
+    }
+
+    /// The tone and dynamics as the export mix takes them.
+    pub fn strip(&self) -> avbridge::AudioStrip {
+        avbridge::AudioStrip {
+            eq_low_db: self.eq_low_db,
+            eq_mid_db: self.eq_mid_db,
+            eq_high_db: self.eq_high_db,
+            highpass_hz: self.highpass_hz,
+            lowpass_hz: self.lowpass_hz,
+            comp_threshold_db: self.comp_threshold_db,
+            comp_ratio: self.comp_ratio,
+        }
     }
 
     /// The same mix inside its limits; a value that is not a number becomes neutral.
     pub fn clamped(self) -> Self {
-        let volume_db = if self.volume_db.is_finite() {
-            self.volume_db
-                .clamp(Self::MIN_VOLUME_DB, Self::MAX_VOLUME_DB)
-        } else {
-            0.0
+        let within = |value: f32, low: f32, high: f32, neutral: f32| {
+            if value.is_finite() {
+                value.clamp(low, high)
+            } else {
+                neutral
+            }
         };
-        let pan = if self.pan.is_finite() {
-            self.pan.clamp(-1.0, 1.0)
-        } else {
-            0.0
+        // A corner frequency is off (0) or inside its useful range.
+        let corner = |value: f32, low: f32, high: f32| {
+            if !value.is_finite() || value <= 0.0 {
+                0.0
+            } else {
+                value.clamp(low, high)
+            }
         };
-        Self { volume_db, pan }
+        Self {
+            volume_db: within(
+                self.volume_db,
+                Self::MIN_VOLUME_DB,
+                Self::MAX_VOLUME_DB,
+                0.0,
+            ),
+            pan: within(self.pan, -1.0, 1.0, 0.0),
+            eq_low_db: within(self.eq_low_db, -Self::MAX_EQ_DB, Self::MAX_EQ_DB, 0.0),
+            eq_mid_db: within(self.eq_mid_db, -Self::MAX_EQ_DB, Self::MAX_EQ_DB, 0.0),
+            eq_high_db: within(self.eq_high_db, -Self::MAX_EQ_DB, Self::MAX_EQ_DB, 0.0),
+            highpass_hz: corner(
+                self.highpass_hz,
+                Self::MIN_HIGHPASS_HZ,
+                Self::MAX_HIGHPASS_HZ,
+            ),
+            lowpass_hz: corner(self.lowpass_hz, Self::MIN_LOWPASS_HZ, Self::MAX_LOWPASS_HZ),
+            comp_threshold_db: within(
+                self.comp_threshold_db,
+                Self::MIN_COMP_THRESHOLD_DB,
+                0.0,
+                -18.0,
+            ),
+            comp_ratio: within(self.comp_ratio, 1.0, Self::MAX_COMP_RATIO, 1.0),
+        }
     }
 
     /// Linear multiplier of [`Self::volume_db`].

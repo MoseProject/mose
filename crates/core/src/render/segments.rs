@@ -489,7 +489,7 @@ pub(crate) fn audio_segment(
         fade_in_secs: clip.fade_in_secs.max(track.dissolve_in_secs(clip) as f32),
         fade_out_secs: clip.fade_out_secs.max(track.dissolve_out_secs(clip) as f32),
         pan: track.mix.pan,
-        strip: Default::default(),
+        strip: track.mix.strip(),
     }
 }
 

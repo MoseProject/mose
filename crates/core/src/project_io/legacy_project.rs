@@ -1,4 +1,8 @@
-//! The project layouts of file versions 3 to 5, kept so such files still open.
+//! The project layouts of file versions 3 to 6, kept so such files still open.
+//!
+//! Version 7 widened [`TrackMix`] from volume and pan to the whole mixer strip (EQ, filters,
+//! compressor), which moves every byte after the first track's mix: version 6 is read through
+//! mirror types of the project, sequence, timeline and track, with the strip neutral.
 //!
 //! Version 6 added [`Track::mix`] inside every track, which moves every byte after the first
 //! track: version 5 and older are read as mirror types of the sequence, timeline and track and
@@ -193,6 +197,121 @@ impl From<ProjectV4> for Project {
             last_edited: old.last_edited,
             summary: old.summary,
             media_library: old.media_library.into_iter().map(Into::into).collect(),
+            sequences: old.sequences.into_iter().map(Into::into).collect(),
+            active_sequence: old.active_sequence,
+            file_path: None,
+            panel_layout: old.panel_layout,
+            smart_bins: old.smart_bins,
+            recent_asset_ids: old.recent_asset_ids,
+            frame_rate: old.frame_rate,
+        }
+    }
+}
+
+/// [`TrackMix`] as version 6 wrote it. Field order is the file layout: do not touch.
+#[derive(Deserialize)]
+struct TrackMixV6 {
+    volume_db: f32,
+    pan: f32,
+}
+
+/// [`Project`] as version 6 wrote it (tracks with volume and pan only). Field order is the file
+/// layout: do not touch.
+#[derive(Deserialize)]
+pub(crate) struct ProjectV6 {
+    id: u64,
+    name: String,
+    last_edited: Recency,
+    summary: String,
+    media_library: Vec<MediaAsset>,
+    sequences: Vec<SequenceV6>,
+    active_sequence: usize,
+    panel_layout: Option<PanelLayout>,
+    smart_bins: Vec<SmartBin>,
+    recent_asset_ids: Vec<u64>,
+    frame_rate: Option<FrameRate>,
+}
+
+#[derive(Deserialize)]
+struct SequenceV6 {
+    id: u64,
+    name: String,
+    timeline: TimelineV6,
+    export_settings: SequenceExportSettings,
+}
+
+#[derive(Deserialize)]
+struct TimelineV6 {
+    tracks: Vec<TrackV6>,
+    playhead_secs: f64,
+    markers: Vec<Marker>,
+    multicam_groups: Vec<MulticamGroup>,
+}
+
+#[derive(Deserialize)]
+struct TrackV6 {
+    id: u64,
+    name: String,
+    kind: TrackKind,
+    clips: Vec<ClipInstance>,
+    text_clips: Vec<TextClip>,
+    shape_clips: Vec<ShapeClip>,
+    visible: bool,
+    audio_role: AudioRole,
+    muted: bool,
+    solo: bool,
+    color_label: Option<[u8; 3]>,
+    locked: bool,
+    mix: TrackMixV6,
+}
+
+impl From<SequenceV6> for Sequence {
+    fn from(old: SequenceV6) -> Self {
+        Sequence {
+            id: old.id,
+            name: old.name,
+            timeline: Timeline {
+                tracks: old
+                    .timeline
+                    .tracks
+                    .into_iter()
+                    .map(|track| Track {
+                        id: track.id,
+                        name: track.name,
+                        kind: track.kind,
+                        clips: track.clips,
+                        text_clips: track.text_clips,
+                        shape_clips: track.shape_clips,
+                        visible: track.visible,
+                        audio_role: track.audio_role,
+                        muted: track.muted,
+                        solo: track.solo,
+                        color_label: track.color_label,
+                        locked: track.locked,
+                        mix: TrackMix {
+                            volume_db: track.mix.volume_db,
+                            pan: track.mix.pan,
+                            ..TrackMix::default()
+                        },
+                    })
+                    .collect(),
+                playhead_secs: old.timeline.playhead_secs,
+                markers: old.timeline.markers,
+                multicam_groups: old.timeline.multicam_groups,
+            },
+            export_settings: old.export_settings,
+        }
+    }
+}
+
+impl From<ProjectV6> for Project {
+    fn from(old: ProjectV6) -> Self {
+        Project {
+            id: old.id,
+            name: old.name,
+            last_edited: old.last_edited,
+            summary: old.summary,
+            media_library: old.media_library,
             sequences: old.sequences.into_iter().map(Into::into).collect(),
             active_sequence: old.active_sequence,
             file_path: None,
