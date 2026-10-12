@@ -57,6 +57,7 @@ fn mixes_overlapping_audio_segments_and_muxes_them_without_reencoding_video() {
             fade_in_secs: 0.0,
             fade_out_secs: 0.0,
             pan: 0.0,
+            strip: Default::default(),
         },
         AudioSegment {
             source_path: source,
@@ -75,6 +76,7 @@ fn mixes_overlapping_audio_segments_and_muxes_them_without_reencoding_video() {
             fade_in_secs: 0.0,
             fade_out_secs: 0.0,
             pan: 0.0,
+            strip: Default::default(),
         },
     ];
 
@@ -122,6 +124,7 @@ fn mix_segment_fades_ramp_the_branch_in_and_out() {
         fade_in_secs: 0.3,
         fade_out_secs: 0.3,
         pan: 0.0,
+        strip: Default::default(),
     };
     let outcome =
         mix_audio_timeline(&[segment], 1.0, &mixed, -14.0, &AtomicBool::new(false)).unwrap();
@@ -175,6 +178,7 @@ fn mixes_with_sidechain_ducking_when_both_roles_are_present() {
             fade_in_secs: 0.0,
             fade_out_secs: 0.0,
             pan: 0.0,
+            strip: Default::default(),
         },
         AudioSegment {
             source_path: source,
@@ -193,6 +197,7 @@ fn mixes_with_sidechain_ducking_when_both_roles_are_present() {
             fade_in_secs: 0.0,
             fade_out_secs: 0.0,
             pan: 0.0,
+            strip: Default::default(),
         },
     ];
 
@@ -223,6 +228,7 @@ fn voice_cleanup_segment(source: PathBuf, voice_cleanup_enabled: bool) -> AudioS
         fade_in_secs: 0.0,
         fade_out_secs: 0.0,
         pan: 0.0,
+        strip: Default::default(),
     }
 }
 
@@ -350,6 +356,7 @@ fn mixes_with_sidechain_ducking_across_multiple_branches_per_role() {
             fade_in_secs: 0.0,
             fade_out_secs: 0.0,
             pan: 0.0,
+            strip: Default::default(),
         },
         AudioSegment {
             source_path: source.clone(),
@@ -368,6 +375,7 @@ fn mixes_with_sidechain_ducking_across_multiple_branches_per_role() {
             fade_in_secs: 0.0,
             fade_out_secs: 0.0,
             pan: 0.0,
+            strip: Default::default(),
         },
         AudioSegment {
             source_path: source.clone(),
@@ -386,6 +394,7 @@ fn mixes_with_sidechain_ducking_across_multiple_branches_per_role() {
             fade_in_secs: 0.0,
             fade_out_secs: 0.0,
             pan: 0.0,
+            strip: Default::default(),
         },
         AudioSegment {
             source_path: source,
@@ -404,6 +413,7 @@ fn mixes_with_sidechain_ducking_across_multiple_branches_per_role() {
             fade_in_secs: 0.0,
             fade_out_secs: 0.0,
             pan: 0.0,
+            strip: Default::default(),
         },
     ];
 
@@ -440,6 +450,7 @@ fn a_target_branch_without_any_trigger_falls_back_to_a_plain_mix() {
         fade_in_secs: 0.0,
         fade_out_secs: 0.0,
         pan: 0.0,
+        strip: Default::default(),
     }];
 
     let outcome =
@@ -483,6 +494,7 @@ fn mixes_a_segment_with_a_keyframed_gain_expression() {
         fade_in_secs: 0.0,
         fade_out_secs: 0.0,
         pan: 0.0,
+        strip: Default::default(),
     }];
 
     let outcome =
@@ -551,5 +563,130 @@ fn a_panned_segment_moves_to_one_side_and_a_centred_one_is_untouched() {
     assert!(
         half_l < half_r && half_l > 0.3 * half_r,
         "{half_l} vs {half_r}"
+    );
+}
+
+/// Writes a mono 48 kHz 16-bit WAV of a sine at `frequency` into the temp dir.
+fn sine_wav(frequency: f32, seconds: f32) -> PathBuf {
+    let path = std::env::temp_dir().join(format!("avbridge_sine_{frequency}.wav"));
+    let rate = 48_000u32;
+    let frames = (seconds * rate as f32) as u32;
+    let mut data = Vec::new();
+    for n in 0..frames {
+        let value = (0.25
+            * (2.0 * std::f32::consts::PI * frequency * n as f32 / rate as f32).sin()
+            * 32767.0) as i16;
+        data.extend_from_slice(&value.to_le_bytes());
+    }
+    let mut wav = Vec::new();
+    wav.extend_from_slice(b"RIFF");
+    wav.extend_from_slice(&(36 + data.len() as u32).to_le_bytes());
+    wav.extend_from_slice(b"WAVEfmt ");
+    wav.extend_from_slice(&16u32.to_le_bytes());
+    wav.extend_from_slice(&1u16.to_le_bytes()); // PCM
+    wav.extend_from_slice(&1u16.to_le_bytes()); // mono
+    wav.extend_from_slice(&rate.to_le_bytes());
+    wav.extend_from_slice(&(rate * 2).to_le_bytes());
+    wav.extend_from_slice(&2u16.to_le_bytes());
+    wav.extend_from_slice(&16u16.to_le_bytes());
+    wav.extend_from_slice(b"data");
+    wav.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    wav.extend_from_slice(&data);
+    std::fs::write(&path, wav).unwrap();
+    path
+}
+
+/// RMS (both channels) of the middle of `frequency`'s sine after the mix graph with `strip`,
+/// without any loudness normalisation so levels can be compared.
+fn strip_level(frequency: f32, strip: avbridge::AudioStrip) -> f32 {
+    let mixed = std::env::temp_dir().join(format!("avbridge_strip_{frequency}.m4a"));
+    let _ = std::fs::remove_file(&mixed);
+    let mut segment = AudioSegment::plain(sine_wav(frequency, 0.6), 0.0, 0.6, 0.0);
+    segment.strip = strip;
+    let outcome =
+        mix_audio_timeline(&[segment], 0.6, &mixed, f32::NAN, &AtomicBool::new(false)).unwrap();
+    assert_eq!(outcome, AudioMixOutcome::Completed);
+    let (left, right) = channel_rms(&mixed);
+    let _ = std::fs::remove_file(&mixed);
+    (left + right) / 2.0
+}
+
+fn db(ratio: f32) -> f32 {
+    20.0 * ratio.log10()
+}
+
+/// The tone and dynamics stages of the mix graph change the band they are named for and leave the
+/// others alone; a neutral strip changes nothing at all.
+#[test]
+fn a_strip_boosts_and_cuts_its_own_band_and_a_neutral_one_does_nothing() {
+    use avbridge::AudioStrip;
+    let flat = |f| strip_level(f, AudioStrip::default());
+    let (low, mid, high) = (flat(50.0), flat(1000.0), flat(10000.0));
+    assert!(
+        low > 0.05 && mid > 0.05 && high > 0.05,
+        "{low} {mid} {high}"
+    );
+
+    let boosted = |f, strip: AudioStrip| db(strip_level(f, strip) / flat(f));
+    let low_boost = AudioStrip {
+        eq_low_db: 9.0,
+        ..AudioStrip::default()
+    };
+    assert!(
+        (boosted(50.0, low_boost) - 9.0).abs() < 2.5,
+        "low shelf at 50 Hz"
+    );
+    assert!(
+        boosted(10000.0, low_boost).abs() < 1.0,
+        "the low shelf leaves 10 kHz alone"
+    );
+
+    let mid_cut = AudioStrip {
+        eq_mid_db: -9.0,
+        ..AudioStrip::default()
+    };
+    assert!(
+        (boosted(1000.0, mid_cut) + 9.0).abs() < 2.5,
+        "mid bell at 1 kHz"
+    );
+    assert!(boosted(50.0, mid_cut).abs() < 1.5);
+
+    let high_boost = AudioStrip {
+        eq_high_db: 9.0,
+        ..AudioStrip::default()
+    };
+    assert!(
+        (boosted(10000.0, high_boost) - 9.0).abs() < 2.5,
+        "high shelf at 10 kHz"
+    );
+    assert!(boosted(50.0, high_boost).abs() < 1.0);
+
+    let highpass = AudioStrip {
+        highpass_hz: 400.0,
+        ..AudioStrip::default()
+    };
+    assert!(
+        boosted(50.0, highpass) < -9.0,
+        "a 400 Hz high-pass removes 50 Hz"
+    );
+    assert!(boosted(1000.0, highpass).abs() < 1.5);
+    let lowpass = AudioStrip {
+        lowpass_hz: 2000.0,
+        ..AudioStrip::default()
+    };
+    assert!(
+        boosted(10000.0, lowpass) < -9.0,
+        "a 2 kHz low-pass removes 10 kHz"
+    );
+    assert!(boosted(50.0, lowpass).abs() < 1.5);
+
+    let compressed = AudioStrip {
+        comp_threshold_db: -30.0,
+        comp_ratio: 8.0,
+        ..AudioStrip::default()
+    };
+    assert!(
+        boosted(1000.0, compressed) < -4.0,
+        "a loud tone over the threshold is brought down"
     );
 }
