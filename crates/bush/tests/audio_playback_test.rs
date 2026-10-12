@@ -670,3 +670,86 @@ fn a_cancelled_stretched_render_returns_nothing() {
         .unwrap()
         .is_none());
 }
+
+fn stereo_renderer() -> AudioRenderer {
+    AudioRenderer::new(RATE, 2, 8192, 2).unwrap()
+}
+
+/// Left and right peaks of 4096 stereo frames of the fixture rendered with `placement`.
+fn stereo_peaks(placement: Placement) -> (f32, f32) {
+    let scene = scene(vec![clip(1, true, placement)]);
+    let block = stereo_renderer()
+        .render(&scene, 0, 4096, &AtomicBool::new(false))
+        .unwrap()
+        .unwrap();
+    let left = block
+        .samples()
+        .chunks_exact(2)
+        .map(|f| f[0])
+        .collect::<Vec<_>>();
+    let right = block
+        .samples()
+        .chunks_exact(2)
+        .map(|f| f[1])
+        .collect::<Vec<_>>();
+    (peak(&left), peak(&right))
+}
+
+#[test]
+fn a_track_fader_scales_the_clip_and_a_pan_moves_it_to_one_side() {
+    let (plain_left, plain_right) = stereo_peaks(Placement::default());
+    assert!(plain_left > 0.05 && (plain_left - plain_right).abs() < 1e-6);
+
+    // The fader multiplies on top of the clip's own gain.
+    let (left, right) = stereo_peaks(Placement {
+        gain: 0.5,
+        track_gain: 0.5,
+        ..Placement::default()
+    });
+    assert!((left - plain_left * 0.25).abs() < 1e-4 && (right - plain_right * 0.25).abs() < 1e-4);
+
+    // Hard right silences the left channel and leaves the right at unity; centred changes nothing.
+    let (left, right) = stereo_peaks(Placement {
+        pan: 1.0,
+        ..Placement::default()
+    });
+    assert!(
+        left < 1e-5 && (right - plain_right).abs() < 1e-6,
+        "{left} {right}"
+    );
+    let (left, right) = stereo_peaks(Placement {
+        pan: -1.0,
+        ..Placement::default()
+    });
+    assert!(
+        right < 1e-5 && (left - plain_left).abs() < 1e-6,
+        "{left} {right}"
+    );
+    let (left, right) = stereo_peaks(Placement::default());
+    assert_eq!((left, right), (plain_left, plain_right));
+}
+
+#[test]
+fn the_fader_also_scales_an_animated_gain() {
+    let animation = Animation {
+        gain_db: Some(
+            KeyframeTrack::new(vec![Keyframe {
+                time_secs: 0.0,
+                value: 0.0,
+                easing: Easing::Linear,
+            }])
+            .unwrap(),
+        ),
+        ..Animation::default()
+    };
+    let (plain, _) = stereo_peaks(Placement {
+        animation: animation.clone(),
+        ..Placement::default()
+    });
+    let (halved, _) = stereo_peaks(Placement {
+        animation,
+        track_gain: 0.5,
+        ..Placement::default()
+    });
+    assert!((halved - plain * 0.5).abs() < 1e-4, "{halved} vs {plain}");
+}
