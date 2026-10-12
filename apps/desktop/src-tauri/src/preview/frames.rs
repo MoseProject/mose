@@ -202,3 +202,43 @@ mod tests {
         assert_eq!(&jpeg[..2], &[0xFF, 0xD8]);
     }
 }
+
+#[cfg(test)]
+mod encode_cost {
+    use super::*;
+
+    /// Cost of one preview frame: `cargo test --release -p desktop jpeg_cost -- --ignored
+    /// --nocapture`. A busy gradient with noise, the kind of picture a game frame is.
+    #[test]
+    #[ignore = "a measurement, not a check"]
+    fn jpeg_cost() {
+        for (width, height) in [(854u32, 480u32), (1280, 720), (1920, 1080)] {
+            let mut rgba = vec![0u8; width as usize * height as usize * 4];
+            let mut state = 0x9E37_79B9_u32;
+            for (index, pixel) in rgba.chunks_exact_mut(4).enumerate() {
+                state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                let x = (index % width as usize) as u32;
+                let y = (index / width as usize) as u32;
+                pixel[0] = ((x * 255 / width) as u8).wrapping_add((state >> 28) as u8);
+                pixel[1] = ((y * 255 / height) as u8).wrapping_add((state >> 24) as u8 & 15);
+                pixel[2] = (((x + y) * 255 / (width + height)) as u8) ^ ((state >> 20) as u8 & 7);
+                pixel[3] = 255;
+            }
+            let mut times = Vec::new();
+            let mut size = 0;
+            for _ in 0..60 {
+                let started = std::time::Instant::now();
+                let jpeg = encode_jpeg_rgba(width, height, &rgba, width.max(height)).unwrap();
+                times.push(started.elapsed().as_secs_f64() * 1000.0);
+                size = jpeg.len();
+            }
+            times.sort_by(f64::total_cmp);
+            println!(
+                "{width}x{height}: p50 {:.2} ms, p95 {:.2} ms, {} KB",
+                times[30],
+                times[57],
+                size / 1024
+            );
+        }
+    }
+}
