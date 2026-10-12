@@ -81,6 +81,7 @@ spec/
     ├── performance-2026-10.md        (export/preview/UI performance work, measurements, tools)
     ├── differentiators.md            (D1-D7: the proposed differentiator feature specs)
     ├── competitive-feature-plan.md   (CF-01-CF-10: next competitive implementation plan)
+    ├── mixer-hdr-color.md            (CM-00..06, MX-00..04: color management, HDR, audio mixer)
     ├── monetization-and-licensing.md (MON-01: Free/Pro subscription and GPL model)
     ├── client-error-reporting.md      (ER-01: secure remote error and crash collection)
     ├── built-in-font-catalog.md       (FONT-01: 43-family offline font catalog)

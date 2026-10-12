@@ -117,3 +117,36 @@ fn a_sample_with_a_spent_budget_still_comes_back_and_is_not_after_the_target() {
         .unwrap();
     assert_eq!(exact, reference);
 }
+
+/// What the preview shows for a flat colour clip, per clip in `OCA_COLOR_PROBE` (a directory of
+/// clips that all hold the sRGB colour 200,60,40): the decoded centre pixel next to that colour.
+/// Ignored (it prints): `OCA_COLOR_PROBE=dir cargo test --release -p core --lib color_probe -- --ignored --nocapture`.
+#[test]
+#[ignore]
+fn color_probe() {
+    let Some(dir) = std::env::var_os("OCA_COLOR_PROBE").map(std::path::PathBuf::from) else {
+        eprintln!("set OCA_COLOR_PROBE to a directory of clips");
+        return;
+    };
+    let mut clips: Vec<_> = std::fs::read_dir(&dir)
+        .unwrap()
+        .flatten()
+        .map(|e| e.path())
+        .collect();
+    clips.sort();
+    for clip in clips {
+        let Ok(sampler) = FrameSampler::open(&clip) else {
+            continue;
+        };
+        let Some(frame) = sampler.sample(0.1, Duration::from_secs(5)) else {
+            eprintln!("{}: no frame", clip.display());
+            continue;
+        };
+        let centre = ((frame.height / 2 * frame.width + frame.width / 2) * 4) as usize;
+        eprintln!(
+            "{:<20} decoded RGB {:?}   (the colour is 200, 60, 40)",
+            clip.file_name().unwrap().to_string_lossy(),
+            &frame.rgba[centre..centre + 3]
+        );
+    }
+}
