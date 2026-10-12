@@ -164,6 +164,11 @@ unsafe extern "C" {
     pub(crate) fn avbridge_version() -> u32;
     pub(crate) fn avbridge_probe(path: *const c_char, out: *mut RawProbeInfo) -> c_int;
     pub(crate) fn avbridge_remux_copy(in_path: *const c_char, out_path: *const c_char) -> c_int;
+    pub(crate) fn avbridge_remux_audio_stream(
+        in_path: *const c_char,
+        out_path: *const c_char,
+        stream_index: c_int,
+    ) -> c_int;
     pub(crate) fn avbridge_encode_export(
         in_path: *const c_char,
         out_path: *const c_char,
