@@ -34,7 +34,7 @@ mod telemetry;
 mod testing;
 
 // The modules keep their flat paths (`crate::state`, `crate::preview_engine`) through these.
-use preview::{bush_adapter, frames, preview_engine, protocol, tile_workers};
+use preview::{bush_adapter, frames, preview_engine, protocol, scope_image, tile_workers};
 use session::{autosave, close_guard, recovery, session_sync, state};
 
 use std::sync::Arc;
