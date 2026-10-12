@@ -81,10 +81,11 @@ pub struct MediaAsset {
     /// What to do when this source is HDR (see [`HdrHandling`]); only matters for HDR video.
     #[serde(default)]
     pub hdr_handling: HdrHandling,
-    /// Which audio stream of `source_path` this asset plays, for an audio-only asset made from
-    /// one track of a multi-track recording; `None` plays the file's first audio stream.
+    /// For an audio-only asset made from one track of a multi-track recording: the recording and
+    /// the track. `source_path` is then the track's own copy in the project cache, which
+    /// [`crate::ensure_audio_stream_file`] makes again from here if it is gone.
     #[serde(default)]
-    pub audio_stream: Option<u32>,
+    pub audio_stream: Option<crate::AudioStreamSource>,
 }
 
 /// What a source file says about how to read its pixels and what audio it carries.

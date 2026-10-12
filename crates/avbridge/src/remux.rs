@@ -17,7 +17,7 @@ use std::ffi::{CString, NulError};
 use std::os::raw::c_int;
 use std::path::Path;
 
-use crate::ffi::avbridge_remux_copy;
+use crate::ffi::{avbridge_remux_audio_stream, avbridge_remux_copy};
 
 /// What [`remux_copy`] failed on.
 #[derive(Debug, thiserror::Error)]
@@ -63,6 +63,26 @@ pub fn remux_copy(in_path: &Path, out_path: &Path) -> Result<(), RemuxError> {
     // `bridge.c` closes the input context, output I/O, and frees the output context on every
     // exit path.
     let status = unsafe { avbridge_remux_copy(c_in.as_ptr(), c_out.as_ptr()) };
+
+    remux_copy_status(status)
+}
+
+/// Copies the single audio stream `stream_index` (the container's index, as [`crate::probe`]
+/// lists it) of `in_path` to `out_path` unchanged, as a standalone audio file. Use a `.mka`
+/// extension: Matroska holds any codec. Equivalent to `ffmpeg -i in -map 0:N -c copy out.mka`.
+pub fn extract_audio_stream(
+    in_path: &Path,
+    out_path: &Path,
+    stream_index: u32,
+) -> Result<(), RemuxError> {
+    let c_in =
+        CString::new(in_path.to_string_lossy().as_bytes()).map_err(RemuxError::InvalidPath)?;
+    let c_out =
+        CString::new(out_path.to_string_lossy().as_bytes()).map_err(RemuxError::InvalidPath)?;
+    let index = c_int::try_from(stream_index).map_err(|_| RemuxError::NewStream)?;
+
+    // SAFETY: as for `remux_copy`.
+    let status = unsafe { avbridge_remux_audio_stream(c_in.as_ptr(), c_out.as_ptr(), index) };
 
     remux_copy_status(status)
 }

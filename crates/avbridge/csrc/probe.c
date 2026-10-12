@@ -125,7 +125,9 @@ ProbeStatus avbridge_probe(const char *path, ProbeInfo *out) {
     return PROBE_OK;
 }
 
-RemuxStatus avbridge_remux_copy(const char *in_path, const char *out_path) {
+/* Copies the video and audio streams of in_path to out_path (all of them when only_stream is -1,
+   otherwise just that one stream, which must be audio) without decoding. */
+static RemuxStatus remux_streams(const char *in_path, const char *out_path, int only_stream) {
     AVFormatContext *in_ctx = NULL;
     AVFormatContext *out_ctx = NULL;
     int *stream_mapping = NULL;
@@ -156,8 +158,11 @@ RemuxStatus avbridge_remux_copy(const char *in_path, const char *out_path) {
         AVStream *in_stream = in_ctx->streams[i];
         AVCodecParameters *in_codecpar = in_stream->codecpar;
 
-        if (in_codecpar->codec_type != AVMEDIA_TYPE_VIDEO &&
-            in_codecpar->codec_type != AVMEDIA_TYPE_AUDIO) {
+        int wanted = only_stream < 0
+                         ? (in_codecpar->codec_type == AVMEDIA_TYPE_VIDEO ||
+                            in_codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
+                         : ((int)i == only_stream && in_codecpar->codec_type == AVMEDIA_TYPE_AUDIO);
+        if (!wanted) {
             stream_mapping[i] = -1;
             continue;
         }
@@ -170,6 +175,11 @@ RemuxStatus avbridge_remux_copy(const char *in_path, const char *out_path) {
         out_stream->codecpar->codec_tag = 0;
         out_stream->time_base = in_stream->time_base;
         stream_mapping[i] = out_stream_count++;
+    }
+
+    if (out_stream_count == 0) {
+        status = REMUX_ERR_NEW_STREAM;
+        goto cleanup;
     }
 
     if (!(out_ctx->oformat->flags & AVFMT_NOFILE)) {
@@ -227,4 +237,14 @@ cleanup:
     }
     avformat_close_input(&in_ctx);
     return status;
+}
+
+RemuxStatus avbridge_remux_copy(const char *in_path, const char *out_path) {
+    return remux_streams(in_path, out_path, -1);
+}
+
+RemuxStatus avbridge_remux_audio_stream(const char *in_path, const char *out_path,
+                                        int stream_index) {
+    if (stream_index < 0) return REMUX_ERR_NEW_STREAM;
+    return remux_streams(in_path, out_path, stream_index);
 }

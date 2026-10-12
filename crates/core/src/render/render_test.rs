@@ -433,48 +433,87 @@ fn resolve_cost() {
     }
 }
 
-/// What an export does to a flat colour clip (sRGB 200, 60, 40 stored as BT.709 YUV): the file it
-/// writes, decoded the way the preview decodes it, must show the same colour.
-#[test]
-fn an_exported_hd_clip_keeps_its_colour() {
+/// Exports `fixture` (a flat colour clip under `tests/fixtures/color`) with `change` applied to
+/// its asset first, and returns the centre pixel of the exported file, decoded the way the
+/// preview decodes it.
+fn exported_centre_pixel(fixture: &str, change: impl FnOnce(&mut crate::MediaAsset)) -> [u8; 3] {
+    exported_centre_pixel_on_tracks(fixture, 1, change)
+}
+
+/// [`exported_centre_pixel`] with the same clip stacked on `tracks` video tracks, which makes the
+/// export composite layers instead of rendering one track.
+fn exported_centre_pixel_on_tracks(
+    fixture: &str,
+    tracks: u64,
+    change: impl FnOnce(&mut crate::MediaAsset),
+) -> [u8; 3] {
+    let output = exported_file_on_tracks(fixture, tracks, change);
+    let frame = crate::FrameSampler::open(&output)
+        .expect("opens the export")
+        .sample(0.0, std::time::Duration::from_secs(5))
+        .expect("a frame");
+    let _ = std::fs::remove_file(&output);
+    let at = ((frame.height / 2 * frame.width + frame.width / 2) * 4) as usize;
+    [frame.rgba[at], frame.rgba[at + 1], frame.rgba[at + 2]]
+}
+
+/// The exported file of `fixture`, for the caller to read and delete.
+fn exported_file(fixture: &str) -> std::path::PathBuf {
+    exported_file_on_tracks(fixture, 1, |_| {})
+}
+
+fn exported_file_on_tracks(
+    fixture: &str,
+    tracks: u64,
+    change: impl FnOnce(&mut crate::MediaAsset),
+) -> std::path::PathBuf {
     use crate::timeline::{AudioRole, ClipInstance, Timeline, Track, TrackKind};
     use crate::Sequence;
     use std::sync::atomic::AtomicBool;
     use std::time::Duration;
 
     let source = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/color/hd709_untagged.mkv");
-    let asset = crate::probe_media(&source)
+        .join("tests/fixtures/color")
+        .join(fixture);
+    let mut asset = crate::probe_media(&source)
         .expect("probes")
-        .into_media_asset(1, "hd709_untagged.mkv".into(), source);
+        .into_media_asset(1, fixture.into(), source);
+    change(&mut asset);
     let sequence = Sequence {
         id: 1,
         name: "s".into(),
         timeline: Timeline {
-            tracks: vec![Track {
-                id: 1,
-                name: "V1".into(),
-                kind: TrackKind::Video,
-                clips: vec![ClipInstance::new(1, 1, 0.0, 0.0, 0.4)],
-                text_clips: vec![],
-                shape_clips: vec![],
-                visible: true,
-                audio_role: AudioRole::Unspecified,
-                muted: false,
-                solo: false,
-                locked: false,
-                color_label: None,
-            }],
+            tracks: (1..=tracks)
+                .map(|id| Track {
+                    id,
+                    name: format!("V{id}"),
+                    kind: TrackKind::Video,
+                    clips: vec![ClipInstance::new(id, 1, 0.0, 0.0, 0.4)],
+                    text_clips: vec![],
+                    shape_clips: vec![],
+                    visible: true,
+                    audio_role: AudioRole::Unspecified,
+                    muted: false,
+                    solo: false,
+                    locked: false,
+                    color_label: None,
+                })
+                .collect(),
             playhead_secs: 0.0,
             markers: vec![],
             multicam_groups: vec![],
         },
         export_settings: Default::default(),
     };
-    let (segments, canvas) = resolve_timeline_segments(&sequence, &[asset]).unwrap();
-    let output = std::env::temp_dir().join(format!("oca-export-color-{}.mp4", std::process::id()));
-    let outcome = render_export_job(
-        &segments,
+    let (track_segments, canvas) = resolve_timeline_segments_multi(&sequence, &[asset]).unwrap();
+    static EXPORTS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let output = std::env::temp_dir().join(format!(
+        "oca-export-color-{}-{}.mp4",
+        std::process::id(),
+        EXPORTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    let outcome = render_export_job_multi(
+        &track_segments,
         canvas,
         &output,
         -14.0,
@@ -488,17 +527,78 @@ fn an_exported_hd_clip_keeps_its_colour() {
     .expect("exports");
     assert!(matches!(outcome, RenderOutcome::Completed));
 
-    let frame = crate::FrameSampler::open(&output)
-        .expect("opens the export")
-        .sample(0.0, Duration::from_secs(5))
-        .expect("a frame");
-    let _ = std::fs::remove_file(&output);
-    let at = ((frame.height / 2 * frame.width + frame.width / 2) * 4) as usize;
-    let pixel = [frame.rgba[at], frame.rgba[at + 1], frame.rgba[at + 2]];
-    for (channel, expected) in [200i32, 60, 40].into_iter().enumerate() {
+    output
+}
+
+fn assert_pixel_near(pixel: [u8; 3], expected: [i32; 3], tolerance: i32, what: &str) {
+    for channel in 0..3 {
         assert!(
-            (i32::from(pixel[channel]) - expected).abs() <= 8,
-            "the export shows {pixel:?}, the colour is 200, 60, 40"
+            (i32::from(pixel[channel]) - expected[channel]).abs() <= tolerance,
+            "{what}: the export shows {pixel:?}, the colour is {expected:?}"
         );
     }
+}
+
+/// Every colour fixture holds the sRGB colour 200, 60, 40 (the HDR one as PQ, BT.2020).
+#[test]
+fn an_exported_hd_clip_keeps_its_colour() {
+    let pixel = exported_centre_pixel("hd709_untagged.mkv", |_| {});
+    assert_pixel_near(pixel, [200, 60, 40], 8, "an SDR clip");
+}
+
+#[test]
+fn an_exported_hdr_clip_is_tone_mapped_to_the_same_sdr_colour() {
+    let pixel = exported_centre_pixel("hdr10_pq.mkv", |_| {});
+    assert_pixel_near(pixel, [200, 60, 40], 10, "an HDR clip");
+}
+
+#[test]
+fn exported_sd_and_full_range_clips_keep_their_colour_in_rec709() {
+    // 601 SD and full-range HD are converted to the Rec.709 limited range the export is tagged
+    // with: without it the player would read their YUV with the wrong matrix or range.
+    assert_pixel_near(
+        exported_centre_pixel("sd601_untagged.mkv", |_| {}),
+        [200, 60, 40],
+        8,
+        "an SD 601 clip",
+    );
+    assert_pixel_near(
+        exported_centre_pixel("hd709_fullrange.mkv", |_| {}),
+        [200, 60, 40],
+        8,
+        "a full-range clip",
+    );
+}
+
+#[test]
+fn an_export_says_it_is_rec709_limited_range() {
+    for fixture in ["sd601_untagged.mkv", "hd709_untagged.mkv", "hdr10_pq.mkv"] {
+        let output = exported_file(fixture);
+        let info = avbridge::probe(&output).expect("the export probes");
+        let _ = std::fs::remove_file(&output);
+        let color = info.color.expect("a video export");
+        assert_eq!(color.space, 1, "{fixture}: the matrix (AVCOL_SPC_BT709)");
+        assert_eq!(color.primaries, 1, "{fixture}: the primaries");
+        assert_eq!(color.transfer, 1, "{fixture}: the transfer");
+        assert!(!color.full_range, "{fixture}: limited range");
+        assert_eq!(color.bit_depth, 8, "{fixture}");
+    }
+}
+
+#[test]
+fn hdr_clips_are_tone_mapped_inside_a_multi_layer_export_too() {
+    let pixel = exported_centre_pixel_on_tracks("hdr10_pq.mkv", 2, |_| {});
+    assert_pixel_near(pixel, [200, 60, 40], 12, "stacked HDR layers");
+}
+
+#[test]
+fn a_clip_set_to_treat_as_sdr_keeps_the_old_washed_out_look() {
+    let pixel = exported_centre_pixel("hdr10_pq.mkv", |asset| {
+        asset.hdr_handling = crate::HdrHandling::TreatAsSdr;
+    });
+    // Not converted: the PQ code values read as SDR, far from the colour (the escape hatch).
+    assert!(
+        (i32::from(pixel[0]) - 200).abs() > 40,
+        "treated as SDR it should look different, got {pixel:?}"
+    );
 }

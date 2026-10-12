@@ -34,6 +34,16 @@
    "Specified pixel format yuv420p is not supported by the h264_qsv encoder", wants nv12/qsv
    instead) — every other candidate here accepts yuv420p. See open_video_encoder's doc comment
    in bridge_internal.h for the full story. */
+/* Every export is Rec.709 SDR with limited range (the segments are converted to it, see
+   `sdr_normalize_filter` and `hdr_tone_map_filter` in core): say so, so players do not have to
+   guess a matrix from the picture size. */
+static void tag_rec709(AVCodecContext *ctx) {
+    ctx->colorspace = AVCOL_SPC_BT709;
+    ctx->color_primaries = AVCOL_PRI_BT709;
+    ctx->color_trc = AVCOL_TRC_BT709;
+    ctx->color_range = AVCOL_RANGE_MPEG;
+}
+
 static enum AVPixelFormat pix_fmt_for_encoder_name(const char *encoder_name) {
     if (strcmp(encoder_name, "h264_qsv") == 0) {
         return AV_PIX_FMT_NV12;
@@ -97,6 +107,7 @@ static AVCodecContext *try_open_encoder(const char *encoder_name, int canvas_wid
     ctx->pix_fmt = pix_fmt_for_encoder_name(encoder_name);
     ctx->time_base = av_inv_q(canvas_fps);
     ctx->framerate = canvas_fps;
+    tag_rec709(ctx);
     ctx->gop_size = (canvas_fps.num / canvas_fps.den) * KEYFRAME_INTERVAL_SECS;
     ctx->max_b_frames = 0;
     ctx->bit_rate = canvas_bit_rate_bps;
@@ -158,6 +169,7 @@ static AVCodecContext *try_open_vaapi_device(const char *device_path, int canvas
     ctx->width = canvas_width;
     ctx->height = canvas_height;
     ctx->pix_fmt = AV_PIX_FMT_VAAPI;
+    tag_rec709(ctx);
     ctx->time_base = av_inv_q(canvas_fps);
     ctx->framerate = canvas_fps;
     ctx->gop_size = (canvas_fps.num / canvas_fps.den) * KEYFRAME_INTERVAL_SECS;

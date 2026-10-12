@@ -17,6 +17,7 @@
 #include "bridge_internal.h"
 
 #include <libavcodec/avcodec.h>
+#include <libavfilter/avfilter.h>
 #include <libavfilter/buffersink.h>
 #include <libavformat/avformat.h>
 #include <libavutil/opt.h>
@@ -25,13 +26,37 @@
 /* Scales one decoded frame into `scaled_frame` (already sized/formatted for the encoder,
    allocated once by the caller) and stamps a sequential pts — proxies don't need to preserve
    the source's original timestamps, just monotonically increasing ones for the encoder/muxer. */
-static int scale_video_frame(struct SwsContext *sws_ctx, AVFrame *src_frame, AVFrame *scaled_frame,
-                             int64_t *next_pts) {
+/* The HDR to SDR conversion of a proxy of an HDR source (see avbridge_tone_map_graph). */
+typedef struct {
+    AVFilterGraph *graph;
+    AVFilterContext *source;
+    AVFilterContext *sink;
+    int key[7];
+    const AVCodecParameters *stream;
+} ProxyToneMap;
+
+static int scale_video_frame(struct SwsContext *sws_ctx, ProxyToneMap *tone_map, AVFrame *src_frame,
+                             AVFrame *scaled_frame, int64_t *next_pts) {
     int ret = av_frame_make_writable(scaled_frame);
     if (ret < 0) return ret;
 
-    ret = sws_scale_frame(sws_ctx, scaled_frame, src_frame);
-    if (ret < 0) return ret;
+    avbridge_fill_missing_color(src_frame, tone_map->stream);
+    if (avbridge_frame_is_hdr(src_frame)) {
+        /* Tone mapped at the proxy size, so a proxy of HDR footage is plain SDR (Rec.709). */
+        ret = avbridge_tone_map_graph(&tone_map->graph, &tone_map->source, &tone_map->sink,
+                                      tone_map->key, src_frame, scaled_frame->width,
+                                      scaled_frame->height, "yuv420p");
+        if (ret < 0) return ret;
+        AVFrame *mapped = av_frame_alloc();
+        if (!mapped) return AVERROR(ENOMEM);
+        ret = avbridge_tone_map_run(tone_map->source, tone_map->sink, src_frame, mapped);
+        if (ret >= 0) ret = av_frame_copy(scaled_frame, mapped);
+        av_frame_free(&mapped);
+        if (ret < 0) return ret;
+    } else {
+        ret = sws_scale_frame(sws_ctx, scaled_frame, src_frame);
+        if (ret < 0) return ret;
+    }
 
     scaled_frame->pts = (*next_pts)++;
     return 0;
@@ -42,8 +67,8 @@ static int scale_video_frame(struct SwsContext *sws_ctx, AVFrame *src_frame, AVF
    AAC encoder with timestamps going backwards. */
 static void stamp_in_samples(AVFrame *frame, const AVCodecContext *decoder) {
     if (frame->pts != AV_NOPTS_VALUE && decoder->pkt_timebase.num > 0 && frame->sample_rate > 0) {
-        frame->pts = av_rescale_q(frame->pts, decoder->pkt_timebase,
-                                  (AVRational){1, frame->sample_rate});
+        frame->pts =
+            av_rescale_q(frame->pts, decoder->pkt_timebase, (AVRational){1, frame->sample_rate});
     }
 }
 
@@ -55,6 +80,7 @@ ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path, i
     AVCodecContext *adec_ctx = NULL;
     AVCodecContext *aenc_ctx = NULL;
     struct SwsContext *sws_ctx = NULL;
+    ProxyToneMap tone_map = {0};
     AudioFilterChain achain = {0};
     AVPacket *pkt = NULL;
     AVFrame *dec_frame = NULL;
@@ -143,11 +169,23 @@ ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path, i
         venc_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
         /* The proxy keeps the source's YUV values, so it must say which matrix they use: a 480p
            proxy of HD footage would otherwise be read as BT.601 (the rule for untagged SD). */
-        venc_ctx->colorspace = avbridge_resolve_colorspace_for(vdec_ctx->colorspace, src_w, src_h);
-        venc_ctx->color_range = vdec_ctx->color_range == AVCOL_RANGE_JPEG ? AVCOL_RANGE_JPEG
-                                                                           : AVCOL_RANGE_MPEG;
-        venc_ctx->color_primaries = vdec_ctx->color_primaries;
-        venc_ctx->color_trc = vdec_ctx->color_trc;
+        tone_map.stream = in_ctx->streams[video_in_index]->codecpar;
+        int hdr_source = tone_map.stream->color_trc == AVCOL_TRC_SMPTE2084 ||
+                         tone_map.stream->color_trc == AVCOL_TRC_ARIB_STD_B67;
+        if (hdr_source) {
+            /* An HDR source becomes an SDR proxy (tone mapped in scale_video_frame). */
+            venc_ctx->colorspace = AVCOL_SPC_BT709;
+            venc_ctx->color_range = AVCOL_RANGE_MPEG;
+            venc_ctx->color_primaries = AVCOL_PRI_BT709;
+            venc_ctx->color_trc = AVCOL_TRC_BT709;
+        } else {
+            venc_ctx->colorspace =
+                avbridge_resolve_colorspace_for(vdec_ctx->colorspace, src_w, src_h);
+            venc_ctx->color_range =
+                vdec_ctx->color_range == AVCOL_RANGE_JPEG ? AVCOL_RANGE_JPEG : AVCOL_RANGE_MPEG;
+            venc_ctx->color_primaries = vdec_ctx->color_primaries;
+            venc_ctx->color_trc = vdec_ctx->color_trc;
+        }
         AVRational frame_rate = in_ctx->streams[video_in_index]->avg_frame_rate;
         if (frame_rate.num <= 0 || frame_rate.den <= 0) {
             frame_rate = (AVRational){30, 1};
@@ -314,7 +352,8 @@ ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path, i
                     status = PROXY_ERR_PIPELINE;
                     goto cleanup_output_io;
                 }
-                if (scale_video_frame(sws_ctx, dec_frame, scaled_frame, &next_video_pts) < 0 ||
+                if (scale_video_frame(sws_ctx, &tone_map, dec_frame, scaled_frame,
+                                      &next_video_pts) < 0 ||
                     encode_write_packet(out_ctx, venc_ctx, out_stream, scaled_frame, enc_pkt) < 0) {
                     status = PROXY_ERR_PIPELINE;
                     goto cleanup_output_io;
@@ -353,7 +392,8 @@ ProxyStatus avbridge_generate_proxy(const char *in_path, const char *out_path, i
         AVStream *out_stream = out_ctx->streams[video_out_index];
         avcodec_send_packet(vdec_ctx, NULL);
         while (avcodec_receive_frame(vdec_ctx, dec_frame) >= 0) {
-            if (scale_video_frame(sws_ctx, dec_frame, scaled_frame, &next_video_pts) < 0 ||
+            if (scale_video_frame(sws_ctx, &tone_map, dec_frame, scaled_frame, &next_video_pts) <
+                    0 ||
                 encode_write_packet(out_ctx, venc_ctx, out_stream, scaled_frame, enc_pkt) < 0) {
                 status = PROXY_ERR_PIPELINE;
                 goto cleanup_output_io;
@@ -400,6 +440,7 @@ cleanup_output_io:
         avio_closep(&out_ctx->pb);
     }
 cleanup:
+    avfilter_graph_free(&tone_map.graph);
     if (sws_ctx) {
         sws_freeContext(sws_ctx);
     }

@@ -100,6 +100,13 @@ typedef enum {
    no filtering. Equivalent to `ffmpeg -i in_path -c copy out_path`. */
 RemuxStatus avbridge_remux_copy(const char *in_path, const char *out_path);
 
+/* Copies one audio stream of in_path (by container stream index, as the probe lists them) to
+   out_path without decoding: a standalone audio file holding just that track. The output format
+   follows out_path's extension (use .mka, which holds any codec). REMUX_ERR_NEW_STREAM when the
+   index is not an audio stream. */
+RemuxStatus avbridge_remux_audio_stream(const char *in_path, const char *out_path,
+                                        int stream_index);
+
 typedef enum {
     ENCODE_OK = 0,
     ENCODE_ERR_OPEN_INPUT = 1,

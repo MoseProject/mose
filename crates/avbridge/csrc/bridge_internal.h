@@ -176,6 +176,28 @@ enum AVColorSpace avbridge_resolve_colorspace(const AVFrame *frame);
 /* The same rule for a stream: its tagged matrix (may be unspecified) and picture size. */
 enum AVColorSpace avbridge_resolve_colorspace_for(enum AVColorSpace tagged, int width, int height);
 
+/* Fills the colour tags `frame` leaves unspecified from the stream's own: some decoders (ProRes)
+   stamp every frame "unspecified" whatever the container says. */
+void avbridge_fill_missing_color(AVFrame *frame, const AVCodecParameters *stream);
+
+/* Whether `frame` is HDR video (PQ or HLG) that has to be converted to SDR before display. */
+int avbridge_frame_is_hdr(const AVFrame *frame);
+
+/* Makes sure `*graph` is an HDR to SDR conversion for frames shaped like `frame`, scaled to
+   width x height and ending in pixel format `output_format` ("rgba", "yuv420p"): scale first (the
+   conversion is float maths per pixel, so it runs at the output size), then the same PQ/HLG to
+   Rec.709 chain the export uses (`hdr_tone_map_filter` in core, keep both in step). `key` (seven
+   ints owned by the caller) remembers what the graph was built for; a different frame shape
+   rebuilds it. Returns 0 or a negative AVERROR. */
+int avbridge_tone_map_graph(AVFilterGraph **graph, AVFilterContext **source, AVFilterContext **sink,
+                            int key[7], const AVFrame *frame, int width, int height,
+                            const char *output_format);
+
+/* Pushes `frame` (not consumed) through a graph from avbridge_tone_map_graph and pulls the
+   converted frame into `result`. Returns 0 or a negative AVERROR. */
+int avbridge_tone_map_run(AVFilterContext *source, AVFilterContext *sink, const AVFrame *frame,
+                          AVFrame *result);
+
 /* Whether `frame` holds full-range (JPEG) YUV: tagged so, or one of the legacy yuvj formats. */
 int avbridge_frame_is_full_range(const AVFrame *frame);
 int init_audio_filter_chain(AVCodecContext *dec_ctx, const AVCodec *encoder,
