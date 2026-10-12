@@ -232,6 +232,15 @@ pub struct ExportJob {
     pub audio_segments: Vec<AudioSegment>,
     pub canvas: Canvas,
     pub target_lufs: f32,
+    /// Whether a single untouched H.264 clip may be exported by the lossless cut. False when the
+    /// export asked for a specific bitrate. `#[serde(default = ...)]` keeps older saved queues
+    /// on the established behavior.
+    #[serde(default = "default_allow_copy")]
+    pub allow_copy: bool,
     pub output_path: String,
     pub status: ExportJobStatus,
+}
+
+fn default_allow_copy() -> bool {
+    true
 }

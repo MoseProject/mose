@@ -174,6 +174,11 @@ const ERROR_CODES: Record<string, TextKey> = {
   pathMissing: "pathMissing",
   outputIsSource: "exportOutputIsSource",
   outputInQueue: "exportOutputInQueue",
+  noFolder: "exportErrNoFolder",
+  folderMissing: "exportErrFolderMissing",
+  noName: "exportErrNoName",
+  invalidBitrate: "exportBitrateRange",
+  invalidResolution: "exportErrResolution",
   projectMissing: "projectMissing",
   projectNameEmpty: "projectNameEmpty",
 };

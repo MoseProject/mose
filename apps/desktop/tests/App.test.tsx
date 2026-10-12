@@ -60,6 +60,9 @@ vi.mock("../src/ipc", () => {
       saveProject: vi.fn().mockResolvedValue(undefined),
       quitApp: vi.fn().mockResolvedValue(undefined),
       controlReady: vi.fn().mockResolvedValue(undefined),
+      startExport: vi.fn().mockResolvedValue(1),
+      exportCanvas: vi.fn().mockRejectedValue("empty"),
+      getPrefs: vi.fn().mockResolvedValue({ outputFolder: "" }),
     },
     onCloseRequested: vi.fn(
       (handler: (request: { dirty: boolean; exporting: boolean }) => void) => {
@@ -69,7 +72,6 @@ vi.mock("../src/ipc", () => {
     ),
     // The control channel's listener; nothing is sent to it in these tests.
     onControlRequest: vi.fn().mockResolvedValue(() => {}),
-    exportActiveSequence: vi.fn().mockResolvedValue(undefined),
   };
 });
 vi.mock("../src/store", async (importOriginal) => {
@@ -80,7 +82,7 @@ vi.mock("../src/store", async (importOriginal) => {
 });
 
 const { App } = await import("../src/App");
-const { api, exportActiveSequence } = await import("../src/ipc");
+const { api } = await import("../src/ipc");
 const { connect } = await import("../src/store");
 
 const session = (overrides: Record<string, unknown> = {}): SessionView => {
@@ -250,7 +252,7 @@ describe("app shell", () => {
       fireEvent.click(screen.getByTestId("export"));
       expect(uiStore.get().exportDialogOpen).toBe(true);
       expect(await screen.findByTestId("export-dialog")).toBeTruthy();
-      expect(exportActiveSequence).not.toHaveBeenCalled();
+      expect(api.startExport).not.toHaveBeenCalled();
     });
   });
 

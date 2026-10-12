@@ -61,6 +61,58 @@ impl Default for ExportSettings {
         }
     }
 }
+/// What the export dialog asks beyond the sequence's own settings: a video bitrate and a
+/// ceiling for the picture height. Both `None` keeps the source-matched defaults.
+#[derive(Debug, Clone, Copy, Default, PartialEq, serde::Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ExportOptions {
+    pub bitrate_mbps: Option<f32>,
+    pub max_height: Option<u32>,
+}
+
+impl ExportOptions {
+    pub const MIN_BITRATE_MBPS: f32 = 0.5;
+    pub const MAX_BITRATE_MBPS: f32 = 200.0;
+
+    /// Rejects a bitrate or height the encoder cannot honour.
+    pub fn validate(&self) -> Result<(), String> {
+        if let Some(mbps) = self.bitrate_mbps {
+            if !mbps.is_finite()
+                || !(Self::MIN_BITRATE_MBPS..=Self::MAX_BITRATE_MBPS).contains(&mbps)
+            {
+                return Err("invalidBitrate".to_string());
+            }
+        }
+        if self.max_height.is_some_and(|height| height < 144) {
+            return Err("invalidResolution".to_string());
+        }
+        Ok(())
+    }
+
+    /// `canvas` with the options applied. A lower height scales the width along (kept even for
+    /// the encoder) and, unless a bitrate was asked for, the bitrate with the pixel count. The
+    /// height never goes above the canvas's own.
+    pub fn apply(&self, canvas: Canvas) -> Canvas {
+        let mut out = canvas;
+        if let Some(height) = self.max_height {
+            if height < canvas.height {
+                let width = (u64::from(canvas.width) * u64::from(height) / u64::from(canvas.height))
+                    as u32
+                    & !1;
+                out.width = width.max(2);
+                out.height = height & !1;
+                let ratio = f64::from(out.width) * f64::from(out.height)
+                    / (f64::from(canvas.width) * f64::from(canvas.height));
+                out.bit_rate_bps = ((canvas.bit_rate_bps as f64) * ratio) as i64;
+            }
+        }
+        if let Some(mbps) = self.bitrate_mbps {
+            out.bit_rate_bps = (f64::from(mbps) * 1_000_000.0) as i64;
+        }
+        out
+    }
+}
+
 pub struct PreparedExport {
     pub track_segments: Vec<Vec<ClipSegment>>,
     pub audio_segments: Vec<AudioSegment>,
@@ -69,15 +121,28 @@ pub struct PreparedExport {
     pub privacy_blur_segments: Vec<PrivacyBlurSegment>,
     pub canvas: Canvas,
     pub target_lufs: f32,
+    pub allow_copy: bool,
 }
+#[cfg(test)]
 pub fn prepare_export(project: &Project) -> Result<PreparedExport, String> {
+    prepare_export_with(project, ExportOptions::default())
+}
+pub fn prepare_export_with(
+    project: &Project,
+    options: ExportOptions,
+) -> Result<PreparedExport, String> {
+    options.validate()?;
     let sequence = project.active_sequence();
     let (track_segments, canvas) =
         avcore::resolve_timeline_segments_multi(sequence, &project.media_library)
             .map_err(|e| e.to_string())?;
     let audio_segments = avcore::resolve_audio_segments(sequence, &project.media_library)
         .map_err(|e| e.to_string())?;
-    let canvas = avcore::apply_export_aspect_ratio(canvas, sequence.export_settings.aspect_ratio);
+    let base = avcore::apply_export_aspect_ratio(canvas, sequence.export_settings.aspect_ratio);
+    let canvas = options.apply(base);
+    let unchanged = canvas.width == base.width
+        && canvas.height == base.height
+        && canvas.bit_rate_bps == base.bit_rate_bps;
     Ok(PreparedExport {
         text_segments: avcore::resolve_text_segments(sequence, canvas.width, canvas.height),
         shape_segments: avcore::resolve_shape_segments(sequence, canvas.width, canvas.height),
@@ -86,6 +151,7 @@ pub fn prepare_export(project: &Project) -> Result<PreparedExport, String> {
         audio_segments,
         canvas,
         target_lufs: sequence.export_settings.target_lufs,
+        allow_copy: unchanged,
     })
 }
 pub struct ExportQueue {
@@ -201,6 +267,7 @@ impl ExportQueue {
             audio_segments: prepared.audio_segments,
             canvas: prepared.canvas,
             target_lufs: prepared.target_lufs,
+            allow_copy: prepared.allow_copy,
             output_path: output.display().to_string(),
             status: ExportJobStatus::Queued,
         });
@@ -374,7 +441,7 @@ impl ExportQueue {
                 };
                 let mut last = 0;
                 let started_at = Instant::now();
-                let result = avcore::render_export_job_multi_with_audio(
+                let result = avcore::render_export_job_multi_with_options(
                     &tracks,
                     &job.audio_segments,
                     job.canvas,
@@ -384,6 +451,7 @@ impl ExportQueue {
                     &job.text_segments,
                     &job.shape_segments,
                     &job.privacy_blur_segments,
+                    job.allow_copy,
                     control.cancel_flag(),
                     |percent| {
                         if percent != last {
