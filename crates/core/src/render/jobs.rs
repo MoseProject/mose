@@ -275,24 +275,60 @@ pub fn render_export_job_multi_with_audio(
     shape_segments: &[avbridge::ShapeSegment],
     privacy_blur_segments: &[PrivacyBlurSegment],
     cancel: &AtomicBool,
-    mut on_progress: impl FnMut(u8),
+    on_progress: impl FnMut(u8),
 ) -> Result<RenderOutcome, RenderError> {
-    validate_timeline_segments(track_segments, canvas, target_lufs)?;
-    validate_text_segments(text_segments, canvas)?;
-    validate_audio_segments(audio_segments)?;
-    if let Some(done) = try_lossless_cut(
+    render_export_job_multi_with_options(
         track_segments,
         audio_segments,
         canvas,
         output,
         target_lufs,
+        gpu_encoder,
         text_segments,
         shape_segments,
         privacy_blur_segments,
+        true,
         cancel,
-        &mut on_progress,
-    ) {
-        return done;
+        on_progress,
+    )
+}
+
+/// [`render_export_job_multi_with_audio`] with a say on the lossless cut: `allow_copy` false
+/// always re-encodes, which an export that asks for a specific bitrate needs (a copy keeps the
+/// source's own bits and would ignore it).
+#[allow(clippy::too_many_arguments)]
+pub fn render_export_job_multi_with_options(
+    track_segments: &[Vec<avbridge::ClipSegment>],
+    audio_segments: &[avbridge::AudioSegment],
+    canvas: Canvas,
+    output: &Path,
+    target_lufs: f32,
+    gpu_encoder: avbridge::GpuEncoderPreference,
+    text_segments: &[TextSegment],
+    shape_segments: &[avbridge::ShapeSegment],
+    privacy_blur_segments: &[PrivacyBlurSegment],
+    allow_copy: bool,
+    cancel: &AtomicBool,
+    mut on_progress: impl FnMut(u8),
+) -> Result<RenderOutcome, RenderError> {
+    validate_timeline_segments(track_segments, canvas, target_lufs)?;
+    validate_text_segments(text_segments, canvas)?;
+    validate_audio_segments(audio_segments)?;
+    if allow_copy {
+        if let Some(done) = try_lossless_cut(
+            track_segments,
+            audio_segments,
+            canvas,
+            output,
+            target_lufs,
+            text_segments,
+            shape_segments,
+            privacy_blur_segments,
+            cancel,
+            &mut on_progress,
+        ) {
+            return done;
+        }
     }
     if track_segments.len() == 1 {
         let outcome = render_export_job(

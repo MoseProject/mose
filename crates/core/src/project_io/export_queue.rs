@@ -175,6 +175,7 @@ mod tests {
                 bit_rate_bps: 1,
             },
             target_lufs: -14.0,
+            allow_copy: true,
             output_path: String::new(),
             status,
         }
