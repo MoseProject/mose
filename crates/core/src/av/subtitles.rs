@@ -34,11 +34,7 @@ pub fn export_srt(timeline: &Timeline) -> String {
         .flat_map(|track| track.text_clips.iter())
         .filter(|clip| !clip.text.trim().is_empty())
         .collect();
-    clips.sort_by(|a, b| {
-        a.start_secs
-            .partial_cmp(&b.start_secs)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    clips.sort_by(|a, b| a.start_secs.total_cmp(&b.start_secs));
 
     let mut out = String::new();
     for (index, clip) in clips.iter().enumerate() {
@@ -46,12 +42,25 @@ pub fn export_srt(timeline: &Timeline) -> String {
         out.push('\n');
         out.push_str(&format_srt_timestamp(clip.start_secs));
         out.push_str(" --> ");
-        out.push_str(&format_srt_timestamp(clip.start_secs + clip.duration_secs));
+        // Never ends before it starts, whatever duration the clip holds.
+        let end_secs = (clip.start_secs + clip.duration_secs).max(clip.start_secs);
+        out.push_str(&format_srt_timestamp(end_secs));
         out.push('\n');
-        out.push_str(&clip.text);
+        out.push_str(&srt_text(&clip.text));
         out.push_str("\n\n");
     }
     out
+}
+
+/// A caption's text as an SRT entry body: a blank line ends an entry in the format, so blank
+/// lines inside the text are dropped (the line breaks around them stay), and Windows line endings
+/// become plain ones.
+fn srt_text(text: &str) -> String {
+    text.lines()
+        .map(str::trim_end)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Formats seconds as SRT's `HH:MM:SS,mmm` timestamp. Negative input clamps to zero — a
