@@ -158,38 +158,34 @@ describe("import failures and media commands", () => {
   });
 });
 
-describe("export helper", () => {
-  it("does nothing when the save dialog is dismissed", async () => {
-    invoke.mockResolvedValueOnce(null);
-    await ipc.exportActiveSequence(() => {
-      return true;
+describe("export commands", () => {
+  it("resolve the target of a folder and a name", async () => {
+    invoke.mockResolvedValueOnce({ path: "D:/out/a.mp4", exists: false });
+    await expect(ipc.api.exportTarget("D:/out", "a")).resolves.toEqual({
+      path: "D:/out/a.mp4",
+      exists: false,
     });
-    expect(invoke).toHaveBeenCalledTimes(1);
-    expect(invoke).toHaveBeenCalledWith("pick_export_path");
+    expect(invoke).toHaveBeenLastCalledWith("export_target", { folder: "D:/out", fileName: "a" });
   });
 
-  it("starts a plain export for a new file", async () => {
-    invoke.mockResolvedValueOnce({ path: "a.mp4", exists: false });
-    const confirm = vi.fn(() => {
-      return true;
+  it("send the options along with the start, or null without them", async () => {
+    await ipc.api.startExport("a.mp4", true, { bitrateMbps: 8, maxHeight: 720 });
+    expect(invoke).toHaveBeenLastCalledWith("start_export", {
+      path: "a.mp4",
+      rename: true,
+      options: { bitrateMbps: 8, maxHeight: 720 },
     });
-    await ipc.exportActiveSequence(confirm);
-    expect(confirm).not.toHaveBeenCalled();
-    expect(invoke).toHaveBeenLastCalledWith("start_export", { path: "a.mp4", rename: false });
+    await ipc.api.startExport("a.mp4", false);
+    expect(invoke).toHaveBeenLastCalledWith("start_export", {
+      path: "a.mp4",
+      rename: false,
+      options: null,
+    });
   });
 
-  it("overwrites an existing file only after confirmation, otherwise renames", async () => {
-    invoke.mockResolvedValueOnce({ path: "a.mp4", exists: true });
-    await ipc.exportActiveSequence(() => {
-      return true;
-    });
-    expect(invoke).toHaveBeenLastCalledWith("start_export", { path: "a.mp4", rename: false });
-
-    invoke.mockResolvedValueOnce({ path: "a.mp4", exists: true });
-    await ipc.exportActiveSequence(() => {
-      return false;
-    });
-    expect(invoke).toHaveBeenLastCalledWith("start_export", { path: "a.mp4", rename: true });
+  it("ask the canvas of an aspect ratio", async () => {
+    await ipc.api.exportCanvas("Portrait");
+    expect(invoke).toHaveBeenLastCalledWith("export_canvas", { aspectRatio: "Portrait" });
   });
 });
 
