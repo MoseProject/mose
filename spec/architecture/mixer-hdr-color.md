@@ -9,6 +9,31 @@ often HEVC or AV1, often 10-bit HDR (BT.2020, PQ) on a Windows HDR display, ofte
 tracks (game, microphone, chat) in one file. Each slice below is justified against that footage
 before any broader editor-parity argument.
 
+## Status (2026-10-12)
+
+| slice | state |
+|---|---|
+| CM-00 SDR decode matrix | done: preview and proxies use the tagged (or size-based) matrix and range, tested against five generated clips |
+| CM-01 colour metadata | done: probe, `MediaAsset::streams`, project format 5 (v3 and v4 files still open, golden files pin both), HDR mark in the library |
+| CM-02 HDR to SDR | done for preview, proxies and export (single and layered); no UI to choose the handling yet (the field exists, default Auto) |
+| CM-03 output tagging | done: every export is tagged Rec.709 limited range and SD or full-range sources are converted to it |
+| MX-01 multi-stream audio | done as copies: each extra track is copied out as its own audio asset (see below); no per-clip stream selector |
+| CM-04, CM-05, CM-06, MX-00, MX-02, MX-03, MX-04 | not started |
+
+Decisions taken while building:
+
+- Tone curve: **Mobius with a knee at half of SDR white**, not Hable. Measured on a 200,60,40 colour
+  stored as PQ: Hable gave 129,39,25 (darkened), Mobius 199,60,39, and a 1000-nit white still maps to 255.
+- Preview cost of HDR: 1080p native 27 ms per frame against 4.8 ms for SDR (4 vCPU), paid at the
+  monitor size because the scale runs first; proxies of HDR are SDR so scrubbing never pays it.
+- Multi-stream: instead of threading a stream index through the waveform, loudness, preview and
+  export code (four C pipelines), each extra track is copied out without decoding (`avbridge_remux_audio_stream`)
+  into the project cache and imported as an ordinary audio asset that remembers its recording
+  (`MediaAsset::audio_stream`). A lost copy is made again when the project loads.
+- Found on the way, all fixed: proxies failed for FLAC, Opus and PCM audio in Matroska; a failed proxy
+  left a partial file that passed for a finished one; graph sources did not carry the decoder's matrix
+  and range, so full-range footage was exported with shifted colours.
+
 ## 1. Findings
 
 Everything here was read from the code or measured in the sandbox (4 vCPU, no GPU). Anything that
