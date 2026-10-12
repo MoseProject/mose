@@ -763,7 +763,7 @@ impl Track {
     /// clip starting at or after `end_secs` shifts left by the removed span. Only `self.clips`
     /// is affected, matching [`Self::ripple_trim_start`]/[`Self::ripple_trim_end`]'s existing
     /// scope (text/shape overlay tracks are never video/audio tracks, so this never applies to
-    /// them). No-op (`false`, `next_clip_id` untouched) if `end_secs <= start_secs`.
+    /// them). No-op (`false`, `next_clip_id` untouched) if `end_secs <= start_secs`; also `false` when the range held nothing to remove or move.
     pub fn ripple_delete_range(
         &mut self,
         start_secs: f64,
@@ -774,6 +774,7 @@ impl Track {
             return false;
         }
 
+        let before = self.clips.clone();
         if self.split_clip_at(start_secs, *next_clip_id) {
             *next_clip_id += 1;
         }
@@ -792,7 +793,8 @@ impl Track {
                 clip.start_secs = (clip.start_secs - removed_span).max(0.0);
             }
         }
-        true
+        // A range with no clip in it and none after it changes nothing: no edit to report.
+        self.clips != before
     }
 
     /// Removes the timeline range `[start_secs, end_secs)` from this track and leaves the gap
@@ -803,6 +805,7 @@ impl Track {
         if !start_secs.is_finite() || !end_secs.is_finite() || end_secs <= start_secs {
             return false;
         }
+        let before = self.clips.clone();
         if self.split_clip_at(start_secs, *next_clip_id) {
             *next_clip_id += 1;
         }
@@ -814,7 +817,7 @@ impl Track {
             let c_end = c.start_secs + c.duration_secs();
             !(c.start_secs >= start_secs - EPSILON && c_end <= end_secs + EPSILON)
         });
-        true
+        self.clips != before
     }
 
     /// The position, in seconds, where this track's last clip ends. `0.0` for an empty track —

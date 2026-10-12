@@ -920,7 +920,7 @@ impl ClipInstance {
     /// `max_source_out_secs` is known — the source asset's own duration) `source_out_secs`
     /// past the end of the actual source media.
     pub fn slip(&mut self, delta_secs: f64, max_source_out_secs: Option<f64>) -> bool {
-        if !delta_secs.is_finite() {
+        if !delta_secs.is_finite() || delta_secs == 0.0 {
             return false;
         }
         let new_source_in_secs = self.source_in_secs + delta_secs;
