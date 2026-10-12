@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../src/i18n";
+import { withAllSections } from "../../support/inspectorTabs";
 import type { OverlayCatalog, ShapeClip, ShapeKind } from "../../../src/types";
 
 vi.mock("../../../src/ipc", () => {
@@ -88,7 +89,7 @@ afterEach(() => {
 });
 
 async function loaded(overrides: Partial<ShapeClip> = {}) {
-  const view = render(<ShapeInspector clip={clip(overrides)} />);
+  const view = render(withAllSections(<ShapeInspector clip={clip(overrides)} />));
   await waitFor(() => {
     return expect((control(t("shapeKind"), "select") as HTMLSelectElement).disabled).toBe(false);
   });
@@ -97,7 +98,7 @@ async function loaded(overrides: Partial<ShapeClip> = {}) {
 
 describe("shape inspector", () => {
   it("keeps the shape picker disabled until the catalog loads", async () => {
-    render(<ShapeInspector clip={clip()} />);
+    render(withAllSections(<ShapeInspector clip={clip()} />));
     expect((control(t("shapeKind"), "select") as HTMLSelectElement).disabled).toBe(true);
     await waitFor(() => {
       return expect((control(t("shapeKind"), "select") as HTMLSelectElement).disabled).toBe(false);

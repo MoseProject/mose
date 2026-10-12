@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { detectLocale, setLocale, t } from "../../src/i18n";
+import { detectLocale, loadLocale, setLocale, t } from "../../src/i18n";
+
+await loadLocale("pt-BR");
+await loadLocale("en");
 import type { PrefsView, UpdateCheckEvent } from "../../src/types";
 
 let emitUpdate: (event: UpdateCheckEvent) => void = () => {};

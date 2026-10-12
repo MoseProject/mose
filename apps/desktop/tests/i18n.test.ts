@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   formatTime,
   formatTimecode,
+  loadLocale,
   localeFromPrefs,
   localeSnapshot,
   setLocale,
@@ -10,6 +11,10 @@ import {
   t,
   type TextKey,
 } from "../src/i18n";
+
+// Only the language in use is loaded on its own; these tests switch between both.
+await loadLocale("en");
+await loadLocale("pt-BR");
 
 afterEach(() => {
   return setLocale("pt-BR");
@@ -100,5 +105,21 @@ describe("the document language", () => {
     expect(document.documentElement.lang).toBe("en");
     setLocale("pt-BR");
     expect(document.documentElement.lang).toBe("pt-BR");
+  });
+});
+
+describe("loading one language at a time", () => {
+  it("starts with the language of the machine only, and switches once the other has arrived", async () => {
+    vi.resetModules();
+    const fresh = await import("../src/i18n");
+    const first = fresh.localeSnapshot();
+    const other = first === "en" ? "pt-BR" : "en";
+    fresh.setLocale(other);
+    // Not switched yet: its texts are still on their way.
+    expect(fresh.localeSnapshot()).toBe(first);
+    await vi.waitFor(() => {
+      expect(fresh.localeSnapshot()).toBe(other);
+    });
+    expect(fresh.t("cancel")).not.toBe("cancel");
   });
 });

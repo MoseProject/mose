@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../src/i18n";
+import { withAllSections } from "../../support/inspectorTabs";
 import type { OverlayCatalog, TextClip } from "../../../src/types";
 
 vi.mock("../../../src/ipc", () => {
@@ -91,7 +92,7 @@ afterEach(() => {
 });
 
 async function loaded(overrides: Partial<TextClip> = {}) {
-  const view = render(<TextInspector clip={clip(overrides)} />);
+  const view = render(withAllSections(<TextInspector clip={clip(overrides)} />));
   await waitFor(() => {
     return expect((control(t("font"), "select") as HTMLSelectElement).disabled).toBe(false);
   });
@@ -100,7 +101,7 @@ async function loaded(overrides: Partial<TextClip> = {}) {
 
 describe("text inspector", () => {
   it("keeps the font picker disabled until the catalog loads", async () => {
-    render(<TextInspector clip={clip()} />);
+    render(withAllSections(<TextInspector clip={clip()} />));
     expect((control(t("font"), "select") as HTMLSelectElement).disabled).toBe(true);
     await waitFor(() => {
       return expect((control(t("font"), "select") as HTMLSelectElement).disabled).toBe(false);
