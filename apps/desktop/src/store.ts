@@ -115,6 +115,7 @@ export const previewStore = createStore<PreviewTick>({
   peakL: 0,
   peakR: 0,
   momentaryLufs: null,
+  renderingCompound: false,
 });
 export const exportsStore = createStore<ExportJobView[]>([]);
 export const layerTemplatesStore = createStore<LayerTemplate[]>([]);

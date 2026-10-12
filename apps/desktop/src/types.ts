@@ -503,6 +503,8 @@ export interface PreviewTick {
   peakR: number;
   /** Momentary loudness in LUFS while playing; null when silent or stopped. */
   momentaryLufs: number | null;
+  /** A compound clip is rendering in the background. */
+  renderingCompound: boolean;
 }
 
 export type ExportStatus =

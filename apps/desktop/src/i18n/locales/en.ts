@@ -29,6 +29,7 @@ export const en = {
   layerTransformResizeHint: "Drag to resize the layer — only visible on overlay tracks.",
   layerTransformAnimatedHint: "Position is animated — edit via the keyframe list.",
   previewEmpty: "Nothing on the timeline at this position",
+  previewRenderingCompound: "Rendering compound clip…",
   play: "Play",
   pause: "Pause",
   stepBack: "Previous frame",
