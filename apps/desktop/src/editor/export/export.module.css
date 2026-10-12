@@ -52,6 +52,10 @@
   color: var(--error);
   font-size: 11px;
 }
+/* A button beside a field is as tall as the field. */
+.dialog-field button {
+  padding-block: 2px;
+}
 .dialog-field input[type="text"] {
   flex: 1;
   min-width: 0;
