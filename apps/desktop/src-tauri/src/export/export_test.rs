@@ -26,6 +26,7 @@ fn job(id: u64, status: ExportJobStatus) -> ExportJob {
             bit_rate_bps: 1_000_000,
         },
         target_lufs: -14.0,
+        allow_copy: true,
         output_path: format!("out{id}.mp4"),
         status,
     }
@@ -474,4 +475,74 @@ fn finishing_updates_the_job_it_belongs_to_and_ignores_one_that_is_gone() {
         Err(avcore::RenderError::EmptyTimeline),
         report(),
     );
+}
+
+fn canvas_1080p() -> Canvas {
+    Canvas {
+        width: 1920,
+        height: 1080,
+        fps_num: 30,
+        fps_den: 1,
+        bit_rate_bps: 16_000_000,
+    }
+}
+
+#[test]
+fn no_options_leave_the_canvas_alone() {
+    let canvas = canvas_1080p();
+    let applied = ExportOptions::default().apply(canvas);
+    assert_eq!(
+        (applied.width, applied.height, applied.bit_rate_bps),
+        (1920, 1080, 16_000_000)
+    );
+}
+
+#[test]
+fn a_lower_height_scales_width_and_bitrate_with_the_pixels() {
+    let applied = ExportOptions {
+        bitrate_mbps: None,
+        max_height: Some(720),
+    }
+    .apply(canvas_1080p());
+    assert_eq!((applied.width, applied.height), (1280, 720));
+    assert_eq!(applied.bit_rate_bps, 7_111_111);
+}
+
+#[test]
+fn a_height_above_the_canvas_never_upscales() {
+    let applied = ExportOptions {
+        bitrate_mbps: None,
+        max_height: Some(2160),
+    }
+    .apply(canvas_1080p());
+    assert_eq!(
+        (applied.width, applied.height, applied.bit_rate_bps),
+        (1920, 1080, 16_000_000)
+    );
+}
+
+#[test]
+fn an_explicit_bitrate_wins_over_the_scaled_one() {
+    let applied = ExportOptions {
+        bitrate_mbps: Some(5.5),
+        max_height: Some(720),
+    }
+    .apply(canvas_1080p());
+    assert_eq!(applied.bit_rate_bps, 5_500_000);
+    assert_eq!(applied.height, 720);
+}
+
+#[test]
+fn bitrates_and_heights_outside_what_the_encoder_takes_are_refused() {
+    let bad = |bitrate_mbps, max_height| {
+        ExportOptions {
+            bitrate_mbps,
+            max_height,
+        }
+        .validate()
+    };
+    assert!(bad(Some(0.1), None).is_err());
+    assert!(bad(Some(f32::INFINITY), None).is_err());
+    assert!(bad(None, Some(100)).is_err());
+    assert!(bad(Some(8.0), Some(720)).is_ok());
 }
