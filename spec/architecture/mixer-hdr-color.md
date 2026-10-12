@@ -19,7 +19,8 @@ before any broader editor-parity argument.
 | CM-03 output tagging | done: every export is tagged Rec.709 limited range and SD or full-range sources are converted to it |
 | MX-01 multi-stream audio | done as copies: each extra track is copied out as its own audio asset (see below); no per-clip stream selector |
 | MX-02 track strip | done for fader and pan per track (project format 6, preview and export, a mixer button in the track header); no per-track meter and no master fader yet |
-| CM-04, CM-05, CM-06, MX-00, MX-03, MX-04 | not started |
+| CM-06 scopes | done: waveform, RGB parade, histogram and vectorscope with reference lines, a strip under the monitor, drawn on request from the frame on screen at a small size (the Tauri shell had no scopes at all before) |
+| CM-04, CM-05, MX-00, MX-03, MX-04 | not started |
 
 Decisions taken while building:
 
@@ -35,7 +36,9 @@ Decisions taken while building:
   centre changes nothing. One law in the model, the preview mixer and the export graph, pinned by a test.
   The export normalizes the whole mix to its loudness target, so a fader changes a track relative to the others
   there; the preview plays the absolute level.
-- Found on the way, all fixed: proxies failed for FLAC, Opus and PCM audio in Matroska; a failed proxy
+- Scopes are served as JPEG without chroma subsampling: the 4:2:0 encoding of a photo smeared a one-pixel
+  red parade trace to a dim blur (red read 40 instead of 255).
+- Found on the way, all fixed: proxies failed for FLAC, Opus and PCM audio in Matroska; ten protocol route tests that had not compiled since a module regrouping (now wired, with a guard test); a failed proxy
   left a partial file that passed for a finished one; graph sources did not carry the decoder's matrix
   and range, so full-range footage was exported with shifted colours.
 
