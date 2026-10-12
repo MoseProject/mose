@@ -101,6 +101,11 @@ make check     # cargo check --workspace --all-targets (fast compile-only loop)
 Single test: `cargo test -p core --test it probe_test::measure_loudness` or
 `cd apps/desktop && npx vitest run`.
 
+**Performance and UI probes**: `scripts/make-bench-video.sh` makes the benchmark clip; the export, import,
+decode, scrub and layer-count probes and the frontend scripts in `apps/desktop/tools/` (headless
+Chromium against a mocked backend: timings, screenshots, accessibility) are listed in
+[`spec/architecture/performance-2026-10.md`](spec/architecture/performance-2026-10.md).
+
 **Git hooks**: `npm install` (Node, one-time) sets up a husky pre-commit hook that runs
 `rustfmt`/`clang-format` on staged `.rs`/`.c`/`.h` files and `prettier` on staged `apps/desktop` `.ts`/`.tsx`/`.css` files via `lint-staged` — see `package.json`
 and `.clang-format`. Skipping `npm install` just means no hook runs; `make fmt`/`cargo fmt`
