@@ -362,6 +362,9 @@ export const ptBR = {
   exportErrNoFolder: "Escolha a pasta onde salvar.",
   exportErrFolderMissing: "Essa pasta não existe.",
   exportErrResolution: "A resolução é pequena demais.",
+  exportQualityAboveSource:
+    "Etapas acima do bitrate da origem ficam indisponíveis: só deixariam o arquivo maior.",
+  exportEmptyTimeline: "Adicione clipes à linha do tempo antes de exportar.",
   exportErrNoName: "Digite um nome de arquivo.",
   exportKeepsBitrate:
     "Igual à origem mantém o bitrate da fonte e, num corte simples, copia a imagem sem recodificar.",
