@@ -51,7 +51,7 @@ ifneq ($(shell sccache --version 2>/dev/null),)
   export RUSTC_WRAPPER ?= sccache
 endif
 
-.PHONY: coverage coverage-web build release test test-core test-bush test-xtask test-e2e test-e2e-headless bench bench-bush fmt fmt-check lint lint-c fmt-c graph docs check clean desktop-install lint-desktop lint-desktop-fix desktop-run desktop-dev desktop-build test-desktop
+.PHONY: coverage coverage-web build release test test-core test-bush test-xtask test-e2e test-e2e-headless bench bench-bush fmt fmt-check lint lint-c fmt-c graph docs check clean desktop-install lint-desktop lint-desktop-fix desktop-run desktop-dev desktop-build test-desktop test-visual
 
 # Debug build of the whole workspace (core, avbridge, ytbridge, desktop, xtask).
 build:
@@ -125,6 +125,12 @@ lint-desktop-fix:
 test-desktop:
 	cd apps/desktop && npm run typecheck && npm test
 	$(FAST_TEST_ENV) cargo test -p desktop --release
+
+# Screenshot, layout and motion tests of the frontend in headless Chromium against a mocked
+# backend (apps/desktop/visual, see its README). Baselines are Linux Chromium renders; run
+# `npm run test:visual:update` in apps/desktop after an intended visual change.
+test-visual:
+	cd apps/desktop && npm run test:visual
 
 # End-to-end tests (e2e/, pytest + selenium) driving the real built oca-desktop.exe through
 # tauri-driver's WebDriver bridge. Needs a build first via `make desktop-build` (this target
