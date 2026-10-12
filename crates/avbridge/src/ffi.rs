@@ -99,6 +99,19 @@ pub(crate) struct RawShapeSegment {
     pub(crate) filter_desc: *const c_char,
 }
 
+pub(crate) const PROBE_MAX_AUDIO_STREAMS: usize = 8;
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub(crate) struct RawAudioStream {
+    pub(crate) stream_index: c_int,
+    pub(crate) channels: c_int,
+    pub(crate) sample_rate_hz: c_int,
+    pub(crate) codec_name: [c_char; 32],
+    pub(crate) title: [c_char; 64],
+    pub(crate) language: [c_char; 16],
+}
+
 #[repr(C)]
 pub(crate) struct RawProbeInfo {
     pub(crate) has_video: c_int,
@@ -111,6 +124,14 @@ pub(crate) struct RawProbeInfo {
     pub(crate) fps_num: c_int,
     pub(crate) fps_den: c_int,
     pub(crate) sample_rate_hz: c_int,
+    pub(crate) pixel_format: c_int,
+    pub(crate) bit_depth: c_int,
+    pub(crate) color_space: c_int,
+    pub(crate) color_primaries: c_int,
+    pub(crate) color_transfer: c_int,
+    pub(crate) color_full_range: c_int,
+    pub(crate) audio_stream_count: c_int,
+    pub(crate) audio_streams: [RawAudioStream; PROBE_MAX_AUDIO_STREAMS],
 }
 
 #[repr(C)]

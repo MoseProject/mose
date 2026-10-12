@@ -19,6 +19,8 @@
 #include <string.h>
 
 #include <libavformat/avformat.h>
+#include <libavutil/dict.h>
+#include <libavutil/pixdesc.h>
 
 uint32_t avbridge_version(void) {
     return avformat_version();
@@ -36,12 +38,14 @@ ProbeStatus avbridge_probe(const char *path, ProbeInfo *out) {
 
     AVStream *video = NULL;
     AVStream *audio = NULL;
+    int audio_count = 0;
     for (unsigned int i = 0; i < fmt_ctx->nb_streams; i++) {
         AVStream *s = fmt_ctx->streams[i];
         if (!video && s->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
             video = s;
-        } else if (!audio && s->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
-            audio = s;
+        } else if (s->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+            if (!audio) audio = s;
+            audio_count++;
         }
     }
 
@@ -72,7 +76,42 @@ ProbeStatus avbridge_probe(const char *path, ProbeInfo *out) {
     }
     out->bit_rate = bit_rate > 0 ? bit_rate : 0;
 
+    out->pixel_format = -1;
+    {
+        int described = 0;
+        for (unsigned int i = 0; i < fmt_ctx->nb_streams && described < PROBE_MAX_AUDIO_STREAMS;
+             i++) {
+            AVStream *s = fmt_ctx->streams[i];
+            if (s->codecpar->codec_type != AVMEDIA_TYPE_AUDIO) continue;
+            out->audio_streams[described].stream_index = (int)i;
+            out->audio_streams[described].channels = s->codecpar->ch_layout.nb_channels;
+            out->audio_streams[described].sample_rate_hz = s->codecpar->sample_rate;
+            strncpy(out->audio_streams[described].codec_name,
+                    avcodec_get_name(s->codecpar->codec_id),
+                    sizeof(out->audio_streams[described].codec_name) - 1);
+            AVDictionaryEntry *title = av_dict_get(s->metadata, "title", NULL, 0);
+            if (title) {
+                strncpy(out->audio_streams[described].title, title->value,
+                        sizeof(out->audio_streams[described].title) - 1);
+            }
+            AVDictionaryEntry *language = av_dict_get(s->metadata, "language", NULL, 0);
+            if (language) {
+                strncpy(out->audio_streams[described].language, language->value,
+                        sizeof(out->audio_streams[described].language) - 1);
+            }
+            described++;
+        }
+        out->audio_stream_count = audio_count;
+    }
+
     if (video) {
+        out->pixel_format = stream->codecpar->format;
+        const AVPixFmtDescriptor *descriptor = av_pix_fmt_desc_get(stream->codecpar->format);
+        out->bit_depth = descriptor ? descriptor->comp[0].depth : 0;
+        out->color_space = stream->codecpar->color_space;
+        out->color_primaries = stream->codecpar->color_primaries;
+        out->color_transfer = stream->codecpar->color_trc;
+        out->color_full_range = stream->codecpar->color_range == AVCOL_RANGE_JPEG;
         out->width = stream->codecpar->width;
         out->height = stream->codecpar->height;
         AVRational fps = stream->avg_frame_rate.num ? stream->avg_frame_rate : stream->r_frame_rate;

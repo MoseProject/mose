@@ -17,7 +17,7 @@ use std::ffi::{CStr, CString, NulError};
 use std::os::raw::c_int;
 use std::path::Path;
 
-use crate::ffi::{avbridge_probe, RawProbeInfo};
+use crate::ffi::{avbridge_probe, RawAudioStream, RawProbeInfo, PROBE_MAX_AUDIO_STREAMS};
 
 /// What [`probe`] failed on.
 #[derive(Debug, thiserror::Error)]
@@ -66,6 +66,40 @@ pub struct ProbeInfo {
     pub fps: Option<f32>,
     /// `None` when [`Self::kind`] is [`StreamKind::Video`] or the rate is unreported.
     pub sample_rate_hz: Option<u32>,
+    /// How the video stream's pixels are meant to be read; `None` for audio-only files.
+    pub color: Option<ColorDescription>,
+    /// Every audio stream in stream order (at most eight are described).
+    pub audio_streams: Vec<AudioStreamInfo>,
+    /// How many audio streams the file has, which can exceed `audio_streams.len()`.
+    pub audio_stream_count: usize,
+}
+
+/// The colour description of a video stream, as FFmpeg's own enum numbers (`AVPixelFormat`,
+/// `AVColorSpace`, `AVColorPrimaries`, `AVColorTransferCharacteristic`); 2 means unspecified in
+/// the last three.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ColorDescription {
+    /// `-1` when unknown.
+    pub pixel_format: i32,
+    pub bit_depth: u32,
+    pub space: i32,
+    pub primaries: i32,
+    pub transfer: i32,
+    pub full_range: bool,
+}
+
+/// One audio stream of a file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AudioStreamInfo {
+    /// Index of the stream within the container.
+    pub stream_index: u32,
+    pub channels: u32,
+    pub sample_rate_hz: u32,
+    pub codec_name: String,
+    /// The stream's `title` tag (OBS names its tracks), empty when absent.
+    pub title: String,
+    /// The stream's `language` tag, empty when absent.
+    pub language: String,
 }
 
 /// Probes the media file at `path` for codec, resolution, fps, bitrate and duration.
@@ -86,6 +120,21 @@ pub fn probe(path: &Path) -> Result<ProbeInfo, ProbeError> {
         fps_num: 0,
         fps_den: 0,
         sample_rate_hz: 0,
+        pixel_format: -1,
+        bit_depth: 0,
+        color_space: 0,
+        color_primaries: 0,
+        color_transfer: 0,
+        color_full_range: 0,
+        audio_stream_count: 0,
+        audio_streams: [RawAudioStream {
+            stream_index: 0,
+            channels: 0,
+            sample_rate_hz: 0,
+            codec_name: [0; 32],
+            title: [0; 64],
+            language: [0; 16],
+        }; PROBE_MAX_AUDIO_STREAMS],
     };
 
     // SAFETY: c_path is a valid NUL-terminated C string for the duration of this call, and
@@ -118,6 +167,35 @@ pub fn probe(path: &Path) -> Result<ProbeInfo, ProbeError> {
             .then_some(raw.fps_num as f32 / raw.fps_den as f32),
         sample_rate_hz: (kind == StreamKind::Audio && raw.sample_rate_hz > 0)
             .then_some(raw.sample_rate_hz as u32),
+        color: (kind == StreamKind::Video).then_some(ColorDescription {
+            pixel_format: raw.pixel_format,
+            bit_depth: raw.bit_depth.max(0) as u32,
+            space: raw.color_space,
+            primaries: raw.color_primaries,
+            transfer: raw.color_transfer,
+            full_range: raw.color_full_range != 0,
+        }),
+        audio_streams: raw
+            .audio_streams
+            .iter()
+            .take((raw.audio_stream_count.max(0) as usize).min(PROBE_MAX_AUDIO_STREAMS))
+            .map(|stream| AudioStreamInfo {
+                stream_index: stream.stream_index.max(0) as u32,
+                channels: stream.channels.max(0) as u32,
+                sample_rate_hz: stream.sample_rate_hz.max(0) as u32,
+                // SAFETY: the C side NUL-terminates each buffer within its bounds.
+                codec_name: unsafe { CStr::from_ptr(stream.codec_name.as_ptr()) }
+                    .to_string_lossy()
+                    .into_owned(),
+                title: unsafe { CStr::from_ptr(stream.title.as_ptr()) }
+                    .to_string_lossy()
+                    .into_owned(),
+                language: unsafe { CStr::from_ptr(stream.language.as_ptr()) }
+                    .to_string_lossy()
+                    .into_owned(),
+            })
+            .collect(),
+        audio_stream_count: raw.audio_stream_count.max(0) as usize,
     })
 }
 
