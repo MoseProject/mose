@@ -135,6 +135,8 @@ fn track_flags_sequence_and_project_fields_round_trip() {
     next.timeline_mut().tracks[0].mix = avcore::timeline::TrackMix {
         volume_db: -9.0,
         pan: 0.4,
+        eq_high_db: 3.0,
+        ..Default::default()
     };
     next.timeline_mut().tracks[1].name = "Voice".into();
     next.timeline_mut().playhead_secs = 12.5;

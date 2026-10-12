@@ -631,25 +631,53 @@ mod commands {
         let id = timeline(&h).tracks[0].id;
         assert!(timeline(&h).tracks[0].mix.is_neutral());
 
-        set_track_mix(h.handle(), id, -6.0, 0.25).unwrap();
+        let mix = |volume_db, pan| avcore::timeline::TrackMix {
+            volume_db,
+            pan,
+            ..Default::default()
+        };
+        set_track_mix(h.handle(), id, mix(-6.0, 0.25)).unwrap();
         assert_eq!(timeline(&h).tracks[0].mix.volume_db, -6.0);
         assert_eq!(timeline(&h).tracks[0].mix.pan, 0.25);
 
         // Out of range and not-a-number values are brought inside the limits.
-        set_track_mix(h.handle(), id, 400.0, -7.0).unwrap();
-        let mix = timeline(&h).tracks[0].mix;
+        set_track_mix(h.handle(), id, mix(400.0, -7.0)).unwrap();
+        let mixed = timeline(&h).tracks[0].mix;
         assert_eq!(
-            (mix.volume_db, mix.pan),
+            (mixed.volume_db, mixed.pan),
             (avcore::timeline::TrackMix::MAX_VOLUME_DB, -1.0)
         );
-        set_track_mix(h.handle(), id, f32::NAN, f32::NAN).unwrap();
+        set_track_mix(h.handle(), id, mix(f32::NAN, f32::NAN)).unwrap();
+        assert!(timeline(&h).tracks[0].mix.is_neutral());
+
+        // The strip is saved with the fader, every control inside its limits.
+        set_track_mix(
+            h.handle(),
+            id,
+            avcore::timeline::TrackMix {
+                eq_low_db: 99.0,
+                highpass_hz: 5.0,
+                comp_ratio: 8.0,
+                comp_threshold_db: -30.0,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let strip = timeline(&h).tracks[0].mix;
+        assert_eq!(strip.eq_low_db, avcore::timeline::TrackMix::MAX_EQ_DB);
+        assert_eq!(
+            strip.highpass_hz,
+            avcore::timeline::TrackMix::MIN_HIGHPASS_HZ
+        );
+        assert_eq!((strip.comp_ratio, strip.comp_threshold_db), (8.0, -30.0));
+        set_track_mix(h.handle(), id, mix(0.0, 0.0)).unwrap();
         assert!(timeline(&h).tracks[0].mix.is_neutral());
 
         // The same mix again, and an unknown track, record nothing.
-        set_track_mix(h.handle(), id, -3.0, 0.0).unwrap();
+        set_track_mix(h.handle(), id, mix(-3.0, 0.0)).unwrap();
         let events = h.count_session_events();
-        set_track_mix(h.handle(), id, -3.0, 0.0).unwrap();
-        set_track_mix(h.handle(), 999, -3.0, 0.0).unwrap();
+        set_track_mix(h.handle(), id, mix(-3.0, 0.0)).unwrap();
+        set_track_mix(h.handle(), 999, mix(-3.0, 0.0)).unwrap();
         assert_eq!(events.load(Ordering::SeqCst), 0);
 
         // One drag is one undo step.

@@ -153,18 +153,33 @@ fn a_tracks_fader_and_pan_reach_its_clips_in_the_preview() {
     louder.mix = avcore::timeline::TrackMix {
         volume_db: -6.0,
         pan: 0.5,
+        eq_low_db: 4.0,
+        highpass_hz: 90.0,
+        comp_ratio: 3.0,
+        comp_threshold_db: -24.0,
+        ..Default::default()
     };
     let mapped = map_with(vec![louder], Vec::new());
     let placement = &mapped.scene.contributors()[0].placement;
     assert!((placement.track_gain - 0.501_187).abs() < 1e-5);
     assert_eq!(placement.pan, 0.5);
+    assert_eq!(placement.strip.eq_low_db, 4.0);
+    assert_eq!(placement.strip.highpass_hz, 90.0);
+    assert_eq!(
+        (
+            placement.strip.comp_ratio,
+            placement.strip.comp_threshold_db
+        ),
+        (3.0, -24.0)
+    );
 
-    // A neutral track leaves both alone.
+    // A neutral track leaves all of it alone.
     let (_, plain) = one_clip(clip(0.0, 0.0, 4.0));
     assert_eq!(
         (plain.placement.track_gain, plain.placement.pan),
         (1.0, 0.0)
     );
+    assert!(plain.placement.strip.is_neutral());
 }
 
 #[test]
@@ -175,6 +190,7 @@ fn the_preview_and_the_export_pan_with_the_same_law() {
         let model = avcore::timeline::TrackMix {
             volume_db: 0.0,
             pan,
+            ..Default::default()
         }
         .pan_gains();
         assert_eq!(bush::pan_gains(pan), model, "pan {pan}");
