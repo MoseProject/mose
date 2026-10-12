@@ -530,6 +530,35 @@ fn insert_sequence_as_compound_clip_appends_to_the_active_timelines_video_track(
 }
 
 #[test]
+fn inserting_a_sequence_that_nests_the_active_one_is_refused_even_through_a_third() {
+    // 0 holds 1, 1 holds 2: inserting 0 into 2 would close the loop 0 -> 1 -> 2 -> 0.
+    let mut project = test_project();
+    let first = project.sequences[0].id;
+    let second = project.new_sequence("Second".to_string());
+    let third = project.new_sequence("Third".to_string());
+    let nesting = |inner: u64| {
+        let mut clip = compound_clip(1, None);
+        clip.nested_sequence_id = Some(inner);
+        compound_video_track(1, vec![clip])
+    };
+    project.sequences[0].timeline.tracks = vec![nesting(second)];
+    project.sequences[1].timeline.tracks = vec![nesting(third)];
+    project.sequences[2].timeline.tracks =
+        vec![compound_video_track(1, vec![compound_clip(1, None)])];
+    project.active_sequence = 2;
+    let before = project.clone();
+
+    assert!(project.sequence_nests(first, third));
+    assert!(!project.sequence_nests(third, first));
+    assert!(!project.insert_sequence_as_compound_clip(first));
+    assert_eq!(project, before, "a refused insert changes nothing");
+    // The other direction is no cycle.
+    project.active_sequence = 0;
+    project.sequences[0].timeline.tracks = vec![compound_video_track(1, vec![])];
+    assert!(project.insert_sequence_as_compound_clip(third));
+}
+
+#[test]
 fn insert_sequence_as_compound_clip_creates_a_video_track_when_none_exists() {
     let mut project = test_project();
     let nested_id = project.new_sequence("Nested".to_string());

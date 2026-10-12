@@ -94,3 +94,34 @@ fn a_project_without_compound_clips_costs_nothing() {
     assert!(!renderer.is_running());
     assert!(!renderer.poll());
 }
+
+#[test]
+fn a_nesting_cycle_neither_hangs_nor_keeps_the_renderer_busy_forever() {
+    let h = harness();
+    let (project, nested_id) = compound_project(&h);
+    // Make the compound's own sequence nest the first one back: 1 -> 2 -> 1.
+    let mut project = (*project).clone();
+    let first_id = project.sequences[0].id;
+    let inner = project
+        .sequences
+        .iter_mut()
+        .find(|sequence| sequence.id == nested_id)
+        .unwrap();
+    inner.timeline.tracks[0].clips[0].nested_sequence_id = Some(first_id);
+    let project = Arc::new(project);
+    let timeline = project.sequences[0].timeline.clone();
+    let mut renderer = NestedRenderer::default();
+
+    assert!(renderer.assets_for(&project, &timeline).is_empty());
+    let started = Instant::now();
+    while renderer.is_running() {
+        renderer.poll();
+        assert!(
+            started.elapsed() < Duration::from_secs(60),
+            "the renderer never gave up on the cycle"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    // Asking again gives nothing to show and does not panic.
+    assert!(renderer.assets_for(&project, &timeline).is_empty());
+}
