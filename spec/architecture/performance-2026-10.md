@@ -106,6 +106,41 @@ split into chunks of 1 to 6 KB that arrive when first needed.
 - `visual/lazy-loading.visual.ts` watches the module requests: an open project fetches none of the
   on-demand code, and each piece arrives with its trigger.
 
+## Backend (analysis of the Rust side, 4 cores, release)
+
+Measured and fine: per-edit work at 3000 clips (clone 0.4 ms, diff 1.7 ms, scene mapping 1.4 ms);
+saving a project 1.0 ms and loading it 4.6 ms (3000 clips, 28 KB file); importing one 22 s 1080p60
+clip once the file is in the cache: probe 0.02 s, waveform 0.07 s, loudness 0.75 s, proxy 8.1 s
+(decode-bound, 2.7x real time). The first run of `import_perf` on a file not yet read measured
+8 s for the waveform: that is the disk, not the code.
+
+Changed:
+
+- **Importing several files** used a thread per file with no limit, so N proxies ran together and
+  all finished after N times as long. With 4 files of 22 s: all at once, every proxy ready at
+  29 s; one by one, 8, 17, 25 and 33 s; two at a time, 14.5, 14.5, 29 and 29 s (total 29 s, the
+  best of the three). `import_gate` lets the audio passes (waveform, loudness) go a few at a time
+  and the proxies two at a time on four cores, in the order the files were imported.
+  `import_concurrency` (core tests) measures it.
+- **Strip tiles (timeline thumbnails)** of a long-GOP original took 173 ms each (p50) and a random
+  one could fail past the 800 ms deadline. They are now converted at the size asked for and decode
+  forward for at most 40 ms (`FrameSampler::sample_small`, Bush's seek budget): 61 ms, and they
+  always answer. Once the proxy exists tiles come from it, exactly. A full tile cache forgets its
+  oldest quarter instead of everything.
+- **Recent projects** decoded ten full project files, twice at startup, on the main thread with
+  the preferences locked. Summaries are kept per file (revalidated by modification time in
+  nanoseconds and size) and the command runs off the main thread.
+- **Saving** encoded and flushed the file with the session locked; it now writes from a copy, and
+  edits made meanwhile keep the project unsaved.
+- **Queueing an export** with a compound clip rendered its nested sequence on the main thread; the
+  command now runs off it.
+- `cargo test -p core --lib` had not compiled since the per-export normalization change (a field
+  listed twice in a test); fixed.
+
+Not changed: the per-GOP cost of exact seeks (see the seek budget above), proxy encoding (decode
+bound), and the AI analyses, whose compute (silence, scenes, highlights) is small next to decoding
+the frames they sample; the ONNX and Whisper models are not available here to time.
+
 ## Tools
 
 | what | how |
@@ -113,6 +148,8 @@ split into chunks of 1 to 6 KB that arrive when first needed.
 | Benchmark clip | `scripts/make-bench-video.sh` |
 | Export timings | `OCA_BENCH_VIDEO=clip.mp4 cargo test --release -p core --test it export_perf -- --ignored --nocapture` (`OCA_BENCH_ONLY` filters) |
 | Import steps | `import_perf` in the same test binary |
+| Several imports at once | `OCA_BENCH_FILES=4 ... import_concurrency` in the same test binary |
+| Strip tile cost | `OCA_BENCH_VIDEO=clip.mp4 cargo test --release -p desktop thumbnail_cost -- --ignored --nocapture` |
 | Slow frames in playback | `PROBE_TRACE=1 playback_probe clip.mp4` lists frames over twice the median |
 | Preview JPEG cost | `cargo test --release -p desktop jpeg_cost -- --ignored --nocapture` |
 | Decode speed | `cargo run --release -p bush --example decode_throughput -- clip.mp4` |
