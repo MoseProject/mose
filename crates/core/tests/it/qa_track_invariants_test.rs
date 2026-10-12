@@ -330,3 +330,17 @@ fn nonsense_arguments_are_refused_not_applied() {
         assert_eq!(track, snapshot, "{bad} changed the track");
     }
 }
+
+#[test]
+fn edits_that_change_nothing_report_false() {
+    let mut next_id = 100;
+    let mut track = empty_track();
+    track.clips.push(ClipInstance::new(1, 1, 0.0, 0.0, 10.0));
+    let snapshot = track.clone();
+    // Past the end of the content: nothing to remove, nothing to move.
+    assert!(!track.ripple_delete_range(20.0, 30.0, &mut next_id));
+    assert!(!track.lift_range(20.0, 30.0, &mut next_id));
+    assert!(!track.clips[0].slip(0.0, None));
+    assert_eq!(track, snapshot);
+    assert_eq!(next_id, 100, "no id is spent on an edit that did nothing");
+}

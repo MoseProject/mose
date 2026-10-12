@@ -368,3 +368,7 @@ pub fn set_project_frame_rate<R: Runtime>(
 #[cfg(test)]
 #[path = "mod_test.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "qa_edit_sequences_test.rs"]
+mod qa_edit_sequences;
