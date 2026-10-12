@@ -2955,9 +2955,10 @@ Plan, findings and acceptance criteria: [architecture/mixer-hdr-color.md](archit
     186, 46, 41 instead of 200, 60, 40 in the preview (BT.601 matrix). First slice, small fix.
 34. `[~]` CM-01 colour metadata, CM-02 HDR to SDR, CM-03 output tagging and CM-06 scopes are done;
     CM-04 10-bit/HDR output and CM-05 grading tools are not.
-35. `[~]` MX-01 multi-stream audio and MX-02 per-track fader and pan are done; MX-00 preview equals
-    export for ducking and voice cleanup, MX-03 EQ and dynamics and MX-04 crossfades and audio-only
-    export are not.
+35. `[~]` MX-01 multi-stream audio, MX-02 per-track fader and pan, MX-03 per-track EQ, filters and
+    compressor, and MX-04 declick at cuts and audio-only export are done; MX-00 preview equals
+    export for ducking and voice cleanup is not (a gate, strip presets, per-clip strips and an
+    adjustable declick length are also left).
 
 ---
 

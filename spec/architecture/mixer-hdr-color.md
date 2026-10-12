@@ -20,7 +20,9 @@ before any broader editor-parity argument.
 | MX-01 multi-stream audio | done as copies: each extra track is copied out as its own audio asset (see below); no per-clip stream selector |
 | MX-02 track strip | done for fader and pan per track (project format 6, preview and export, a mixer button in the track header); no per-track meter and no master fader yet |
 | CM-06 scopes | done: waveform, RGB parade, histogram and vectorscope with reference lines, a strip under the monitor, drawn on request from the frame on screen at a small size (the Tauri shell had no scopes at all before) |
-| CM-04, CM-05, MX-00, MX-03, MX-04 | not started |
+| MX-03 EQ and dynamics | done for a per-track strip: high-pass, low-pass, three-band EQ and a compressor (project format 7, v3 to v6 files still open), in the preview and the export, controls in the track mix panel; no gate, no presets, no per-clip strip |
+| MX-04 crossfades and audio-only export | done: a 10 ms declick fade at hard cuts (export and preview), audio fades now also play in the preview, and an audio-only export as WAV 24-bit, FLAC, MP3 or Opus from the export dialog; the declick length is fixed, not adjustable |
+| CM-04, CM-05, MX-00 | not started |
 
 Decisions taken while building:
 
@@ -36,6 +38,22 @@ Decisions taken while building:
   centre changes nothing. One law in the model, the preview mixer and the export graph, pinned by a test.
   The export normalizes the whole mix to its loudness target, so a fader changes a track relative to the others
   there; the preview plays the absolute level.
+- Strip stages run after the pan, in the order high-pass, low-pass, low shelf (120 Hz), mid bell (1 kHz, Q 1),
+  high shelf (6 kHz), compressor (attack 10 ms, release 250 ms, soft knee), the same filters as the export graph
+  and the same corner frequencies. A probe renders the same tones through the preview strip and through the export
+  and compares the level change: shelves agree within 1.3 dB, bell, filters and compressor within 0.3 dB
+  (`crates/bush/tests/strip_test.rs`, tolerance 1.5 dB). The compressor works per clip branch in both, not on
+  the summed track bus, so two clips of one track do not compress each other.
+- The preview applies the level before the strip when a strip is active, as the export does, so the compressor sees
+  the signal at its mixed level.
+- Declick, not `acrossfade`: a cut between two clips of one track gets a 10 ms linear fade-out and fade-in
+  (`Track::audio_fade_in_secs`/`audio_fade_out_secs`) unless the second clip continues the first (same asset, touching,
+  source resuming at the same plain speed, i.e. a split). A hard cut forces the mixed audio path, because the
+  one-pass export copies the source audio and would join the two with a click. The preview played no audio fades
+  at all before; handles, dissolves and the declick now go through `Placement::audio_fade`.
+- Audio-only export goes through the export queue like a video (`ExportJob::audio_only`, `ExportOptions::audio_format`),
+  with the mix built even for an untouched clip (`resolve_audio_segments_for_audio_export`). Formats: WAV 24-bit (PCM),
+  FLAC 24-bit, MP3 256 kbps (libmp3lame), Opus 160 kbps (libopus), all available in the FFmpeg build used here.
 - Scopes are served as JPEG without chroma subsampling: the 4:2:0 encoding of a photo smeared a one-pixel
   red parade trace to a dim blur (red read 40 instead of 255).
 - Found on the way, all fixed: proxies failed for FLAC, Opus and PCM audio in Matroska; ten protocol route tests that had not compiled since a module regrouping (now wired, with a guard test); a failed proxy
