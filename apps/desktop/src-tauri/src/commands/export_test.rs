@@ -251,9 +251,9 @@ fn a_target_without_folder_or_name_is_a_coded_error() {
 fn the_export_canvas_follows_the_aspect_ratio() {
     let h = harness();
     h.add_fixture_clip();
-    let original = export_canvas(h.state(), avcore::ExportAspectRatio::Original).unwrap();
+    let original = export_canvas(h.state(), avcore::ExportAspectRatio::Original, None).unwrap();
     assert!(original.duration_secs > 0.0 && original.bitrate_mbps > 0.0);
-    let portrait = export_canvas(h.state(), avcore::ExportAspectRatio::Portrait).unwrap();
+    let portrait = export_canvas(h.state(), avcore::ExportAspectRatio::Portrait, None).unwrap();
     assert_eq!((portrait.width, portrait.height), (1080, 1920));
 }
 
@@ -306,7 +306,7 @@ fn an_unusable_bitrate_is_refused_before_anything_is_queued() {
 fn a_larger_height_exports_the_picture_scaled_up() {
     let h = harness();
     h.add_fixture_clip();
-    let original = export_canvas(h.state(), avcore::ExportAspectRatio::Original).unwrap();
+    let original = export_canvas(h.state(), avcore::ExportAspectRatio::Original, None).unwrap();
     let output = path_in(&h.dir, "up.mp4");
     let options = crate::export::ExportOptions {
         bitrate_mbps: None,

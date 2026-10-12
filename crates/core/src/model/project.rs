@@ -71,7 +71,10 @@ impl Sequence {
                 clip.transition_in = crate::timeline::TransitionType::None;
             }
         }
-        sequence.timeline.tracks.retain(|track| !track.clips.is_empty());
+        sequence
+            .timeline
+            .tracks
+            .retain(|track| !track.clips.is_empty());
         Some(sequence)
     }
 }

@@ -643,7 +643,11 @@ fn isolating_a_clip_keeps_only_it_and_moves_it_to_the_start() {
     project.timeline_mut().tracks = vec![compound_video_track(1, vec![first, second]), overlay];
 
     let alone = project.active_sequence().isolating_clip(2).unwrap();
-    assert_eq!(alone.timeline.tracks.len(), 1, "the track left empty is dropped");
+    assert_eq!(
+        alone.timeline.tracks.len(),
+        1,
+        "the track left empty is dropped"
+    );
     let clips = &alone.timeline.tracks[0].clips;
     assert_eq!(clips.len(), 1);
     assert_eq!((clips[0].id, clips[0].start_secs), (2, 0.0));
