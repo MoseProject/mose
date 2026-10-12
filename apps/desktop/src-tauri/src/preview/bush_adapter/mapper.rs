@@ -74,6 +74,14 @@ pub trait SourceResolver {
     fn source_path(&mut self, asset: &MediaAsset) -> Option<PathBuf>;
     /// The parsed `.cube` table at `path`, `None` if it cannot be read.
     fn lut(&mut self, path: &str) -> Option<Arc<Lut3D>>;
+    /// The table of `clip`'s colour grade (baked after its own LUT), `None` when the grade is
+    /// neutral. Baking walks 36k colours, so a resolver may cache it.
+    fn graded_lut(&mut self, clip: &ClipInstance) -> Option<Arc<Lut3D>> {
+        let baked = clip.graded_lut()?;
+        Lut3D::new(baked.size(), baked.entries().to_vec())
+            .ok()
+            .map(Arc::new)
+    }
 }
 
 /// A property whose Bush rendering differs from the export.
@@ -501,7 +509,11 @@ fn map_clip(
     }
     placement.effects = effects;
     placement.blend = blend_of(clip.blend_mode);
-    if !clip.lut_path.is_empty() {
+    // A grade is baked into one table that includes the clip's own LUT; without one, the LUT is
+    // used as it is. The export reads the same table through `lut3d`.
+    if let Some(graded) = resolver.graded_lut(clip) {
+        placement.lut = Some(graded);
+    } else if !clip.lut_path.is_empty() {
         placement.lut = resolver.lut(&clip.lut_path);
     }
 

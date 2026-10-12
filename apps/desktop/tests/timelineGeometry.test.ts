@@ -17,7 +17,7 @@ import {
   xToTime,
   zoomAround,
 } from "../src/timelineGeometry";
-import { NEUTRAL_TRACK_MIX } from "../src/types";
+import { NEUTRAL_GRADE, NEUTRAL_TRACK_MIX } from "../src/types";
 import type { ClipInstance, Marker, ShapeClip, TextClip, Track } from "../src/types";
 
 function clip(id: number, start: number, duration: number, speed = 1): ClipInstance {
@@ -63,6 +63,7 @@ function clip(id: number, start: number, duration: number, speed = 1): ClipInsta
     crop_y_keyframes: [],
     crop_w_keyframes: [],
     crop_h_keyframes: [],
+    grade: NEUTRAL_GRADE,
   };
 }
 

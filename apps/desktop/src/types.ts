@@ -188,6 +188,8 @@ export interface ClipInstance {
   brightness_keyframes: Keyframe<number>[];
   contrast_keyframes: Keyframe<number>[];
   saturation_keyframes: Keyframe<number>[];
+  /** The colour grade, baked into a lookup table for the preview and the export. */
+  grade: Grade;
   crop_x_keyframes: Keyframe<number>[];
   crop_y_keyframes: Keyframe<number>[];
   crop_w_keyframes: Keyframe<number>[];
@@ -330,6 +332,35 @@ export interface Track {
 }
 
 /** A track's mixer strip: fader, pan, tone and compressor. The limits mirror `TrackMix` in avcore. */
+/** A clip's colour grade. The limits mirror `Grade` in avcore. */
+export interface Grade {
+  /** Stops, -4 to 4. */
+  exposure: number;
+  /** -1 cooler to 1 warmer. */
+  temperature: number;
+  /** -1 greener to 1 more magenta. */
+  tint: number;
+  /** Per red, green and blue: lift (blacks, 0 neutral), gamma (mids, 1 neutral), gain (whites, 1 neutral). */
+  lift: [number, number, number];
+  gamma: [number, number, number];
+  gain: [number, number, number];
+  shadows: number;
+  highlights: number;
+}
+
+export const MAX_GRADE_EXPOSURE = 4;
+
+export const NEUTRAL_GRADE: Grade = {
+  exposure: 0,
+  temperature: 0,
+  tint: 0,
+  lift: [0, 0, 0],
+  gamma: [1, 1, 1],
+  gain: [1, 1, 1],
+  shadows: 0,
+  highlights: 0,
+};
+
 export interface TrackMix {
   volume_db: number;
   pan: number;
@@ -621,6 +652,7 @@ export interface ClipPatch {
   gainDb?: number;
   speedFactor?: number;
   brightness?: number;
+  grade?: Grade;
   contrast?: number;
   saturation?: number;
   frozen?: boolean;

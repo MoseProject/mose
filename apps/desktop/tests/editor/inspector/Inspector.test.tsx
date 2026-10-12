@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../src/i18n";
 import { withAllSections } from "../../support/inspectorTabs";
 import { makeSession } from "../../support/testSupport";
-import type { ClipInstance, SessionView } from "../../../src/types";
+import { NEUTRAL_GRADE, type ClipInstance, type SessionView } from "../../../src/types";
 
 vi.mock("../../../src/ipc", () => {
   const names = [
@@ -85,6 +85,7 @@ const clip = (overrides: Partial<ClipInstance> = {}): ClipInstance => {
     crop_y_keyframes: [],
     crop_w_keyframes: [],
     crop_h_keyframes: [],
+    grade: NEUTRAL_GRADE,
     ...overrides,
   } as unknown as ClipInstance;
 };

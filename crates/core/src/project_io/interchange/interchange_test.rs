@@ -93,6 +93,7 @@ fn clip(id: u64, asset_id: u64, start_secs: f64, duration_secs: f64) -> ClipInst
         privacy_blur_seed_vertices: Vec::new(),
         privacy_blur_seed_center_x_frac: 0.0,
         privacy_blur_seed_center_y_frac: 0.0,
+        grade: Default::default(),
     }
 }
 

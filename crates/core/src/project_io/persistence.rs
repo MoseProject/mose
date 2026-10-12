@@ -42,7 +42,7 @@ use serde::Serialize;
 
 use crate::project::Project;
 
-use super::legacy_project::{ProjectV4, ProjectV5, ProjectV6};
+use super::legacy_project::{ProjectV4, ProjectV5, ProjectV6, ProjectV7};
 
 /// Identifies an `.ocproj` file before we even try to gzip/msgpack-decode it, so a
 /// wrong-file/corrupt-file error says exactly that instead of surfacing an opaque gzip or
@@ -63,7 +63,9 @@ const SEMANTIC_INDEX_MAGIC: &[u8; 4] = b"OCSI";
 /// The price is that the encoding is positional: any change to the fields of a type inside
 /// [`Project`] changes the bytes, so such a change must bump this version, and files from other
 /// versions are refused with a clear error rather than misread.
-const PROJECT_FORMAT_VERSION: u8 = 7;
+const PROJECT_FORMAT_VERSION: u8 = 8;
+/// The layout before the per-clip grade, still readable through `legacy_project::ProjectV7`.
+const PROJECT_FORMAT_VERSION_V7: u8 = 7;
 /// The layout before the mixer strip (a track mix of only volume and pan), still readable through
 /// `legacy_project::ProjectV6`.
 const PROJECT_FORMAT_VERSION_V6: u8 = 6;
@@ -290,6 +292,7 @@ pub fn from_project_bytes(bytes: &[u8]) -> Result<Project, PersistError> {
     let version = bytes[header];
     if ![
         PROJECT_FORMAT_VERSION,
+        PROJECT_FORMAT_VERSION_V7,
         PROJECT_FORMAT_VERSION_V6,
         PROJECT_FORMAT_VERSION_V5,
         PROJECT_FORMAT_VERSION_V4,
@@ -311,6 +314,10 @@ pub fn from_project_bytes(bytes: &[u8]) -> Result<Project, PersistError> {
         .map_err(|_| PersistError::Corrupt("damaged compressed data"))?;
     if version == PROJECT_FORMAT_VERSION {
         return postcard::from_bytes(&payload).map_err(PersistError::Project);
+    }
+    if version == PROJECT_FORMAT_VERSION_V7 {
+        let old: ProjectV7 = postcard::from_bytes(&payload).map_err(PersistError::Project)?;
+        return Ok(old.into());
     }
     if version == PROJECT_FORMAT_VERSION_V6 {
         let old: ProjectV6 = postcard::from_bytes(&payload).map_err(PersistError::Project)?;

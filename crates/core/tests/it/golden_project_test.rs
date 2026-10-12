@@ -214,3 +214,22 @@ fn the_pinned_version_6_file_still_opens_with_a_neutral_strip() {
         .flat_map(|s| &s.timeline.tracks)
         .all(|track| track.mix.strip_is_neutral()));
 }
+
+/// The pinned file of layout version 7 (clips without a grade) still opens with neutral grades.
+/// Never regenerate this one either.
+#[test]
+fn the_pinned_version_7_file_still_opens_with_neutral_grades() {
+    let bytes = std::fs::read(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/golden_v7.ocproj"),
+    )
+    .expect("tests/fixtures/golden_v7.ocproj");
+    assert_eq!(bytes[4], 7, "this fixture is a version 7 file");
+    let opened = from_project_bytes(&bytes).expect("a version 7 file opens");
+    assert_eq!(opened, project());
+    assert!(opened
+        .sequences
+        .iter()
+        .flat_map(|s| &s.timeline.tracks)
+        .flat_map(|track| &track.clips)
+        .all(|clip| clip.grade.is_neutral()));
+}

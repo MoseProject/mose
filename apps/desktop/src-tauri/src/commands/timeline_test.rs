@@ -516,6 +516,11 @@ mod commands {
                 brightness: Some(9.0),
                 contrast: Some(9.0),
                 saturation: Some(9.0),
+                grade: Some(avcore::timeline::Grade {
+                    exposure: 99.0,
+                    gain: [99.0, 1.0, 1.0],
+                    ..Default::default()
+                }),
                 frozen: Some(true),
                 flipped_h: Some(true),
                 voice_cleanup_enabled: Some(true),
@@ -554,6 +559,8 @@ mod commands {
         assert_eq!(c.brightness, 1.0);
         assert_eq!(c.contrast, 2.0);
         assert_eq!(c.saturation, 2.0);
+        assert_eq!(c.grade.exposure, avcore::timeline::MAX_EXPOSURE_STOPS);
+        assert_eq!(c.grade.gain, [4.0, 1.0, 1.0]);
         assert!(c.frozen && c.flipped_h && c.voice_cleanup_enabled);
         assert_eq!((c.crop_x, c.crop_y), (0.1, 0.2));
         assert_eq!((c.crop_w, c.crop_h), (0.05, 0.05));

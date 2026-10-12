@@ -470,6 +470,7 @@ impl Track {
             privacy_blur_seed_vertices: Vec::new(),
             privacy_blur_seed_center_x_frac: 0.0,
             privacy_blur_seed_center_y_frac: 0.0,
+            grade: Default::default(),
         };
         clip.source_out_secs = split_source_secs;
         clip.fade_out_secs = 0.0;

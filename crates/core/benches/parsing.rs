@@ -163,6 +163,7 @@ fn large_project(asset_count: usize, clips_per_track: usize) -> Project {
                 privacy_blur_seed_vertices: Vec::new(),
                 privacy_blur_seed_center_x_frac: 0.0,
                 privacy_blur_seed_center_y_frac: 0.0,
+                grade: Default::default(),
             })
             .collect(),
         text_clips: vec![],
