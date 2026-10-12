@@ -70,3 +70,50 @@ fn even_sample_times_honors_the_maximum_when_bounds_are_reversed() {
     let times = FrameSampler::even_sample_times(0.0, 10.0, 1.0, 10, 3);
     assert_eq!(times, vec![0.0, 5.0, 10.0]);
 }
+
+fn fixture() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/video.mp4")
+}
+
+#[test]
+fn a_small_sample_is_converted_at_the_size_asked_for() {
+    let sampler = FrameSampler::open(&fixture()).unwrap();
+    let full = sampler.sample(0.5, Duration::from_secs(5)).unwrap();
+    let small = sampler
+        .sample_small(0.5, Duration::from_secs(5), 64, None)
+        .unwrap();
+    assert!(small.width.max(small.height) <= 64);
+    assert!(
+        small.width.max(small.height) >= 60,
+        "not much smaller than asked"
+    );
+    // The same picture, only smaller, with its aspect ratio kept.
+    let ratio = |frame: &SampledFrame| f64::from(frame.width) / f64::from(frame.height);
+    assert!((ratio(&full) - ratio(&small)).abs() < 0.05);
+    assert_eq!(
+        small.rgba.len(),
+        small.width as usize * small.height as usize * 4
+    );
+    // A size larger than the source leaves it as it is.
+    let large = sampler
+        .sample_small(0.5, Duration::from_secs(5), 100_000, None)
+        .unwrap();
+    assert_eq!((large.width, large.height), (full.width, full.height));
+}
+
+#[test]
+fn a_sample_with_a_spent_budget_still_comes_back_and_is_not_after_the_target() {
+    let sampler = FrameSampler::open(&fixture()).unwrap();
+    // A budget of nothing: the first frame decoded stands in, instead of failing or waiting.
+    let rough = sampler
+        .sample_small(0.9, Duration::from_secs(5), 64, Some(Duration::ZERO))
+        .unwrap();
+    assert!(rough.width > 0 && rough.height > 0);
+    // The exact sample that follows is unaffected by it.
+    let exact = sampler.sample(0.9, Duration::from_secs(5)).unwrap();
+    let reference = FrameSampler::open(&fixture())
+        .unwrap()
+        .sample(0.9, Duration::from_secs(5))
+        .unwrap();
+    assert_eq!(exact, reference);
+}
