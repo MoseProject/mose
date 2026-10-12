@@ -381,6 +381,10 @@ typedef struct {
        stage; 0 = none. */
     float fade_in_secs;
     float fade_out_secs;
+    /* Stereo balance, -1 (left only) to 1 (right only), 0 = centred and untouched: the side the
+       pan moves away from is attenuated with a quarter-sine taper, the other stays at unity.
+       Applied after the branch's voice cleanup, before it joins the mix. */
+    float pan;
 } AudioSegment;
 
 typedef enum {

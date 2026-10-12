@@ -72,6 +72,12 @@ pub struct AudioSegment {
     pub fade_in_secs: f32,
     #[serde(default)]
     pub fade_out_secs: f32,
+    /// Stereo balance of this branch, `-1.0` (left only) to `1.0` (right only), `0.0` centred and
+    /// untouched. The side the pan moves away from is attenuated with a quarter-sine taper and
+    /// the other side stays at unity, so the centre setting changes nothing. `#[serde(default)]`
+    /// so an `.ocqueue` job persisted before this field existed loads centred.
+    #[serde(default)]
+    pub pan: f32,
 }
 
 impl AudioSegment {
@@ -100,6 +106,7 @@ impl AudioSegment {
             voice_cleanup_ceiling_linear: default_voice_cleanup_ceiling_linear(),
             fade_in_secs: 0.0,
             fade_out_secs: 0.0,
+            pan: 0.0,
         }
     }
 }
@@ -198,6 +205,7 @@ pub fn mix_audio_timeline(
             voice_cleanup_ceiling_linear: seg.voice_cleanup_ceiling_linear,
             fade_in_secs: seg.fade_in_secs,
             fade_out_secs: seg.fade_out_secs,
+            pan: seg.pan,
         })
         .collect();
 

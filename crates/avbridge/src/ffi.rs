@@ -71,6 +71,7 @@ pub(crate) struct RawAudioSegment {
     pub(crate) voice_cleanup_ceiling_linear: f32,
     pub(crate) fade_in_secs: f32,
     pub(crate) fade_out_secs: f32,
+    pub(crate) pan: f32,
 }
 
 /// Mirror of `TextSegment` in `bridge.h` — one pre-rasterized text overlay image.
