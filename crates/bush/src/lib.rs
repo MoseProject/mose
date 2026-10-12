@@ -42,7 +42,9 @@ mod video_frame;
 
 pub use audio_block::{AudioBlock, AudioBlockError};
 pub use audio_mixer::{AudioMixer, MixError, MixInput};
-pub use audio_playback::{AudioPlayer, AudioPlayerError, AudioRenderError, AudioRenderer};
+pub use audio_playback::{
+    pan_gains, AudioPlayer, AudioPlayerError, AudioRenderError, AudioRenderer,
+};
 pub use audio_sink::{AudioSink, FakeSink, SinkError};
 pub use audio_source::{AudioSource, AudioSourceError};
 pub use avbridge::DecodePolicy;

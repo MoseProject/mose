@@ -209,6 +209,7 @@ impl AudioRenderer {
                 }
                 None => placement.gain,
             };
+            apply_pan(&mut samples, usize::from(self.channels), placement.pan);
             // Re-time from source time to timeline time so the mixer aligns it.
             let aligned = AudioBlock::new(
                 self.sample_rate,
@@ -216,7 +217,7 @@ impl AudioRenderer {
                 overlap_start as f64 / rate,
                 samples,
             )?;
-            parts.push((aligned, static_gain));
+            parts.push((aligned, static_gain * placement.track_gain));
         }
 
         let mut inputs = vec![MixInput {
@@ -266,6 +267,42 @@ const GAIN_STEP_FRAMES: usize = 64;
 /// Multiplies interleaved `samples` by the gain track (dB, clip-local time) starting at
 /// `first_local_secs`. Linear gain is interpolated between sparse evaluations so a ramp is
 /// click-free without evaluating the track for every sample.
+/// The left and right multipliers of a stereo balance `pan` (`-1.0` to `1.0`): the side the pan
+/// moves away from falls off as a quarter sine, the other stays at unity, so a centred pan changes
+/// nothing. The export mix (`audio_mix.c`) and `avcore::timeline::TrackMix::pan_gains` use the
+/// same law.
+pub fn pan_gains(pan: f32) -> (f32, f32) {
+    let pan = if pan.is_finite() {
+        pan.clamp(-1.0, 1.0)
+    } else {
+        0.0
+    };
+    let left = if pan > 0.0 {
+        (pan * std::f32::consts::FRAC_PI_2).cos()
+    } else {
+        1.0
+    };
+    let right = if pan < 0.0 {
+        (-pan * std::f32::consts::FRAC_PI_2).cos()
+    } else {
+        1.0
+    };
+    (left, right)
+}
+
+/// Applies a stereo balance to interleaved samples. Mono audio is left alone (the preview output
+/// is stereo, so this only sees one channel for a mono output format).
+fn apply_pan(samples: &mut [f32], channels: usize, pan: f32) {
+    if channels != 2 || pan == 0.0 {
+        return;
+    }
+    let (left, right) = pan_gains(pan);
+    for frame in samples.chunks_exact_mut(2) {
+        frame[0] *= left;
+        frame[1] *= right;
+    }
+}
+
 fn apply_gain_curve(
     samples: &mut [f32],
     channels: usize,
