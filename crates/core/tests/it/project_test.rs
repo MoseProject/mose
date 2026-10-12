@@ -629,3 +629,32 @@ fn snapping_follows_the_project_frame_rate_and_is_off_without_one() {
         "an invalid rate is ignored"
     );
 }
+
+#[test]
+fn isolating_a_clip_keeps_only_it_and_moves_it_to_the_start() {
+    let mut project = test_project();
+    let mut first = compound_clip(1, None);
+    first.start_secs = 2.0;
+    let mut second = compound_clip(2, None);
+    second.start_secs = 7.5;
+    second.transition_in = TransitionType::Fade;
+    let mut overlay = compound_video_track(2, vec![compound_clip(3, None)]);
+    overlay.name = "V2".to_string();
+    project.timeline_mut().tracks = vec![compound_video_track(1, vec![first, second]), overlay];
+
+    let alone = project.active_sequence().isolating_clip(2).unwrap();
+    assert_eq!(alone.timeline.tracks.len(), 1, "the track left empty is dropped");
+    let clips = &alone.timeline.tracks[0].clips;
+    assert_eq!(clips.len(), 1);
+    assert_eq!((clips[0].id, clips[0].start_secs), (2, 0.0));
+    assert_eq!(clips[0].transition_in, TransitionType::None);
+    // The project's own sequence is untouched.
+    assert_eq!(project.timeline().tracks.len(), 2);
+    assert_eq!(project.timeline().tracks[0].clips[1].start_secs, 7.5);
+}
+
+#[test]
+fn isolating_a_clip_that_does_not_exist_gives_nothing() {
+    let project = test_project();
+    assert!(project.active_sequence().isolating_clip(99).is_none());
+}
