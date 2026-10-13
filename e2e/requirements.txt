@@ -1,4 +1,4 @@
 pytest==9.1.1
 # Pinned to the pre-4.10 API (desired_capabilities on Remote()) that tauri-driver's WebDriver
 # examples are written against; newer Selenium dropped that constructor argument.
-selenium==4.50.0
+selenium==4.51.0
