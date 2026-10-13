@@ -1228,7 +1228,7 @@ version = "0.1.0"
 dependencies = [
  "bush",
  "core",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "image",
  "jpeg-encoder",
  "rfd",
