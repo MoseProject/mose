@@ -95,7 +95,7 @@ nvml-wrapper = "0.13"
 # every entry this crate ever writes (already-gzip-compressed `.ocproj` bytes, already-encoded
 # proxy `.mp4`s) is incompressible in practice -- `CompressionMethod::Stored` is used explicitly,
 # so none of zip's optional codecs (deflate/bzip2/lzma/zstd/xz/aes-crypto/ppmd) are needed.
-zip = { version = "8", default-features = false }
+zip = { version = "9", default-features = false }
 # Ordered-pattern scrubbing for `error_reporting`'s sanitizer (drives, home dirs, URLs,
 # credentials). Already in the workspace's Cargo.lock as a transitive dependency — no new
 # versions/resolution needed just for this.
